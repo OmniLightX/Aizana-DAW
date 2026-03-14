@@ -62,7 +62,16 @@ target_sources(Cloudes PRIVATE
     src/app/MainWindow.cpp
     src/app/ApplicationState.cpp
     src/engine/EditManager.cpp
+    src/engine/ClipEditor.cpp
+    src/engine/MidiRecorder.cpp
+    src/engine/MixerEngine.cpp
+    src/engine/AutomationEngine.cpp
     src/audio/AudioEngine.cpp
+    src/audio/AudioRecorder.cpp
+    # Plugin hosting (PLUG-01 through PLUG-04)
+    src/plugins/ClapPluginFormat.cpp
+    src/plugins/PluginScanner.cpp
+    src/plugins/PluginManager.cpp
 )
 
 target_include_directories(Cloudes PRIVATE
