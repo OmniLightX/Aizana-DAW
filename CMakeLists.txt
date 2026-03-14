@@ -60,6 +60,9 @@ juce_add_gui_app(Cloudes
 target_sources(Cloudes PRIVATE
     src/app/Main.cpp
     src/app/MainWindow.cpp
+    src/app/ApplicationState.cpp
+    src/engine/EditManager.cpp
+    src/audio/AudioEngine.cpp
 )
 
 target_include_directories(Cloudes PRIVATE

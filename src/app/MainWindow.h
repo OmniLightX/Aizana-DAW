@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "ApplicationState.h"
 
 //==============================================================================
 /**
@@ -15,6 +16,9 @@
  *   - Fixed transport bar at top
  *   - Arrangement view (tracks + timeline) in upper region
  *   - Mixer view (channel strips) in lower region (visible by default)
+ *
+ * ApplicationState is constructed here to ensure the audio device and Edit
+ * are initialised before any UI is shown (plan 01-02 requirement).
  */
 class MainWindow : public juce::DocumentWindow
 {
@@ -24,6 +28,11 @@ public:
 
     void closeButtonPressed() override;
 
+    /** Access the application state (EditManager + AudioEngine) from any UI component. */
+    ApplicationState& getApplicationState() { return *appState; }
+
 private:
+    std::unique_ptr<ApplicationState> appState;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };

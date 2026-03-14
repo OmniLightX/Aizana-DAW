@@ -39,6 +39,10 @@ MainWindow::MainWindow (juce::String name)
                           .findColour (juce::ResizableWindow::backgroundColourId),
                       DocumentWindow::allButtons)
 {
+    // Construct ApplicationState first — opens audio device and creates a new Edit.
+    // Audio device failures are non-fatal (logged inside ApplicationState constructor).
+    appState = std::make_unique<ApplicationState>();
+
     setUsingNativeTitleBar (true);
     setContentOwned (new PlaceholderContent(), true);
 
