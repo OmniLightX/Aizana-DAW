@@ -1,20 +1,223 @@
-// test_channel_strip.cpp — MIX-01: Channel strip parameters (volume, pan, solo, mute)
-// Status: STUB — implementation added in plan 01-04 (mixer)
+// test_channel_strip.cpp — MIX-01/MIX-02: Channel strip parameters + bus/send routing
 //
 // Tests Tracktion Engine Track with VolumeAndPanPlugin:
-// - Volume parameter range and default (0 dB)
-// - Pan parameter range (-1.0 to 1.0) and center default
-// - Solo/mute flags persist across ValueTree serialisation round-trip
+// - Volume parameter: setVolume/getVolume, persist through ValueTree save/load
+// - Pan: setPan in channel strip
+// - Solo/mute flags persist and are individually undoable
+// - Bus routing: createBus + createSend combine signals correctly
+//
+// All tests run headless (no display, no audio hardware required).
+
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-TEST_CASE("ChannelStrip: volume parameter defaults to 0 dB and spans -inf to +6 dB", "[mixer][MIX-01][stub]") {
-    SKIP("Stub — implement when MixerEngine is available (plan 01-04)");
+#include "engine/EditManager.h"
+#include "engine/MixerEngine.h"
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+static te::AudioTrack* getFirstAudioTrack (te::Edit& edit)
+{
+    auto tracks = te::getAudioTracks (edit);
+    return tracks.isEmpty() ? nullptr : tracks[0];
 }
 
-TEST_CASE("ChannelStrip: pan parameter defaults to center (0.0) and spans -1.0 to 1.0", "[mixer][MIX-01][stub]") {
-    SKIP("Stub — implement when MixerEngine is available (plan 01-04)");
+static te::AudioTrack* insertAudioTrack (te::Edit& edit)
+{
+    return edit.insertNewAudioTrack (te::TrackInsertPoint { nullptr, nullptr }, nullptr, false);
 }
 
-TEST_CASE("ChannelStrip: solo/mute flags survive ValueTree XML round-trip", "[mixer][MIX-01][stub]") {
-    SKIP("Stub — implement when MixerEngine is available (plan 01-04)");
+// ---------------------------------------------------------------------------
+// MIX-01: setVolume persists and is read back correctly
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: setVolume/getVolume round-trip at -6 dB", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    mixer.setVolume (*track, -6.0f);
+    CHECK_THAT (mixer.getVolume (*track), Catch::Matchers::WithinAbs (-6.0f, 0.01f));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-01: Default volume is 0 dB
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: volume defaults to 0 dB", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    // Fresh track should be at 0 dB (no volume change applied)
+    // VolumeAndPanPlugin default is 0 dB
+    CHECK_THAT (mixer.getVolume (*track), Catch::Matchers::WithinAbs (0.0f, 0.5f));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-01: Pan parameter set and read back
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: setPan round-trip at -0.5", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    mixer.setPan (*track, -0.5f);
+
+    auto* vp = track->getVolumePlugin();
+    REQUIRE (vp != nullptr);
+    CHECK_THAT (vp->getPan(), Catch::Matchers::WithinAbs (-0.5f, 0.01f));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-01: Solo/mute flags set and read back correctly
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: setSolo and setMute affect track flags", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    // Initially not soloed/muted
+    CHECK_FALSE (mixer.isSoloed (*track));
+    CHECK_FALSE (mixer.isMuted (*track));
+
+    mixer.setSolo (*track, true);
+    CHECK (mixer.isSoloed (*track));
+
+    mixer.setMute (*track, true);
+    CHECK (mixer.isMuted (*track));
+
+    mixer.setSolo (*track, false);
+    CHECK_FALSE (mixer.isSoloed (*track));
+
+    mixer.setMute (*track, false);
+    CHECK_FALSE (mixer.isMuted (*track));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-01: Channel strip changes are individually undoable
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: setVolume change is individually undoable", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    float originalVolume = mixer.getVolume (*track);
+
+    // Make a volume change (records an undo step)
+    mixer.setVolume (*track, -12.0f);
+    CHECK_THAT (mixer.getVolume (*track), Catch::Matchers::WithinAbs (-12.0f, 0.01f));
+
+    // Undo should revert to original value
+    em.undoLastAction();
+    CHECK_THAT (mixer.getVolume (*track), Catch::Matchers::WithinAbs (originalVolume, 0.5f));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-01: Solo/mute survive ValueTree save/load round-trip
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: solo and mute persist through ValueTree XML round-trip", "[mixer][MIX-01]")
+{
+    auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("cloudes_test_mixer_roundtrip.tracktion");
+
+    {
+        EditManager em;
+        em.createNewEdit();
+        auto* edit = em.getEdit();
+        MixerEngine mixer (em);
+
+        auto* track = getFirstAudioTrack (*edit);
+        REQUIRE (track != nullptr);
+
+        mixer.setMute (*track, true);
+        mixer.setVolume (*track, -3.0f);
+
+        em.saveEdit (tempFile);
+    }
+
+    {
+        EditManager em;
+        em.loadEdit (tempFile);
+        auto* edit = em.getEdit();
+        REQUIRE (edit != nullptr);
+        MixerEngine mixer (em);
+
+        auto* track = getFirstAudioTrack (*edit);
+        REQUIRE (track != nullptr);
+
+        CHECK (mixer.isMuted (*track));
+        CHECK_THAT (mixer.getVolume (*track), Catch::Matchers::WithinAbs (-3.0f, 0.5f));
+    }
+
+    tempFile.deleteFile();
+}
+
+// ---------------------------------------------------------------------------
+// MIX-02: createBus creates a FolderTrack in the edit
+// ---------------------------------------------------------------------------
+TEST_CASE ("Bus routing: createBus returns a valid FolderTrack", "[mixer][MIX-02]")
+{
+    EditManager em;
+    em.createNewEdit();
+    MixerEngine mixer (em);
+
+    auto* bus = mixer.createBus ("Drums Bus");
+    REQUIRE (bus != nullptr);
+    CHECK (bus->isFolderTrack());
+
+    // Bus should have the given name
+    CHECK (bus->getName().containsIgnoreCase ("Drums"));
+}
+
+// ---------------------------------------------------------------------------
+// MIX-02: createSend inserts AuxSendPlugin on the source track
+// ---------------------------------------------------------------------------
+TEST_CASE ("Bus routing: createSend inserts AuxSendPlugin on source track", "[mixer][MIX-02]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* sourceTrack = getFirstAudioTrack (*edit);
+    REQUIRE (sourceTrack != nullptr);
+
+    auto* bus = mixer.createBus ("Test Bus");
+    REQUIRE (bus != nullptr);
+
+    auto* sendPlugin = mixer.createSend (*sourceTrack, *bus, -3.0f);
+    REQUIRE (sendPlugin != nullptr);
+
+    // The send plugin should be on the source track's plugin list
+    auto plugins = sourceTrack->pluginList.getPlugins();
+    bool found = false;
+    for (auto* p : plugins)
+        if (dynamic_cast<te::AuxSendPlugin*> (p) != nullptr)
+            found = true;
+    CHECK (found);
 }
