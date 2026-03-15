@@ -102,6 +102,8 @@ target_sources(Cloudes PRIVATE
     src/ui/eq/SpectrumAnalyzer.cpp
     # Preferences dialog (plan 01-11: MIDI clock UI)
     src/ui/preferences/PreferencesDialog.cpp
+    # Plugin browser popup (plan 01-15: PLUG-01/02/03/04 UI entry point)
+    src/ui/pluginbrowser/PluginBrowserPopup.cpp
 )
 
 target_include_directories(Cloudes PRIVATE

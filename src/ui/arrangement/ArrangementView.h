@@ -5,6 +5,9 @@
 #include "app/ApplicationState.h"
 #include "engine/ClipEditor.h"
 #include "engine/MixerEngine.h"
+#include "plugins/PluginManager.h"
+#include "plugins/PluginScanner.h"
+#include "ui/pluginwin/PluginWindowManager.h"
 #include "TrackHeader.h"
 #include "ClipComponent.h"
 
@@ -22,15 +25,22 @@ namespace te = tracktion::engine;
  * per RESEARCH.md Pattern 1.
  *
  * Track row height: 60px (fixed in Phase 1; variable-height rows in Phase 2).
+ *
+ * Plan 01-15: TrackHeaders now receive PluginManager, PluginWindowManager, and
+ * PluginScanner so that right-click context menus can insert plugins.
  */
 class ArrangementView : public juce::Component,
+                        public juce::FileDragAndDropTarget,
                         private juce::ValueTree::Listener,
                         private juce::ScrollBar::Listener
 {
 public:
-    ArrangementView (ApplicationState& appState,
-                     ClipEditor& clipEditor,
-                     MixerEngine& mixerEngine);
+    ArrangementView (ApplicationState&    appState,
+                     ClipEditor&          clipEditor,
+                     MixerEngine&         mixerEngine,
+                     PluginManager&       pluginManager,
+                     PluginWindowManager& pluginWindowManager,
+                     PluginScanner&       pluginScanner);
     ~ArrangementView() override;
 
     void resized() override;
@@ -40,10 +50,26 @@ public:
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
     void   setPixelsPerSecond (double pps);
 
+    // Add Track button accessor — used by MainComponent for Cmd+T shortcut
+    juce::TextButton& getAddTrackButton() noexcept { return addTrackButton; }
+
+    // FileDragAndDropTarget overrides
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
+    void fileDragEnter (const juce::StringArray& files, int x, int y) override;
+    void fileDragExit  (const juce::StringArray& files) override;
+
 private:
-    ApplicationState& appState;
-    ClipEditor& clipEditor;
-    MixerEngine& mixerEngine;
+    ApplicationState&    appState;
+    ClipEditor&          clipEditor;
+    MixerEngine&         mixerEngine;
+    PluginManager&       pluginManager;
+    PluginWindowManager& pluginWindowManager;
+    PluginScanner&       pluginScanner;
+
+    // ---- Header strip ----
+    juce::TextButton addTrackButton { "+ Track" };
+    bool isDragHovering = false;
 
     // ---- Left panel: track headers ----
     juce::Viewport headerViewport;
@@ -56,8 +82,9 @@ private:
     juce::OwnedArray<TrackHeader>   trackHeaders;
     juce::OwnedArray<ClipComponent> clipComponents;
 
-    static constexpr int kTrackHeight    = 60;
-    static constexpr int kHeaderWidth    = 160;
+    static constexpr int kTrackHeight       = 60;
+    static constexpr int kHeaderWidth       = 160;
+    static constexpr int kHeaderStripHeight = 28;   // top strip holding Add Track button
 
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
