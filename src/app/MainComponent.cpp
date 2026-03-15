@@ -9,6 +9,9 @@ MainComponent::MainComponent (ApplicationState& appState_)
     addAndMakeVisible (arrangementView);
     addAndMakeVisible (mixerView);
 
+    // DockedPluginPanel from PluginWindowManager — right-side panel
+    addAndMakeVisible (pluginWindowManager.getDockedPanel());
+
     // Mixer visible by default (CONTEXT.md: mixing-first design)
     mixerView.setVisible (mixerVisible);
 
@@ -24,6 +27,11 @@ void MainComponent::resized()
 
     // Fixed transport bar at top (CONTEXT.md: "Fixed transport bar at top")
     transportBar.setBounds (area.removeFromTop (50));
+
+    // DockedPluginPanel — right-side panel (auto-hides when empty)
+    auto& dockedPanel = pluginWindowManager.getDockedPanel();
+    const int dockedWidth = dockedPanel.isEmpty() ? 0 : kDockedPanelWidth;
+    dockedPanel.setBounds (area.removeFromRight (dockedWidth));
 
     if (mixerVisible)
     {

@@ -88,6 +88,18 @@ target_sources(Cloudes PRIVATE
     src/ui/arrangement/ClipComponent.cpp
     src/ui/mixer/MixerView.cpp
     src/ui/mixer/ChannelStrip.cpp
+    # Piano Roll editor (plan 01-09)
+    src/ui/pianoroll/PianoRollView.cpp
+    src/ui/pianoroll/NoteComponent.cpp
+    src/ui/pianoroll/VelocityLane.cpp
+    src/ui/pianoroll/CCLane.cpp
+    # Plugin window management (plan 01-10: PLUG-01/02/03/04)
+    src/ui/pluginwin/PluginWindowManager.cpp
+    src/ui/pluginwin/FloatingPluginWindow.cpp
+    src/ui/pluginwin/DockedPluginPanel.cpp
+    # EQ UI + Spectrum analyzer (plan 01-10: FX-01)
+    src/ui/eq/EQComponent.cpp
+    src/ui/eq/SpectrumAnalyzer.cpp
 )
 
 target_include_directories(Cloudes PRIVATE
