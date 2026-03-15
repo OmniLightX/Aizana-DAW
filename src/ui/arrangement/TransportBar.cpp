@@ -16,20 +16,34 @@ TransportBar::TransportBar (ApplicationState& appState_)
     bpmLabel.setFont (juce::FontOptions (14.0f));
     bpmLabel.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
 
-    // Update BPM display from edit tempo
-    if (auto* edit = appState.editManager.getEdit())
+    // Make BPM label editable: double-click enters edit mode
+    bpmLabel.setEditable (false, true, false);  // (singleClick, doubleClick, lossOfFocusDiscards)
+    bpmLabel.onTextChange = [this]
     {
-        auto& tempoSeq = edit->tempoSequence;
-        if (tempoSeq.getNumTempos() > 0)
+        auto newBpm = bpmLabel.getText().getDoubleValue();
+        if (newBpm >= 20.0 && newBpm <= 300.0)
         {
-            auto bpm = tempoSeq.getTempo (0)->getBpm();
-            bpmLabel.setText (juce::String (bpm, 1) + " BPM", juce::dontSendNotification);
+            if (auto* edit = appState.editManager.getEdit())
+            {
+                auto& undoManager = appState.editManager.getUndoManager();
+                undoManager.beginNewTransaction ("Set BPM");
+                auto& seq = edit->tempoSequence;
+                if (seq.getNumTempos() > 0)
+                    seq.getTempo (0)->setBpm (newBpm);
+            }
         }
-        else
-        {
-            bpmLabel.setText ("120.0 BPM", juce::dontSendNotification);
-        }
-    }
+        // Refresh label with the actually-applied value
+        updateBpmLabel();
+    };
+
+    // Update BPM display from edit tempo
+    updateBpmLabel();
+
+    // Style sample rate label
+    sampleRateLabel.setJustificationType (juce::Justification::centred);
+    sampleRateLabel.setFont (juce::FontOptions (11.0f));
+    sampleRateLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
+    sampleRateLabel.setText ("-- kHz", juce::dontSendNotification);
 
     // Style transport buttons
     playButton.setColour   (juce::TextButton::buttonColourId,     juce::Colour (0xff2d6a2d));
@@ -48,6 +62,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (recordButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
+    addAndMakeVisible (sampleRateLabel);
 
     // Start 30ms timer to update position display during playback
     startTimer (30);
@@ -72,8 +87,10 @@ void TransportBar::resized()
     area.removeFromLeft (4);
     recordButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
 
-    // Right side: BPM display
-    bpmLabel.setBounds (area.removeFromRight (120));
+    // Right side: sample rate + BPM display (rightmost to leftmost)
+    sampleRateLabel.setBounds (area.removeFromRight (70));
+    area.removeFromRight (4);  // gap
+    bpmLabel.setBounds (area.removeFromRight (100));
 
     // Centre: position display
     positionLabel.setBounds (area);
@@ -110,6 +127,38 @@ void TransportBar::timerCallback()
     // Toggle button states based on playback
     playButton.setToggleState (transport.isPlaying(), juce::dontSendNotification);
     recordButton.setToggleState (transport.isRecording(), juce::dontSendNotification);
+
+    // Keep BPM label in sync (handles undo/redo changes)
+    if (! bpmLabel.isBeingEdited())
+        updateBpmLabel();
+
+    // Sample rate update — every ~2 seconds (60 ticks at 30ms = 1.8s)
+    if (++sampleRateUpdateCounter >= 60)
+    {
+        sampleRateUpdateCounter = 0;
+        auto* device = appState.audioEngine.getDeviceManager().getCurrentAudioDevice();
+        if (device != nullptr)
+        {
+            const double sr = device->getCurrentSampleRate();
+            const juce::String srText = (sr >= 1000.0)
+                ? juce::String (sr / 1000.0, 1) + " kHz"
+                : juce::String (sr, 0) + " Hz";
+            sampleRateLabel.setText (srText, juce::dontSendNotification);
+        }
+    }
+}
+
+void TransportBar::updateBpmLabel()
+{
+    if (auto* edit = appState.editManager.getEdit())
+    {
+        auto& seq = edit->tempoSequence;
+        if (seq.getNumTempos() > 0)
+        {
+            const double bpm = seq.getTempo (0)->getBpm();
+            bpmLabel.setText (juce::String (bpm, 1) + " BPM", juce::dontSendNotification);
+        }
+    }
 }
 
 void TransportBar::playClicked()

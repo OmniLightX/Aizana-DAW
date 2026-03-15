@@ -33,10 +33,19 @@ private:
     /** Shows current playback position — e.g. "0:00:00.000". Updated every 30ms. */
     juce::Label positionLabel;
 
-    /** Shows the edit BPM — e.g. "120 BPM". */
+    /** Shows the edit BPM — e.g. "120 BPM". Double-click to edit. */
     juce::Label bpmLabel;
 
+    /** Shows the audio device sample rate — e.g. "44.1 kHz". */
+    juce::Label sampleRateLabel;
+
+    /** Counter for throttling sample-rate polls (update every ~2s at 30ms timer). */
+    int sampleRateUpdateCounter = 0;
+
     void timerCallback() override;
+
+    /** Refresh bpmLabel text from the current edit tempo. */
+    void updateBpmLabel();
 
     void playClicked();
     void stopClicked();
