@@ -19,18 +19,10 @@ ArrangementView::ArrangementView (ApplicationState& appState_,
     timelineViewport.setViewedComponent (&timelineContainer, false);
     addAndMakeVisible (timelineViewport);
 
-    // Keep vertical scroll positions in sync between header and timeline
-    timelineViewport.getVerticalScrollBar().onValueChange = [this]
-    {
-        headerViewport.setViewPosition (0,
-            (int)timelineViewport.getVerticalScrollBar().getCurrentRangeStart());
-    };
-    headerViewport.getVerticalScrollBar().onValueChange = [this]
-    {
-        timelineViewport.setViewPosition (
-            timelineViewport.getViewPositionX(),
-            (int)headerViewport.getVerticalScrollBar().getCurrentRangeStart());
-    };
+    // Keep vertical scroll positions in sync between header and timeline.
+    // juce::ScrollBar does not have onValueChange — must use addListener().
+    timelineViewport.getVerticalScrollBar().addListener (this);
+    headerViewport.getVerticalScrollBar().addListener (this);
 
     // Register as ValueTree listener on the Edit's state so we rebuild when
     // tracks are added/removed — RESEARCH.md Pattern 1 (reactive ValueTree).
@@ -43,6 +35,9 @@ ArrangementView::ArrangementView (ApplicationState& appState_,
 
 ArrangementView::~ArrangementView()
 {
+    timelineViewport.getVerticalScrollBar().removeListener (this);
+    headerViewport.getVerticalScrollBar().removeListener (this);
+
     if (auto* edit = appState.editManager.getEdit())
         edit->state.removeListener (this);
 }
@@ -86,7 +81,7 @@ void ArrangementView::resized()
         if (edit != nullptr)
         {
             int idx = 0;
-            for (auto* t : edit->getAudioTracks())
+            for (auto* t : te::getAudioTracks (*edit))
             {
                 if (t == parentTrack)
                 {
@@ -135,7 +130,7 @@ void ArrangementView::rebuildTrackRows()
     if (edit == nullptr)
         return;
 
-    for (auto* audioTrack : edit->getAudioTracks())
+    for (auto* audioTrack : te::getAudioTracks (*edit))
     {
         // Create and add track header
         auto* header = trackHeaders.add (new TrackHeader (*audioTrack, mixerEngine));
@@ -197,4 +192,20 @@ void ArrangementView::valueTreePropertyChanged (juce::ValueTree&, const juce::Id
 {
     // Clip/track property changes (name, position) may require a repaint
     juce::MessageManager::callAsync ([this] { resized(); repaint(); });
+}
+
+//==============================================================================
+// ScrollBar::Listener — keeps header and timeline vertical scroll in sync
+
+void ArrangementView::scrollBarMoved (juce::ScrollBar* scrollBar, double newRangeStart)
+{
+    if (scrollBar == &timelineViewport.getVerticalScrollBar())
+    {
+        headerViewport.setViewPosition (0, (int)newRangeStart);
+    }
+    else if (scrollBar == &headerViewport.getVerticalScrollBar())
+    {
+        timelineViewport.setViewPosition (timelineViewport.getViewPositionX(),
+                                          (int)newRangeStart);
+    }
 }

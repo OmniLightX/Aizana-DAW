@@ -24,7 +24,8 @@ namespace te = tracktion::engine;
  * Track row height: 60px (fixed in Phase 1; variable-height rows in Phase 2).
  */
 class ArrangementView : public juce::Component,
-                        private juce::ValueTree::Listener
+                        private juce::ValueTree::Listener,
+                        private juce::ScrollBar::Listener
 {
 public:
     ArrangementView (ApplicationState& appState,
@@ -70,6 +71,9 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int)   override;
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeParentChanged   (juce::ValueTree&) override {}
+
+    // ScrollBar::Listener — keeps header/timeline vertical scroll in sync
+    void scrollBarMoved (juce::ScrollBar* scrollBar, double newRangeStart) override;
 
     // Keep header and timeline scroll positions in sync
     void syncScrollPositions();

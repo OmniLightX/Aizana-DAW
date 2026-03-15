@@ -9,6 +9,7 @@
 #include "ui/arrangement/ArrangementView.h"
 #include "ui/mixer/MixerView.h"
 #include "ui/pluginwin/PluginWindowManager.h"
+#include "ui/preferences/PreferencesDialog.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.

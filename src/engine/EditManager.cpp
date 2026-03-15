@@ -95,6 +95,95 @@ juce::UndoManager& EditManager::getUndoManager()
 }
 
 //==============================================================================
+// Autosave
+
+void EditManager::setCurrentFile (const juce::File& file)
+{
+    currentSessionFile = file;
+
+    if (file.existsAsFile())
+    {
+        // Start autosave timer on a valid session file
+        autosaveTimer.startTimer (kAutosaveIntervalMs);
+    }
+    else
+    {
+        autosaveTimer.stopTimer();
+    }
+}
+
+void EditManager::performAutosave()
+{
+    if (edit == nullptr || ! currentSessionFile.existsAsFile())
+        return;
+
+    // Build autosave filename: {SessionName}_autosave_N.tracktionedit
+    // We rotate 3 slots: _autosave_1, _autosave_2, _autosave_3
+    const auto stem = currentSessionFile.getFileNameWithoutExtension();
+    const auto dir  = currentSessionFile.getParentDirectory();
+
+    // Find the next slot (rotate among kAutosaveKeptCount slots)
+    // The slot with the oldest modification time gets overwritten.
+    juce::File oldestFile;
+    juce::Time oldestTime = juce::Time::getCurrentTime();
+    bool allExist = true;
+
+    for (int i = 1; i <= kAutosaveKeptCount; ++i)
+    {
+        const auto candidate = dir.getChildFile (
+            stem + "_autosave_" + juce::String (i) + ".tracktionedit");
+
+        if (! candidate.existsAsFile())
+        {
+            // Empty slot — use it immediately
+            oldestFile = candidate;
+            allExist = false;
+            break;
+        }
+
+        if (candidate.getLastModificationTime() <= oldestTime)
+        {
+            oldestTime = candidate.getLastModificationTime();
+            oldestFile = candidate;
+        }
+    }
+
+    if (oldestFile == juce::File{})
+        return;  // Shouldn't happen
+
+    // Flush and write the autosave (overwrite the oldest slot)
+    edit->flushState();
+    te::EditFileOperations (*edit).saveAs (oldestFile, true);
+}
+
+juce::File EditManager::getLatestAutosave (const juce::File& sessionFile) const
+{
+    if (! sessionFile.existsAsFile())
+        return {};
+
+    const auto stem = sessionFile.getFileNameWithoutExtension();
+    const auto dir  = sessionFile.getParentDirectory();
+
+    juce::File latestFile;
+    juce::Time latestTime;
+
+    for (int i = 1; i <= kAutosaveKeptCount; ++i)
+    {
+        const auto candidate = dir.getChildFile (
+            stem + "_autosave_" + juce::String (i) + ".tracktionedit");
+
+        if (candidate.existsAsFile() &&
+            candidate.getLastModificationTime() > latestTime)
+        {
+            latestTime  = candidate.getLastModificationTime();
+            latestFile  = candidate;
+        }
+    }
+
+    return latestFile;
+}
+
+//==============================================================================
 void EditManager::moveClip (te::Clip& clip, double newStartTimeSecs)
 {
     if (edit == nullptr)

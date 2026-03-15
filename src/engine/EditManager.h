@@ -35,6 +35,22 @@ public:
     /** Flush and save Edit state to a .tracktion ValueTree XML file. */
     void saveEdit (const juce::File& file);
 
+    /**
+     * Set the current session file path.
+     * Once set, autosave writes {SessionName}_autosave.tracktionedit every 2 min.
+     * Pass an invalid file to pause autosave (e.g., when no session is open).
+     */
+    void setCurrentFile (const juce::File& file);
+
+    /**
+     * Returns the most recent autosave file for the given session, or an
+     * invalid File if no autosave exists yet.
+     */
+    juce::File getLatestAutosave (const juce::File& sessionFile) const;
+
+    /** Perform an autosave immediately (called by the timer and on clean exit). */
+    void performAutosave();
+
     // --- AI-aware undo (AUDIO-05) ---
 
     /**
@@ -76,6 +92,21 @@ public:
 private:
     te::Engine engine { "Cloudes" };
     std::unique_ptr<te::Edit> edit;
+
+    // ---- Autosave (RESEARCH.md Open Question 4) ----
+    juce::File currentSessionFile;  // set by setCurrentFile()
+
+    // Autosave timer — fires every 2 minutes on the message thread
+    struct AutosaveTimerImpl : public juce::Timer
+    {
+        EditManager& owner;
+        explicit AutosaveTimerImpl (EditManager& o) : owner (o) {}
+        void timerCallback() override { owner.performAutosave(); }
+    };
+    AutosaveTimerImpl autosaveTimer { *this };
+
+    static constexpr int kAutosaveIntervalMs   = 2 * 60 * 1000;  // 2 minutes
+    static constexpr int kAutosaveKeptCount    = 3;               // keep last 3
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditManager)
 };

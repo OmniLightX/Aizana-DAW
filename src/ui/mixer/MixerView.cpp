@@ -68,7 +68,7 @@ void MixerView::rebuildStrips()
     if (edit == nullptr)
         return;
 
-    for (auto* audioTrack : edit->getAudioTracks())
+    for (auto* audioTrack : te::getAudioTracks (*edit))
     {
         // Create a MeterProcessor for this track
         auto meter = std::make_unique<MeterProcessor>();

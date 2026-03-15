@@ -87,11 +87,10 @@ void TrackHeader::soloClicked()
 
 void TrackHeader::armClicked()
 {
-    // Record-arm: set track as ready for recording.
-    // Tracktion Engine uses track.setInputMonitoringEnabled() or
-    // edit->recordingEnabled — store armed state in the track's ValueTree.
-    if (armButton.getToggleState())
-        track.setLivePlayEnabled (true);
-    else
-        track.setLivePlayEnabled (false);
+    // Record-arm: store armed state in the track's ValueTree.
+    // te::AudioTrack does not have setLivePlayEnabled() in TE v3.2.0 —
+    // the arm state is a custom property read by AudioRecorder when starting
+    // a recording session.
+    const bool armed = armButton.getToggleState();
+    track.state.setProperty ("armed", armed, nullptr);
 }

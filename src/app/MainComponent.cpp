@@ -46,6 +46,14 @@ void MainComponent::resized()
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    // Cmd+, (macOS) / Ctrl+, (Windows) opens Preferences (MIDI clock, audio settings)
+    if (key == juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0) ||
+        key == juce::KeyPress (',', juce::ModifierKeys::ctrlModifier, 0))
+    {
+        PreferencesDialog::show (appState);
+        return true;
+    }
+
     // CONTEXT.md: Cmd+M (macOS) / Ctrl+M (Windows) toggles mixer
     if (key == juce::KeyPress ('m', juce::ModifierKeys::commandModifier, 0))
     {

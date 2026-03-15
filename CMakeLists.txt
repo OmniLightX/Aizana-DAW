@@ -100,6 +100,8 @@ target_sources(Cloudes PRIVATE
     # EQ UI + Spectrum analyzer (plan 01-10: FX-01)
     src/ui/eq/EQComponent.cpp
     src/ui/eq/SpectrumAnalyzer.cpp
+    # Preferences dialog (plan 01-11: MIDI clock UI)
+    src/ui/preferences/PreferencesDialog.cpp
 )
 
 target_include_directories(Cloudes PRIVATE
