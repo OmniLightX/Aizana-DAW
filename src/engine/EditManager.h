@@ -42,6 +42,9 @@ public:
      */
     void setCurrentFile (const juce::File& file);
 
+    /** Returns the current session file (may be invalid if no file has been set). */
+    juce::File getCurrentFile() const { return currentSessionFile; }
+
     /**
      * Returns the most recent autosave file for the given session, or an
      * invalid File if no autosave exists yet.
