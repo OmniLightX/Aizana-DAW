@@ -3,15 +3,66 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
+#include "metering/MeterProcessor.h"
 
 namespace te = tracktion::engine;
 
+//==============================================================================
+/**
+ * MeterBar — Real-time LUFS/Peak meter display for a ChannelStrip.
+ *
+ * Reads from MeterProcessor atomics on the message thread at ~24fps.
+ * Displays:
+ *   - Vertical bar: instantaneous peak level (dBFS)
+ *   - Numeric label: integrated LUFS (reference information only —
+ *     REQUIREMENTS.md: "LUFS und technische Werte sind Richtlinien, nicht Pflicht-Ziel")
+ *
+ * No clipping indicators or target enforcement — LUFS is informational only.
+ *
+ * Thread safety: only reads from std::atomic values (thread-safe).
+ */
+class MeterBar : public juce::Component,
+                 private juce::Timer
+{
+public:
+    explicit MeterBar (MeterProcessor& meterProcessor);
+    ~MeterBar() override;
+
+    void paint (juce::Graphics& g) override;
+    void resized() override;
+
+private:
+    MeterProcessor& meterProcessor;
+
+    // Current display values — updated in timerCallback, read in paint()
+    // Both on message thread, no sync needed.
+    float displayPeakDB = -100.0f;
+    float displayRMSDB  = -100.0f;
+    float displayLUFSI  = -100.0f;  // integrated LUFS
+
+    // Peak hold: highest peak seen, decays after kPeakHoldMs
+    float peakHoldDB    = -100.0f;
+    int   peakHoldTicks = 0;
+    static constexpr int kPeakHoldTicks = 60;  // ~2.5s at 24fps
+
+    juce::Label lufsLabel;  // Shows integrated LUFS value below the bar
+
+    void timerCallback() override;  // Fires at ~24fps
+
+    // Convert dBFS to normalised bar height (0.0 = silent, 1.0 = 0dBFS)
+    static float dbToNorm (float dB);
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MeterBar)
+};
+
+//==============================================================================
 /**
  * ChannelStrip — Single mixer channel strip for one AudioTrack.
  *
  * Width: ~80px. Height: full MixerView height.
  *
  * Contains (top to bottom):
+ *   - MeterBar  — real-time peak + LUFS meter (plan 01-10, EXP-03)
  *   - Track name label (bottom)
  *   - Solo (S) and Mute (M) buttons
  *   - Pan knob (Rotary slider, -1.0 to +1.0)
@@ -27,7 +78,8 @@ class ChannelStrip : public juce::Component,
                      private juce::ValueTree::Listener
 {
 public:
-    ChannelStrip (te::AudioTrack& track, MixerEngine& mixerEngine);
+    ChannelStrip (te::AudioTrack& track, MixerEngine& mixerEngine,
+                  MeterProcessor& meterProcessor);
     ~ChannelStrip() override;
 
     void resized() override;
@@ -39,11 +91,12 @@ private:
     te::AudioTrack& track;
     MixerEngine& mixerEngine;
 
-    juce::Slider  volumeFader;
-    juce::Slider  panKnob;
+    MeterBar         meterBar;
+    juce::Slider     volumeFader;
+    juce::Slider     panKnob;
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
-    juce::Label   trackNameLabel;
+    juce::Label      trackNameLabel;
 
     // Called when the fader value changes (user interaction)
     void volumeChanged();

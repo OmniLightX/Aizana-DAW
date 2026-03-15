@@ -21,6 +21,10 @@ MixerView::~MixerView()
 {
     if (auto* edit = appState.editManager.getEdit())
         edit->state.removeListener (this);
+
+    // Clear strips first (they reference MeterProcessors); then clear MeterProcessors
+    strips.clear();
+    meterProcessors.clear();
 }
 
 void MixerView::resized()
@@ -47,10 +51,18 @@ void MixerView::paint (juce::Graphics& g)
     g.drawLine (0.0f, 0.0f, (float)getWidth(), 0.0f, 2.0f);
 }
 
+MeterProcessor* MixerView::getMeterProcessorForTrack (const te::AudioTrack& track)
+{
+    auto it = meterProcessors.find (const_cast<te::AudioTrack*> (&track));
+    return (it != meterProcessors.end()) ? it->second.get() : nullptr;
+}
+
 void MixerView::rebuildStrips()
 {
+    // Clear existing strips and processors
     channelStripContainer.removeAllChildren();
     strips.clear();
+    meterProcessors.clear();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
@@ -58,7 +70,17 @@ void MixerView::rebuildStrips()
 
     for (auto* audioTrack : edit->getAudioTracks())
     {
-        auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine));
+        // Create a MeterProcessor for this track
+        auto meter = std::make_unique<MeterProcessor>();
+        // Initialise with nominal values; audio engine will call prepareToPlay
+        // with real values when it starts.
+        meter->prepareToPlay (44100.0, 512);
+
+        auto* meterPtr = meter.get();
+        meterProcessors[audioTrack] = std::move (meter);
+
+        // Create the ChannelStrip passing the MeterProcessor reference
+        auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr));
         channelStripContainer.addAndMakeVisible (strip);
     }
 
