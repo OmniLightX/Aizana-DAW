@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_devices/juce_audio_devices.h>
+#include "metering/MeterProcessor.h"
 
 /**
  * AudioEngine — wraps juce::AudioDeviceManager for CoreAudio (macOS) and WASAPI (Windows).
@@ -19,12 +20,16 @@
  *   These invariants are enforced in Debug builds via juce::AudioThreadGuard in plan 01-06
  *   when the DSP processors are implemented. Document the constraint here so every
  *   future processBlock() author sees it at the point of entry into the audio subsystem.
+ *
+ * Plan 01-17: AudioEngine now inherits AudioIODeviceCallback so it can
+ * tap the output buffer after Tracktion Engine renders each block. This feeds the
+ * master MeterProcessor without requiring insertion into the TE plugin chain.
  */
-class AudioEngine
+class AudioEngine : public juce::AudioIODeviceCallback
 {
 public:
     AudioEngine();
-    ~AudioEngine();
+    ~AudioEngine() override;
 
     /**
      * Initialise the audio device manager.
@@ -41,6 +46,13 @@ public:
 
     /** Returns the underlying AudioDeviceManager for advanced device configuration. */
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
+
+    /**
+     * Returns the master MeterProcessor that taps the final mixed output.
+     * MixerView's timerCallback reads meter values from this processor.
+     * All channel strips share the master meter for Phase 1 (EXP-03).
+     */
+    MeterProcessor& getMasterMeterProcessor() noexcept { return masterMeterProcessor; }
 
     /**
      * Set WASAPI low-latency preference (Windows only).
@@ -65,9 +77,31 @@ public:
      */
     double getCurrentLatencyMs() const;
 
+    // -----------------------------------------------------------------------
+    // AudioIODeviceCallback — audio thread callbacks
+    // Registered after deviceManager.initialise() so the Tracktion Engine
+    // callback runs first and fills the output buffer before we tap it.
+    // -----------------------------------------------------------------------
+
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int numInputChannels,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const juce::AudioIODeviceCallbackContext& context) override;
+
+    void audioDeviceAboutToStart (juce::AudioIODevice* device) override;
+    void audioDeviceStopped() override;
+
 private:
     juce::AudioDeviceManager deviceManager;
     bool preferLowLatencyWASAPI = true;
+
+    // Master MeterProcessor — taps the final mixed output via the IO callback.
+    // Feeds the MixerView channel strip MeterBars (all strips share this meter
+    // showing the program-level mix in Phase 1).
+    MeterProcessor masterMeterProcessor;
+    std::atomic<bool> masterMeterPrepared { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

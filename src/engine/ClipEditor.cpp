@@ -161,6 +161,45 @@ te::Clip* ClipEditor::copyClip (te::Clip& sourceClip,
 }
 
 //==============================================================================
+te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
+                                                 te::AudioTrack&   track,
+                                                 double            startTimeSecs)
+{
+    // Determine the audio file duration via JUCE AudioFormatManager
+    juce::AudioFormatManager afm;
+    afm.registerBasicFormats();
+
+    std::unique_ptr<juce::AudioFormatReader> reader (afm.createReaderFor (audioFile));
+    if (reader == nullptr)
+        return nullptr;  // Unrecognised format
+
+    double durationSecs = static_cast<double> (reader->lengthInSamples)
+                          / reader->sampleRate;
+
+    auto& undoManager = editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Import Audio: " + audioFile.getFileName());
+
+    // Build the ClipPosition using TE v3.2.0 strong time types (STATE.md decision: plan 01-02)
+    auto clipStart = TimePos::fromSeconds (startTimeSecs);
+    auto clipEnd   = TimePos::fromSeconds (startTimeSecs + durationSecs);
+    te::ClipPosition clipPos { TimeRng (clipStart, clipEnd), {} };
+
+    auto* newClipBase = track.insertNewClip (te::TrackItem::Type::wave,
+                                              audioFile.getFileNameWithoutExtension(),
+                                              clipPos,
+                                              nullptr);
+    auto* newClip = dynamic_cast<te::WaveAudioClip*> (newClipBase);
+    if (newClip == nullptr)
+        return nullptr;
+
+    // Point the clip at the source file non-destructively (STATE.md plan 01-03 decision:
+    // use setToDirectFileReference(), not setCurrentSourceFile() which is protected)
+    newClip->getSourceFileReference().setToDirectFileReference (audioFile, true);
+
+    return newClip;
+}
+
+//==============================================================================
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 {
     auto& undoManager = editManager.getUndoManager();

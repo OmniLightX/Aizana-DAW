@@ -214,6 +214,61 @@ void MeterProcessor::flushFifo()
 }
 
 // ---------------------------------------------------------------------------
+// pushAudioData — AUDIO THREAD
+//
+// Called from the AudioDeviceManager IO callback after Tracktion Engine has
+// filled the output buffer. Feeds the master MeterProcessor without requiring
+// insertion into the TE plugin chain.
+//
+// CRITICAL: Same audio-thread invariants as processBlock apply here:
+//   - No libebur128 calls — only FIFO write and atomic peak store.
+//   - No heap allocations.
+//   - No locks.
+// ---------------------------------------------------------------------------
+
+void MeterProcessor::pushAudioData (const float* const* channelData,
+                                     int numChans,
+                                     int numSamples)
+{
+    if (channelData == nullptr || numSamples <= 0 || numChans <= 0)
+        return;
+
+    const int channels = std::min (numChans, numChannels);
+
+    // --- Instantaneous peak (atomic store — safe on audio thread) ---
+    float maxMagnitude = 0.0f;
+    for (int ch = 0; ch < channels; ++ch)
+    {
+        if (channelData[ch] == nullptr)
+            continue;
+        for (int i = 0; i < numSamples; ++i)
+            maxMagnitude = std::max (maxMagnitude, std::abs (channelData[ch][i]));
+    }
+
+    const float newPeak = toDBFS (maxMagnitude);
+    float current = peakDB.load (std::memory_order_relaxed);
+    if (newPeak > current)
+        peakDB.store (newPeak, std::memory_order_relaxed);
+
+    // --- Lock-free FIFO write ---
+    // Write channel 0 (and channel 1 if stereo) into the meter buffer.
+    int start1, size1, start2, size2;
+    meterFifo.prepareToWrite (numSamples, start1, size1, start2, size2);
+
+    for (int ch = 0; ch < channels && ch < meterBuffer.getNumChannels(); ++ch)
+    {
+        if (channelData[ch] == nullptr)
+            continue;
+        if (size1 > 0)
+            meterBuffer.copyFromWithRamp (ch, start1, channelData[ch],        size1, 1.0f, 1.0f);
+        if (size2 > 0)
+            meterBuffer.copyFromWithRamp (ch, start2, channelData[ch] + size1, size2, 1.0f, 1.0f);
+    }
+
+    meterFifo.finishedWrite (size1 + size2);
+}
+
+// ---------------------------------------------------------------------------
 // Thread-safe getters
 // ---------------------------------------------------------------------------
 

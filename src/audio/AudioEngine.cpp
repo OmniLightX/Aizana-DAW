@@ -2,7 +2,13 @@
 
 //==============================================================================
 AudioEngine::AudioEngine() = default;
-AudioEngine::~AudioEngine() = default;
+
+AudioEngine::~AudioEngine()
+{
+    // Unregister the IO callback before destruction to avoid dangling pointer
+    // in the AudioDeviceManager's callback list.
+    deviceManager.removeAudioCallback (this);
+}
 
 //==============================================================================
 juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannels)
@@ -30,6 +36,11 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
     // in preferences and JUCE negotiates it with the driver. Phase 1 documents the intent;
     // plan 01-08 (Preferences UI) wires up the buffer size selector.
 
+    // Register the metering tap callback AFTER initialise() so the Tracktion Engine
+    // callback (registered during its own device connection) runs first and fills the
+    // output buffer before we read it for metering. This guarantees we tap post-render audio.
+    deviceManager.addAudioCallback (this);
+
     return errorString;
 }
 
@@ -41,6 +52,53 @@ void AudioEngine::setPreferLowLatencyWASAPI (bool prefer)
     // The WASAPI mode is applied on the next device open via AudioDeviceSetup.
     // If a device is currently open, the change takes effect after the user
     // applies preferences (which calls deviceManager.setAudioDeviceSetup() in plan 01-08).
+}
+
+//==============================================================================
+// AudioDeviceIOCallbackWithContext — audio thread implementation
+//==============================================================================
+
+void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
+{
+    // Called on the message thread before the device starts producing audio.
+    // Prepare the master MeterProcessor with the real device parameters.
+    if (device != nullptr)
+    {
+        const double sr      = device->getCurrentSampleRate();
+        const int    bufSize = device->getCurrentBufferSizeSamples();
+        masterMeterProcessor.prepareToPlay (sr, bufSize);
+        masterMeterPrepared.store (true, std::memory_order_release);
+    }
+}
+
+void AudioEngine::audioDeviceStopped()
+{
+    // Called on the message thread when the device stops.
+    // Prevent the IO callback from writing to a released MeterProcessor.
+    masterMeterPrepared.store (false, std::memory_order_release);
+    masterMeterProcessor.releaseResources();
+}
+
+void AudioEngine::audioDeviceIOCallbackWithContext (
+    const float* const* /*inputChannelData*/,
+    int /*numInputChannels*/,
+    float* const* outputChannelData,
+    int numOutputChannels,
+    int numSamples,
+    const juce::AudioIODeviceCallbackContext& /*context*/)
+{
+    // Tracktion Engine has already filled outputChannelData by this point
+    // because our callback was registered AFTER the engine's own callback
+    // (see AudioEngine::initialise — addAudioCallback called last).
+    //
+    // CRITICAL: This is the audio thread. Do NOT write to outputChannelData.
+    // We only READ the output buffer for metering — purely a tap.
+    if (masterMeterPrepared.load (std::memory_order_acquire)
+        && outputChannelData != nullptr
+        && numSamples > 0)
+    {
+        masterMeterProcessor.pushAudioData (outputChannelData, numOutputChannels, numSamples);
+    }
 }
 
 //==============================================================================

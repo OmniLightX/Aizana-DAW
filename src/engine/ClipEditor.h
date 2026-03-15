@@ -91,6 +91,29 @@ public:
     /** Returns the currently active take index (zero-based). */
     int getActiveTake (const te::Clip& comp) const;
 
+    // -------------------------------------------------------------------------
+    // Audio file import — creates a WaveAudioClip from a file on disk
+    // -------------------------------------------------------------------------
+
+    /**
+     * Import an audio file as a new WaveAudioClip on the given track.
+     *
+     * The clip's start time is startTimeSecs. Its duration is determined from
+     * the actual audio file length (via JUCE AudioFormatManager).
+     *
+     * The operation is wrapped in an UndoManager transaction so it is undoable
+     * with Cmd+Z.
+     *
+     * Returns a pointer to the created clip, or nullptr on failure (unrecognised
+     * format, bad file, TE insertion error).
+     *
+     * Source audio file: NEVER modified. The clip references the file via
+     * setToDirectFileReference() (non-destructive).
+     */
+    te::WaveAudioClip* importAudioFile (const juce::File& audioFile,
+                                        te::AudioTrack&   track,
+                                        double            startTimeSecs);
+
 private:
     EditManager& editManager;
 

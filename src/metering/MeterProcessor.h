@@ -55,6 +55,18 @@ public:
     void flushFifo();
 
     // -----------------------------------------------------------------------
+    // Alternative feed path — called from AudioDeviceManager callback (audio
+    // thread). Accepts raw pointer arrays from the device output buffer.
+    // Bypasses the need to insert into Tracktion Engine's plugin chain.
+    //
+    // AUDIO THREAD: only updates peakDB and writes to FIFO (lock-free).
+    // NEVER calls libebur128 — that remains on the message thread in flushFifo().
+    // -----------------------------------------------------------------------
+    void pushAudioData (const float* const* channelData,
+                        int numChannels,
+                        int numSamples);
+
+    // -----------------------------------------------------------------------
     // AudioProcessor interface
     // -----------------------------------------------------------------------
 
