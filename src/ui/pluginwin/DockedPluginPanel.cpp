@@ -80,7 +80,8 @@ void DockedPluginPanel::addPlugin (te::Plugin& plugin)
         if (&entry->plugin == &plugin)
             return;
 
-    auto* editor = plugin.createEditorIfNeeded();
+    auto editorOwned = plugin.createEditor();
+    auto* editor = editorOwned.release();
 
     auto onUnpin = [this, &plugin] { removePlugin (plugin); };
     auto* entry = entries.add (new DockedEntry (plugin, editor, onUnpin));

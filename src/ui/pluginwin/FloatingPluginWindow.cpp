@@ -53,10 +53,11 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     setUsingNativeTitleBar (true);
     setResizable (true, true);
 
-    // Create and own the plugin's editor
-    auto* editor = plugin.createEditorIfNeeded();
-    if (editor != nullptr)
+    // Create and own the plugin's editor via TE's Plugin::createEditor()
+    auto editorOwned = plugin.createEditor();
+    if (editorOwned != nullptr)
     {
+        auto* editor = editorOwned.release();
         setContentOwned (editor, true);
         centreWithSize (editor->getWidth(),
                         editor->getHeight() + getTitleBarHeight());

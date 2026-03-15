@@ -126,8 +126,10 @@ target_link_libraries(Cloudes PRIVATE
 )
 
 # CLAP API is header-only; add include path so src/plugins can use clap/clap.h
+# libebur128 header — FetchContent puts it in build/_deps, add include path explicitly
 target_include_directories(Cloudes PRIVATE
     ${clap_api_SOURCE_DIR}/include
+    ${ebur128_SOURCE_DIR}/ebur128
 )
 
 # ---------------------------------------------------------------------------

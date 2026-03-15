@@ -51,15 +51,9 @@ juce::AudioFormat* ExportPipeline::formatFor(ExportFormat fmt)
             return formatManager.findFormatForFileExtension("aif");
 
         case ExportFormat::MP3:
-        {
-            // LAMEEncoderAudioFormat wraps the LAME binary. Check if it exists.
-            if (juce::LAMEEncoderAudioFormat::findLAMEBinary().exists())
-            {
-                static juce::LAMEEncoderAudioFormat lameFormat(juce::File());
-                return &lameFormat;
-            }
+            // juce::LAMEEncoderAudioFormat is not available in JUCE 8 without
+            // an explicit LAME integration build. MP3 export deferred to v2.
             return nullptr;
-        }
 
         default:
             return formatManager.findFormatForFileExtension("wav");

@@ -279,7 +279,6 @@ void ChannelStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
 {
     // When volume or pan changes externally (undo/redo, AI), update fader/knob
     // without re-triggering the onChange callback (dontSendNotification).
-    using te::IDs;
     if (property == te::IDs::volume)
     {
         const float dB = mixerEngine.getVolume (track);
