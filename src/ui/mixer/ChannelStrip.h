@@ -31,13 +31,21 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
+    /**
+     * Push new meter values to display (called from MixerView timerCallback on message thread).
+     * Stores values and triggers repaint. All MeterBars receive the same master meter values
+     * in Phase 1 (program-level metering shared across all strips).
+     */
+    void setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI);
+
 private:
     MeterProcessor& meterProcessor;
 
-    // Current display values — updated in timerCallback, read in paint()
-    // Both on message thread, no sync needed.
+    // Current display values — updated in timerCallback or setMeterValues(), read in paint().
+    // All operations on message thread, no synchronisation needed.
     float displayPeakDB = -100.0f;
     float displayRMSDB  = -100.0f;
+    float displayLUFSM  = -100.0f;  // momentary LUFS
     float displayLUFSI  = -100.0f;  // integrated LUFS
 
     // Peak hold: highest peak seen, decays after kPeakHoldMs
@@ -86,6 +94,15 @@ public:
     void paint (juce::Graphics& g) override;
 
     te::AudioTrack& getTrack() const noexcept { return track; }
+
+    /** Returns the MeterBar so MixerView::timerCallback can push master meter values. */
+    MeterBar& getMeterBar() noexcept { return meterBar; }
+
+    /**
+     * Push master meter values to this strip's MeterBar (called from MixerView::timerCallback).
+     * All strips receive the same program-level values in Phase 1.
+     */
+    void setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI);
 
 private:
     te::AudioTrack& track;

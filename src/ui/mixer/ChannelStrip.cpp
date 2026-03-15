@@ -76,6 +76,62 @@ void MeterBar::timerCallback()
         repaint();
 }
 
+void MeterBar::setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI)
+{
+    // Called from MixerView::timerCallback (message thread) with master meter values.
+    // Updates display state and triggers a repaint if any value changed significantly.
+    bool needsRepaint = false;
+
+    if (std::abs (peakDB - displayPeakDB) > 0.1f)
+    {
+        displayPeakDB = peakDB;
+        needsRepaint  = true;
+    }
+
+    if (std::abs (rmsDB - displayRMSDB) > 0.1f)
+    {
+        displayRMSDB = rmsDB;
+        needsRepaint = true;
+    }
+
+    if (std::abs (lufsM - displayLUFSM) > 0.1f)
+    {
+        displayLUFSM = lufsM;
+        needsRepaint = true;
+    }
+
+    if (std::abs (lufsI - displayLUFSI) > 0.1f)
+    {
+        displayLUFSI = lufsI;
+
+        const juce::String lufsText = displayLUFSI <= -99.0f
+            ? "---"
+            : juce::String (displayLUFSI, 1);
+        lufsLabel.setText (lufsText, juce::dontSendNotification);
+        needsRepaint = true;
+    }
+
+    // Peak hold logic — driven by pushed values (not read from processor)
+    if (displayPeakDB > peakHoldDB)
+    {
+        peakHoldDB    = displayPeakDB;
+        peakHoldTicks = kPeakHoldTicks;
+        needsRepaint  = true;
+    }
+    else if (peakHoldTicks > 0)
+    {
+        --peakHoldTicks;
+        if (peakHoldTicks == 0)
+        {
+            peakHoldDB   = -100.0f;
+            needsRepaint = true;
+        }
+    }
+
+    if (needsRepaint)
+        repaint();
+}
+
 float MeterBar::dbToNorm (float dB)
 {
     // -60dBFS at bottom, 0dBFS at top. Clamp below -60.
@@ -277,6 +333,12 @@ void ChannelStrip::paint (juce::Graphics& g)
     // Right border separator between strips
     g.setColour (juce::Colour (0xff111111));
     g.drawLine ((float)getWidth() - 1.0f, 0.0f, (float)getWidth() - 1.0f, (float)getHeight(), 1.0f);
+}
+
+void ChannelStrip::setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI)
+{
+    // Delegate to the MeterBar — all display logic lives there.
+    meterBar.setMeterValues (peakDB, rmsDB, lufsM, lufsI);
 }
 
 void ChannelStrip::volumeChanged()

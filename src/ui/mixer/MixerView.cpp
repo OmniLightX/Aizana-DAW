@@ -15,10 +15,17 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_)
         edit->state.addListener (this);
 
     rebuildStrips();
+
+    // Start the 24fps meter update timer (plan 01-17 — EXP-03 gap closure).
+    // timerCallback() flushes the master MeterProcessor FIFO and pushes values
+    // to all channel strip MeterBars.
+    startTimerHz (24);
 }
 
 MixerView::~MixerView()
 {
+    stopTimer();  // Stop before destroying strips to avoid dangling timerCallback
+
     if (auto* edit = appState.editManager.getEdit())
         edit->state.removeListener (this);
 
@@ -85,6 +92,33 @@ void MixerView::rebuildStrips()
     }
 
     resized();
+}
+
+//==============================================================================
+// juce::Timer — 24fps meter update (plan 01-17, EXP-03 gap closure)
+
+void MixerView::timerCallback()
+{
+    // Get the master MeterProcessor from AudioEngine.
+    // This processor taps the post-render output buffer via an AudioIODeviceCallback,
+    // so it receives real audio data during playback.
+    auto& masterMeter = appState.audioEngine.getMasterMeterProcessor();
+
+    // CRITICAL: flushFifo() pumps the lock-free FIFO into libebur128 on the message thread.
+    // This call must happen on the message thread (which it does — we are in timerCallback).
+    // The audio thread NEVER calls libebur128 — it only writes to the FIFO.
+    masterMeter.flushFifo();
+
+    // Read the updated values (atomics — thread-safe from any thread)
+    const float peakDB = masterMeter.getPeakDB();
+    const float rmsDB  = masterMeter.getRMSDB();
+    const float lufsM  = masterMeter.getLUFSMomentary();
+    const float lufsI  = masterMeter.getLUFSIntegrated();
+
+    // Push master meter values to all channel strip MeterBars.
+    // Phase 1: all strips show the same program-level mix.
+    for (auto* strip : strips)
+        strip->setMeterValues (peakDB, rmsDB, lufsM, lufsI);
 }
 
 //==============================================================================

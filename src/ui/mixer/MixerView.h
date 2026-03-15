@@ -23,12 +23,20 @@ namespace te = tracktion::engine;
  *
  * Reactive: listens to Edit's ValueTree for track add/remove to rebuild strips.
  *
- * Plan 01-10: MixerView owns one MeterProcessor per track. Processors are
- * initialised with prepareToPlay(44100, 512) as default; the audio engine
- * calls prepareToPlay again with real values when it starts.
+ * Plan 01-17 (EXP-03 meter gap closure):
+ *   MixerView now owns a 24fps juce::Timer. Its timerCallback() reads from
+ *   AudioEngine::getMasterMeterProcessor() (which taps the post-render output
+ *   buffer via an AudioIODeviceCallback) and calls flushFifo() to pump
+ *   libebur128 on the message thread, then pushes the resulting values to
+ *   all ChannelStrip MeterBars via setMeterValues(). All strips display the
+ *   program-level mix in Phase 1 (per-track metering deferred to Phase 2).
+ *
+ * Plan 01-10 per-track MeterProcessors are retained for the getMeterProcessorForTrack()
+ * API — they remain as placeholders for per-track metering in a future phase.
  */
 class MixerView : public juce::Component,
-                  private juce::ValueTree::Listener
+                  private juce::ValueTree::Listener,
+                  private juce::Timer
 {
 public:
     MixerView (ApplicationState& appState, MixerEngine& mixerEngine);
@@ -39,8 +47,8 @@ public:
 
     /**
      * Returns the MeterProcessor for a given track.
-     * Used by the audio graph to push samples into the meter FIFO.
-     * Returns nullptr if the track has no strip (shouldn't happen in normal use).
+     * Retained from plan 01-10 for future per-track metering.
+     * Returns nullptr if the track has no strip.
      */
     MeterProcessor* getMeterProcessorForTrack (const te::AudioTrack& track);
 
@@ -52,13 +60,16 @@ private:
     juce::Component channelStripContainer;
     juce::OwnedArray<ChannelStrip> strips;
 
-    // One MeterProcessor per track (owned here, referenced by ChannelStrip's MeterBar)
-    // Key: track pointer (stable for the lifetime of the strip)
+    // Per-track MeterProcessors retained from plan 01-10 (future per-track metering).
+    // In Phase 1 the master meter from AudioEngine feeds all strips instead.
     std::map<te::AudioTrack*, std::unique_ptr<MeterProcessor>> meterProcessors;
 
     static constexpr int kStripWidth = 80;
 
     void rebuildStrips();
+
+    // juce::Timer — fires at 24fps to flush master meter FIFO and update MeterBars
+    void timerCallback() override;
 
     void valueTreeChildAdded   (juce::ValueTree&, juce::ValueTree&) override;
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
