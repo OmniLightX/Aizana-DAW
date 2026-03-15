@@ -8,24 +8,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 
 # ---------------------------------------------------------------------------
-# all_tests — Pure unit tests that do NOT require JUCE/Tracktion linkage.
-# DSP, metering, plugin chain order, export, etc.
-# These stub tests use SKIP() and compile with only Catch2.
-# ---------------------------------------------------------------------------
-add_executable(all_tests
-    test_eq_dsp.cpp
-    test_compressor_dsp.cpp
-    test_reverb_dsp.cpp
-    test_limiter_dsp.cpp
-    test_lufs_meter.cpp
-    test_export_wav.cpp
-)
-
-target_link_libraries(all_tests PRIVATE Catch2::Catch2WithMain)
-
-# ---------------------------------------------------------------------------
 # engine_tests — Tests requiring JUCE + Tracktion Engine linkage.
-# Covers AUDIO-03, AUDIO-04, AUDIO-05, MIX-01, MIX-02, MIX-03, MIX-04.
+# Covers AUDIO-03, AUDIO-04, AUDIO-05, MIX-01, MIX-02, MIX-03, MIX-04,
+# PLUG-01 through PLUG-04, FX-01 through FX-04, EXP-01 through EXP-04.
 # Runs headless — no display or audio hardware required.
 # ---------------------------------------------------------------------------
 juce_add_console_app(engine_tests
@@ -45,6 +30,15 @@ target_sources(engine_tests PRIVATE
     test_au_scan.cpp
     test_clap_host.cpp
     test_plugin_chain_order.cpp
+    # DSP effects tests (FX-01 through FX-04) — require juce::dsp
+    test_eq_dsp.cpp
+    test_compressor_dsp.cpp
+    test_reverb_dsp.cpp
+    test_limiter_dsp.cpp
+    # Metering tests (EXP-03) — require JUCE + libebur128
+    test_lufs_meter.cpp
+    # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
+    test_export_wav.cpp
     # Source files
     ../src/engine/EditManager.cpp
     ../src/engine/ClipEditor.cpp
@@ -56,6 +50,14 @@ target_sources(engine_tests PRIVATE
     ../src/plugins/ClapPluginFormat.cpp
     ../src/plugins/PluginScanner.cpp
     ../src/plugins/PluginManager.cpp
+    # DSP effects implementations (FX-01 through FX-04)
+    ../src/fx/EQProcessor.cpp
+    ../src/fx/CompressorProcessor.cpp
+    ../src/fx/ReverbProcessor.cpp
+    ../src/fx/LimiterProcessor.cpp
+    # Metering + Export implementations (plan 01-07)
+    ../src/metering/MeterProcessor.cpp
+    ../src/engine/ExportPipeline.cpp
 )
 
 target_include_directories(engine_tests PRIVATE
@@ -80,6 +82,7 @@ target_link_libraries(engine_tests PRIVATE
     juce::juce_dsp
     juce::juce_gui_extra
     tracktion::tracktion_engine
+    ebur128
 )
 
 # Expose CLAP include path (consistent with Cloudes app target)
@@ -89,5 +92,4 @@ target_include_directories(engine_tests PRIVATE
 
 include(CTest)
 include(Catch)
-catch_discover_tests(all_tests)
 catch_discover_tests(engine_tests)

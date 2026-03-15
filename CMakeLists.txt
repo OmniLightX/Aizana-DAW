@@ -60,6 +60,7 @@ juce_add_gui_app(Cloudes
 target_sources(Cloudes PRIVATE
     src/app/Main.cpp
     src/app/MainWindow.cpp
+    src/app/MainComponent.cpp
     src/app/ApplicationState.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
@@ -72,6 +73,21 @@ target_sources(Cloudes PRIVATE
     src/plugins/ClapPluginFormat.cpp
     src/plugins/PluginScanner.cpp
     src/plugins/PluginManager.cpp
+    # DSP effects (FX-01 through FX-04)
+    src/fx/EQProcessor.cpp
+    src/fx/CompressorProcessor.cpp
+    src/fx/ReverbProcessor.cpp
+    src/fx/LimiterProcessor.cpp
+    # Metering + Export (plan 01-07, EXP-01 through EXP-04)
+    src/metering/MeterProcessor.cpp
+    src/engine/ExportPipeline.cpp
+    # UI Shell (plan 01-08)
+    src/ui/arrangement/TransportBar.cpp
+    src/ui/arrangement/ArrangementView.cpp
+    src/ui/arrangement/TrackHeader.cpp
+    src/ui/arrangement/ClipComponent.cpp
+    src/ui/mixer/MixerView.cpp
+    src/ui/mixer/ChannelStrip.cpp
 )
 
 target_include_directories(Cloudes PRIVATE

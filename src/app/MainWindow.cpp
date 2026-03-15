@@ -1,35 +1,5 @@
 #include "MainWindow.h"
-
-//==============================================================================
-/**
- * Placeholder content component — a blank gray surface.
- *
- * This will be replaced in plan 01-08 (UI Shell) with the real
- * ArrangementView + MixerView + TransportBar layout.
- */
-class PlaceholderContent : public juce::Component
-{
-public:
-    PlaceholderContent()
-    {
-        setSize (1200, 800);
-    }
-
-    void paint (juce::Graphics& g) override
-    {
-        g.fillAll (juce::Colour (0xff2a2a2a));   // dark gray — DAW neutral background
-
-        g.setColour (juce::Colours::grey);
-        g.setFont (juce::FontOptions (20.0f));
-        g.drawText ("Cloudes — DAW Foundation (skeleton)",
-                    getLocalBounds(),
-                    juce::Justification::centred,
-                    true);
-    }
-
-private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlaceholderContent)
-};
+#include "MainComponent.h"
 
 //==============================================================================
 
@@ -44,7 +14,11 @@ MainWindow::MainWindow (juce::String name)
     appState = std::make_unique<ApplicationState>();
 
     setUsingNativeTitleBar (true);
-    setContentOwned (new PlaceholderContent(), true);
+
+    // Replace placeholder with the real DAW shell (plan 01-08).
+    // MainComponent takes ownership of the three-panel layout:
+    //   TransportBar (top) + ArrangementView (middle) + MixerView (bottom).
+    setContentOwned (new MainComponent (*appState), true);
 
     setResizable (true, true);
     centreWithSize (getWidth(), getHeight());
