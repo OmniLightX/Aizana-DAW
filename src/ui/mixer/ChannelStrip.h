@@ -94,6 +94,7 @@ private:
     MeterBar         meterBar;
     juce::Slider     volumeFader;
     juce::Slider     panKnob;
+    juce::Label      panLabel;      // "PAN" label below the pan knob
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
     juce::Label      trackNameLabel;

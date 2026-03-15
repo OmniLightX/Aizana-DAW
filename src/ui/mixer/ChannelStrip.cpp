@@ -141,13 +141,27 @@ void MeterBar::paint (juce::Graphics& g)
         g.fillRect (rmsX, rmsY, barW, rmsH);
     }
 
-    // Tick marks at -6, -12, -18, -24 dBFS
-    g.setColour (juce::Colour (0xff444444));
+    // Tick marks at -6, -12, -18, -24 dBFS with dB scale labels
     for (float dB : { -6.0f, -12.0f, -18.0f, -24.0f })
     {
-        const float norm = dbToNorm (dB);
+        const float norm  = dbToNorm (dB);
         const float tickY = area.getBottom() - norm * area.getHeight();
+
+        // Tick line
+        g.setColour (juce::Colour (0xff444444));
         g.drawHorizontalLine ((int)tickY, area.getX(), area.getRight());
+
+        // dB text label — drawn inside the meter bar with semi-transparent colour
+        // so it's visible at any strip width without needing external space
+        g.setFont (juce::FontOptions (8.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.45f));
+        g.drawText (juce::String (static_cast<int> (dB)),
+                    (int)area.getX(),
+                    (int)(tickY - 9.0f),  // above the tick line
+                    (int)area.getWidth(),
+                    9,
+                    juce::Justification::centredRight,
+                    false);
     }
 }
 
@@ -195,6 +209,12 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
         mixerEngine.setMute (track, muteButton.getToggleState());
     };
 
+    // ---- Pan label ----
+    panLabel.setText ("PAN", juce::dontSendNotification);
+    panLabel.setJustificationType (juce::Justification::centred);
+    panLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
+    panLabel.setFont (juce::FontOptions (9.0f));
+
     // ---- Track name label ----
     trackNameLabel.setText (track.getName(), juce::dontSendNotification);
     trackNameLabel.setJustificationType (juce::Justification::centred);
@@ -204,6 +224,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     addAndMakeVisible (meterBar);
     addAndMakeVisible (volumeFader);
     addAndMakeVisible (panKnob);
+    addAndMakeVisible (panLabel);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (trackNameLabel);
@@ -231,9 +252,10 @@ void ChannelStrip::resized()
     soloButton.setBounds (buttonArea.removeFromLeft (buttonArea.getWidth() / 2).reduced (1));
     muteButton.setBounds (buttonArea.reduced (1));
 
-    // Pan knob
-    const int panH = juce::jmin (50, area.getHeight() / 5);
+    // Pan knob — enforce minimum 40px so it never collapses to invisible
+    const int panH = juce::jmax (40, juce::jmin (50, area.getHeight() / 5));
     panKnob.setBounds (area.removeFromTop (panH));
+    panLabel.setBounds (area.removeFromTop (12));
 
     // Meter bar on the left ~30% width, volume fader on the right ~70%
     const int meterW = juce::jmax (16, area.getWidth() * 30 / 100);
