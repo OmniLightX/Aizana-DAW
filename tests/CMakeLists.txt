@@ -90,6 +90,11 @@ target_include_directories(engine_tests PRIVATE
     ${clap_api_SOURCE_DIR}/include
 )
 
+# libebur128 header — FetchContent puts it in build/_deps, expose same path as main target
+target_include_directories(engine_tests PRIVATE
+    ${ebur128_SOURCE_DIR}/ebur128
+)
+
 include(CTest)
 include(Catch)
 catch_discover_tests(engine_tests)
