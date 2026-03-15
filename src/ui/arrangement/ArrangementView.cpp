@@ -144,7 +144,7 @@ void ArrangementView::rebuildTrackRows()
         // Create clip components for each clip in this track
         for (auto* clip : audioTrack->getClips())
         {
-            auto* cc = clipComponents.add (new ClipComponent (*clip));
+            auto* cc = clipComponents.add (new ClipComponent (*clip, appState.editManager));
             timelineContainer.addAndMakeVisible (cc);
         }
     }

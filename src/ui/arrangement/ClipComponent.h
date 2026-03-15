@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
+#include "engine/EditManager.h"
 
 namespace te = tracktion::engine;
 
@@ -11,20 +12,23 @@ namespace te = tracktion::engine;
  * Renders a coloured rectangle proportional to clip duration with the clip name
  * drawn inside. One ClipComponent is created per clip in the ArrangementView.
  *
- * Drag-to-move is wired in plan 01-09 (ClipEditor integration).
+ * Double-clicking a MIDI clip opens PianoRollView in a floating DocumentWindow.
+ * Drag-to-move may be added in a future plan.
  * Positioned by ArrangementView based on clip start time and pixelsPerSecond zoom.
  */
 class ClipComponent : public juce::Component
 {
 public:
-    explicit ClipComponent (te::Clip& clip);
+    ClipComponent (te::Clip& clip, EditManager& editManager);
 
-    void paint (juce::Graphics& g) override;
+    void paint           (juce::Graphics& g) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
 
     te::Clip& getClip() const noexcept { return clip; }
 
 private:
-    te::Clip& clip;
+    te::Clip&    clip;
+    EditManager& editManager;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipComponent)
 };
