@@ -207,20 +207,11 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
             break;
 
         case ExportMixdown:
-            // Plan 01-16 will implement ExportDialog. For now show placeholder.
-            juce::AlertWindow::showMessageBoxAsync (
-                juce::MessageBoxIconType::InfoIcon,
-                "Export Mixdown",
-                "Export dialog coming in plan 01-16. "
-                "Engine is ready: ExportPipeline::exportMixdown().");
+            ExportDialog::showMixdownDialog (appState.editManager, exportPipeline);
             break;
 
         case ExportStems:
-            juce::AlertWindow::showMessageBoxAsync (
-                juce::MessageBoxIconType::InfoIcon,
-                "Export Stems",
-                "Export dialog coming in plan 01-16. "
-                "Engine is ready: ExportPipeline::exportStems().");
+            ExportDialog::showStemsDialog (appState.editManager, exportPipeline);
             break;
 
         default:

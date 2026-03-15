@@ -5,6 +5,7 @@
 #include "engine/MixerEngine.h"
 #include "engine/AutomationEngine.h"
 #include "engine/ClipEditor.h"
+#include "engine/ExportPipeline.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/arrangement/TransportBar.h"
@@ -12,6 +13,7 @@
 #include "ui/mixer/MixerView.h"
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "ui/preferences/PreferencesDialog.h"
+#include "ui/export/ExportDialog.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -70,6 +72,10 @@ private:
     AutomationEngine automationEngine { appState.editManager };
     ClipEditor       clipEditor       { appState.editManager };
 
+    // Export pipeline — owned by MainComponent, passed to ExportDialog (plan 01-16)
+    // ExportPipeline() takes no constructor args; edit is passed per-call
+    ExportPipeline   exportPipeline;
+
     // Plugin scanning + management (plan 01-15)
     // PluginScanner must be declared before PluginManager (dependency order)
     PluginScanner    pluginScanner;
@@ -81,7 +87,8 @@ private:
     // UI components
     TransportBar    transportBar    { appState };
     ArrangementView arrangementView { appState, clipEditor, mixerEngine,
-                                      pluginManager, pluginWindowManager, pluginScanner };
+                                      pluginManager, pluginWindowManager, pluginScanner,
+                                      automationEngine };
     MixerView       mixerView       { appState, mixerEngine };
     // dockedPanel is inside pluginWindowManager — added to our layout via getDockedPanel()
 
