@@ -19,20 +19,28 @@
  *
  * ApplicationState is constructed here to ensure the audio device and Edit
  * are initialised before any UI is shown (plan 01-02 requirement).
+ *
+ * Plan 01-13: On macOS, installs MainComponent as the native system menu bar
+ * via juce::MenuBarModel::setMacMainMenu(). On Windows/Linux, adds a
+ * juce::MenuBarComponent at the top of the window.
  */
 class MainWindow : public juce::DocumentWindow
 {
 public:
     explicit MainWindow (juce::String name);
-    ~MainWindow() override = default;
+    ~MainWindow() override;
 
     void closeButtonPressed() override;
+    void resized() override;
 
     /** Access the application state (EditManager + AudioEngine) from any UI component. */
     ApplicationState& getApplicationState() { return *appState; }
 
 private:
     std::unique_ptr<ApplicationState> appState;
+
+    // Only used on non-macOS platforms (Windows / Linux):
+    std::unique_ptr<juce::MenuBarComponent> menuBarComponent;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
