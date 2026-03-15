@@ -5,10 +5,12 @@
 #include "app/ApplicationState.h"
 #include "engine/ClipEditor.h"
 #include "engine/MixerEngine.h"
+#include "engine/AutomationEngine.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "TrackHeader.h"
+#include "TrackRow.h"
 #include "ClipComponent.h"
 
 namespace te = tracktion::engine;
@@ -28,6 +30,10 @@ namespace te = tracktion::engine;
  *
  * Plan 01-15: TrackHeaders now receive PluginManager, PluginWindowManager, and
  * PluginScanner so that right-click context menus can insert plugins.
+ *
+ * Plan 01-18: AutomationEngine is passed in so TrackRows can wire the
+ * AutomationLane to it.  Each track row has a disclosure "A" button that
+ * expands to reveal the lane below the clip area.
  */
 class ArrangementView : public juce::Component,
                         public juce::FileDragAndDropTarget,
@@ -40,7 +46,8 @@ public:
                      MixerEngine&         mixerEngine,
                      PluginManager&       pluginManager,
                      PluginWindowManager& pluginWindowManager,
-                     PluginScanner&       pluginScanner);
+                     PluginScanner&       pluginScanner,
+                     AutomationEngine&    automationEngine);
     ~ArrangementView() override;
 
     void resized() override;
@@ -66,6 +73,7 @@ private:
     PluginManager&       pluginManager;
     PluginWindowManager& pluginWindowManager;
     PluginScanner&       pluginScanner;
+    AutomationEngine&    automationEngine;
 
     // ---- Header strip ----
     juce::TextButton addTrackButton { "+ Track" };
@@ -79,8 +87,8 @@ private:
     juce::Viewport timelineViewport;
     juce::Component timelineContainer; // sized to fit all clips
 
-    juce::OwnedArray<TrackHeader>   trackHeaders;
-    juce::OwnedArray<ClipComponent> clipComponents;
+    juce::OwnedArray<TrackHeader> trackHeaders;
+    juce::OwnedArray<TrackRow>    trackRows;
 
     static constexpr int kTrackHeight       = 60;
     static constexpr int kHeaderWidth       = 160;
@@ -89,8 +97,10 @@ private:
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
 
-    // Rebuilds all header + clip children from current Edit state
+    // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();
+    // Lays out all TrackRows vertically (called by resized() and after row expansion)
+    void layoutTrackRows();
 
     // ValueTree::Listener — called when tracks are added/removed/reordered
     void valueTreeChildAdded   (juce::ValueTree&, juce::ValueTree&) override;

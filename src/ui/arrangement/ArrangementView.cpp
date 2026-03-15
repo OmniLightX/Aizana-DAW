@@ -7,13 +7,15 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   MixerEngine&         mixerEngine_,
                                   PluginManager&       pluginManager_,
                                   PluginWindowManager& pluginWindowManager_,
-                                  PluginScanner&       pluginScanner_)
+                                  PluginScanner&       pluginScanner_,
+                                  AutomationEngine&    automationEngine_)
     : appState            (appState_)
     , clipEditor          (clipEditor_)
     , mixerEngine         (mixerEngine_)
     , pluginManager       (pluginManager_)
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner       (pluginScanner_)
+    , automationEngine    (automationEngine_)
 {
     // Header viewport — scrolls vertically only (no horizontal scroll)
     headerViewport.setScrollBarsShown (true, false);
@@ -78,58 +80,30 @@ void ArrangementView::resized()
     // Right: timeline panel (rest of width)
     timelineViewport.setBounds (area);
 
-    // Size the containers based on track count
-    const int trackCount = trackHeaders.size();
-    const int totalTrackH = trackCount * kTrackHeight;
+    // Size the header container — one row per track header (fixed kTrackHeight each)
+    const int trackCount  = trackHeaders.size();
+    const int totalHeaderH = trackCount * kTrackHeight;
 
-    headerContainer.setSize (kHeaderWidth, juce::jmax (totalTrackH, headerViewport.getHeight()));
+    headerContainer.setSize (kHeaderWidth,
+                             juce::jmax (totalHeaderH, headerViewport.getHeight()));
 
     // Timeline width: 5 minutes at current zoom, or at least the viewport width
     const double timelineWidthPx = pixelsPerSecond * 300.0;   // 5 minutes
-    timelineContainer.setSize (juce::jmax ((int)timelineWidthPx, timelineViewport.getWidth()),
-                               juce::jmax (totalTrackH, timelineViewport.getHeight()));
 
-    // Lay out each track header vertically in the header container
+    // Lay out track headers (fixed height, independent of expanded TrackRows)
     for (int i = 0; i < trackHeaders.size(); ++i)
         trackHeaders[i]->setBounds (0, i * kTrackHeight, kHeaderWidth, kTrackHeight);
 
-    // Lay out clip components inside timelineContainer
-    for (auto* cc : clipComponents)
-    {
-        auto& clip = cc->getClip();
-        auto* parentTrack = clip.getTrack();
-        if (parentTrack == nullptr)
-            continue;
+    // Lay out TrackRows in the timeline container
+    layoutTrackRows();
 
-        // Find track row index
-        int rowIndex = -1;
-        auto* edit = appState.editManager.getEdit();
-        if (edit != nullptr)
-        {
-            int idx = 0;
-            for (auto* t : te::getAudioTracks (*edit))
-            {
-                if (t == parentTrack)
-                {
-                    rowIndex = idx;
-                    break;
-                }
-                ++idx;
-            }
-        }
+    // Timeline container height = sum of all TrackRow preferred heights
+    int totalRowH = 0;
+    for (auto* row : trackRows)
+        totalRowH += row->getPreferredHeight();
 
-        if (rowIndex < 0)
-            continue;
-
-        const double startSecs = clip.getPosition().getStart().inSeconds();
-        const double endSecs   = clip.getPosition().getEnd().inSeconds();
-        const int x  = (int)(startSecs * pixelsPerSecond);
-        const int w  = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
-        const int y  = rowIndex * kTrackHeight + 2;
-        const int h  = kTrackHeight - 4;
-
-        cc->setBounds (x, y, w, h);
-    }
+    timelineContainer.setSize (juce::jmax ((int)timelineWidthPx, timelineViewport.getWidth()),
+                               juce::jmax (totalRowH, timelineViewport.getHeight()));
 }
 
 void ArrangementView::paint (juce::Graphics& g)
@@ -159,16 +133,18 @@ void ArrangementView::rebuildTrackRows()
     headerContainer.removeAllChildren();
     timelineContainer.removeAllChildren();
     trackHeaders.clear();
-    clipComponents.clear();
+    trackRows.clear();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
+    {
+        resized();
         return;
+    }
 
     for (auto* audioTrack : te::getAudioTracks (*edit))
     {
-        // Create and add track header — now passes plugin management references
-        // so that the right-click context menu can insert plugins (plan 01-15)
+        // Track header (left panel) — passes plugin management refs for right-click menu
         auto* header = trackHeaders.add (new TrackHeader (*audioTrack,
                                                           mixerEngine,
                                                           pluginManager,
@@ -176,16 +152,46 @@ void ArrangementView::rebuildTrackRows()
                                                           pluginScanner));
         headerContainer.addAndMakeVisible (header);
 
-        // Create clip components for each clip in this track
+        // TrackRow (right panel / timeline) — expandable, holds clips + AutomationLane
+        auto* row = trackRows.add (new TrackRow (*audioTrack,
+                                                  automationEngine,
+                                                  pixelsPerSecond,
+                                                  scrollPositionSecs));
+        timelineContainer.addAndMakeVisible (row);
+
+        // Create clip components inside the row's clip area
         for (auto* clip : audioTrack->getClips())
         {
-            auto* cc = clipComponents.add (new ClipComponent (*clip, appState.editManager));
-            timelineContainer.addAndMakeVisible (cc);
+            auto* cc = new ClipComponent (*clip, appState.editManager);
+            row->getClipArea().addAndMakeVisible (cc);
+
+            // Position clip within the clip area
+            const double startSecs = clip->getPosition().getStart().inSeconds();
+            const double endSecs   = clip->getPosition().getEnd().inSeconds();
+            const int    x = (int)((startSecs - scrollPositionSecs) * pixelsPerSecond);
+            const int    w = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
+            cc->setBounds (x, 2, w, TrackRow::kCollapsedHeight - 4);
         }
     }
 
     // Trigger layout
     resized();
+}
+
+void ArrangementView::layoutTrackRows()
+{
+    int y = 0;
+    const int timelineW = timelineContainer.getWidth() > 0
+                              ? timelineContainer.getWidth()
+                              : juce::jmax ((int)(pixelsPerSecond * 300.0),
+                                            timelineViewport.getWidth());
+
+    for (auto* row : trackRows)
+    {
+        const int h = row->getPreferredHeight();
+        row->setBounds (0, y, timelineW, h);
+        y += h;
+    }
 }
 
 //==============================================================================
