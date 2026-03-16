@@ -108,6 +108,20 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Spacebar: global play/stop — works from anywhere in the app (no focus trap)
+    if (key == juce::KeyPress::spaceKey)
+    {
+        if (auto* edit = appState.editManager.getEdit())
+        {
+            auto& transport = edit->getTransport();
+            if (transport.isPlaying())
+                transport.stop (false, false);
+            else
+                transport.play (false);
+        }
+        return true;
+    }
+
     return false;
 }
 
