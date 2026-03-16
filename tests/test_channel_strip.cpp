@@ -138,6 +138,37 @@ TEST_CASE ("ChannelStrip: setVolume change is individually undoable", "[mixer][M
 }
 
 // ---------------------------------------------------------------------------
+// MIX-01: setPan change is individually undoable (AUDIO-05)
+// ---------------------------------------------------------------------------
+TEST_CASE ("ChannelStrip: setPan change is individually undoable", "[mixer][MIX-01]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    auto* vp = track->getVolumePlugin();
+    REQUIRE (vp != nullptr);
+
+    float originalPan = vp->pan.get();
+
+    // Make a pan change (records an undo step)
+    mixer.setPan (*track, 0.7f);
+    CHECK_THAT (vp->getPan(), Catch::Matchers::WithinAbs (0.7f, 0.01f));
+
+    // Undo restores the ValueTree pan CachedValue. Read via vp->pan.get() (the
+    // CachedValue, same source that setPan wrote to) — identical to how
+    // getVolume reads vp->volume.get() after undo. TE's valueTreePropertyChanged
+    // does NOT propagate the restored value back to panParam->currentValue, so
+    // vp->getPan() (which reads currentValue) would still show the pre-undo value.
+    em.undoLastAction();
+    CHECK_THAT (vp->pan.get(), Catch::Matchers::WithinAbs (originalPan, 0.01f));
+}
+
+// ---------------------------------------------------------------------------
 // MIX-01: Solo/mute survive ValueTree save/load round-trip
 // ---------------------------------------------------------------------------
 TEST_CASE ("ChannelStrip: solo and mute persist through ValueTree XML round-trip", "[mixer][MIX-01]")

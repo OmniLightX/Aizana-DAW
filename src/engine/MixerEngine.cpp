@@ -54,11 +54,15 @@ void MixerEngine::setPan (te::AudioTrack& track, float pan)
     if (vp == nullptr)
         return;
 
-    // Use CachedValue with UndoManager for proper undo support.
-    // Pan value is in [-1.0, 1.0] which matches the pan CachedValue range.
+    // Write the pan CachedValue with UndoManager first so the UndoManager
+    // captures the correct before-state. Then call vp->setPan() to sync
+    // panParam->currentValue (TE's ValueTree property-changed callback does
+    // NOT propagate the new value back to currentValue, so vp->setPan() is
+    // still required after setValue — same invariant as setVolume/setSliderPos).
+    const float clamped = juce::jlimit (-1.0f, 1.0f, pan);
     edit->getUndoManager().beginNewTransaction ("Set pan");
-    vp->setPan (juce::jlimit (-1.0f, 1.0f, pan));
-    vp->pan.setValue (juce::jlimit (-1.0f, 1.0f, pan), &edit->getUndoManager());
+    vp->pan.setValue (clamped, &edit->getUndoManager());
+    vp->setPan (clamped);
 }
 
 void MixerEngine::setSolo (te::AudioTrack& track, bool solo)
