@@ -59,14 +59,14 @@ te::AutomatableParameter* AutomationLane::getParam() const
     // Stage 3: name-based match (handles TE versions where paramID diverges from our string)
     // "volume" matches params named "Volume", "Vol", etc.
     for (auto* p : allParams)
-        if (p->parameterName.containsIgnoreCase (parameterID))
+        if (p->paramName.containsIgnoreCase (parameterID))
             return p;
 
     // Debug: surface available params so developers can correct the paramID string
     // This fires in debug builds only — jassertfalse stops execution in debugger.
     DBG ("AutomationLane::getParam() -- no match for paramID='" + parameterID + "'. Available:");
     for (auto* p : allParams)
-        DBG ("  paramID='" + p->paramID + "' name='" + p->parameterName + "'");
+        DBG ("  paramID='" + p->paramID + "' name='" + p->paramName + "'");
     jassertfalse;  // Fires in debug builds — check the DBG output above for correct ID
 
     return nullptr;
@@ -84,7 +84,7 @@ void AutomationLane::paint (juce::Graphics& g)
 
     // Parameter label
     g.setColour (juce::Colours::grey);
-    g.setFont (juce::Font (10.0f));
+    g.setFont (juce::FontOptions (10.0f));
     g.drawText ("AUTO: " + parameterID.toUpperCase(),
                 4, 4, 80, 16, juce::Justification::centredLeft);
 

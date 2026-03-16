@@ -38,15 +38,23 @@ void MixerView::resized()
 {
     channelStripViewport.setBounds (getLocalBounds());
 
-    // Size container to hold all strips side-by-side
-    const int totalW = juce::jmax (strips.size() * kStripWidth,
+    // Size container to hold all strips side-by-side (audio + bus)
+    const int totalW = juce::jmax ((strips.size() + busStrips.size()) * kStripWidth,
                                    channelStripViewport.getWidth());
     channelStripContainer.setSize (totalW, channelStripViewport.getMaximumVisibleHeight());
 
-    // Lay out strips horizontally
+    // Lay out audio track strips horizontally
     for (int i = 0; i < strips.size(); ++i)
         strips[i]->setBounds (i * kStripWidth, 0, kStripWidth,
                               channelStripContainer.getHeight());
+
+    // Lay out bus strips after audio track strips
+    for (int i = 0; i < busStrips.size(); ++i)
+    {
+        const int busIdx = strips.size() + i;
+        busStrips[i]->setBounds (busIdx * kStripWidth, 0, kStripWidth,
+                                 channelStripContainer.getHeight());
+    }
 }
 
 void MixerView::paint (juce::Graphics& g)
@@ -69,6 +77,7 @@ void MixerView::rebuildStrips()
     // Clear existing strips and processors
     channelStripContainer.removeAllChildren();
     strips.clear();
+    busStrips.clear();
     meterProcessors.clear();
 
     auto* edit = appState.editManager.getEdit();
@@ -89,6 +98,16 @@ void MixerView::rebuildStrips()
         // Create the ChannelStrip passing the MeterProcessor reference
         auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr));
         channelStripContainer.addAndMakeVisible (strip);
+    }
+
+    // Create BusStrips for FolderTracks (buses created via "Create Bus from Track")
+    for (auto* track : te::getAllTracks (*edit))
+    {
+        if (auto* folderTrack = dynamic_cast<te::FolderTrack*> (track))
+        {
+            auto* busStrip = busStrips.add (new BusStrip (*folderTrack));
+            channelStripContainer.addAndMakeVisible (busStrip);
+        }
     }
 
     resized();

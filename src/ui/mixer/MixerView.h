@@ -66,6 +66,63 @@ private:
 
     static constexpr int kStripWidth = 80;
 
+    /**
+     * BusStrip — Visual representation of a FolderTrack (bus) in the mixer.
+     * Simpler than ChannelStrip: shows bus name and a coloured header bar.
+     * Volume on bus is controlled via the track's VolumePlugin if available,
+     * otherwise display-only. Created when a FolderTrack exists in the edit.
+     *
+     * Apple approach: buses appear immediately with distinct visual style
+     * (darker, tagged "BUS") so users get instant confirmation of creation.
+     */
+    class BusStrip : public juce::Component
+    {
+    public:
+        explicit BusStrip (te::FolderTrack& track_) : track (track_)
+        {
+            nameLabel.setText ("BUS\n" + track.getName(), juce::dontSendNotification);
+            nameLabel.setJustificationType (juce::Justification::centred);
+            nameLabel.setColour (juce::Label::textColourId, juce::Colour (0xffbbbbbb));
+            nameLabel.setFont (juce::FontOptions (10.0f));
+            addAndMakeVisible (nameLabel);
+        }
+
+        void resized() override
+        {
+            nameLabel.setBounds (getLocalBounds().reduced (4));
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            // Darker background distinguishes buses from audio track strips
+            g.fillAll (juce::Colour (0xff1a1a2e));
+
+            // Bus colour strip at top (4px) — uses track colour like ChannelStrip
+            g.setColour (track.getColour());
+            g.fillRect (0, 0, getWidth(), 4);
+
+            // "BUS" tag overlay in top-left corner
+            g.setColour (juce::Colour (0xff446688));
+            g.fillRoundedRectangle (4.0f, 6.0f, 28.0f, 12.0f, 3.0f);
+            g.setColour (juce::Colours::white);
+            g.setFont (juce::FontOptions (8.0f));
+            g.drawText ("BUS", 4, 6, 28, 12, juce::Justification::centred);
+
+            // Right border separator
+            g.setColour (juce::Colour (0xff111111));
+            g.drawLine ((float)getWidth() - 1.0f, 0.0f,
+                        (float)getWidth() - 1.0f, (float)getHeight(), 1.0f);
+        }
+
+    private:
+        te::FolderTrack& track;
+        juce::Label nameLabel;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusStrip)
+    };
+
+    juce::OwnedArray<BusStrip> busStrips;
+
     void rebuildStrips();
 
     // juce::Timer — fires at 24fps to flush master meter FIFO and update MeterBars
