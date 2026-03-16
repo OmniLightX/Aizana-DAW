@@ -241,7 +241,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
 
     // ---- Pan knob ----
     panKnob.setSliderStyle     (juce::Slider::RotaryHorizontalVerticalDrag);
-    panKnob.setTextBoxStyle    (juce::Slider::TextBoxBelow, false, 50, 16);
+    panKnob.setTextBoxStyle    (juce::Slider::NoTextBox, false, 0, 0);
     panKnob.setRange           (-1.0, 1.0, 0.01);
     panKnob.setDoubleClickReturnValue (true, 0.0);  // double-click resets centre
     panKnob.setValue           (0.0, juce::dontSendNotification);  // default centre
@@ -308,8 +308,8 @@ void ChannelStrip::resized()
     soloButton.setBounds (buttonArea.removeFromLeft (buttonArea.getWidth() / 2).reduced (1));
     muteButton.setBounds (buttonArea.reduced (1));
 
-    // Pan knob — enforce minimum 40px so it never collapses to invisible
-    const int panH = juce::jmax (40, juce::jmin (50, area.getHeight() / 5));
+    // Without text box, the full height is the rotary dial itself — use 55px to make it prominent
+    const int panH = juce::jmax (48, juce::jmin (60, area.getHeight() / 4));
     panKnob.setBounds (area.removeFromTop (panH));
     panLabel.setBounds (area.removeFromTop (12));
 
