@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/EditManager.h"
 
@@ -29,6 +30,14 @@ public:
 private:
     te::Clip&    clip;
     EditManager& editManager;
+
+    // Waveform thumbnail — loaded asynchronously from the clip's source file
+    // Cache is per-component; for a production app it would be shared, but for Phase 1
+    // one cache per component is simpler and avoids shared-state coupling.
+    juce::AudioFormatManager        formatManager;
+    juce::AudioThumbnailCache       thumbnailCache { 128 };
+    juce::AudioThumbnail            thumbnail      { 512, formatManager, thumbnailCache };
+    bool                            thumbnailLoaded { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipComponent)
 };

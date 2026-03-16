@@ -7,6 +7,20 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_)
     : clip (clip_), editManager (editManager_)
 {
     setRepaintsOnMouseActivity (true);
+
+    // Register standard audio formats so the thumbnail knows how to read WAV/AIFF/etc.
+    formatManager.registerBasicFormats();
+
+    // Load thumbnail from source file for WaveAudioClip
+    if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
+    {
+        const juce::File audioFile = waveClip->getSourceFileReference().getFile();
+        if (audioFile.existsAsFile())
+        {
+            thumbnail.setSource (new juce::FileInputSource (audioFile));
+            thumbnailLoaded = true;
+        }
+    }
 }
 
 void ClipComponent::paint (juce::Graphics& g)
@@ -41,6 +55,27 @@ void ClipComponent::paint (juce::Graphics& g)
                 bounds.reduced (4.0f, 2.0f).toNearestInt(),
                 juce::Justification::centredLeft,
                 true);
+
+    // ---- Waveform thumbnail (WaveAudioClip only) ----
+    if (thumbnailLoaded && thumbnail.getTotalLength() > 0.0)
+    {
+        // Draw waveform in the interior area (inset from border)
+        auto waveArea = bounds.reduced (2.0f, 12.0f).toNearestInt();  // 12px leaves room for name
+        if (waveArea.getHeight() > 4)
+        {
+            // Semi-transparent white waveform over the clip body colour
+            g.setColour (juce::Colours::white.withAlpha (0.35f));
+
+            // Draw from clip start to end (clip's own timeline, not absolute edit position)
+            const double clipLengthSecs = clip.getPosition().getLength().inSeconds();
+            thumbnail.drawChannel (g,
+                                   waveArea,
+                                   0.0,                    // start at clip start
+                                   juce::jmax (0.001, clipLengthSecs),  // end at clip end
+                                   0,                      // channel 0 (left/mono)
+                                   1.0f);                  // vertical zoom = 1.0 (full amplitude)
+        }
+    }
 }
 
 void ClipComponent::mouseDoubleClick (const juce::MouseEvent&)
