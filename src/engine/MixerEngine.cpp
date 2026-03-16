@@ -19,18 +19,28 @@ void MixerEngine::setVolume (te::AudioTrack& track, float dB)
     if (vp == nullptr)
         return;
 
-    // setVolumeDb updates volParam->currentValue (read by getVolumeDb).
-    // We also write the ValueTree property with the UndoManager so the change
-    // is individually undoable via undoLastAction().
+    // Write the normalized fader position to the ValueTree via CachedValue with
+    // UndoManager so the change is individually undoable. Call setValue() first
+    // so the UndoManager captures the correct before-state from the ValueTree.
+    // Then call setSliderPos() to update volParam->currentValue synchronously
+    // (TE's ValueTree property-changed callback does NOT propagate the new value
+    // back to currentValue, so setSliderPos() is still required after setValue).
+    const float faderPos = te::decibelsToVolumeFaderPosition (dB);
     edit->getUndoManager().beginNewTransaction ("Set volume");
-    vp->setVolumeDb (dB);
-    vp->volume.setValue (te::decibelsToVolumeFaderPosition (dB), &edit->getUndoManager());
+    vp->volume.setValue (faderPos, &edit->getUndoManager());
+    vp->setSliderPos (faderPos);
 }
 
 float MixerEngine::getVolume (const te::AudioTrack& track) const
 {
+    // Read from the volume CachedValue (the ValueTree-backed source of truth)
+    // rather than volParam->getCurrentValue(). After undo, the ValueTree property
+    // is restored and the CachedValue is updated synchronously via
+    // forceUpdateOfCachedValue(), but volParam->currentValue is NOT propagated
+    // back by the property-changed callback. Reading from the CachedValue
+    // ensures correct values both after setVolume() and after undoLastAction().
     if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
-        return vp->getVolumeDb();
+        return te::volumeFaderPositionToDB (vp->volume.get());
 
     return 0.0f;
 }
