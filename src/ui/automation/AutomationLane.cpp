@@ -44,9 +44,31 @@ AutomationLane::~AutomationLane()
 
 te::AutomatableParameter* AutomationLane::getParam() const
 {
-    for (auto* p : track.getAllAutomatableParams())
+    const auto& allParams = track.getAllAutomatableParams();
+
+    // Stage 1: exact case-sensitive match (fastest, most reliable when paramID is correct)
+    for (auto* p : allParams)
         if (p->paramID == parameterID)
             return p;
+
+    // Stage 2: case-insensitive match (handles "Volume" vs "volume" discrepancy)
+    for (auto* p : allParams)
+        if (p->paramID.equalsIgnoreCase (parameterID))
+            return p;
+
+    // Stage 3: name-based match (handles TE versions where paramID diverges from our string)
+    // "volume" matches params named "Volume", "Vol", etc.
+    for (auto* p : allParams)
+        if (p->parameterName.containsIgnoreCase (parameterID))
+            return p;
+
+    // Debug: surface available params so developers can correct the paramID string
+    // This fires in debug builds only — jassertfalse stops execution in debugger.
+    DBG ("AutomationLane::getParam() -- no match for paramID='" + parameterID + "'. Available:");
+    for (auto* p : allParams)
+        DBG ("  paramID='" + p->paramID + "' name='" + p->parameterName + "'");
+    jassertfalse;  // Fires in debug builds — check the DBG output above for correct ID
+
     return nullptr;
 }
 
