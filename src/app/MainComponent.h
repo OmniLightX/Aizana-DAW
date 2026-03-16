@@ -116,6 +116,7 @@ private:
 
         // View menu
         ViewToggleMixer = 201,
+        ScanPlugins     = 202,
 
         // Export menu
         ExportMixdown = 301,
@@ -133,6 +134,15 @@ private:
     void handleFileSave();
     void handleFileSaveAs();
     void handleFileImportAudio();
+
+    // -------------------------------------------------------------------------
+    // View menu handlers
+    // -------------------------------------------------------------------------
+    void handleScanPlugins();
+
+    // Returns the path to the cached plugin list XML file
+    // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)
+    static juce::File getPluginListCacheFile();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -17,6 +17,10 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Mixer visible by default (CONTEXT.md: mixing-first design)
     mixerView.setVisible (mixerVisible);
 
+    // Load previously-scanned plugin list so the browser is populated on startup.
+    // If no cache exists (first launch), the browser remains empty until user triggers Scan.
+    pluginScanner.loadPluginList (getPluginListCacheFile());
+
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
 
@@ -182,6 +186,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           mixerVisible ? "Hide Mixer" : "Show Mixer",
                           true,
                           mixerVisible);
+            menu.addSeparator();
+            menu.addItem (ScanPlugins, "Scan Plugins...", true);
             break;
 
         case 3:  // Export
@@ -218,6 +224,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
         case ViewToggleMixer:
             toggleMixer();
             menuItemsChanged();
+            break;
+
+        case ScanPlugins:
+            handleScanPlugins();
             break;
 
         case ExportMixdown:
@@ -395,4 +405,52 @@ void MainComponent::handleFileImportAudio()
 
             fileChooser.reset();
         });
+}
+
+//==============================================================================
+// View menu handlers
+//==============================================================================
+
+void MainComponent::handleScanPlugins()
+{
+    // Show a non-blocking notification while scanning.
+    // Apple approach: minimal feedback — transient informational alert,
+    // not a modal dialog with a progress bar.
+    juce::AlertWindow::showMessageBoxAsync (
+        juce::MessageBoxIconType::InfoIcon,
+        "Scanning Plugins",
+        "Scanning plugin directories in the background.\n"
+        "The plugin browser will update when the scan completes.",
+        "OK");
+
+    // Run scan on a background thread — scanForPlugins is currently synchronous,
+    // so we wrap it in juce::Thread::launch and dispatch completion back to the
+    // message thread so UI updates happen safely.
+    juce::Thread::launch ([this]
+    {
+        pluginScanner.scanForPlugins (
+            [] (float /*progress*/) {},   // progress callback (no progress bar in Phase 1)
+            [this] ()
+            {
+                // Save results to cache so the next launch loads immediately
+                pluginScanner.savePluginList (getPluginListCacheFile());
+
+                // Post UI notification back to the message thread
+                juce::MessageManager::callAsync ([this]
+                {
+                    juce::AlertWindow::showMessageBoxAsync (
+                        juce::MessageBoxIconType::InfoIcon,
+                        "Scan Complete",
+                        "Plugin scan finished. The browser now shows all found plugins.",
+                        "OK");
+                });
+            });
+    });
+}
+
+juce::File MainComponent::getPluginListCacheFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("Cloudes")
+               .getChildFile ("knownPlugins.xml");
 }

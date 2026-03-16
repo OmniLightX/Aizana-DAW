@@ -22,8 +22,10 @@ public:
 
     void resized() override;
     void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
 
 private:
+    void showSampleRateMenu();
     ApplicationState& appState;
 
     juce::TextButton playButton   { "Play" };

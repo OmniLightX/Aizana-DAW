@@ -39,10 +39,11 @@ TransportBar::TransportBar (ApplicationState& appState_)
     // Update BPM display from edit tempo
     updateBpmLabel();
 
-    // Style sample rate label
+    // Style sample rate label — brighter text + pointer cursor signals interactivity
     sampleRateLabel.setJustificationType (juce::Justification::centred);
     sampleRateLabel.setFont (juce::FontOptions (11.0f));
-    sampleRateLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
+    sampleRateLabel.setColour (juce::Label::textColourId, juce::Colour (0xffaaaaaa));
+    sampleRateLabel.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     sampleRateLabel.setText ("-- kHz", juce::dontSendNotification);
 
     // Style transport buttons
@@ -197,4 +198,56 @@ void TransportBar::recordClicked()
         transport.stop (false, false);
     else
         transport.record (false);
+}
+
+void TransportBar::mouseDown (const juce::MouseEvent& e)
+{
+    // Only respond to clicks on the sample rate label
+    if (sampleRateLabel.getBounds().contains (e.getPosition()))
+        showSampleRateMenu();
+}
+
+void TransportBar::showSampleRateMenu()
+{
+    auto& deviceManager = appState.audioEngine.getDeviceManager();
+    auto* device = deviceManager.getCurrentAudioDevice();
+    const double currentRate = (device != nullptr) ? device->getCurrentSampleRate() : 0.0;
+
+    // Standard professional rates only — clean popup like iOS Settings
+    // Apple approach: present only the meaningful choices, no technical noise
+    struct RateOption { double rate; const char* label; };
+    const RateOption options[] = {
+        { 44100.0, "44.1 kHz" },
+        { 48000.0, "48 kHz"   },
+        { 88200.0, "88.2 kHz" },
+        { 96000.0, "96 kHz"   },
+    };
+
+    juce::PopupMenu menu;
+    int id = 1;
+    for (const auto& opt : options)
+    {
+        const bool isCurrent = std::abs (opt.rate - currentRate) < 1.0;
+        menu.addItem (id++, opt.label, true, isCurrent);
+    }
+
+    menu.showMenuAsync (
+        juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (
+            sampleRateLabel.getScreenBounds()),
+        [this] (int result)
+        {
+            if (result < 1 || result > 4) return;
+
+            const double rates[] = { 44100.0, 48000.0, 88200.0, 96000.0 };
+            const double chosenRate = rates[result - 1];
+
+            auto& deviceManager = appState.audioEngine.getDeviceManager();
+            auto setup = deviceManager.getAudioDeviceSetup();
+            setup.sampleRate = chosenRate;
+            deviceManager.setAudioDeviceSetup (setup, true);
+
+            // Update label immediately — timerCallback will sync in 2s otherwise
+            const juce::String srText = juce::String (chosenRate / 1000.0, 1) + " kHz";
+            sampleRateLabel.setText (srText, juce::dontSendNotification);
+        });
 }
