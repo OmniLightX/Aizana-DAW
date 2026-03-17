@@ -1,46 +1,17 @@
 #include "PluginScanner.h"
 
 // ---------------------------------------------------------------------------
-// Background scan thread
+// Background scan thread (multi-format, self-contained)
 // ---------------------------------------------------------------------------
 
-class PluginScanThread : public juce::Thread
+class ScanThread : public juce::Thread
 {
 public:
-    PluginScanThread (juce::PluginDirectoryScanner& scanner,
-                      std::function<void(float)>    onProgress,
-                      std::function<void()>          onComplete)
-        : juce::Thread ("PluginScanThread")
-        , scanner      (scanner)
-        , onProgress   (std::move (onProgress))
-        , onComplete   (std::move (onComplete))
-    {}
+    std::function<void()> body;
+    ScanThread() : juce::Thread ("PluginScanThread") {}
+    void run() override { if (body) body(); }
 
-    void run() override
-    {
-        juce::String pluginName;
-
-        while (! threadShouldExit())
-        {
-            const bool morePlugins = scanner.scanNextFile (true, pluginName);
-
-            if (onProgress)
-                onProgress (scanner.getProgress());
-
-            if (! morePlugins)
-                break;
-        }
-
-        if (onComplete)
-            onComplete();
-    }
-
-private:
-    juce::PluginDirectoryScanner& scanner;
-    std::function<void(float)>    onProgress;
-    std::function<void()>          onComplete;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginScanThread)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScanThread)
 };
 
 // ---------------------------------------------------------------------------
@@ -72,40 +43,53 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
     // Cancel any in-progress scan first
     cancelScan();
 
-    // Dead plugins file — tracks plugins that previously crashed during scanning
-    // so the scanner can skip them on future runs
     const auto deadPluginsFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                                      .getChildFile ("Cloudes")
                                      .getChildFile ("dead_plugins.txt");
-
     deadPluginsFile.getParentDirectory().createDirectory();
 
-    // PluginDirectoryScanner scans one format at a time — iterate over all formats.
-    for (int i = 0; i < formatManager.getNumFormats(); ++i)
+    // Build the scan body: iterates all formats sequentially on a background thread.
+    // PluginDirectoryScanner is not thread-safe — one scanner at a time.
+    auto scanBody = [this, deadPluginsFile,
+                     onProgress = std::move (onProgress),
+                     onComplete = std::move (onComplete)]()
     {
-        auto* format = formatManager.getFormat (i);
-        if (format == nullptr || ! format->canScanForPlugins())
-            continue;
-
-        juce::PluginDirectoryScanner scanner (
-            knownPlugins,
-            *format,
-            getDefaultSearchPaths(),
-            true,             // recursive search
-            deadPluginsFile,
-            true              // allowPluginsWhichRequireAsynchronousInstantiation
-        );
-
-        juce::String pluginName;
-        while (scanner.scanNextFile (true, pluginName))
+        for (int i = 0; i < formatManager.getNumFormats(); ++i)
         {
-            if (onProgress)
-                onProgress (scanner.getProgress());
-        }
-    }
+            auto* format = formatManager.getFormat (i);
+            if (format == nullptr || ! format->canScanForPlugins())
+                continue;
 
-    if (onComplete)
-        onComplete();
+            juce::PluginDirectoryScanner scanner (
+                knownPlugins,
+                *format,
+                getDefaultSearchPaths(),
+                true,             // recursive search
+                deadPluginsFile,
+                true              // allowPluginsWhichRequireAsynchronousInstantiation
+            );
+
+            juce::String pluginName;
+            while (! (scanThread != nullptr && scanThread->threadShouldExit()))
+            {
+                const bool more = scanner.scanNextFile (true, pluginName);
+                if (onProgress)
+                    onProgress (scanner.getProgress());
+                if (! more)
+                    break;
+            }
+        }
+
+        if (onComplete)
+            onComplete();
+    };
+
+    // Launch on background thread — returns immediately (non-blocking).
+    // scanThread is stored so cancelScan() can stop it cleanly.
+    auto* thread = new ScanThread();
+    thread->body = std::move (scanBody);
+    scanThread.reset (thread);
+    thread->startThread (juce::Thread::Priority::background);
 }
 
 void PluginScanner::cancelScan()

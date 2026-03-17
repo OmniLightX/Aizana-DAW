@@ -1,10 +1,16 @@
 #include "MixerView.h"
+#include "ui/pluginbrowser/PluginBrowserPopup.h"
 
 //==============================================================================
 
-MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_)
+MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
+                      PluginManager& pluginManager_, PluginWindowManager& pluginWindowManager_,
+                      PluginScanner& pluginScanner_)
     : appState (appState_)
     , mixerEngine (mixerEngine_)
+    , pluginManager (pluginManager_)
+    , pluginWindowManager (pluginWindowManager_)
+    , pluginScanner (pluginScanner_)
 {
     channelStripViewport.setScrollBarsShown (false, true);  // horizontal scroll only
     channelStripViewport.setViewedComponent (&channelStripContainer, false);
@@ -105,12 +111,73 @@ void MixerView::rebuildStrips()
     {
         if (auto* folderTrack = dynamic_cast<te::FolderTrack*> (track))
         {
-            auto* busStrip = busStrips.add (new BusStrip (*folderTrack));
+            auto* busStrip = busStrips.add (new BusStrip (*folderTrack,
+                                                           pluginManager,
+                                                           pluginWindowManager,
+                                                           pluginScanner));
             channelStripContainer.addAndMakeVisible (busStrip);
         }
     }
 
     resized();
+}
+
+//==============================================================================
+// BusStrip — context menu and plugin insert (plan 01-27, MIX-02/PLUG-04 gap closure)
+
+void MixerView::BusStrip::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isRightButtonDown())
+        showContextMenu();
+}
+
+void MixerView::BusStrip::showContextMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem (1, "Add Plugin...");
+    menu.addSeparator();
+    menu.addItem (2, "Rename Bus");
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        [this] (int result)
+        {
+            if (result == 1)
+            {
+                PluginBrowserPopup::showForComponent (
+                    *this,
+                    pluginScanner.getKnownPlugins(),
+                    [this] (const juce::PluginDescription& desc)
+                    {
+                        auto* newPlugin = pluginManager.insertPlugin (track, desc);
+                        if (newPlugin != nullptr)
+                            pluginWindowManager.openPluginWindow (*newPlugin);
+                    });
+            }
+            else if (result == 2)
+            {
+                // JUCE 8: showInputBoxAsync removed — build AlertWindow manually
+                // and use showAsync (JUCE_MODAL_LOOPS_PERMITTED not set).
+                auto* alert = new juce::AlertWindow ("Rename Bus",
+                                                     "New name:",
+                                                     juce::MessageBoxIconType::QuestionIcon);
+                alert->addTextEditor ("name", track.getName());
+                alert->addButton ("OK",     1, juce::KeyPress (juce::KeyPress::returnKey));
+                alert->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+                alert->enterModalState (true,
+                    juce::ModalCallbackFunction::create (
+                        [alert, this] (int code)
+                        {
+                            if (code == 1)
+                            {
+                                const auto name = alert->getTextEditorContents ("name");
+                                if (name.isNotEmpty())
+                                    track.setName (name);
+                            }
+                        }),
+                    true /* delete on dismiss */);
+            }
+        });
 }
 
 //==============================================================================

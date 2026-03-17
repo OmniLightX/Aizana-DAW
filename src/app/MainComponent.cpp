@@ -423,29 +423,26 @@ void MainComponent::handleScanPlugins()
         "The plugin browser will update when the scan completes.",
         "OK");
 
-    // Run scan on a background thread — scanForPlugins is currently synchronous,
-    // so we wrap it in juce::Thread::launch and dispatch completion back to the
-    // message thread so UI updates happen safely.
-    juce::Thread::launch ([this]
-    {
-        pluginScanner.scanForPlugins (
-            [] (float /*progress*/) {},   // progress callback (no progress bar in Phase 1)
-            [this] ()
-            {
-                // Save results to cache so the next launch loads immediately
-                pluginScanner.savePluginList (getPluginListCacheFile());
+    // scanForPlugins now launches its own background thread and returns immediately.
+    // onComplete is called from the background thread — UI updates use callAsync.
+    pluginScanner.scanForPlugins (
+        [] (float /*progress*/) {},   // progress callback (no progress bar in Phase 1)
+        [this] ()
+        {
+            // Save results to cache so the next launch loads immediately.
+            // Called on background thread — savePluginList is file I/O, safe here.
+            pluginScanner.savePluginList (getPluginListCacheFile());
 
-                // Post UI notification back to the message thread
-                juce::MessageManager::callAsync ([this]
-                {
-                    juce::AlertWindow::showMessageBoxAsync (
-                        juce::MessageBoxIconType::InfoIcon,
-                        "Scan Complete",
-                        "Plugin scan finished. The browser now shows all found plugins.",
-                        "OK");
-                });
+            // Post UI notification back to the message thread
+            juce::MessageManager::callAsync ([this]
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::InfoIcon,
+                    "Scan Complete",
+                    "Plugin scan finished. The browser now shows all found plugins.",
+                    "OK");
             });
-    });
+        });
 }
 
 juce::File MainComponent::getPluginListCacheFile()

@@ -69,6 +69,7 @@ target_sources(Cloudes PRIVATE
     src/engine/AutomationEngine.cpp
     src/audio/AudioEngine.cpp
     src/audio/AudioRecorder.cpp
+    src/audio/MetronomeGenerator.cpp
     # Plugin hosting (PLUG-01 through PLUG-04)
     src/plugins/ClapPluginFormat.cpp
     src/plugins/PluginScanner.cpp

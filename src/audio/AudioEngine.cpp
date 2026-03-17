@@ -68,6 +68,7 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
         const int    bufSize = device->getCurrentBufferSizeSamples();
         masterMeterProcessor.prepareToPlay (sr, bufSize);
         masterMeterPrepared.store (true, std::memory_order_release);
+        metronome.prepare (sr, bufSize);
     }
 }
 
@@ -90,14 +91,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
     // Tracktion Engine has already filled outputChannelData by this point
     // because our callback was registered AFTER the engine's own callback
     // (see AudioEngine::initialise — addAudioCallback called last).
-    //
-    // CRITICAL: This is the audio thread. Do NOT write to outputChannelData.
-    // We only READ the output buffer for metering — purely a tap.
-    if (masterMeterPrepared.load (std::memory_order_acquire)
-        && outputChannelData != nullptr
-        && numSamples > 0)
+    if (outputChannelData != nullptr && numSamples > 0)
     {
-        masterMeterProcessor.pushAudioData (outputChannelData, numOutputChannels, numSamples);
+        // Mix metronome click into output buffer (audio thread — atomic params only).
+        // Must run before metering tap so the meter captures click energy too.
+        metronome.processBlock (outputChannelData, numOutputChannels, numSamples);
+
+        // Metering tap — READ-ONLY. Captures post-metronome output for MixerView.
+        if (masterMeterPrepared.load (std::memory_order_acquire))
+            masterMeterProcessor.pushAudioData (outputChannelData, numOutputChannels, numSamples);
     }
 }
 

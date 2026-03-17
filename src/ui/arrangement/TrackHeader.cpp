@@ -77,6 +77,13 @@ void TrackHeader::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff2a2a2a));
     g.fillRect (4, 0, getWidth() - 4, getHeight());
 
+    // Selection tint: subtle Apple-style overlay (not garish)
+    if (selected)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.06f));
+        g.fillRect (4, 0, getWidth() - 4, getHeight());
+    }
+
     // Right border separator
     g.setColour (juce::Colour (0xff111111));
     g.drawLine ((float)getWidth() - 1.0f, 0.0f,
@@ -91,8 +98,38 @@ void TrackHeader::paint (juce::Graphics& g)
 
 void TrackHeader::mouseDown (const juce::MouseEvent& e)
 {
+    if (! e.mods.isRightButtonDown())
+    {
+        // Notify ArrangementView to update selection
+        if (onSelectionRequest)
+            onSelectionRequest (this);
+    }
+
     if (e.mods.isRightButtonDown())
         showContextMenu();
+}
+
+void TrackHeader::mouseDrag (const juce::MouseEvent& e)
+{
+    // Only start drag after a minimum drag distance to avoid accidental reorders
+    if (e.getDistanceFromDragStart() < 8) return;
+
+    if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor (this))
+    {
+        container->startDragging ("track-reorder",
+                                  this,
+                                  juce::ScaledImage(),  // no custom drag image
+                                  true);                 // allowDraggingToOtherWindows = true
+    }
+}
+
+void TrackHeader::setSelected (bool shouldBeSelected)
+{
+    if (selected != shouldBeSelected)
+    {
+        selected = shouldBeSelected;
+        repaint();
+    }
 }
 
 //==============================================================================

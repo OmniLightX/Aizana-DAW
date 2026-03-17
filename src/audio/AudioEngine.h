@@ -2,6 +2,7 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "metering/MeterProcessor.h"
+#include "MetronomeGenerator.h"
 
 /**
  * AudioEngine — wraps juce::AudioDeviceManager for CoreAudio (macOS) and WASAPI (Windows).
@@ -55,6 +56,12 @@ public:
     MeterProcessor& getMasterMeterProcessor() noexcept { return masterMeterProcessor; }
 
     /**
+     * Returns the MetronomeGenerator for enabling/disabling the click track
+     * and syncing BPM. Called from TransportBar (message thread, via atomics).
+     */
+    MetronomeGenerator& getMetronome() noexcept { return metronome; }
+
+    /**
      * Set WASAPI low-latency preference (Windows only).
      *
      * When true (default), JUCE will request the IAudioClient3 low-latency path
@@ -102,6 +109,11 @@ private:
     // showing the program-level mix in Phase 1).
     MeterProcessor masterMeterProcessor;
     std::atomic<bool> masterMeterPrepared { false };
+
+    // MetronomeGenerator — synthesizes click audio directly into the output buffer.
+    // Parameters (BPM, enabled, beatsPerBar) communicated via std::atomic<> from
+    // the message thread. processBlock() called in audioDeviceIOCallbackWithContext.
+    MetronomeGenerator metronome;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

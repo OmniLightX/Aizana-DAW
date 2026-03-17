@@ -36,11 +36,19 @@ public:
                  PluginWindowManager&  pluginWindowManager,
                  PluginScanner&        pluginScanner);
 
-    void resized() override;
-    void paint   (juce::Graphics& g) override;
+    void resized()  override;
+    void paint     (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
 
     te::AudioTrack& getTrack() const noexcept { return track; }
+
+    // Selection state
+    bool isSelected() const noexcept { return selected; }
+    void setSelected (bool shouldBeSelected);
+
+    // Callback: called by mouseDown (left click) to notify ArrangementView
+    std::function<void (TrackHeader*)> onSelectionRequest;
 
 private:
     te::AudioTrack&      track;
@@ -53,6 +61,8 @@ private:
     juce::TextButton muteButton { "M" };
     juce::TextButton soloButton { "S" };
     juce::TextButton armButton  { "R" };
+
+    bool selected = false;
 
     void muteClicked();
     void soloClicked();
