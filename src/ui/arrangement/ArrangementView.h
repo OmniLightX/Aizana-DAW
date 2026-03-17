@@ -34,9 +34,13 @@ namespace te = tracktion::engine;
  * Plan 01-18: AutomationEngine is passed in so TrackRows can wire the
  * AutomationLane to it.  Each track row has a disclosure "A" button that
  * expands to reveal the lane below the clip area.
+ *
+ * Plan 01-25: RulerStrip added above timeline rows; 30ms timer drives playhead
+ * redraws; arrow key scrubbing; BPM-reactive ruler repaint.
  */
 class ArrangementView : public juce::Component,
                         public juce::FileDragAndDropTarget,
+                        private juce::Timer,
                         private juce::ValueTree::Listener,
                         private juce::ScrollBar::Listener
 {
@@ -66,7 +70,22 @@ public:
     void fileDragEnter (const juce::StringArray& files, int x, int y) override;
     void fileDragExit  (const juce::StringArray& files) override;
 
+    // Keyboard scrubbing — left/right arrows nudge playhead by beat or bar
+    bool keyPressed (const juce::KeyPress& key) override;
+
 private:
+    // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
+    class RulerStrip : public juce::Component
+    {
+    public:
+        RulerStrip (ApplicationState& appState, double& pixelsPerSecond, double& scrollPositionSecs);
+        void paint (juce::Graphics& g) override;
+    private:
+        ApplicationState& appState;
+        double& pixelsPerSecond;
+        double& scrollPositionSecs;
+    };
+
     ApplicationState&    appState;
     ClipEditor&          clipEditor;
     MixerEngine&         mixerEngine;
@@ -78,6 +97,13 @@ private:
     // ---- Header strip ----
     juce::TextButton addTrackButton { "+ Track" };
     bool isDragHovering = false;
+
+    // ---- Ruler strip ----
+    RulerStrip rulerStrip;
+    static constexpr int kRulerHeight = 18;  // slim ruler, one line of bar number text
+
+    // ---- Playhead ----
+    double playheadPositionSecs = 0.0;  // updated by 30ms timer, read by paint()
 
     // ---- Left panel: track headers ----
     juce::Viewport headerViewport;
@@ -101,6 +127,9 @@ private:
     void rebuildTrackRows();
     // Lays out all TrackRows vertically (called by resized() and after row expansion)
     void layoutTrackRows();
+
+    // Timer::Listener — 30ms playhead position poll
+    void timerCallback() override;
 
     // ValueTree::Listener — called when tracks are added/removed/reordered
     void valueTreeChildAdded   (juce::ValueTree&, juce::ValueTree&) override;
