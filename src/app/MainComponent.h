@@ -89,7 +89,8 @@ private:
     ArrangementView arrangementView { appState, clipEditor, mixerEngine,
                                       pluginManager, pluginWindowManager, pluginScanner,
                                       automationEngine };
-    MixerView       mixerView       { appState, mixerEngine };
+    MixerView       mixerView       { appState, mixerEngine,
+                                      pluginManager, pluginWindowManager, pluginScanner };
     // dockedPanel is inside pluginWindowManager — added to our layout via getDockedPanel()
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default

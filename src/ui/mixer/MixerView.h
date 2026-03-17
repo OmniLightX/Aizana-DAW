@@ -6,6 +6,9 @@
 #include "engine/MixerEngine.h"
 #include "metering/MeterProcessor.h"
 #include "ChannelStrip.h"
+#include "plugins/PluginManager.h"
+#include "plugins/PluginScanner.h"
+#include "ui/pluginwin/PluginWindowManager.h"
 
 #include <map>
 #include <memory>
@@ -39,7 +42,9 @@ class MixerView : public juce::Component,
                   private juce::Timer
 {
 public:
-    MixerView (ApplicationState& appState, MixerEngine& mixerEngine);
+    MixerView (ApplicationState& appState, MixerEngine& mixerEngine,
+               PluginManager& pluginManager, PluginWindowManager& pluginWindowManager,
+               PluginScanner& pluginScanner);
     ~MixerView() override;
 
     void resized() override;
@@ -54,7 +59,10 @@ public:
 
 private:
     ApplicationState& appState;
-    MixerEngine& mixerEngine;
+    MixerEngine&      mixerEngine;
+    PluginManager&    pluginManager;
+    PluginWindowManager& pluginWindowManager;
+    PluginScanner&    pluginScanner;
 
     juce::Viewport channelStripViewport;
     juce::Component channelStripContainer;
@@ -78,7 +86,14 @@ private:
     class BusStrip : public juce::Component
     {
     public:
-        explicit BusStrip (te::FolderTrack& track_) : track (track_)
+        BusStrip (te::FolderTrack&     track_,
+                  PluginManager&        pluginManager_,
+                  PluginWindowManager&  pluginWindowManager_,
+                  PluginScanner&        pluginScanner_)
+            : track (track_)
+            , pluginManager (pluginManager_)
+            , pluginWindowManager (pluginWindowManager_)
+            , pluginScanner (pluginScanner_)
         {
             nameLabel.setText ("BUS\n" + track.getName(), juce::dontSendNotification);
             nameLabel.setJustificationType (juce::Justification::centred);
@@ -114,9 +129,16 @@ private:
                         (float)getWidth() - 1.0f, (float)getHeight(), 1.0f);
         }
 
+        void mouseDown (const juce::MouseEvent& e) override;
+
     private:
-        te::FolderTrack& track;
-        juce::Label nameLabel;
+        te::FolderTrack&      track;
+        PluginManager&        pluginManager;
+        PluginWindowManager&  pluginWindowManager;
+        PluginScanner&        pluginScanner;
+        juce::Label           nameLabel;
+
+        void showContextMenu();
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusStrip)
     };
