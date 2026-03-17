@@ -37,8 +37,14 @@ namespace te = tracktion::engine;
  *
  * Plan 01-25: RulerStrip added above timeline rows; 30ms timer drives playhead
  * redraws; arrow key scrubbing; BPM-reactive ruler repaint.
+ *
+ * Plan 01-28: DragAndDropContainer/Target added for track header drag-to-reorder.
+ * TrackHeaders call startDragging; ArrangementView receives itemDropped and
+ * reorders the track via ValueTree::moveChild (undoable).
  */
 class ArrangementView : public juce::Component,
+                        public juce::DragAndDropContainer,
+                        public juce::DragAndDropTarget,
                         public juce::FileDragAndDropTarget,
                         private juce::Timer,
                         private juce::ValueTree::Listener,
@@ -70,6 +76,12 @@ public:
     void fileDragEnter (const juce::StringArray& files, int x, int y) override;
     void fileDragExit  (const juce::StringArray& files) override;
 
+    // DragAndDropTarget overrides — track header drag-to-reorder
+    bool isInterestedInDragSource (const juce::DragAndDropTarget::SourceDetails& details) override;
+    void itemDropped  (const juce::DragAndDropTarget::SourceDetails& details) override;
+    void itemDragMove (const juce::DragAndDropTarget::SourceDetails& details) override;
+    void itemDragExit (const juce::DragAndDropTarget::SourceDetails& details) override;
+
     // Keyboard scrubbing — left/right arrows nudge playhead by beat or bar
     bool keyPressed (const juce::KeyPress& key) override;
 
@@ -97,6 +109,12 @@ private:
     // ---- Header strip ----
     juce::TextButton addTrackButton { "+ Track" };
     bool isDragHovering = false;
+
+    // ---- Track selection and drag-to-reorder ----
+    TrackHeader* selectedTrackHeader = nullptr;
+    int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none
+
+    void setSelectedTrackHeader (TrackHeader* header);
 
     // ---- Ruler strip ----
     RulerStrip rulerStrip;

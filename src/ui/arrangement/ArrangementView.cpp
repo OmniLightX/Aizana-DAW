@@ -228,6 +228,15 @@ void ArrangementView::paint (juce::Graphics& g)
         g.drawRect (getLocalBounds(), 2);
     }
 
+    // Drop indicator: thin Apple system blue line between rows during track drag-reorder
+    if (dragOverRowIndex >= 0)
+    {
+        const int indicatorY = kHeaderStripHeight + kRulerHeight
+                             + dragOverRowIndex * kTrackHeight;
+        g.setColour (juce::Colour (0xff3d9eff));  // Apple system blue accent
+        g.fillRect (0, indicatorY - 1, getWidth(), 2);
+    }
+
     // Apple Final Cut Pro style playhead: thin platinum/white vertical line
     if (appState.editManager.getEdit() != nullptr)
     {
@@ -350,6 +359,11 @@ void ArrangementView::rebuildTrackRows()
                                                           pluginWindowManager,
                                                           pluginScanner));
         headerContainer.addAndMakeVisible (header);
+
+        // Wire selection callback — left-click on header notifies ArrangementView
+        header->onSelectionRequest = [this] (TrackHeader* h) {
+            setSelectedTrackHeader (h);
+        };
 
         // TrackRow (right panel / timeline) — expandable, holds clips + AutomationLane
         auto* row = trackRows.add (new TrackRow (*audioTrack,
@@ -548,4 +562,81 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
             offsetSecs += clip->getPosition().getLength().inSeconds();
         }
     }
+}
+
+//==============================================================================
+// Track selection
+
+void ArrangementView::setSelectedTrackHeader (TrackHeader* header)
+{
+    if (selectedTrackHeader != nullptr && selectedTrackHeader != header)
+        selectedTrackHeader->setSelected (false);
+
+    selectedTrackHeader = header;
+
+    if (header != nullptr)
+        header->setSelected (true);
+}
+
+//==============================================================================
+// DragAndDropTarget — track header drag-to-reorder
+
+bool ArrangementView::isInterestedInDragSource (
+    const juce::DragAndDropTarget::SourceDetails& details)
+{
+    return details.description == "track-reorder";
+}
+
+void ArrangementView::itemDragMove (
+    const juce::DragAndDropTarget::SourceDetails& details)
+{
+    // Calculate which row the drag is over for the drop indicator line.
+    // localPosition is relative to this component; subtract header strip and ruler.
+    const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
+    dragOverRowIndex = juce::jlimit (0, trackHeaders.size(), y / kTrackHeight);
+    repaint();
+}
+
+void ArrangementView::itemDragExit (
+    const juce::DragAndDropTarget::SourceDetails& /*details*/)
+{
+    dragOverRowIndex = -1;
+    repaint();
+}
+
+void ArrangementView::itemDropped (
+    const juce::DragAndDropTarget::SourceDetails& details)
+{
+    dragOverRowIndex = -1;
+    repaint();
+
+    auto* sourceHeader = dynamic_cast<TrackHeader*> (details.sourceComponent.get());
+    if (sourceHeader == nullptr) return;
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    // Determine drop index from y position
+    const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
+    const int dropIndex = juce::jlimit (0, trackHeaders.size() - 1, y / kTrackHeight);
+
+    // Find current index of the dragged track header
+    const int sourceIndex = trackHeaders.indexOf (sourceHeader);
+    if (sourceIndex < 0 || sourceIndex == dropIndex) return;
+
+    // Reorder via ValueTree::moveChild (undoable)
+    auto& undoManager = appState.editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Reorder Track");
+
+    // TE tracks are direct children of edit->state
+    const auto& trackState = sourceHeader->getTrack().state;
+    const int currentChildIndex = edit->state.indexOf (trackState);
+    if (currentChildIndex < 0) return;
+
+    // Adjust target index: when moving down, +1 compensates for the source removal
+    int targetIndex = dropIndex;
+    if (dropIndex > sourceIndex) targetIndex++;
+
+    edit->state.moveChild (currentChildIndex, targetIndex, &undoManager);
+    // valueTreeChildOrderChanged listener will call rebuildTrackRows() asynchronously
 }
