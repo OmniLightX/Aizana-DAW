@@ -58,9 +58,22 @@ TransportBar::TransportBar (ApplicationState& appState_)
     stopButton.onClick   = [this] { stopClicked(); };
     recordButton.onClick = [this] { recordClicked(); };
 
+    // Metronome button — toggle, wired to MetronomeGenerator
+    metronomeButton.setClickingTogglesState (true);
+    metronomeButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    metronomeButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // dark blue active state
+    metronomeButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
+    metronomeButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    metronomeButton.onClick = [this]
+    {
+        const bool enabled = metronomeButton.getToggleState();
+        appState.audioEngine.getMetronome().setEnabled (enabled);
+    };
+
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
     addAndMakeVisible (recordButton);
+    addAndMakeVisible (metronomeButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
     addAndMakeVisible (sampleRateLabel);
@@ -82,11 +95,13 @@ void TransportBar::resized()
     const int buttonW = 60;
     const int buttonH = area.getHeight();
 
-    playButton.setBounds   (area.removeFromLeft (buttonW).withHeight (buttonH));
+    playButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
     area.removeFromLeft (4);
-    stopButton.setBounds   (area.removeFromLeft (buttonW).withHeight (buttonH));
+    stopButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
     area.removeFromLeft (4);
-    recordButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
+    recordButton.setBounds    (area.removeFromLeft (buttonW).withHeight (buttonH));
+    area.removeFromLeft (4);
+    metronomeButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
 
     // Right side: sample rate + BPM display (rightmost to leftmost)
     sampleRateLabel.setBounds (area.removeFromRight (70));
@@ -131,7 +146,25 @@ void TransportBar::timerCallback()
 
     // Keep BPM label in sync (handles undo/redo changes)
     if (! bpmLabel.isBeingEdited())
+    {
         updateBpmLabel();
+
+        // Keep metronome BPM in sync with the edit's current tempo
+        if (auto* editForBpm = appState.editManager.getEdit())
+        {
+            auto& seq = editForBpm->tempoSequence;
+            if (seq.getNumTempos() > 0)
+            {
+                const double bpm = seq.getTempo (0)->getBpm();
+                appState.audioEngine.getMetronome().setBpm (bpm);
+
+                // Sync beats per bar from time signature
+                if (seq.getNumTimeSigs() > 0)
+                    appState.audioEngine.getMetronome().setBeatsPerBar (
+                        seq.getTimeSig (0)->numerator);
+            }
+        }
+    }
 
     // Sample rate update — every ~2 seconds (60 ticks at 30ms = 1.8s)
     if (++sampleRateUpdateCounter >= 60)

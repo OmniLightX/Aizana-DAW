@@ -28,9 +28,12 @@ private:
     void showSampleRateMenu();
     ApplicationState& appState;
 
-    juce::TextButton playButton   { "Play" };
-    juce::TextButton stopButton   { "Stop" };
-    juce::TextButton recordButton { "Rec"  };
+    juce::TextButton playButton      { "Play"  };
+    juce::TextButton stopButton      { "Stop"  };
+    juce::TextButton recordButton    { "Rec"   };
+
+    /** Enables/disables the metronome click track. */
+    juce::TextButton metronomeButton { "Click" };
 
     /** Shows current playback position — e.g. "0:00:00.000". Updated every 30ms. */
     juce::Label positionLabel;
