@@ -16,11 +16,13 @@ using PluginSelectedCallback = std::function<void(const juce::PluginDescription&
  * Press Return on a selected row does the same.
  */
 class PluginBrowserPopup : public juce::Component,
-                           private juce::ListBoxModel
+                           private juce::ListBoxModel,
+                           private juce::Timer
 {
 public:
     PluginBrowserPopup (const juce::KnownPluginList& knownPlugins,
                         PluginSelectedCallback onSelected);
+    ~PluginBrowserPopup() override;
 
     /**
      * Show as a CallOutBox anchored to the given component.
@@ -49,6 +51,11 @@ private:
     void returnKeyPressed         (int lastRowSelected)             override;
 
     void updateFilteredList (const juce::String& searchText);
+
+    // Timer — polls KnownPluginList once per second to detect new scan results
+    void timerCallback() override;
+
+    int lastKnownPluginCount = 0;  // tracks count to detect changes from a background scan
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginBrowserPopup)
 };

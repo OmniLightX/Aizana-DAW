@@ -24,7 +24,19 @@ PluginBrowserPopup::PluginBrowserPopup (const juce::KnownPluginList& knownPlugin
     // Populate with all plugins immediately
     updateFilteredList ({});
 
+    // Track current count so timerCallback can detect new scan results
+    lastKnownPluginCount = knownPlugins.getNumTypes();
+
+    // Poll once per second — refreshes list if a background scan completes
+    // while this popup is open (the KnownPluginList& reference is always live)
+    startTimerHz (1);
+
     setSize (320, 400);
+}
+
+PluginBrowserPopup::~PluginBrowserPopup()
+{
+    stopTimer();
 }
 
 //==============================================================================
@@ -70,6 +82,18 @@ void PluginBrowserPopup::updateFilteredList (const juce::String& searchText)
     filteredPlugins.sort (cmp);
 
     pluginListBox.updateContent();
+}
+
+//==============================================================================
+
+void PluginBrowserPopup::timerCallback()
+{
+    const int currentCount = knownPlugins.getNumTypes();
+    if (currentCount != lastKnownPluginCount)
+    {
+        lastKnownPluginCount = currentCount;
+        updateFilteredList (searchBox.getText());
+    }
 }
 
 //==============================================================================
@@ -143,4 +167,24 @@ void PluginBrowserPopup::paint (juce::Graphics& g)
 
     g.setColour (juce::Colour (0xff444444));
     g.drawRect (getLocalBounds(), 1);
+
+    // Empty state: draw a centred hint in the list area when no plugins are found.
+    // Apple approach: quiet, informative, not alarming.
+    if (filteredPlugins.isEmpty())
+    {
+        const auto listBounds = pluginListBox.getBounds();
+
+        g.setColour (juce::Colour (0xff555555));
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawText ("No plugins found",
+                    listBounds.toFloat(),
+                    juce::Justification::centred, false);
+
+        g.setFont (juce::FontOptions (10.0f));
+        g.setColour (juce::Colour (0xff444444));
+        // "\xe2\x80\xba" = UTF-8 encoding of › (right-pointing angle quotation mark)
+        g.drawText ("Run View \xe2\x80\xba Scan Plugins...",
+                    listBounds.withTrimmedTop (listBounds.getHeight() / 2).toFloat(),
+                    juce::Justification::centred, false);
+    }
 }
