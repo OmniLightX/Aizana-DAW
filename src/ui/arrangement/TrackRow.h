@@ -26,9 +26,10 @@ namespace te = tracktion::engine;
 class TrackRow : public juce::Component
 {
 public:
-    static constexpr int kCollapsedHeight     = 60;
+    static constexpr int kCollapsedHeight      = 60;
     static constexpr int kAutomationLaneHeight = 80;
-    static constexpr int kExpandedHeight      = kCollapsedHeight + kAutomationLaneHeight;
+    static constexpr int kExpandedHeight       = kCollapsedHeight + kAutomationLaneHeight;
+    static constexpr int kDisclosureButtonSize = 24;
 
     TrackRow (te::AudioTrack& track,
               AutomationEngine& automationEngine,
@@ -38,6 +39,9 @@ public:
     bool isExpanded()        const { return expanded; }
     int  getPreferredHeight() const;  // Returns kCollapsedHeight or kExpandedHeight
     void toggleAutomationLane();      // Called by disclosure button
+
+    /** Called after expand/collapse so ArrangementView can re-layout headers + timeline. */
+    std::function<void()> onExpansionChanged;
 
     /** Clip area subcomponent — ArrangementView adds ClipComponents here. */
     juce::Component& getClipArea()           { return clipArea; }

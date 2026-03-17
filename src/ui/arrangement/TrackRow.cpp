@@ -18,12 +18,20 @@ TrackRow::TrackRow (te::AudioTrack&   track_,
 //==============================================================================
 void TrackRow::buildDisclosureButton()
 {
-    disclosureButton.setTooltip ("Toggle automation lane");
+    disclosureButton.setTooltip ("Show/hide automation lane");
     disclosureButton.onClick = [this] { toggleAutomationLane(); };
+
+    // Collapsed state: subtle dark background with grey text — visible but not dominant
     disclosureButton.setColour (juce::TextButton::buttonColourId,
-                                juce::Colours::transparentBlack);
+                                juce::Colour (0xff2a2a2a));
     disclosureButton.setColour (juce::TextButton::textColourOffId,
-                                juce::Colours::grey);
+                                juce::Colour (0xff888888));
+    // Expanded state: Apple system orange tint signals active state
+    disclosureButton.setColour (juce::TextButton::buttonOnColourId,
+                                juce::Colour (0xff3a2a10));  // very dark orange background
+    disclosureButton.setColour (juce::TextButton::textColourOnId,
+                                juce::Colour (0xffff9500));  // Apple system orange text
+    disclosureButton.setClickingTogglesState (true);
 }
 
 //==============================================================================
@@ -45,9 +53,13 @@ void TrackRow::toggleAutomationLane()
         automationLane.reset();
     }
 
-    // Notify parent (ArrangementView) to re-layout all track rows
-    if (auto* parent = getParentComponent())
-        parent->resized();
+    disclosureButton.setToggleState (expanded, juce::dontSendNotification);
+
+    // Fire callback so ArrangementView can re-layout both headers and timeline
+    if (onExpansionChanged)
+        onExpansionChanged();
+    else if (auto* parent = getParentComponent())
+        parent->resized();  // fallback if callback not wired
 }
 
 //==============================================================================
@@ -61,15 +73,20 @@ void TrackRow::resized()
 {
     auto area = getLocalBounds();
 
-    // Disclosure button: small square in top-right corner
-    disclosureButton.setBounds (area.removeFromRight (20).removeFromTop (20));
+    // Disclosure button: 24x24px, bottom-right corner of the clip area zone
+    // 2px inset from right and bottom edges — accessible, non-dominant
+    const int btnSize = kDisclosureButtonSize;
+    disclosureButton.setBounds (area.getWidth() - btnSize - 2,
+                                kCollapsedHeight - btnSize - 2,
+                                btnSize,
+                                btnSize);
 
-    // Clip area: top portion (always kCollapsedHeight)
-    clipArea.setBounds (area.removeFromTop (kCollapsedHeight));
+    // Clip area: top kCollapsedHeight, full width (disclosure button overlaps via z-order)
+    clipArea.setBounds (0, 0, area.getWidth(), kCollapsedHeight);
 
-    // Automation lane: remaining area when expanded
+    // Automation lane: below the clip area when expanded
     if (expanded && automationLane != nullptr)
-        automationLane->setBounds (area.removeFromTop (kAutomationLaneHeight));
+        automationLane->setBounds (0, kCollapsedHeight, area.getWidth(), kAutomationLaneHeight);
 }
 
 //==============================================================================
