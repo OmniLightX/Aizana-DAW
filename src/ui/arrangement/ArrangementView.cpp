@@ -179,19 +179,24 @@ void ArrangementView::resized()
     // Right: timeline panel (rest of width)
     timelineViewport.setBounds (area);
 
-    // Size the header container — one row per track header (fixed kTrackHeight each)
-    const int trackCount  = trackHeaders.size();
-    const int totalHeaderH = trackCount * kTrackHeight;
-
-    headerContainer.setSize (kHeaderWidth,
-                             juce::jmax (totalHeaderH, headerViewport.getHeight()));
-
     // Timeline width: 5 minutes at current zoom, or at least the viewport width
     const double timelineWidthPx = pixelsPerSecond * 300.0;   // 5 minutes
 
-    // Lay out track headers (fixed height, independent of expanded TrackRows)
-    for (int i = 0; i < trackHeaders.size(); ++i)
-        trackHeaders[i]->setBounds (0, i * kTrackHeight, kHeaderWidth, kTrackHeight);
+    // Lay out track headers with variable heights matching their corresponding TrackRow.
+    // When an automation lane is expanded the header must grow to match, so both
+    // columns stay aligned while scrolling vertically in sync.
+    int headerY = 0;
+    for (int i = 0; i < trackHeaders.size() && i < trackRows.size(); ++i)
+    {
+        const int rowH = trackRows[i]->getPreferredHeight();
+        trackHeaders[i]->setBounds (0, headerY, kHeaderWidth, rowH);
+        headerY += rowH;
+    }
+
+    // Update headerContainer height to match total track row height
+    const int totalHeaderH = headerY;
+    headerContainer.setSize (kHeaderWidth,
+                             juce::jmax (totalHeaderH, headerViewport.getHeight()));
 
     // Lay out TrackRows in the timeline container
     layoutTrackRows();
@@ -352,6 +357,9 @@ void ArrangementView::rebuildTrackRows()
                                                   pixelsPerSecond,
                                                   scrollPositionSecs));
         timelineContainer.addAndMakeVisible (row);
+
+        // Wire expansion callback — fires resized() so both header + timeline re-layout
+        row->onExpansionChanged = [this] { resized(); };
 
         // Create clip components inside the row's clip area
         for (auto* clip : audioTrack->getClips())
