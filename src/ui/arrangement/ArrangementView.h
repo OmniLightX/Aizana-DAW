@@ -41,6 +41,10 @@ namespace te = tracktion::engine;
  * Plan 01-28: DragAndDropContainer/Target added for track header drag-to-reorder.
  * TrackHeaders call startDragging; ArrangementView receives itemDropped and
  * reorders the track via ValueTree::moveChild (undoable).
+ *
+ * Plan 01-34: NonScrollingViewport inner class added so left/right arrow keys
+ * propagate to ArrangementView::keyPressed for playhead scrubbing instead of
+ * being consumed by the Viewport's internal scroll handler.
  */
 class ArrangementView : public juce::Component,
                         public juce::DragAndDropContainer,
@@ -98,6 +102,21 @@ private:
         double& scrollPositionSecs;
     };
 
+    // ---- Viewport subclass that lets left/right arrow keys pass to parent ----
+    // Without this, juce::Viewport consumes left/right arrows to scroll its content,
+    // blocking ArrangementView::keyPressed from receiving them for playhead scrubbing.
+    // Up/down arrows are left to normal Viewport behaviour (vertical scroll).
+    struct NonScrollingViewport : public juce::Viewport
+    {
+        bool keyPressed (const juce::KeyPress& key) override
+        {
+            if (key.getKeyCode() == juce::KeyPress::leftKey
+                || key.getKeyCode() == juce::KeyPress::rightKey)
+                return false;  // not consumed — propagates up to ArrangementView::keyPressed
+            return juce::Viewport::keyPressed (key);
+        }
+    };
+
     ApplicationState&    appState;
     ClipEditor&          clipEditor;
     MixerEngine&         mixerEngine;
@@ -124,11 +143,11 @@ private:
     double playheadPositionSecs = 0.0;  // updated by 30ms timer, read by paint()
 
     // ---- Left panel: track headers ----
-    juce::Viewport headerViewport;
+    NonScrollingViewport headerViewport;
     juce::Component headerContainer;   // sized to fit all track headers vertically
 
     // ---- Right panel: timeline ----
-    juce::Viewport timelineViewport;
+    NonScrollingViewport timelineViewport;
     juce::Component timelineContainer; // sized to fit all clips
 
     juce::OwnedArray<TrackHeader> trackHeaders;
