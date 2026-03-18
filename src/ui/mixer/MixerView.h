@@ -100,6 +100,11 @@ private:
             nameLabel.setColour (juce::Label::textColourId, juce::Colour (0xffbbbbbb));
             nameLabel.setFont (juce::FontOptions (10.0f));
             addAndMakeVisible (nameLabel);
+
+            // Ensure this component receives mouse events even when child
+            // components (e.g. nameLabel) are present. The 'false' argument
+            // means children do not absorb clicks intended for the parent.
+            setInterceptsMouseClicks (true, false);
         }
 
         void resized() override

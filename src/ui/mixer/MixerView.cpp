@@ -127,7 +127,7 @@ void MixerView::rebuildStrips()
 
 void MixerView::BusStrip::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isRightButtonDown())
+    if (e.mods.isPopupMenu())
         showContextMenu();
 }
 
