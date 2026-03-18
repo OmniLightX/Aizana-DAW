@@ -1,57 +1,60 @@
 #include "AudioEngine.h"
 
 //==============================================================================
-AudioEngine::AudioEngine() = default;
+AudioEngine::AudioEngine (te::Engine& engine_)
+    : engine (engine_)
+{
+}
 
 AudioEngine::~AudioEngine()
 {
     // Unregister the IO callback before destruction to avoid dangling pointer
     // in the AudioDeviceManager's callback list.
-    deviceManager.removeAudioCallback (this);
+    engine.getDeviceManager().deviceManager.removeAudioCallback (this);
 }
 
 //==============================================================================
 juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannels)
 {
-    // Attempt to initialise AudioDeviceManager with the preferred number of channels.
-    //
-    // Parameters:
-    //   numInputs     — desired input channels (0 = no input / output-only)
-    //   numOutputs    — desired output channels
-    //   savedState    — nullptr on first launch; restored from user preferences in plan 01-08
-    //   selectDefaultDeviceOnFailure — true: fall back to system default on failure
-    //
-    // On macOS: JUCE selects CoreAudio automatically (no further configuration needed).
-    // On Windows: JUCE selects WASAPI. The preferLowLatencyWASAPI flag configures
-    //   whether to request IAudioClient3 (low-latency exclusive WASAPI) or shared mode.
-    //   See AudioDeviceSetup::bufferSize — JUCE uses IAudioClient3 if the buffer size
-    //   matches the device's minimum period. This is surfaced in plan 01-08 preferences UI.
-    auto errorString = deviceManager.initialise (numInputChannels,
-                                                 numOutputChannels,
-                                                 nullptr, // no saved state on first launch
-                                                 true);   // fall back to default device
+    // Initialise TE's device manager — this opens CoreAudio (macOS) or WASAPI (Windows).
+    // te::DeviceManager is the SINGLE audio connection to hardware for this application.
+    // When transport.play() is called on the Edit, Tracktion Engine routes audio through
+    // this same device manager — so it MUST be initialised before playback.
+    engine.getDeviceManager().initialise (numInputChannels, numOutputChannels);
+    juce::String errorString; // te::DeviceManager::initialise() returns void
 
-    // Note: preferLowLatencyWASAPI affects the next device setup via AudioDeviceSetup.
-    // The WASAPI IAudioClient3 path is engaged when the user selects a small buffer size
-    // in preferences and JUCE negotiates it with the driver. Phase 1 documents the intent;
-    // plan 01-08 (Preferences UI) wires up the buffer size selector.
+    // --- Sample rate enforcement ---
+    // The OS may have the audio device set to a non-standard rate (e.g., 24 kHz from
+    // macOS Audio MIDI Setup). A DAW must default to 44.1 kHz or 48 kHz. Correct it here
+    // immediately after the device opens so the TransportBar shows a valid rate on launch.
+    {
+        auto& adm = engine.getDeviceManager().deviceManager;
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        adm.getAudioDeviceSetup (setup);
 
-    // Register the metering tap callback AFTER initialise() so the Tracktion Engine
-    // callback (registered during its own device connection) runs first and fills the
-    // output buffer before we read it for metering. This guarantees we tap post-render audio.
-    deviceManager.addAudioCallback (this);
+        const double standardRates[] = { 44100.0, 48000.0, 88200.0, 96000.0 };
+        bool isStandard = false;
+        for (auto r : standardRates)
+            if (std::abs (setup.sampleRate - r) < 1.0)
+                { isStandard = true; break; }
+
+        if (! isStandard || setup.sampleRate <= 0.0)
+        {
+            setup.sampleRate = 44100.0;
+            // keepCurrentlyActiveBits = true: preserve active channels, only change rate
+            auto srErr = adm.setAudioDeviceSetup (setup, true);
+            if (srErr.isNotEmpty())
+                juce::Logger::writeToLog ("Sample rate correction warning: " + srErr);
+        }
+    }
+    // --- End sample rate enforcement ---
+
+    // Register the metering tap callback AFTER TE's device manager initialise() call.
+    // TE registers its own graph-rendering callback first (during initialise()),
+    // so our callback runs AFTER the graph renders — correct for metering post-render audio.
+    engine.getDeviceManager().deviceManager.addAudioCallback (this);
 
     return errorString;
-}
-
-//==============================================================================
-void AudioEngine::setPreferLowLatencyWASAPI (bool prefer)
-{
-    preferLowLatencyWASAPI = prefer;
-
-    // The WASAPI mode is applied on the next device open via AudioDeviceSetup.
-    // If a device is currently open, the change takes effect after the user
-    // applies preferences (which calls deviceManager.setAudioDeviceSetup() in plan 01-08).
 }
 
 //==============================================================================
@@ -106,7 +109,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
 //==============================================================================
 double AudioEngine::getCurrentLatencyMs() const
 {
-    auto* device = deviceManager.getCurrentAudioDevice();
+    auto* device = engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
     if (device == nullptr)
         return 0.0;
 

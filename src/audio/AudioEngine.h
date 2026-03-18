@@ -1,17 +1,25 @@
 #pragma once
 
+#include <tracktion_engine/tracktion_engine.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "metering/MeterProcessor.h"
 #include "MetronomeGenerator.h"
 
+namespace te = tracktion::engine;
+
 /**
- * AudioEngine — wraps juce::AudioDeviceManager for CoreAudio (macOS) and WASAPI (Windows).
+ * AudioEngine — wraps Tracktion Engine's device manager for audio hardware access.
  *
  * Design constraints (CONTEXT.md / RESEARCH.md):
  *   - macOS: CoreAudio (JUCE native driver)
  *   - Windows: WASAPI only — no ASIO in Phase 1 (Steinberg SDK GPL incompatibility)
  *   - WASAPI latency: expose both shared mode (default) and low-latency IAudioClient3 mode
  *   - Initialisation failures are non-fatal: logged and surfaced for the preferences dialog
+ *
+ * Audio device ownership: AudioEngine does NOT own its own juce::AudioDeviceManager.
+ * Instead it delegates entirely to te::DeviceManager owned by te::Engine. This is
+ * the SINGLE audio connection to hardware for this application — having two competing
+ * device managers would cause one to fail silently.
  *
  * Audio thread discipline (enforced in DSP processors, documented here as design constraint):
  *   - Any code path touching processBlock() MUST use std::atomic<> for parameter communication
@@ -25,28 +33,48 @@
  * Plan 01-17: AudioEngine now inherits AudioIODeviceCallback so it can
  * tap the output buffer after Tracktion Engine renders each block. This feeds the
  * master MeterProcessor without requiring insertion into the TE plugin chain.
+ *
+ * Plan 01-31: Removed standalone juce::AudioDeviceManager. Now holds te::Engine&
+ * and delegates all device management to engine.getDeviceManager() (te::DeviceManager).
+ * initialise() calls engine.getDeviceManager().initialise() to open CoreAudio/WASAPI.
  */
 class AudioEngine : public juce::AudioIODeviceCallback
 {
 public:
-    AudioEngine();
+    explicit AudioEngine (te::Engine& engine);
     ~AudioEngine() override;
 
     /**
      * Initialise the audio device manager.
      *
-     * Attempts to open the preferred audio device. On failure, falls back to
-     * default device. On complete failure, returns a non-empty error string.
+     * Calls te::DeviceManager::initialise() which opens CoreAudio (macOS) or
+     * WASAPI (Windows). This is the SINGLE call that connects the application
+     * to audio hardware — te::Engine's edit graph routes audio through this same
+     * device manager when transport.play() is called.
      *
-     * @param numInputChannels   Desired input channel count (default: 2)
+     * On failure, falls back to default device. On complete failure, returns a
+     * non-empty error string. The caller should log the error and show it in
+     * preferences — do NOT crash.
+     *
+     * @param numInputChannels   Desired input channel count (default: 0)
      * @param numOutputChannels  Desired output channel count (default: 2)
      * @return Empty string on success; human-readable error description on failure.
-     *         The caller should log the error and show it in preferences — do NOT crash.
      */
-    juce::String initialise (int numInputChannels = 2, int numOutputChannels = 2);
+    juce::String initialise (int numInputChannels = 0, int numOutputChannels = 2);
 
-    /** Returns the underlying AudioDeviceManager for advanced device configuration. */
-    juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
+    /**
+     * Returns TE's underlying juce::AudioDeviceManager for device configuration.
+     *
+     * TransportBar uses this to read the current sample rate and to change
+     * device setup. This is te::Engine's device manager, NOT a standalone one.
+     */
+    juce::AudioDeviceManager& getDeviceManager()
+    {
+        // TE's DeviceManager exposes its underlying juce::AudioDeviceManager as a
+        // public member named 'deviceManager' (TracktionEngineAudioDeviceManager,
+        // which inherits juce::AudioDeviceManager). No getAudioDeviceManager() accessor.
+        return engine.getDeviceManager().deviceManager;
+    }
 
     /**
      * Returns the master MeterProcessor that taps the final mixed output.
@@ -62,21 +90,6 @@ public:
     MetronomeGenerator& getMetronome() noexcept { return metronome; }
 
     /**
-     * Set WASAPI low-latency preference (Windows only).
-     *
-     * When true (default), JUCE will request the IAudioClient3 low-latency path
-     * which fixes the buffer at ~480 samples (~10ms at 48kHz). Requires WaveRT
-     * compatible drivers.
-     *
-     * When false, WASAPI shared mode is used (10-20ms system mixer latency).
-     * See RESEARCH.md Pitfall 5 for details.
-     *
-     * This preference is applied on the NEXT call to initialise() — it does not
-     * reconfigure the already-open device.
-     */
-    void setPreferLowLatencyWASAPI (bool prefer);
-
-    /**
      * Returns the current output latency in milliseconds, or 0.0 if no device is open.
      *
      * Sum of output buffer latency + driver reported output latency. Use this
@@ -86,8 +99,9 @@ public:
 
     // -----------------------------------------------------------------------
     // AudioIODeviceCallback — audio thread callbacks
-    // Registered after deviceManager.initialise() so the Tracktion Engine
-    // callback runs first and fills the output buffer before we tap it.
+    // Registered with engine.getDeviceManager().getAudioDeviceManager() after
+    // initialise() so the Tracktion Engine callback runs first and fills the
+    // output buffer before we tap it.
     // -----------------------------------------------------------------------
 
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
@@ -101,8 +115,7 @@ public:
     void audioDeviceStopped() override;
 
 private:
-    juce::AudioDeviceManager deviceManager;
-    bool preferLowLatencyWASAPI = true;
+    te::Engine& engine;
 
     // Master MeterProcessor — taps the final mixed output via the IO callback.
     // Feeds the MixerView channel strip MeterBars (all strips share this meter

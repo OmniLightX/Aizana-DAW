@@ -20,7 +20,7 @@
 struct ApplicationState
 {
     EditManager editManager;
-    AudioEngine audioEngine;
+    AudioEngine audioEngine { editManager.getEngine() };
 
     ApplicationState()
     {
