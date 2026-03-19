@@ -110,6 +110,78 @@ juce::MouseCursor ArrangementView::RulerStrip::getMouseCursor()
 }
 
 //==============================================================================
+// ToolbarStrip
+
+ArrangementView::ToolbarStrip::ToolbarStrip()
+{
+    // Style all three buttons identically — flat, dark, no border
+    auto styleBtn = [] (juce::TextButton& btn)
+    {
+        btn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffaaaaaa));
+        btn.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffffffff));
+    };
+    styleBtn (pointerBtn);
+    styleBtn (selectBtn);
+    styleBtn (scissorsBtn);
+
+    addAndMakeVisible (pointerBtn);
+    addAndMakeVisible (selectBtn);
+    addAndMakeVisible (scissorsBtn);
+
+    // Button clicks fire onToolChange so ArrangementView can update activeTool
+    pointerBtn.onClick  = [this] { if (onToolChange) onToolChange (EditTool::Pointer);     };
+    selectBtn.onClick   = [this] { if (onToolChange) onToolChange (EditTool::RangeSelect); };
+    scissorsBtn.onClick = [this] { if (onToolChange) onToolChange (EditTool::Scissors);    };
+
+    updateButtonStates();
+}
+
+void ArrangementView::ToolbarStrip::resized()
+{
+    // Three equal-width buttons filling the strip horizontally
+    const int w = getWidth() / 3;
+    pointerBtn .setBounds (0,       0, w, getHeight());
+    selectBtn  .setBounds (w,       0, w, getHeight());
+    scissorsBtn.setBounds (w * 2,   0, getWidth() - w * 2, getHeight());
+}
+
+void ArrangementView::ToolbarStrip::paint (juce::Graphics& g)
+{
+    // Subtle separator on the right edge of the toolbar area
+    g.setColour (juce::Colour (0xff333333));
+    g.drawVerticalLine (getWidth() - 1, 0.0f, (float)getHeight());
+}
+
+void ArrangementView::ToolbarStrip::updateButtonStates()
+{
+    // Highlight the active tool button with Apple system blue at 20% alpha
+    const juce::Colour activeColour  (0x33007aff);  // 0x33 = ~20% alpha, 007aff = Apple blue
+    const juce::Colour inactiveColour (0x00000000); // transparent
+
+    pointerBtn .setColour (juce::TextButton::buttonColourId,
+                           activeTool == EditTool::Pointer     ? activeColour : inactiveColour);
+    selectBtn  .setColour (juce::TextButton::buttonColourId,
+                           activeTool == EditTool::RangeSelect ? activeColour : inactiveColour);
+    scissorsBtn.setColour (juce::TextButton::buttonColourId,
+                           activeTool == EditTool::Scissors    ? activeColour : inactiveColour);
+
+    // Text colour also brightens on the active tool
+    const juce::Colour activeText   (0xffffffff);
+    const juce::Colour inactiveText (0xffaaaaaa);
+
+    pointerBtn .setColour (juce::TextButton::textColourOffId,
+                           activeTool == EditTool::Pointer     ? activeText : inactiveText);
+    selectBtn  .setColour (juce::TextButton::textColourOffId,
+                           activeTool == EditTool::RangeSelect ? activeText : inactiveText);
+    scissorsBtn.setColour (juce::TextButton::textColourOffId,
+                           activeTool == EditTool::Scissors    ? activeText : inactiveText);
+
+    repaint();
+}
+
+//==============================================================================
 
 ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   ClipEditor&          clipEditor_,
@@ -192,6 +264,10 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         mouseWheelMove (e.getEventRelativeTo (this), w);
     };
 
+    // Toolbar strip — edit tool buttons in the header strip
+    addAndMakeVisible (toolbarStrip);
+    toolbarStrip.onToolChange = [this] (EditTool tool) { setActiveTool (tool); };
+
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
 
@@ -234,6 +310,14 @@ void ArrangementView::resized()
     // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
     zoomInButton.setBounds  (getWidth() - 28, headerStrip.getY() + 4, 20, 20);
     zoomOutButton.setBounds (getWidth() - 52, headerStrip.getY() + 4, 20, 20);
+
+    // Toolbar strip — three tool buttons (Pointer/RangeSelect/Scissors), 24px each,
+    // placed to the right of the Add Track button and left of the zoom buttons.
+    // Centre-aligned vertically in the header strip.
+    const int toolBtnW = 24;
+    const int toolbarW = toolBtnW * 3;
+    const int toolbarX = 84;   // just right of Add Track button (80 + 4px gap)
+    toolbarStrip.setBounds (toolbarX, headerStrip.getY(), toolbarW, kHeaderStripHeight);
 
     // Ruler strip — full width, sits between header strip and track rows
     // The ruler portion under the header column (left of kHeaderWidth) is filled
@@ -488,46 +572,76 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // ---- Tool shortcuts (standard DAW: E = Pointer, R = Range Select, S = Scissors) ----
+    // These must not require modifiers — plain letter keys only.
+    if (! key.getModifiers().isAnyModifierKeyDown())
+    {
+        if (key.getKeyCode() == 'e' || key.getKeyCode() == 'E')
+        {
+            setActiveTool (EditTool::Pointer);
+            return true;
+        }
+        if (key.getKeyCode() == 'r' || key.getKeyCode() == 'R')
+        {
+            setActiveTool (EditTool::RangeSelect);
+            return true;
+        }
+        if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
+        {
+            setActiveTool (EditTool::Scissors);
+            return true;
+        }
+    }
+
     return false;
 }
 
 //==============================================================================
-// Marquee selection — mouseDown / mouseDrag / mouseUp
+// Tool-dispatching mouse handlers
 
 void ArrangementView::mouseDown (const juce::MouseEvent& e)
 {
     if (! e.mods.isLeftButtonDown()) return;
 
-    // Only start marquee if clicking in the timeline area (right of headers, below ruler)
     const int timelineLeft = kHeaderWidth;
     const int timelineTop  = kHeaderStripHeight + kRulerHeight;
 
-    if (e.x >= timelineLeft && e.y >= timelineTop)
+    if (e.x < timelineLeft || e.y < timelineTop) return;
+
+    const int xInTimeline = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
+    const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
+
+    switch (activeTool)
     {
-        // Clear previous selection
-        selectedClips.clear();
+        case EditTool::Pointer:
+            // Seek playhead — existing behaviour. Clip dragging is handled
+            // by ClipComponent itself (does not reach this handler).
+            selectedClips.clear();
+            if (auto* edit = appState.editManager.getEdit())
+                edit->getTransport().setPosition (
+                    tracktion::TimePosition::fromSeconds (clickTimeSecs));
+            break;
 
-        // Click on empty space in timeline area sets the playhead position
-        auto* edit = appState.editManager.getEdit();
-        if (edit != nullptr)
-        {
-            const int xInTimeline = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
-            const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
-            edit->getTransport().setPosition (
-                tracktion::TimePosition::fromSeconds (clickTimeSecs));
-        }
+        case EditTool::RangeSelect:
+            // Start marquee — existing behaviour, now tool-gated
+            selectedClips.clear();
+            isMarqueeActive = true;
+            marqueeStartPoint = e.getPosition();
+            marqueeRect = {};
+            break;
 
-        // Start marquee
-        isMarqueeActive = true;
-        marqueeStartPoint = e.getPosition();
-        marqueeRect = {};
-        repaint();
+        case EditTool::Scissors:
+            // Split clip at the click position
+            splitClipAtTime (clickTimeSecs, e.y);
+            break;
     }
+
+    repaint();
 }
 
 void ArrangementView::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! isMarqueeActive) return;
+    if (! isMarqueeActive || activeTool != EditTool::RangeSelect) return;
 
     // Build rectangle from start point to current position
     const int x1 = juce::jmin (marqueeStartPoint.x, e.x);
@@ -583,6 +697,115 @@ void ArrangementView::mouseUp (const juce::MouseEvent&)
         // The marquee rectangle disappears but selection persists until next click.
         marqueeRect = {};
         repaint();
+    }
+}
+
+juce::MouseCursor ArrangementView::getMouseCursor()
+{
+    switch (activeTool)
+    {
+        case EditTool::Pointer:
+            return juce::MouseCursor (juce::MouseCursor::NormalCursor);
+        case EditTool::RangeSelect:
+            return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
+        case EditTool::Scissors:
+            // No dedicated scissors cursor in JUCE — crosshair is universally
+            // understood as a precision tool in DAW conventions.
+            return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
+    }
+    return juce::MouseCursor (juce::MouseCursor::NormalCursor);
+}
+
+void ArrangementView::setActiveTool (EditTool tool)
+{
+    activeTool = tool;
+    toolbarStrip.activeTool = tool;
+    toolbarStrip.updateButtonStates();
+    // Refresh cursor immediately so the change is visible without moving the mouse
+    updateMouseCursor();
+}
+
+void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    // Map screenY → row within the timeline area
+    const int timelineTop = kHeaderStripHeight + kRulerHeight;
+    int rowLocalY = screenY - timelineTop + timelineViewport.getViewPositionY();
+
+    int cumY = 0;
+    for (int ri = 0; ri < trackRows.size(); ++ri)
+    {
+        auto* row = trackRows[ri];
+        const int rowH = row->getPreferredHeight();
+
+        if (rowLocalY >= cumY && rowLocalY < cumY + rowH)
+        {
+            auto* track = dynamic_cast<te::AudioTrack*> (
+                te::getAudioTracks (*edit)[ri]);
+            if (track == nullptr) break;
+
+            // Find the clip that spans timeSecs
+            for (auto* clip : track->getClips())
+            {
+                const double start = clip->getPosition().getStart().inSeconds();
+                const double end   = clip->getPosition().getEnd().inSeconds();
+
+                if (timeSecs <= start || timeSecs >= end)
+                    continue;   // click is outside this clip
+
+                // Attempt to use TE v3.2.0 splitClipAt if available.
+                // If the free-function is not available, fall back to duplicate-and-trim.
+                if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (clip))
+                {
+                    auto& undoManager = appState.editManager.getUndoManager();
+                    undoManager.beginNewTransaction ("Split Clip");
+
+                    // Duplicate-and-trim fallback:
+                    // 1. Record original range before trimming the original
+                    const double originalEnd   = end;
+
+                    // 2. Trim the original clip's end to the split point
+                    waveClip->setEnd (tracktion::TimePosition::fromSeconds (timeSecs), false);
+
+                    // 3. Insert a new clip from the split point to the original end,
+                    //    referencing the same source file with the offset shifted.
+                    const double offsetShift = timeSecs - start;  // seconds into the source file
+                    te::ClipPosition newPos {
+                        tracktion::TimeRange (
+                            tracktion::TimePosition::fromSeconds (timeSecs),
+                            tracktion::TimePosition::fromSeconds (originalEnd)),
+                        tracktion::TimeDuration()
+                    };
+
+                    auto newClipState = track->insertNewClip (
+                        te::TrackItem::Type::wave,
+                        "Split",
+                        newPos,
+                        nullptr);   // no SelectionManager in Phase 1
+
+                    if (auto* newWave = dynamic_cast<te::WaveAudioClip*> (newClipState))
+                    {
+                        // Point new clip at the same source file
+                        newWave->getSourceFileReference().setToDirectFileReference (
+                            waveClip->getSourceFileReference().getFile(), true);
+
+                        // Shift the source offset so the new clip plays the correct
+                        // portion: original offset + shift into the source.
+                        const double originalOffset = waveClip->getPosition().getOffset().inSeconds();
+                        newWave->setOffset (
+                            tracktion::TimeDuration::fromSeconds (originalOffset + offsetShift));
+                    }
+                }
+                break;  // only split one clip per click
+            }
+
+            // Rebuild so the new clip appears immediately
+            juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+            break;
+        }
+        cumY += rowH;
     }
 }
 

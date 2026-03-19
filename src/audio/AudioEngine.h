@@ -3,6 +3,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "metering/MeterProcessor.h"
+#include "metering/MasterMeterAudioProcessor.h"
 #include "MetronomeGenerator.h"
 
 namespace te = tracktion::engine;
@@ -30,13 +31,17 @@ namespace te = tracktion::engine;
  *   when the DSP processors are implemented. Document the constraint here so every
  *   future processBlock() author sees it at the point of entry into the audio subsystem.
  *
- * Plan 01-17: AudioEngine now inherits AudioIODeviceCallback so it can
- * tap the output buffer after Tracktion Engine renders each block. This feeds the
- * master MeterProcessor without requiring insertion into the TE plugin chain.
+ * Plan 01-17: AudioEngine inherits AudioIODeviceCallback so it can tap the secondary
+ * output buffer for MetronomeGenerator mixing.
  *
  * Plan 01-31: Removed standalone juce::AudioDeviceManager. Now holds te::Engine&
  * and delegates all device management to engine.getDeviceManager() (te::DeviceManager).
  * initialise() calls engine.getDeviceManager().initialise() to open CoreAudio/WASAPI.
+ *
+ * Plan 01-39: Metering is now wired via MasterMeterAudioProcessor registered with
+ * te::DeviceManager::setGlobalOutputAudioProcessor(). TE owns the processor lifetime
+ * (unique_ptr transfer). AudioEngine keeps a raw observer pointer for prepareToPlay
+ * delegation in changeListenerCallback(). The secondary-callback meter tap is removed.
  */
 class AudioEngine : public juce::AudioIODeviceCallback,
                     public juce::ChangeListener
@@ -126,10 +131,20 @@ public:
 private:
     te::Engine& engine;
 
-    // Master MeterProcessor — taps the final mixed output via the IO callback.
-    // Feeds the MixerView channel strip MeterBars (all strips share this meter
-    // showing the program-level mix in Phase 1).
+    // Master MeterProcessor — lock-free metering backend (FIFO + atomics).
+    // Feeds MixerView channel strip MeterBars (all strips share this master meter).
     MeterProcessor masterMeterProcessor;
+
+    // Raw observer to the MasterMeterAudioProcessor registered with TE's device manager.
+    // TE owns the object lifetime (unique_ptr transfer in initialise()).
+    // Used only to delegate prepareToPlay() in changeListenerCallback() when the device
+    // changes after initialise() has already transferred ownership to TE.
+    // Set to nullptr until initialise() registers the processor with TE.
+    MasterMeterAudioProcessor* masterMeterAudioProcessorPtr { nullptr };
+
+    // masterMeterPrepared is kept for audioDeviceAboutToStart / audioDeviceStopped
+    // which still need to guard the MetronomeGenerator. It is NO LONGER used to gate
+    // meter tapping — MasterMeterAudioProcessor handles that inside TE's render pipeline.
     std::atomic<bool> masterMeterPrepared { false };
 
     // MetronomeGenerator — synthesizes click audio directly into the output buffer.

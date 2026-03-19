@@ -203,6 +203,13 @@ private:
     juce::TextButton zoomOutButton   { juce::String::fromUTF8 ("\xe2\x88\x92") };  // Unicode minus sign
     bool isDragHovering = false;
 
+    // ---- Edit tool toolbar ----
+    ToolbarStrip toolbarStrip;
+    EditTool     activeTool = EditTool::Pointer;
+
+    // Changes the active tool, updates toolbar highlight, and refreshes cursor
+    void setActiveTool (EditTool tool);
+
     // ---- Track selection and drag-to-reorder ----
     TrackHeader* selectedTrackHeader = nullptr;
     int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none
@@ -214,6 +221,11 @@ private:
     juce::Array<ClipComponent*> selectedClips;   // clips inside the marquee
 
     void setSelectedTrackHeader (TrackHeader* header);
+
+    // ---- Scissors tool — splits the clip at the given timeline position ----
+    // Finds the track row under screenY, finds the clip spanning timeSecs,
+    // and splits it using duplicate-and-trim (TE v3.2.0 has no public splitAt).
+    void splitClipAtTime (double timeSecs, int screenY);
 
     // ---- Ruler strip ----
     RulerStrip rulerStrip;

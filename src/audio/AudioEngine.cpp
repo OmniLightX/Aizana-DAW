@@ -8,8 +8,18 @@ AudioEngine::AudioEngine (te::Engine& engine_)
 
 AudioEngine::~AudioEngine()
 {
-    // Unregister the IO callback and change listener before destruction to
-    // avoid dangling pointers in the AudioDeviceManager's lists.
+    // Close the audio device BEFORE unregistering callbacks.
+    // Without an explicit close, CoreAudio (macOS) may retain an open HAL handle
+    // that conflicts with the next application launch — the HAL sees a new client
+    // trying to open the same device while the previous one hasn't cleanly released
+    // it, producing distorted audio on relaunch.
+    //
+    // closeAudioDevice() synchronously stops the hardware stream. JUCE then calls
+    // audioDeviceStopped() on all still-registered callbacks during this close, which
+    // is safe because our members (masterMeterProcessor, metronome) are still alive.
+    // After closeAudioDevice(), currentAudioDevice is null, so removeAudioCallback
+    // will NOT call audioDeviceStopped() a second time (JUCE guards against this).
+    engine.getDeviceManager().deviceManager.closeAudioDevice();
     engine.getDeviceManager().deviceManager.removeAudioCallback (this);
     engine.getDeviceManager().deviceManager.removeChangeListener (this);
 }
@@ -34,10 +44,46 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
 
     auto& adm = engine.getDeviceManager().deviceManager;
 
-    // Register the metering tap callback AFTER TE's device manager initialise() call.
-    // TE registers its own graph-rendering callback first (during initialise()),
-    // so our callback runs AFTER the graph renders — correct for metering post-render audio.
+    // Verify output channels are active after TE initialises the device.
+    // On first launch, TE calls initialiseWithDefaultDevices() which enables two
+    // output channels. On second+ launch, TE restores saved XML settings via
+    // deviceManager.initialise(xml). If that XML is missing the "audioDeviceOutChans"
+    // attribute (e.g., from an older save or a save that omitted it), JUCE falls back
+    // to a default parse of "" which produces an empty bitmask — the device opens but
+    // routes to no physical outputs. The graph renders internally but nothing reaches
+    // the speakers.
+    //
+    // Fix: after TE initialises, check the bitmask. If it is empty, force-enable the
+    // requested output channels on whatever device was opened. This mirrors Logic Pro's
+    // behaviour of always routing to the best available output on launch.
+    {
+        auto setup = adm.getAudioDeviceSetup();
+        if (setup.outputChannels.countNumberOfSetBits() == 0 && adm.getCurrentAudioDevice() != nullptr)
+        {
+            setup.outputChannels.setRange (0, numOutputChannels, true);
+            auto setupErr = adm.setAudioDeviceSetup (setup, true);
+            if (setupErr.isNotEmpty())
+                juce::Logger::writeToLog ("AudioEngine: output routing fallback failed: " + setupErr);
+            else
+                juce::Logger::writeToLog ("AudioEngine: activated " + juce::String (numOutputChannels)
+                                          + " output channels (restored from empty bitmask)");
+        }
+    }
+
+    // Register the secondary AudioIODeviceCallback for MetronomeGenerator mixing.
+    // TE registers its own graph-rendering callback during initialise() so ours runs after.
     adm.addAudioCallback (this);
+
+    // Register MasterMeterAudioProcessor with TE's global output pipeline.
+    // TE inserts this processor at the very end of its render pipeline — after all tracks
+    // are mixed — so processBlock() receives the true mixed output (not the secondary temp
+    // buffer which only contains metronome click energy).
+    //
+    // TE takes unique_ptr ownership; AudioEngine keeps a raw observer for later
+    // prepareToPlay() delegation in changeListenerCallback().
+    auto meterProc = std::make_unique<MasterMeterAudioProcessor> (masterMeterProcessor);
+    masterMeterAudioProcessorPtr = meterProc.get();
+    engine.getDeviceManager().setGlobalOutputAudioProcessor (std::move (meterProc));
 
     // Register for device-change notifications (hot-plug, sample-rate/buffer-size changes).
     // changeListenerCallback() re-prepares MetronomeGenerator and MasterMeterProcessor
@@ -54,20 +100,20 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
 void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     // Called on the message thread before the device starts producing audio.
-    // Prepare the master MeterProcessor and MetronomeGenerator with the real
-    // device parameters. Both prepared flags are set AFTER prepare() completes
-    // so the audio thread never sees a partially-prepared state.
+    // Prepare MetronomeGenerator with the real device parameters.
+    //
+    // NOTE: masterMeterProcessor.prepareToPlay() is NOT called here — TE calls
+    // MasterMeterAudioProcessor::prepareToPlay() (which delegates to masterMeterProcessor)
+    // as part of its own device-start sequence via the globalOutputAudioProcessor.
     if (device != nullptr)
     {
         const double sr      = device->getCurrentSampleRate();
         const int    bufSize = device->getCurrentBufferSizeSamples();
 
-        // Clear prepared flags first so the audio thread stops using stale state
-        // while we re-prepare (device restart / hot-plug scenario).
+        // Clear prepared flags so the audio thread pauses while we re-prepare.
         masterMeterPrepared.store (false, std::memory_order_release);
         metronomePrepared.store (false, std::memory_order_release);
 
-        masterMeterProcessor.prepareToPlay (sr, bufSize);
         metronome.prepare (sr, bufSize);
 
         // Set flags only after prepare completes — audio thread is safe to proceed.
@@ -79,11 +125,12 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 void AudioEngine::audioDeviceStopped()
 {
     // Called on the message thread when the device stops.
-    // Clear both prepared flags to block the IO callback from writing to
-    // released resources.
+    // Clear prepared flags to block the secondary IO callback (metronome mixing).
+    // NOTE: masterMeterProcessor.releaseResources() is NOT called here — TE calls
+    // MasterMeterAudioProcessor::releaseResources() (which delegates to masterMeterProcessor)
+    // as part of its own device-stop sequence via the globalOutputAudioProcessor.
     masterMeterPrepared.store (false, std::memory_order_release);
     metronomePrepared.store (false, std::memory_order_release);
-    masterMeterProcessor.releaseResources();
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext (
@@ -94,24 +141,39 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
     int numSamples,
     const juce::AudioIODeviceCallbackContext& /*context*/)
 {
-    // Tracktion Engine has already filled outputChannelData by this point
-    // because our callback was registered AFTER the engine's own callback
-    // (see AudioEngine::initialise — addAudioCallback called last).
+    // ARCHITECTURE NOTE — JUCE multi-callback temp buffer:
+    // JUCE's AudioDeviceManager calls the FIRST registered callback (TE's render) with the
+    // REAL hardware output buffer. Every subsequent callback — including this one — receives
+    // a SHARED TEMP BUFFER, not the real output. After each secondary callback returns, JUCE
+    // ADDS the temp buffer content to the real output (dst[j] += src[j]).
+    //
+    // Critical consequence: the temp buffer is NEVER zeroed between audio callback cycles.
+    // If we add to it without clearing first, previous cycle content accumulates — growing
+    // louder each buffer until it fills the output with deafening, escalating noise.
+    //
+    // Fix: ZERO the temp buffer at the start of every secondary callback. We then write only
+    // the signals we own (metronome click). JUCE adds our clean content to TE's rendered audio.
+    //
+    // Metering: MasterMeterAudioProcessor is registered with TE's globalOutputAudioProcessor,
+    // so it runs INSIDE TE's render pipeline where the real mixed output buffer is visible.
+    // This secondary callback no longer taps the meter — it is metronome-mixing only.
     if (outputChannelData != nullptr && numSamples > 0)
     {
-        // Mix metronome click into output buffer (audio thread — atomic params only).
+        // Clear our portion of the temp buffer before writing anything.
+        // This prevents accumulation from previous callback cycles.
+        for (int ch = 0; ch < numOutputChannels; ++ch)
+            if (outputChannelData[ch] != nullptr)
+                juce::FloatVectorOperations::clear (outputChannelData[ch], numSamples);
+
+        // Mix metronome click into the now-zeroed temp buffer.
         // Guard with metronomePrepared: blocks processing if the device was just changed
-        // and prepare() has not yet completed on the message thread. Without this guard,
-        // MetronomeGenerator::processBlock would run with stale sr from the previous
-        // device (or the default 44100 Hz before any prepare() fires), causing the
-        // phase accumulator to advance at the wrong rate and producing garbled output.
-        // Must run before metering tap so the meter captures click energy too.
+        // and prepare() has not yet completed on the message thread.
         if (metronomePrepared.load (std::memory_order_acquire))
             metronome.processBlock (outputChannelData, numOutputChannels, numSamples);
 
-        // Metering tap — READ-ONLY. Captures post-metronome output for MixerView.
-        if (masterMeterPrepared.load (std::memory_order_acquire))
-            masterMeterProcessor.pushAudioData (outputChannelData, numOutputChannels, numSamples);
+        // NOTE: No metering tap here. MasterMeterAudioProcessor handles metering inside
+        // TE's render pipeline — it sees the true mixed output including all audio tracks,
+        // not just the metronome-only secondary temp buffer.
     }
 }
 
@@ -145,13 +207,19 @@ void AudioEngine::changeListenerCallback (juce::ChangeBroadcaster* /*source*/)
 
         if (sr > 0.0 && bufSize > 0)
         {
-            // Clear prepared flags so the audio thread pauses using these processors
-            // while we re-prepare them for the new device parameters.
+            // Clear prepared flags so the secondary IO callback pauses while we re-prepare.
             masterMeterPrepared.store (false, std::memory_order_release);
             metronomePrepared.store (false, std::memory_order_release);
 
-            masterMeterProcessor.prepareToPlay (sr, bufSize);
+            // Re-prepare MetronomeGenerator for the new device parameters.
             metronome.prepare (sr, bufSize);
+
+            // Re-prepare MasterMeterAudioProcessor if TE has not already done so.
+            // TE may call prepareToPlay on globalOutputAudioProcessor independently,
+            // but we call it here as a safety net to ensure the metering FIFO matches
+            // the new sample rate before MixerView's timer reads results.
+            if (masterMeterAudioProcessorPtr != nullptr)
+                masterMeterAudioProcessorPtr->prepareToPlay (sr, bufSize);
 
             masterMeterPrepared.store (true, std::memory_order_release);
             metronomePrepared.store (true, std::memory_order_release);

@@ -79,8 +79,9 @@ target_sources(Cloudes PRIVATE
     src/fx/CompressorProcessor.cpp
     src/fx/ReverbProcessor.cpp
     src/fx/LimiterProcessor.cpp
-    # Metering + Export (plan 01-07, EXP-01 through EXP-04)
+    # Metering + Export (plan 01-07, EXP-01 through EXP-04; plan 01-39 TE global tap)
     src/metering/MeterProcessor.cpp
+    src/metering/MasterMeterAudioProcessor.cpp
     src/engine/ExportPipeline.cpp
     # UI Shell (plan 01-08)
     src/ui/arrangement/TransportBar.cpp
