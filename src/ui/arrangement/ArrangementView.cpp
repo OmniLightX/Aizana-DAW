@@ -161,6 +161,37 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         // automatically call rebuildTrackRows() — no manual update needed
     };
 
+    // Zoom buttons — header strip, top-right corner
+    // These provide discoverability and a keyboard-alternative to pinch/Ctrl+scroll.
+    addAndMakeVisible (zoomInButton);
+    addAndMakeVisible (zoomOutButton);
+    zoomInButton.setTooltip  ("Zoom in (Ctrl + scroll up)");
+    zoomOutButton.setTooltip ("Zoom out (Ctrl + scroll down)");
+
+    // No border or fill — styled to match the dark header strip
+    auto styleZoomButton = [] (juce::TextButton& btn)
+    {
+        btn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0x00000000));
+        btn.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffaaaaaa));
+        btn.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffffffff));
+    };
+    styleZoomButton (zoomInButton);
+    styleZoomButton (zoomOutButton);
+
+    zoomInButton.onClick  = [this] { setPixelsPerSecond (pixelsPerSecond * 1.4); };
+    zoomOutButton.onClick = [this] { setPixelsPerSecond (pixelsPerSecond / 1.4); };
+
+    // Wire ZoomViewport callback — intercepts Ctrl/Cmd+scroll over the timeline and
+    // delegates to the existing zoom logic in ArrangementView::mouseWheelMove.
+    // e.getEventRelativeTo(this) converts the event coordinates from viewport-local
+    // to ArrangementView-local so the zoom-to-cursor calculation works correctly.
+    timelineViewport.onZoomWheel = [this] (const juce::MouseEvent& e,
+                                            const juce::MouseWheelDetails& w)
+    {
+        mouseWheelMove (e.getEventRelativeTo (this), w);
+    };
+
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
 
@@ -198,6 +229,11 @@ void ArrangementView::resized()
     // Header strip at top: Add Track button (height 28px)
     auto headerStrip = area.removeFromTop (kHeaderStripHeight);
     addTrackButton.setBounds (headerStrip.removeFromLeft (80).reduced (2));
+
+    // Zoom buttons — top-right of the header strip, 20×20 each with 4px gap
+    // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
+    zoomInButton.setBounds  (getWidth() - 28, headerStrip.getY() + 4, 20, 20);
+    zoomOutButton.setBounds (getWidth() - 52, headerStrip.getY() + 4, 20, 20);
 
     // Ruler strip — full width, sits between header strip and track rows
     // The ruler portion under the header column (left of kHeaderWidth) is filled

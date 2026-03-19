@@ -45,7 +45,20 @@ namespace te = tracktion::engine;
  * Plan 01-34: NonScrollingViewport inner class added so left/right arrow keys
  * propagate to ArrangementView::keyPressed for playhead scrubbing instead of
  * being consumed by the Viewport's internal scroll handler.
+ *
+ * Plan 01-41: ZoomViewport subclass intercepts Ctrl/Cmd+scroll over the timeline
+ * and forwards it to ArrangementView::mouseWheelMove — fixing the event-routing
+ * gap where the Viewport previously consumed all wheel events. Zoom +/− buttons
+ * added to the header strip for discoverability.
+ *
+ * Plan 01-42: Edit tools toolbar added to the header strip. Three tools:
+ * Pointer (default), Range Select (marquee), Scissors (split clip).
+ * Keyboard shortcuts E/R/S switch tools. Scissors calls splitClipAtTime
+ * which uses duplicate-and-trim (TE v3.2.0 has no public splitAt on clips).
  */
+
+/** Active edit tool — controls mouse behaviour in the timeline area. */
+enum class EditTool { Pointer, RangeSelect, Scissors };
 class ArrangementView : public juce::Component,
                         public juce::DragAndDropContainer,
                         public juce::DragAndDropTarget,
@@ -93,10 +106,13 @@ public:
     void mouseWheelMove (const juce::MouseEvent& event,
                          const juce::MouseWheelDetails& wheel) override;
 
-    // Marquee selection mouse handlers
+    // Tool-dispatching mouse handlers (Pointer/RangeSelect/Scissors)
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp   (const juce::MouseEvent& e) override;
+
+    // Cursor feedback per active tool
+    juce::MouseCursor getMouseCursor() override;
 
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
@@ -134,6 +150,45 @@ private:
         }
     };
 
+    // ---- Toolbar strip — three edit tool buttons in the header strip ----
+    class ToolbarStrip : public juce::Component
+    {
+    public:
+        EditTool activeTool = EditTool::Pointer;
+        std::function<void(EditTool)> onToolChange;
+
+        // Unicode symbols: ↖ = Pointer, ⬚ = Range Select, ✂ = Scissors
+        juce::TextButton pointerBtn  { u8"\u2196" };
+        juce::TextButton selectBtn   { u8"\u2B1A" };
+        juce::TextButton scissorsBtn { u8"\u2702" };
+
+        ToolbarStrip();
+        void resized() override;
+        void paint   (juce::Graphics& g) override;
+        void updateButtonStates();
+    };
+
+    // ---- Viewport subclass that intercepts Ctrl/Cmd+scroll for zoom ----
+    // The timeline viewport sits between the user's mouse and ArrangementView.
+    // juce::Viewport normally consumes all wheel events for scrolling, so
+    // ArrangementView::mouseWheelMove is never called when the cursor is over
+    // the timeline. ZoomViewport intercepts wheel events that carry Ctrl/Cmd and
+    // forwards them via onZoomWheel, while passing plain scroll events to the
+    // base class (NonScrollingViewport) unchanged.
+    struct ZoomViewport : public NonScrollingViewport
+    {
+        std::function<void (const juce::MouseEvent&, const juce::MouseWheelDetails&)> onZoomWheel;
+
+        void mouseWheelMove (const juce::MouseEvent& e,
+                             const juce::MouseWheelDetails& w) override
+        {
+            if ((e.mods.isCtrlDown() || e.mods.isCommandDown()) && onZoomWheel)
+                onZoomWheel (e, w);
+            else
+                NonScrollingViewport::mouseWheelMove (e, w);
+        }
+    };
+
     ApplicationState&    appState;
     ClipEditor&          clipEditor;
     MixerEngine&         mixerEngine;
@@ -143,7 +198,9 @@ private:
     AutomationEngine&    automationEngine;
 
     // ---- Header strip ----
-    juce::TextButton addTrackButton { "+ Track" };
+    juce::TextButton addTrackButton  { "+ Track" };
+    juce::TextButton zoomInButton    { "+" };
+    juce::TextButton zoomOutButton   { juce::String::fromUTF8 ("\xe2\x88\x92") };  // Unicode minus sign
     bool isDragHovering = false;
 
     // ---- Track selection and drag-to-reorder ----
@@ -170,8 +227,8 @@ private:
     juce::Component headerContainer;   // sized to fit all track headers vertically
 
     // ---- Right panel: timeline ----
-    NonScrollingViewport timelineViewport;
-    juce::Component timelineContainer; // sized to fit all clips
+    ZoomViewport     timelineViewport;
+    juce::Component  timelineContainer; // sized to fit all clips
 
     juce::OwnedArray<TrackHeader> trackHeaders;
     juce::OwnedArray<TrackRow>    trackRows;
