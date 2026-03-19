@@ -201,8 +201,9 @@ void MixerView::timerCallback()
     // The audio thread NEVER calls libebur128 — it only writes to the FIFO.
     masterMeter.flushFifo();
 
-    // Read the updated values (atomics — thread-safe from any thread)
-    const float peakDB = masterMeter.getPeakDB();
+    // Read-and-reset peak so each 24fps window shows only this interval's max,
+    // not an accumulated max since program start (fixes ratchet-upward bug).
+    const float peakDB = masterMeter.readAndResetPeakDB();
     const float rmsDB  = masterMeter.getRMSDB();
     const float lufsM  = masterMeter.getLUFSMomentary();
     const float lufsI  = masterMeter.getLUFSIntegrated();

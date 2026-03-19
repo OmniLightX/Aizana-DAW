@@ -14,66 +14,8 @@ MeterBar::MeterBar (MeterProcessor& meterProcessor_)
     lufsLabel.setFont (juce::FontOptions (8.0f));
     addAndMakeVisible (lufsLabel);
 
-    startTimerHz (24);  // ~24fps — matches EXP-03 requirement
-}
-
-MeterBar::~MeterBar()
-{
-    stopTimer();
-}
-
-void MeterBar::timerCallback()
-{
-    // Read atomic values — thread-safe, no lock needed
-    const float newPeak = meterProcessor.getPeakDB();
-    const float newRMS  = meterProcessor.getRMSDB();
-    const float newLUFS = meterProcessor.getLUFSIntegrated();
-
-    bool needsRepaint = false;
-
-    if (std::abs (newPeak - displayPeakDB) > 0.1f)
-    {
-        displayPeakDB = newPeak;
-        needsRepaint = true;
-    }
-
-    if (std::abs (newRMS - displayRMSDB) > 0.1f)
-    {
-        displayRMSDB = newRMS;
-        needsRepaint = true;
-    }
-
-    // Peak hold logic
-    if (displayPeakDB > peakHoldDB)
-    {
-        peakHoldDB    = displayPeakDB;
-        peakHoldTicks = kPeakHoldTicks;
-        needsRepaint  = true;
-    }
-    else if (peakHoldTicks > 0)
-    {
-        --peakHoldTicks;
-        if (peakHoldTicks == 0)
-        {
-            peakHoldDB   = -100.0f;
-            needsRepaint = true;
-        }
-    }
-
-    if (std::abs (newLUFS - displayLUFSI) > 0.1f)
-    {
-        displayLUFSI = newLUFS;
-
-        // Update LUFS label — informational, neutral colour
-        const juce::String lufsText = displayLUFSI <= -99.0f
-            ? "---"
-            : juce::String (displayLUFSI, 1);
-        lufsLabel.setText (lufsText, juce::dontSendNotification);
-        needsRepaint = true;
-    }
-
-    if (needsRepaint)
-        repaint();
+    // No timer started here — MeterBar is purely push-driven.
+    // All updates arrive via setMeterValues() called from MixerView::timerCallback().
 }
 
 void MeterBar::setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI)

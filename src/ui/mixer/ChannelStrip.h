@@ -21,12 +21,10 @@ namespace te = tracktion::engine;
  *
  * Thread safety: only reads from std::atomic values (thread-safe).
  */
-class MeterBar : public juce::Component,
-                 private juce::Timer
+class MeterBar : public juce::Component
 {
 public:
     explicit MeterBar (MeterProcessor& meterProcessor);
-    ~MeterBar() override;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -41,7 +39,7 @@ public:
 private:
     MeterProcessor& meterProcessor;
 
-    // Current display values — updated in timerCallback or setMeterValues(), read in paint().
+    // Current display values — updated by setMeterValues(), read in paint().
     // All operations on message thread, no synchronisation needed.
     float displayPeakDB = -100.0f;
     float displayRMSDB  = -100.0f;
@@ -54,8 +52,6 @@ private:
     static constexpr int kPeakHoldTicks = 60;  // ~2.5s at 24fps
 
     juce::Label lufsLabel;  // Shows integrated LUFS value below the bar
-
-    void timerCallback() override;  // Fires at ~24fps
 
     // Convert dBFS to normalised bar height (0.0 = silent, 1.0 = 0dBFS)
     static float dbToNorm (float dB);

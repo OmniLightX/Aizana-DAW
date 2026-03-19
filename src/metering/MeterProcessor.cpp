@@ -277,6 +277,15 @@ float MeterProcessor::getPeakDB() const
     return peakDB.load(std::memory_order_relaxed);
 }
 
+float MeterProcessor::readAndResetPeakDB()
+{
+    // Atomically read the current peak and reset to -100 dBFS.
+    // Each timerCallback tick sees only the peak from the current window —
+    // prevents the ratchet-upward-forever behaviour where a past audio burst
+    // keeps peakDB stuck at its max level until the next burst exceeds it.
+    return peakDB.exchange (-100.0f, std::memory_order_relaxed);
+}
+
 float MeterProcessor::getRMSDB() const
 {
     return rmsDB.load(std::memory_order_relaxed);

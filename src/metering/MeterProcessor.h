@@ -38,6 +38,14 @@ public:
     /** Instantaneous peak level in dBFS (computed in processBlock on audio thread). */
     float getPeakDB() const;
 
+    /**
+     * Atomically read and reset the peak level to -100 dBFS.
+     * Use this in timerCallback() so each 24fps window sees only the peak from
+     * the current interval — prevents the ratchet-upward-forever bug where audio
+     * bursts leave peakDB stuck at the max level indefinitely.
+     */
+    float readAndResetPeakDB();
+
     /** RMS level in dBFS (computed over the samples read since the last flush). */
     float getRMSDB() const;
 
