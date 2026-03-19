@@ -112,78 +112,6 @@ juce::MouseCursor ArrangementView::RulerStrip::getMouseCursor()
 }
 
 //==============================================================================
-// ToolbarStrip
-
-ArrangementView::ToolbarStrip::ToolbarStrip()
-{
-    // Style all three buttons identically — flat, dark, no border
-    auto styleBtn = [] (juce::TextButton& btn)
-    {
-        btn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0x00000000));
-        btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0x00000000));
-        btn.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffaaaaaa));
-        btn.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffffffff));
-    };
-    styleBtn (pointerBtn);
-    styleBtn (selectBtn);
-    styleBtn (scissorsBtn);
-
-    addAndMakeVisible (pointerBtn);
-    addAndMakeVisible (selectBtn);
-    addAndMakeVisible (scissorsBtn);
-
-    // Button clicks fire onToolChange so ArrangementView can update activeTool
-    pointerBtn.onClick  = [this] { if (onToolChange) onToolChange (EditTool::Pointer);     };
-    selectBtn.onClick   = [this] { if (onToolChange) onToolChange (EditTool::RangeSelect); };
-    scissorsBtn.onClick = [this] { if (onToolChange) onToolChange (EditTool::Scissors);    };
-
-    updateButtonStates();
-}
-
-void ArrangementView::ToolbarStrip::resized()
-{
-    // Three equal-width buttons filling the strip horizontally
-    const int w = getWidth() / 3;
-    pointerBtn .setBounds (0,       0, w, getHeight());
-    selectBtn  .setBounds (w,       0, w, getHeight());
-    scissorsBtn.setBounds (w * 2,   0, getWidth() - w * 2, getHeight());
-}
-
-void ArrangementView::ToolbarStrip::paint (juce::Graphics& g)
-{
-    // Subtle separator on the right edge of the toolbar area
-    g.setColour (juce::Colour (0xff333333));
-    g.drawVerticalLine (getWidth() - 1, 0.0f, (float)getHeight());
-}
-
-void ArrangementView::ToolbarStrip::updateButtonStates()
-{
-    // Highlight the active tool button with Apple system blue at 20% alpha
-    const juce::Colour activeColour  (0x33007aff);  // 0x33 = ~20% alpha, 007aff = Apple blue
-    const juce::Colour inactiveColour (0x00000000); // transparent
-
-    pointerBtn .setColour (juce::TextButton::buttonColourId,
-                           activeTool == EditTool::Pointer     ? activeColour : inactiveColour);
-    selectBtn  .setColour (juce::TextButton::buttonColourId,
-                           activeTool == EditTool::RangeSelect ? activeColour : inactiveColour);
-    scissorsBtn.setColour (juce::TextButton::buttonColourId,
-                           activeTool == EditTool::Scissors    ? activeColour : inactiveColour);
-
-    // Text colour also brightens on the active tool
-    const juce::Colour activeText   (0xffffffff);
-    const juce::Colour inactiveText (0xffaaaaaa);
-
-    pointerBtn .setColour (juce::TextButton::textColourOffId,
-                           activeTool == EditTool::Pointer     ? activeText : inactiveText);
-    selectBtn  .setColour (juce::TextButton::textColourOffId,
-                           activeTool == EditTool::RangeSelect ? activeText : inactiveText);
-    scissorsBtn.setColour (juce::TextButton::textColourOffId,
-                           activeTool == EditTool::Scissors    ? activeText : inactiveText);
-
-    repaint();
-}
-
-//==============================================================================
 
 ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   ClipEditor&          clipEditor_,
@@ -266,15 +194,13 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         mouseWheelMove (e.getEventRelativeTo (this), w);
     };
 
-    // Toolbar strip — edit tool buttons in the header strip
-    addAndMakeVisible (toolbarStrip);
-    toolbarStrip.onToolChange = [this] (EditTool tool) { setActiveTool (tool); };
-
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
 
-    // Keyboard focus needed for left/right arrow scrubbing
+    // Keyboard focus: any mouse click in the arrangement area reclaims focus so
+    // E/R/S tool shortcuts work reliably without requiring manual tab navigation.
     setWantsKeyboardFocus (true);
+    setMouseClickGrabsKeyboardFocus (true);
 
     // Register as ValueTree listener on the Edit's state so we rebuild when
     // tracks are added/removed — RESEARCH.md Pattern 1 (reactive ValueTree).
@@ -312,14 +238,6 @@ void ArrangementView::resized()
     // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
     zoomInButton.setBounds  (getWidth() - 28, headerStrip.getY() + 4, 20, 20);
     zoomOutButton.setBounds (getWidth() - 52, headerStrip.getY() + 4, 20, 20);
-
-    // Toolbar strip — three tool buttons (Pointer/RangeSelect/Scissors), 24px each,
-    // placed to the right of the Add Track button and left of the zoom buttons.
-    // Centre-aligned vertically in the header strip.
-    const int toolBtnW = 24;
-    const int toolbarW = toolBtnW * 3;
-    const int toolbarX = 84;   // just right of Add Track button (80 + 4px gap)
-    toolbarStrip.setBounds (toolbarX, headerStrip.getY(), toolbarW, kHeaderStripHeight);
 
     // Ruler strip — full width, sits between header strip and track rows
     // The ruler portion under the header column (left of kHeaderWidth) is filled
@@ -884,6 +802,7 @@ void ArrangementView::layoutTrackRows()
     {
         const int h = row->getPreferredHeight();
         row->setBounds (0, y, timelineW, h);
+        row->layoutClips (pixelsPerSecond);   // reposition clips at new zoom level
         y += h;
     }
 }

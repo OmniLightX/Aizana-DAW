@@ -40,6 +40,10 @@ public:
     int  getPreferredHeight() const;  // Returns kCollapsedHeight or kExpandedHeight
     void toggleAutomationLane();      // Called by disclosure button
 
+    /** Repositions all ClipComponent children at the given zoom level.
+     *  Call this from layoutTrackRows() on every zoom/resize cycle. */
+    void layoutClips (double pixelsPerSecond);
+
     /** Called after expand/collapse so ArrangementView can re-layout headers + timeline. */
     std::function<void()> onExpansionChanged;
 

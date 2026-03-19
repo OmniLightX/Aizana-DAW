@@ -1,4 +1,5 @@
 #include "TrackRow.h"
+#include "ClipComponent.h"
 
 //==============================================================================
 TrackRow::TrackRow (te::AudioTrack&   track_,
@@ -87,6 +88,22 @@ void TrackRow::resized()
     // Automation lane: below the clip area when expanded
     if (expanded && automationLane != nullptr)
         automationLane->setBounds (0, kCollapsedHeight, area.getWidth(), kAutomationLaneHeight);
+}
+
+//==============================================================================
+void TrackRow::layoutClips (double pps)
+{
+    for (int i = 0; i < clipArea.getNumChildComponents(); ++i)
+    {
+        if (auto* cc = dynamic_cast<ClipComponent*> (clipArea.getChildComponent (i)))
+        {
+            const double startSecs  = cc->getClip().getPosition().getStart().inSeconds();
+            const double lengthSecs = cc->getClip().getPosition().getLength().inSeconds();
+            const int x = (int)(startSecs  * pps);
+            const int w = juce::jmax (4, (int)(lengthSecs * pps));
+            cc->setBounds (x, 0, w, clipArea.getHeight());
+        }
+    }
 }
 
 //==============================================================================
