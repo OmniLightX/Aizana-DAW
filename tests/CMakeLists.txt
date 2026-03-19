@@ -47,6 +47,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/AutomationEngine.cpp
     ../src/audio/AudioRecorder.cpp
     ../src/audio/AudioEngine.cpp
+    ../src/audio/MetronomeGenerator.cpp
     ../src/plugins/ClapPluginFormat.cpp
     ../src/plugins/PluginScanner.cpp
     ../src/plugins/PluginManager.cpp
