@@ -260,6 +260,43 @@ void ArrangementView::setPixelsPerSecond (double pps)
     repaint();
 }
 
+void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
+                                       const juce::MouseWheelDetails& wheel)
+{
+    // Pinch-to-zoom: macOS trackpad delivers pinch as Ctrl+scroll-Y
+    // Also handle Cmd+scroll for explicit keyboard+scroll zoom
+    if (event.mods.isCtrlDown() || event.mods.isCommandDown())
+    {
+        // deltaY > 0 = zoom in, deltaY < 0 = zoom out
+        const double zoomFactor = 1.0 + wheel.deltaY * 2.0;
+        const double newPPS = juce::jlimit (10.0, 2000.0, pixelsPerSecond * zoomFactor);
+
+        // Zoom towards the mouse cursor position:
+        // Calculate the time position under the cursor before zoom
+        const int mouseXInTimeline = event.getPosition().x - kHeaderWidth
+                                     + timelineViewport.getViewPositionX();
+        const double timeAtCursor = mouseXInTimeline / pixelsPerSecond;
+
+        // Apply new zoom
+        pixelsPerSecond = newPPS;
+
+        // Scroll so the same time position remains under the cursor
+        const int newMouseXInTimeline = (int)(timeAtCursor * pixelsPerSecond);
+        const int newScrollX = newMouseXInTimeline - (event.getPosition().x - kHeaderWidth);
+        timelineViewport.setViewPosition (juce::jmax (0, newScrollX),
+                                          timelineViewport.getViewPositionY());
+        scrollPositionSecs = juce::jmax (0.0, (double)newScrollX / pixelsPerSecond);
+
+        resized();
+        rulerStrip.repaint();
+        repaint();
+        return;
+    }
+
+    // Default: pass to base class for normal scrolling
+    Component::mouseWheelMove (event, wheel);
+}
+
 //==============================================================================
 // Timer — 30ms playhead poll
 

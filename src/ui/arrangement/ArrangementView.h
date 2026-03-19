@@ -89,6 +89,10 @@ public:
     // Keyboard scrubbing — left/right arrows nudge playhead by beat or bar
     bool keyPressed (const juce::KeyPress& key) override;
 
+    // Pinch-to-zoom (macOS trackpad) and Cmd+scroll zoom
+    void mouseWheelMove (const juce::MouseEvent& event,
+                         const juce::MouseWheelDetails& wheel) override;
+
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
