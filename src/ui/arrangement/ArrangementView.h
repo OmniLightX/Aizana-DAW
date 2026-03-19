@@ -13,8 +13,6 @@
 #include "TrackRow.h"
 #include "ClipComponent.h"
 
-namespace te = tracktion::engine;
-
 /**
  * ArrangementView — Linear timeline with track rows, track headers, and clip blocks.
  *

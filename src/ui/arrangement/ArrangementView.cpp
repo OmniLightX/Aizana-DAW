@@ -1,5 +1,7 @@
 #include "ArrangementView.h"
 
+namespace te = tracktion::engine;
+
 //==============================================================================
 // RulerStrip
 
@@ -70,7 +72,7 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
                 if (bx >= 0 && bx <= getWidth())
                 {
                     g.setColour (juce::Colour (0xff333333));
-                    g.drawVerticalLine (bx, (float)(getHeight() / 2), (float)getHeight());
+                    g.drawVerticalLine (bx, (float)getHeight() / 2.0f, (float)getHeight());
                 }
             }
         }
