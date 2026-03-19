@@ -44,8 +44,8 @@ public:
     {
         sr = sampleRate;
         // Pre-allocate click envelope buffer at max block size
-        // Click duration: 20ms — about 882 samples at 44.1kHz
-        clickDurationSamples = (int)(sampleRate * 0.020);
+        // Click duration: 10ms — about 441 samples at 44.1kHz (tighter, punchier click)
+        clickDurationSamples = (int)(sampleRate * 0.010);
         reset();
     }
 
@@ -58,13 +58,14 @@ private:
     std::atomic<int>    beatsPerBar   { 4 };
 
     double sr = 44100.0;
-    int    clickDurationSamples = 882;   // updated in prepare()
+    int    clickDurationSamples = 441;   // updated in prepare() — 10ms at 44.1kHz
 
     // Audio-thread state (single-threaded — audio callback only)
     double phaseAccumulator    = 0.0;   // position within current beat [0.0, 1.0)
     int    beatInBar           = 0;     // which beat in the bar (0 = downbeat)
     int    clickSamplesLeft    = 0;     // samples remaining in current click burst
     double clickPhase          = 0.0;   // sine oscillator phase for click tone
+    double clickFreq           = 1200.0; // frequency locked in at beat boundary, persists for full click
 
     void reset() noexcept
     {

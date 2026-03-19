@@ -27,20 +27,23 @@ void MetronomeGenerator::processBlock (float* const* outputData,
             clickSamplesLeft = clickDurationSamples;
             clickPhase = 0.0;
 
-            // Advance beat-in-bar counter
+            // Select frequency BEFORE incrementing beatInBar so beat 0 (downbeat)
+            // correctly uses 1200 Hz — beatInBar still holds the value for this beat
+            clickFreq = (beatInBar == 0) ? 1200.0 : 800.0;
+
+            // Advance beat-in-bar counter after frequency selection
             beatInBar = (beatInBar + 1) % bpb;
         }
 
         // Synthesize click if active
         if (clickSamplesLeft > 0)
         {
-            // Downbeat (beat 0): 1200 Hz — higher, punchier
-            // Upbeat (beats 1..N): 800 Hz — lower, softer
-            const double freq = (beatInBar == 0) ? 1200.0 : 800.0;
+            // Use clickFreq locked in at beat boundary — stays constant for the full click burst
+            const double freq = clickFreq;
 
             // Amplitude: decays over the click duration
             const float envelope = (float)clickSamplesLeft / (float)clickDurationSamples;
-            const float amplitude = 0.5f * envelope * envelope;  // quadratic decay
+            const float amplitude = 0.6f * envelope * envelope;  // quadratic decay, slightly louder
 
             const double twoPi = 6.283185307179586;
             const float sample = amplitude * std::sin (clickPhase);
