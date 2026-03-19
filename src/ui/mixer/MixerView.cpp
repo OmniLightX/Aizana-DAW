@@ -44,22 +44,28 @@ void MixerView::resized()
 {
     channelStripViewport.setBounds (getLocalBounds());
 
+    // Use MixerView's own height (stable, set by MainComponent::resized) rather than
+    // getMaximumVisibleHeight() which returns near-zero when the horizontal scrollbar
+    // is visible and JUCE hasn't finished laying out the scrollbar geometry yet.
+    // Subtract the scrollbar thickness so the volume-fader text box is never obscured
+    // by the bar; 200px minimum guard prevents collapse to an unusable size.
+    const int scrollBarH = channelStripViewport.getScrollBarThickness();
+    const int stripH     = juce::jmax (200, getLocalBounds().getHeight() - scrollBarH);
+
     // Size container to hold all strips side-by-side (audio + bus)
     const int totalW = juce::jmax ((strips.size() + busStrips.size()) * kStripWidth,
                                    channelStripViewport.getWidth());
-    channelStripContainer.setSize (totalW, channelStripViewport.getMaximumVisibleHeight());
+    channelStripContainer.setSize (totalW, stripH);
 
     // Lay out audio track strips horizontally
     for (int i = 0; i < strips.size(); ++i)
-        strips[i]->setBounds (i * kStripWidth, 0, kStripWidth,
-                              channelStripContainer.getHeight());
+        strips[i]->setBounds (i * kStripWidth, 0, kStripWidth, stripH);
 
     // Lay out bus strips after audio track strips
     for (int i = 0; i < busStrips.size(); ++i)
     {
         const int busIdx = strips.size() + i;
-        busStrips[i]->setBounds (busIdx * kStripWidth, 0, kStripWidth,
-                                 channelStripContainer.getHeight());
+        busStrips[i]->setBounds (busIdx * kStripWidth, 0, kStripWidth, stripH);
     }
 }
 
