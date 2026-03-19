@@ -278,16 +278,33 @@ void ArrangementView::timerCallback()
         repaint();  // repaints the playhead line drawn in ArrangementView::paint()
     }
 
-    // Auto-follow playhead during playback: if playhead approaches right edge, scroll
+    // Auto-follow playhead during playback
     if (edit->getTransport().isPlaying())
     {
-        const double visibleEndSecs = scrollPositionSecs
-            + timelineViewport.getWidth() / pixelsPerSecond;
-        if (playheadPositionSecs > visibleEndSecs - 1.0)
+        const double viewportWidthSecs = timelineViewport.getWidth() / pixelsPerSecond;
+        const double visibleStartSecs = scrollPositionSecs;
+
+        // If playhead is past 80% of visible area, scroll to put playhead at 20%
+        const double scrollThreshold = visibleStartSecs + viewportWidthSecs * 0.8;
+        if (playheadPositionSecs > scrollThreshold)
         {
-            const int newScrollX = (int)((playheadPositionSecs - 2.0) * pixelsPerSecond);
-            timelineViewport.setViewPosition (juce::jmax (0, newScrollX),
-                                              timelineViewport.getViewPositionY());
+            const double newStartSecs = playheadPositionSecs - viewportWidthSecs * 0.2;
+            const int newScrollX = (int)(juce::jmax (0.0, newStartSecs) * pixelsPerSecond);
+            timelineViewport.setViewPosition (newScrollX, timelineViewport.getViewPositionY());
+            // CRITICAL: update scrollPositionSecs manually since setViewPosition
+            // does not trigger scrollBarMoved for programmatic calls
+            scrollPositionSecs = juce::jmax (0.0, newStartSecs);
+            rulerStrip.repaint();
+        }
+
+        // Also handle playhead scrolling left (e.g., loop back to start)
+        if (playheadPositionSecs < visibleStartSecs)
+        {
+            const double newStartSecs = juce::jmax (0.0, playheadPositionSecs - 0.5);
+            const int newScrollX = (int)(newStartSecs * pixelsPerSecond);
+            timelineViewport.setViewPosition (newScrollX, timelineViewport.getViewPositionY());
+            scrollPositionSecs = newStartSecs;
+            rulerStrip.repaint();
         }
     }
 }
