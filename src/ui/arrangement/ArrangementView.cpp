@@ -251,6 +251,42 @@ void ArrangementView::paint (juce::Graphics& g)
             g.drawVerticalLine (screenX, (float)rulerBottom, (float)getHeight());
         }
     }
+
+    // ---- Marquee selection rectangle ----
+    if (isMarqueeActive && ! marqueeRect.isEmpty())
+    {
+        // Semi-transparent blue fill
+        g.setColour (juce::Colours::dodgerblue.withAlpha (0.15f));
+        g.fillRect (marqueeRect);
+
+        // Blue border
+        g.setColour (juce::Colours::dodgerblue.withAlpha (0.6f));
+        g.drawRect (marqueeRect, 1);
+    }
+
+    // ---- Selected clip highlights ----
+    if (! selectedClips.isEmpty())
+    {
+        const int timelineLeft = kHeaderWidth;
+        const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+
+        g.setColour (juce::Colours::dodgerblue.withAlpha (0.25f));
+        for (auto* cc : selectedClips)
+        {
+            if (cc == nullptr) continue;
+            auto* row = cc->getParentComponent();   // clipArea
+            if (row == nullptr || row->getParentComponent() == nullptr) continue;
+            auto* trackRow = row->getParentComponent();  // TrackRow
+
+            auto bounds = cc->getBounds()
+                .translated (row->getX() + trackRow->getX(),
+                             row->getY() + trackRow->getY())
+                .translated (timelineLeft - timelineViewport.getViewPositionX(),
+                             timelineTop  - timelineViewport.getViewPositionY());
+
+            g.fillRect (bounds);
+        }
+    }
 }
 
 void ArrangementView::setPixelsPerSecond (double pps)
@@ -385,6 +421,101 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
     }
 
     return false;
+}
+
+//==============================================================================
+// Marquee selection — mouseDown / mouseDrag / mouseUp
+
+void ArrangementView::mouseDown (const juce::MouseEvent& e)
+{
+    if (! e.mods.isLeftButtonDown()) return;
+
+    // Only start marquee if clicking in the timeline area (right of headers, below ruler)
+    const int timelineLeft = kHeaderWidth;
+    const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+
+    if (e.x >= timelineLeft && e.y >= timelineTop)
+    {
+        // Clear previous selection
+        selectedClips.clear();
+
+        // Click on empty space in timeline area sets the playhead position
+        auto* edit = appState.editManager.getEdit();
+        if (edit != nullptr)
+        {
+            const int xInTimeline = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
+            const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
+            edit->getTransport().setPosition (
+                tracktion::TimePosition::fromSeconds (clickTimeSecs));
+        }
+
+        // Start marquee
+        isMarqueeActive = true;
+        marqueeStartPoint = e.getPosition();
+        marqueeRect = {};
+        repaint();
+    }
+}
+
+void ArrangementView::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! isMarqueeActive) return;
+
+    // Build rectangle from start point to current position
+    const int x1 = juce::jmin (marqueeStartPoint.x, e.x);
+    const int y1 = juce::jmin (marqueeStartPoint.y, e.y);
+    const int x2 = juce::jmax (marqueeStartPoint.x, e.x);
+    const int y2 = juce::jmax (marqueeStartPoint.y, e.y);
+    marqueeRect = { x1, y1, x2 - x1, y2 - y1 };
+
+    // Only consider it a marquee (not a click) if dragged at least 4px
+    if (marqueeRect.getWidth() < 4 && marqueeRect.getHeight() < 4)
+        return;
+
+    // Determine which clips intersect the marquee.
+    // Convert marquee rect to timeline-container-local coordinates.
+    const int timelineLeft = kHeaderWidth;
+    const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+
+    juce::Rectangle<int> timelineMarquee (
+        marqueeRect.getX() - timelineLeft + timelineViewport.getViewPositionX(),
+        marqueeRect.getY() - timelineTop  + timelineViewport.getViewPositionY(),
+        marqueeRect.getWidth(),
+        marqueeRect.getHeight()
+    );
+
+    selectedClips.clear();
+    for (auto* row : trackRows)
+    {
+        auto& clipArea = row->getClipArea();
+        for (int i = 0; i < clipArea.getNumChildComponents(); ++i)
+        {
+            if (auto* cc = dynamic_cast<ClipComponent*> (clipArea.getChildComponent (i)))
+            {
+                // Convert clip bounds to timeline container coordinates
+                auto clipBoundsInContainer = cc->getBounds().translated (
+                    clipArea.getX() + row->getX(),
+                    clipArea.getY() + row->getY());
+
+                if (timelineMarquee.intersects (clipBoundsInContainer))
+                    selectedClips.add (cc);
+            }
+        }
+    }
+
+    repaint();
+}
+
+void ArrangementView::mouseUp (const juce::MouseEvent&)
+{
+    if (isMarqueeActive)
+    {
+        isMarqueeActive = false;
+        // Keep selectedClips — they remain selected after mouse release.
+        // The marquee rectangle disappears but selection persists until next click.
+        marqueeRect = {};
+        repaint();
+    }
 }
 
 //==============================================================================

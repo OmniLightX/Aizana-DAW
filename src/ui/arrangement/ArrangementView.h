@@ -93,6 +93,11 @@ public:
     void mouseWheelMove (const juce::MouseEvent& event,
                          const juce::MouseWheelDetails& wheel) override;
 
+    // Marquee selection mouse handlers
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp   (const juce::MouseEvent& e) override;
+
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
@@ -136,6 +141,12 @@ private:
     // ---- Track selection and drag-to-reorder ----
     TrackHeader* selectedTrackHeader = nullptr;
     int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none
+
+    // ---- Marquee selection ----
+    bool             isMarqueeActive = false;
+    juce::Point<int> marqueeStartPoint;          // in ArrangementView coordinates
+    juce::Rectangle<int> marqueeRect;            // current marquee rectangle (screen coords)
+    juce::Array<ClipComponent*> selectedClips;   // clips inside the marquee
 
     void setSelectedTrackHeader (TrackHeader* header);
 
