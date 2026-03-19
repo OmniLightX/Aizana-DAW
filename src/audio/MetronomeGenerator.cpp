@@ -43,7 +43,7 @@ void MetronomeGenerator::processBlock (float* const* outputData,
 
             // Amplitude: decays over the click duration
             const float envelope = (float)clickSamplesLeft / (float)clickDurationSamples;
-            const float amplitude = 0.6f * envelope * envelope;  // quadratic decay, slightly louder
+            const float amplitude = 0.25f * envelope * envelope;  // quadratic decay — ~12 dBFS headroom, reference click level
 
             const double twoPi = 6.283185307179586;
             const float sample = amplitude * std::sin (clickPhase);

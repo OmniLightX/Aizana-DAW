@@ -18,6 +18,12 @@ void EditManager::createNewEdit()
 
     // Ensure transport is stopped (it is by default, but be explicit)
     edit->getTransport().stop (false, false);
+
+    // Disable TE's built-in click track. Cloudes uses MetronomeGenerator instead —
+    // a custom synthesiser that runs in AudioEngine::audioDeviceIOCallbackWithContext.
+    // TE's click track defaults to false for fresh edits, but saved edit state or
+    // future TE defaults could enable it, resulting in two simultaneous click generators.
+    edit->clickTrackEnabled = false;
 }
 
 //==============================================================================
