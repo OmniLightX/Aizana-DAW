@@ -77,6 +77,38 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
     }
 }
 
+void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
+{
+    if (! e.mods.isLeftButtonDown()) return;
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    // Convert click x to an absolute timeline time, accounting for scroll offset.
+    // scrollPositionSecs * pixelsPerSecond gives the horizontal scroll in pixels;
+    // adding e.x yields the absolute pixel position in the timeline.
+    const double clickTimeSecs = juce::jmax (
+        0.0,
+        (e.x + scrollPositionSecs * pixelsPerSecond) / pixelsPerSecond);
+
+    edit->getTransport().setPosition (
+        tracktion::TimePosition::fromSeconds (clickTimeSecs));
+}
+
+void ArrangementView::RulerStrip::mouseDrag (const juce::MouseEvent& e)
+{
+    // Dragging in the ruler = scrub: update playhead position continuously.
+    // Reuses mouseDown logic — no additional state needed.
+    mouseDown (e);
+}
+
+juce::MouseCursor ArrangementView::RulerStrip::getMouseCursor()
+{
+    // Left-right resize cursor signals "this is an interactive scrub target"
+    // — matches Logic Pro and Ableton Live conventions.
+    return juce::MouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+}
+
 //==============================================================================
 
 ArrangementView::ArrangementView (ApplicationState&    appState_,

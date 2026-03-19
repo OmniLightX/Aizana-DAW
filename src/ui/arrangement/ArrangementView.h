@@ -105,6 +105,14 @@ private:
     public:
         RulerStrip (ApplicationState& appState, double& pixelsPerSecond, double& scrollPositionSecs);
         void paint (juce::Graphics& g) override;
+
+        // Click-to-seek: left-click on ruler positions the playhead
+        void mouseDown (const juce::MouseEvent& e) override;
+        // Drag-to-scrub: dragging along the ruler updates playhead continuously
+        void mouseDrag (const juce::MouseEvent& e) override;
+        // Signal to users that the ruler is an interactive scrub target
+        juce::MouseCursor getMouseCursor() override;
+
     private:
         ApplicationState& appState;
         double& pixelsPerSecond;
