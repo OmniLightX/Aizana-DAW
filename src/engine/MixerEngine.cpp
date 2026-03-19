@@ -65,6 +65,17 @@ void MixerEngine::setPan (te::AudioTrack& track, float pan)
     vp->setPan (clamped);
 }
 
+float MixerEngine::getPan (const te::AudioTrack& track) const
+{
+    // Read from the pan CachedValue (ValueTree-backed source of truth).
+    // After undo, the CachedValue is updated synchronously via forceUpdateOfCachedValue()
+    // but panParam->currentValue is NOT propagated back — same invariant as getVolume.
+    if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
+        return vp->pan.get();
+
+    return 0.0f;
+}
+
 void MixerEngine::setSolo (te::AudioTrack& track, bool solo)
 {
     auto* edit = editManager.getEdit();

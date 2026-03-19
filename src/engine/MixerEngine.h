@@ -36,6 +36,9 @@ public:
     /** Set track pan (-1.0 = L, 0.0 = C, 1.0 = R). Undoable. */
     void setPan (te::AudioTrack& track, float pan);
 
+    /** Return track pan from VolumeAndPanPlugin CachedValue (-1.0 to +1.0). */
+    float getPan (const te::AudioTrack& track) const;
+
     /** Solo this track (mutes all other non-solo-isolated tracks). Undoable. */
     void setSolo (te::AudioTrack& track, bool solo);
 

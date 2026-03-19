@@ -111,6 +111,7 @@ private:
     MeterBar         meterBar;
     juce::Slider     volumeFader;
     juce::Slider     panKnob;
+    juce::Label      panValueLabel; // numeric pan readout: "L33", "C", "R48"
     juce::Label      panLabel;      // "PAN" label below the pan knob
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
@@ -119,6 +120,9 @@ private:
     // Called when the fader value changes (user interaction)
     void volumeChanged();
     void panChanged();
+
+    // Format pan value as "L33", "C", or "R48" (absolute percent 0-100)
+    static juce::String formatPanValue (double pan);
 
     // ValueTree::Listener — keeps UI in sync when track state changes externally
     void valueTreePropertyChanged (juce::ValueTree& tree,

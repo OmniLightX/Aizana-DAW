@@ -246,6 +246,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     panKnob.setDoubleClickReturnValue (true, 0.0);  // double-click resets centre
     panKnob.setValue           (0.0, juce::dontSendNotification);  // default centre
     panKnob.onValueChange = [this] { panChanged(); };
+    // panValueLabel initial text is set after panValueLabel is constructed (below)
 
     // ---- Solo / Mute buttons ----
     soloButton.setClickingTogglesState (true);
@@ -265,6 +266,12 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
         mixerEngine.setMute (track, muteButton.getToggleState());
     };
 
+    // ---- Pan value label (numeric readout: L33 / C / R48) ----
+    panValueLabel.setText ("C", juce::dontSendNotification);
+    panValueLabel.setJustificationType (juce::Justification::centred);
+    panValueLabel.setColour (juce::Label::textColourId, juce::Colour (0xffcccccc));
+    panValueLabel.setFont (juce::FontOptions (9.0f));
+
     // ---- Pan label ----
     panLabel.setText ("PAN", juce::dontSendNotification);
     panLabel.setJustificationType (juce::Justification::centred);
@@ -277,9 +284,13 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     trackNameLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     trackNameLabel.setFont (juce::FontOptions (10.0f));
 
+    // Set initial pan value label from current knob state
+    panValueLabel.setText (formatPanValue (panKnob.getValue()), juce::dontSendNotification);
+
     addAndMakeVisible (meterBar);
     addAndMakeVisible (volumeFader);
     addAndMakeVisible (panKnob);
+    addAndMakeVisible (panValueLabel);
     addAndMakeVisible (panLabel);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (muteButton);
@@ -311,6 +322,7 @@ void ChannelStrip::resized()
     // Without text box, the full height is the rotary dial itself — use 55px to make it prominent
     const int panH = juce::jmax (48, juce::jmin (60, area.getHeight() / 4));
     panKnob.setBounds (area.removeFromTop (panH));
+    panValueLabel.setBounds (area.removeFromTop (12));  // numeric readout: L33 / C / R48
     panLabel.setBounds (area.removeFromTop (12));
 
     // Meter bar on the left ~30% width, volume fader on the right ~70%
@@ -351,11 +363,19 @@ void ChannelStrip::volumeChanged()
     mixerEngine.setVolume (track, (float)volumeFader.getValue());
 }
 
+juce::String ChannelStrip::formatPanValue (double pan)
+{
+    int pct = juce::roundToInt (std::abs (pan) * 100.0);
+    if (pct == 0) return "C";
+    return (pan < 0.0 ? "L" : "R") + juce::String (pct);
+}
+
 void ChannelStrip::panChanged()
 {
     auto& um = track.edit.getUndoManager();
     um.beginNewTransaction ("Pan knob");
     mixerEngine.setPan (track, (float)panKnob.getValue());
+    panValueLabel.setText (formatPanValue (panKnob.getValue()), juce::dontSendNotification);
 }
 
 void ChannelStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
@@ -367,5 +387,12 @@ void ChannelStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
     {
         const float dB = mixerEngine.getVolume (track);
         volumeFader.setValue (dB, juce::dontSendNotification);
+    }
+
+    if (property == te::IDs::pan)
+    {
+        const float pan = mixerEngine.getPan (track);
+        panKnob.setValue (pan, juce::dontSendNotification);
+        panValueLabel.setText (formatPanValue (pan), juce::dontSendNotification);
     }
 }
