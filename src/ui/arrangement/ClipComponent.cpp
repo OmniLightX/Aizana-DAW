@@ -1,13 +1,15 @@
 #include "ClipComponent.h"
+#include "ArrangementView.h"
 #include "ui/pianoroll/PianoRollView.h"
 #include "engine/ClipEditor.h"
 
 //==============================================================================
 
 ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
-                               ClipEditor& clipEditor_, double& pixelsPerSecond_)
+                               ClipEditor& clipEditor_, double& pixelsPerSecond_,
+                               const EditTool& activeTool)
     : clip (clip_), editManager (editManager_), clipEditor (clipEditor_),
-      pixelsPerSecond (pixelsPerSecond_)
+      pixelsPerSecond (pixelsPerSecond_), activeTool_ (activeTool)
 {
     setRepaintsOnMouseActivity (true);
 
@@ -83,18 +85,35 @@ void ClipComponent::paint (juce::Graphics& g)
 
 void ClipComponent::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isLeftButtonDown())
+    if (! e.mods.isLeftButtonDown()) return;
+
+    // Scissors tool: forward click to parent ArrangementView for clip splitting.
+    // We must NOT start a drag — the drag would swallow the scissors action.
+    if (activeTool_ == EditTool::Scissors)
     {
-        dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
-        dragStartMouseX = e.getEventRelativeTo (getParentComponent()).x;
-        isDragging = false;
-        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+        if (auto* av = findParentComponentOfClass<ArrangementView>())
+        {
+            const auto eventInAV   = e.getEventRelativeTo (av);
+            const int  timelineLeft = ArrangementView::kHeaderWidth;
+            const int  xInTimeline  = eventInAV.x - timelineLeft
+                                      + av->getTimelineViewportX();
+            const double timeSecs = juce::jmax (0.0, (double)xInTimeline / av->getPixelsPerSecond());
+            av->splitClipAtTime (timeSecs, eventInAV.y);
+        }
+        return;  // Do NOT start drag
     }
+
+    // Normal pointer tool — start drag
+    dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
+    dragStartMouseX = e.getEventRelativeTo (getParentComponent()).x;
+    isDragging = false;
+    setMouseCursor (juce::MouseCursor::DraggingHandCursor);
 }
 
 void ClipComponent::mouseDrag (const juce::MouseEvent& e)
 {
     if (! e.mods.isLeftButtonDown()) return;
+    if (activeTool_ == EditTool::Scissors) return;  // scissors never drags clips
     isDragging = true;
 
     const int currentX = e.getEventRelativeTo (getParentComponent()).x;

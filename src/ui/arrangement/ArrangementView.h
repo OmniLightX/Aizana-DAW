@@ -12,6 +12,7 @@
 #include "TrackHeader.h"
 #include "TrackRow.h"
 #include "ClipComponent.h"
+#include "EditTool.h"
 
 /**
  * ArrangementView — Linear timeline with track rows, track headers, and clip blocks.
@@ -53,10 +54,13 @@
  * Pointer (default), Range Select (marquee), Scissors (split clip).
  * Keyboard shortcuts E/R/S switch tools. Scissors calls splitClipAtTime
  * which uses duplicate-and-trim (TE v3.2.0 has no public splitAt on clips).
+ *
+ * Plan 01-44: ToolbarStrip removed. Right-click context menu replaces the
+ * toolbar — Apple-style cleanliness. Any left-click in the arrangement
+ * reclaims keyboard focus so E/R/S shortcuts work reliably. Scissors tool
+ * now intercepts ClipComponent::mouseDown so click-on-clip splits correctly.
  */
 
-/** Active edit tool — controls mouse behaviour in the timeline area. */
-enum class EditTool { Pointer, RangeSelect, Scissors };
 class ArrangementView : public juce::Component,
                         public juce::DragAndDropContainer,
                         public juce::DragAndDropTarget,
@@ -112,6 +116,13 @@ public:
     // Cursor feedback per active tool
     juce::MouseCursor getMouseCursor() override;
 
+    // Public accessors for ClipComponent scissors forwarding
+    int    getTimelineViewportX() const { return timelineViewport.getViewPositionX(); }
+    void   splitClipAtTime (double timeSecs, int screenY);  // also called by ClipComponent
+
+    // Track header column width — needed by ClipComponent for scissors coordinate conversion
+    static constexpr int kHeaderWidth = 160;
+
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
@@ -146,24 +157,6 @@ private:
                 return false;  // not consumed — propagates up to ArrangementView::keyPressed
             return juce::Viewport::keyPressed (key);
         }
-    };
-
-    // ---- Toolbar strip — three edit tool buttons in the header strip ----
-    class ToolbarStrip : public juce::Component
-    {
-    public:
-        EditTool activeTool = EditTool::Pointer;
-        std::function<void(EditTool)> onToolChange;
-
-        // Unicode symbols: ↖ = Pointer, ⬚ = Range Select, ✂ = Scissors
-        juce::TextButton pointerBtn  { u8"\u2196" };
-        juce::TextButton selectBtn   { u8"\u2B1A" };
-        juce::TextButton scissorsBtn { u8"\u2702" };
-
-        ToolbarStrip();
-        void resized() override;
-        void paint   (juce::Graphics& g) override;
-        void updateButtonStates();
     };
 
     // ---- Viewport subclass that intercepts Ctrl/Cmd+scroll for zoom ----
@@ -201,11 +194,10 @@ private:
     juce::TextButton zoomOutButton   { juce::String::fromUTF8 ("\xe2\x88\x92") };  // Unicode minus sign
     bool isDragHovering = false;
 
-    // ---- Edit tool toolbar ----
-    ToolbarStrip toolbarStrip;
-    EditTool     activeTool = EditTool::Pointer;
+    // ---- Active edit tool ----
+    EditTool activeTool = EditTool::Pointer;
 
-    // Changes the active tool, updates toolbar highlight, and refreshes cursor
+    // Changes the active tool and refreshes cursor
     void setActiveTool (EditTool tool);
 
     // ---- Track selection and drag-to-reorder ----
@@ -219,11 +211,6 @@ private:
     juce::Array<ClipComponent*> selectedClips;   // clips inside the marquee
 
     void setSelectedTrackHeader (TrackHeader* header);
-
-    // ---- Scissors tool — splits the clip at the given timeline position ----
-    // Finds the track row under screenY, finds the clip spanning timeSecs,
-    // and splits it using duplicate-and-trim (TE v3.2.0 has no public splitAt).
-    void splitClipAtTime (double timeSecs, int screenY);
 
     // ---- Ruler strip ----
     RulerStrip rulerStrip;
@@ -244,7 +231,7 @@ private:
     juce::OwnedArray<TrackRow>    trackRows;
 
     static constexpr int kTrackHeight       = 60;
-    static constexpr int kHeaderWidth       = 160;
+    // kHeaderWidth is declared in public section for ClipComponent access
     static constexpr int kHeaderStripHeight = 28;   // top strip holding Add Track button
 
     double pixelsPerSecond    = 100.0;

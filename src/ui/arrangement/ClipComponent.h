@@ -4,6 +4,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/EditManager.h"
+#include "EditTool.h"
 
 namespace te = tracktion::engine;
 
@@ -23,7 +24,7 @@ class ClipComponent : public juce::Component
 {
 public:
     ClipComponent (te::Clip& clip, EditManager& editManager, ClipEditor& clipEditor,
-                   double& pixelsPerSecond);
+                   double& pixelsPerSecond, const EditTool& activeTool);
 
     void paint            (juce::Graphics& g) override;
     void mouseDown        (const juce::MouseEvent& e) override;
@@ -34,10 +35,11 @@ public:
     te::Clip& getClip() const noexcept { return clip; }
 
 private:
-    te::Clip&    clip;
-    EditManager& editManager;
-    ClipEditor&  clipEditor;
-    double&      pixelsPerSecond;
+    te::Clip&          clip;
+    EditManager&       editManager;
+    ClipEditor&        clipEditor;
+    double&            pixelsPerSecond;
+    const EditTool&    activeTool_;   // reference to ArrangementView::activeTool
 
     // Drag state
     double dragStartClipTimeSecs = 0.0;  // clip start time when drag began

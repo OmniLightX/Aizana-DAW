@@ -521,6 +521,35 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
 
 void ArrangementView::mouseDown (const juce::MouseEvent& e)
 {
+    // Right-click anywhere in the arrangement shows a context menu for tool selection.
+    // Using isPopupMenu() covers right-click AND Ctrl+click (macOS convention).
+    if (e.mods.isPopupMenu())
+    {
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("Edit Tool");
+        menu.addItem (1, juce::String ("Pointer")
+                         + (activeTool == EditTool::Pointer     ? "  \xe2\x9c\x93" : "")
+                         + "   E");
+        menu.addItem (2, juce::String ("Range Select")
+                         + (activeTool == EditTool::RangeSelect ? "  \xe2\x9c\x93" : "")
+                         + "   R");
+        menu.addItem (3, juce::String ("Scissors")
+                         + (activeTool == EditTool::Scissors    ? "  \xe2\x9c\x93" : "")
+                         + "   S");
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+            [this] (int result) {
+                switch (result)
+                {
+                    case 1: setActiveTool (EditTool::Pointer);     break;
+                    case 2: setActiveTool (EditTool::RangeSelect); break;
+                    case 3: setActiveTool (EditTool::Scissors);    break;
+                    default: break;
+                }
+            });
+        return;  // Don't start marquee on right-click
+    }
+
     if (! e.mods.isLeftButtonDown()) return;
 
     const int timelineLeft = kHeaderWidth;
@@ -551,10 +580,15 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
             break;
 
         case EditTool::Scissors:
-            // Split clip at the click position
+            // Split clip at the click position. ClipComponent::mouseDown also forwards
+            // scissors clicks to this method via findParentComponentOfClass, but direct
+            // clicks on empty timeline space are handled here.
             splitClipAtTime (clickTimeSecs, e.y);
             break;
     }
+
+    // Reclaim keyboard focus so E/R/S shortcuts work after any left-click in the arrangement.
+    grabKeyboardFocus();
 
     repaint();
 }
@@ -639,8 +673,6 @@ juce::MouseCursor ArrangementView::getMouseCursor()
 void ArrangementView::setActiveTool (EditTool tool)
 {
     activeTool = tool;
-    toolbarStrip.activeTool = tool;
-    toolbarStrip.updateButtonStates();
     // Refresh cursor immediately so the change is visible without moving the mouse
     updateMouseCursor();
 }
@@ -774,7 +806,7 @@ void ArrangementView::rebuildTrackRows()
         // Create clip components inside the row's clip area
         for (auto* clip : audioTrack->getClips())
         {
-            auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond);
+            auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond, activeTool);
             row->getClipArea().addAndMakeVisible (cc);
 
             // Position clip within the clip area
