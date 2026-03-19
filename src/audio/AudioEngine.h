@@ -38,7 +38,8 @@ namespace te = tracktion::engine;
  * and delegates all device management to engine.getDeviceManager() (te::DeviceManager).
  * initialise() calls engine.getDeviceManager().initialise() to open CoreAudio/WASAPI.
  */
-class AudioEngine : public juce::AudioIODeviceCallback
+class AudioEngine : public juce::AudioIODeviceCallback,
+                    public juce::ChangeListener
 {
 public:
     explicit AudioEngine (te::Engine& engine);
@@ -114,6 +115,14 @@ public:
     void audioDeviceAboutToStart (juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
 
+    // -----------------------------------------------------------------------
+    // ChangeListener — notified by AudioDeviceManager when the hardware
+    // device changes (hot-plug, sample-rate change, buffer-size change).
+    // Fired on the message thread; re-prepares all audio processors so they
+    // match the new device parameters before the next audio callback fires.
+    // -----------------------------------------------------------------------
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+
 private:
     te::Engine& engine;
 
@@ -126,7 +135,10 @@ private:
     // MetronomeGenerator — synthesizes click audio directly into the output buffer.
     // Parameters (BPM, enabled, beatsPerBar) communicated via std::atomic<> from
     // the message thread. processBlock() called in audioDeviceIOCallbackWithContext.
+    // metronomePrepared guards against early CoreAudio callbacks arriving before
+    // prepare() fires on the message thread (mirrors masterMeterPrepared pattern).
     MetronomeGenerator metronome;
+    std::atomic<bool> metronomePrepared { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };
