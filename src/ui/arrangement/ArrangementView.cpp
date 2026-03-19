@@ -432,7 +432,7 @@ void ArrangementView::rebuildTrackRows()
         // Create clip components inside the row's clip area
         for (auto* clip : audioTrack->getClips())
         {
-            auto* cc = new ClipComponent (*clip, appState.editManager);
+            auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond);
             row->getClipArea().addAndMakeVisible (cc);
 
             // Position clip within the clip area

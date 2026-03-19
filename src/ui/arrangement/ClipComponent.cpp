@@ -1,10 +1,13 @@
 #include "ClipComponent.h"
 #include "ui/pianoroll/PianoRollView.h"
+#include "engine/ClipEditor.h"
 
 //==============================================================================
 
-ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_)
-    : clip (clip_), editManager (editManager_)
+ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
+                               ClipEditor& clipEditor_, double& pixelsPerSecond_)
+    : clip (clip_), editManager (editManager_), clipEditor (clipEditor_),
+      pixelsPerSecond (pixelsPerSecond_)
 {
     setRepaintsOnMouseActivity (true);
 
@@ -76,6 +79,43 @@ void ClipComponent::paint (juce::Graphics& g)
                                    1.0f);                  // vertical zoom = 1.0 (full amplitude)
         }
     }
+}
+
+void ClipComponent::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isLeftButtonDown())
+    {
+        dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
+        dragStartMouseX = e.getEventRelativeTo (getParentComponent()).x;
+        isDragging = false;
+        setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+    }
+}
+
+void ClipComponent::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! e.mods.isLeftButtonDown()) return;
+    isDragging = true;
+
+    const int currentX = e.getEventRelativeTo (getParentComponent()).x;
+    const int deltaX = currentX - dragStartMouseX;
+    const double deltaSecs = deltaX / pixelsPerSecond;
+    const double newStartSecs = juce::jmax (0.0, dragStartClipTimeSecs + deltaSecs);
+
+    // Move clip position (undoable via ClipEditor)
+    clipEditor.moveClip (clip, newStartSecs);
+
+    // Update visual position immediately
+    const double endSecs = newStartSecs + clip.getPosition().getLength().inSeconds();
+    const int newX = (int)(newStartSecs * pixelsPerSecond);
+    const int newW = juce::jmax (4, (int)((endSecs - newStartSecs) * pixelsPerSecond));
+    setBounds (newX, getY(), newW, getHeight());
+}
+
+void ClipComponent::mouseUp (const juce::MouseEvent&)
+{
+    setMouseCursor (juce::MouseCursor::NormalCursor);
+    isDragging = false;
 }
 
 void ClipComponent::mouseDoubleClick (const juce::MouseEvent&)

@@ -7,6 +7,8 @@
 
 namespace te = tracktion::engine;
 
+class ClipEditor;
+
 /**
  * ClipComponent — Visual representation of a single clip on the timeline.
  *
@@ -14,15 +16,19 @@ namespace te = tracktion::engine;
  * drawn inside. One ClipComponent is created per clip in the ArrangementView.
  *
  * Double-clicking a MIDI clip opens PianoRollView in a floating DocumentWindow.
- * Drag-to-move may be added in a future plan.
+ * Left-drag repositions the clip along the timeline (undoable via ClipEditor::moveClip).
  * Positioned by ArrangementView based on clip start time and pixelsPerSecond zoom.
  */
 class ClipComponent : public juce::Component
 {
 public:
-    ClipComponent (te::Clip& clip, EditManager& editManager);
+    ClipComponent (te::Clip& clip, EditManager& editManager, ClipEditor& clipEditor,
+                   double& pixelsPerSecond);
 
-    void paint           (juce::Graphics& g) override;
+    void paint            (juce::Graphics& g) override;
+    void mouseDown        (const juce::MouseEvent& e) override;
+    void mouseDrag        (const juce::MouseEvent& e) override;
+    void mouseUp          (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
 
     te::Clip& getClip() const noexcept { return clip; }
@@ -30,6 +36,13 @@ public:
 private:
     te::Clip&    clip;
     EditManager& editManager;
+    ClipEditor&  clipEditor;
+    double&      pixelsPerSecond;
+
+    // Drag state
+    double dragStartClipTimeSecs = 0.0;  // clip start time when drag began
+    int    dragStartMouseX       = 0;    // mouse X in parent coords when drag began
+    bool   isDragging            = false;
 
     // Waveform thumbnail — loaded asynchronously from the clip's source file
     // Cache is per-component; for a production app it would be shared, but for Phase 1
