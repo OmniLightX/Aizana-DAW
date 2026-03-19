@@ -577,11 +577,12 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
     auto tracks = te::getAudioTracks (*edit);
 
     // Convert drop x → timeline time:
-    // dropX is relative to ArrangementView; subtract header column width to get
-    // timeline-local x, then add current scroll offset.
-    int timelineX = dropX - kHeaderWidth;
-    double dropTimeSecs = scrollPositionSecs + (timelineX / pixelsPerSecond);
-    dropTimeSecs = juce::jmax (0.0, dropTimeSecs);
+    // dropX is in ArrangementView coordinates; subtract header width to get
+    // position relative to the timeline viewport's visible area, then add
+    // the viewport's horizontal scroll offset to get absolute timeline pixels.
+    const int timelineLocalX = dropX - kHeaderWidth;
+    const int absoluteTimelineX = timelineLocalX + timelineViewport.getViewPositionX();
+    double dropTimeSecs = juce::jmax (0.0, (double)absoluteTimelineX / pixelsPerSecond);
 
     // Determine which track row the drop landed on.
     // dropY is relative to ArrangementView; subtract the header strip height and
