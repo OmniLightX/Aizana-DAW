@@ -32,7 +32,11 @@ void TrackRow::buildDisclosureButton()
                                 juce::Colour (0xff3a2a10));  // very dark orange background
     disclosureButton.setColour (juce::TextButton::textColourOnId,
                                 juce::Colour (0xffff9500));  // Apple system orange text
-    disclosureButton.setClickingTogglesState (true);
+    // Toggle state is managed entirely by toggleAutomationLane() via
+    // disclosureButton.setToggleState(expanded, dontSendNotification).
+    // Letting JUCE auto-toggle on click would create a race: JUCE flips
+    // the button before onClick fires, then our code flips expanded again,
+    // resulting in the lane immediately closing on first click.
 }
 
 //==============================================================================
