@@ -73,6 +73,7 @@ private:
     std::map<te::AudioTrack*, std::unique_ptr<MeterProcessor>> meterProcessors;
 
     static constexpr int kStripWidth = 80;
+    int cachedStripHeight = 200;  // Never go below 200px; updated on valid resized() calls
 
     /**
      * BusStrip — Visual representation of a FolderTrack (bus) in the mixer.

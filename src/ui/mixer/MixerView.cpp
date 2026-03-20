@@ -44,13 +44,19 @@ void MixerView::resized()
 {
     channelStripViewport.setBounds (getLocalBounds());
 
-    // Use MixerView's own height (stable, set by MainComponent::resized) rather than
-    // getMaximumVisibleHeight() which returns near-zero when the horizontal scrollbar
-    // is visible and JUCE hasn't finished laying out the scrollbar geometry yet.
-    // Subtract the scrollbar thickness so the volume-fader text box is never obscured
-    // by the bar; 200px minimum guard prevents collapse to an unusable size.
-    const int scrollBarH = channelStripViewport.getScrollBarThickness();
-    const int stripH     = juce::jmax (200, getLocalBounds().getHeight() - scrollBarH);
+    // Compute candidate strip height from current geometry.
+    // Use MixerView's own height (set by MainComponent::resized, stable).
+    const int viewH = getHeight();
+
+    // Only update cached height if we have a meaningful parent-assigned height.
+    // During viewport internal relayout, getHeight() may be stale or zero.
+    if (viewH > 100)
+    {
+        const int scrollBarH = channelStripViewport.getScrollBarThickness();
+        cachedStripHeight = juce::jmax (200, viewH - scrollBarH);
+    }
+
+    const int stripH = cachedStripHeight;
 
     // Size container to hold all strips side-by-side (audio + bus)
     const int totalW = juce::jmax ((strips.size() + busStrips.size()) * kStripWidth,
