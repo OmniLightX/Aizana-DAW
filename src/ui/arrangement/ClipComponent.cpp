@@ -85,6 +85,14 @@ void ClipComponent::paint (juce::Graphics& g)
 
 void ClipComponent::mouseDown (const juce::MouseEvent& e)
 {
+    // Right-click: forward to ArrangementView for tool context menu
+    if (e.mods.isPopupMenu())
+    {
+        if (auto* av = findParentComponentOfClass<ArrangementView>())
+            av->mouseDown (e.getEventRelativeTo (av));
+        return;
+    }
+
     if (! e.mods.isLeftButtonDown()) return;
 
     // Scissors tool: forward click to parent ArrangementView for clip splitting.

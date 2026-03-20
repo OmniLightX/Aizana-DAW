@@ -1,5 +1,6 @@
 #include "TrackRow.h"
 #include "ClipComponent.h"
+#include "ArrangementView.h"
 
 //==============================================================================
 TrackRow::TrackRow (te::AudioTrack&   track_,
@@ -12,6 +13,9 @@ TrackRow::TrackRow (te::AudioTrack&   track_,
     , scrollPositionSeconds (scrollPositionSeconds_)
 {
     addAndMakeVisible (clipArea);
+    // clipArea itself does not intercept clicks (they pass through to TrackRow),
+    // but its children (ClipComponents) still receive them.
+    clipArea.setInterceptsMouseClicks (false, true);
     buildDisclosureButton();
     addAndMakeVisible (disclosureButton);
 }
@@ -37,6 +41,18 @@ void TrackRow::buildDisclosureButton()
     // Letting JUCE auto-toggle on click would create a race: JUCE flips
     // the button before onClick fires, then our code flips expanded again,
     // resulting in the lane immediately closing on first click.
+}
+
+//==============================================================================
+void TrackRow::mouseDown (const juce::MouseEvent& e)
+{
+    // Forward right-click to ArrangementView for tool context menu
+    if (e.mods.isPopupMenu())
+    {
+        if (auto* av = findParentComponentOfClass<ArrangementView>())
+            av->mouseDown (e.getEventRelativeTo (av));
+        return;
+    }
 }
 
 //==============================================================================

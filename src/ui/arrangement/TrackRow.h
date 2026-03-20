@@ -51,6 +51,7 @@ public:
     juce::Component& getClipArea()           { return clipArea; }
     AutomationLane*  getAutomationLane()     { return expanded ? automationLane.get() : nullptr; }
 
+    void mouseDown (const juce::MouseEvent& e) override;
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
