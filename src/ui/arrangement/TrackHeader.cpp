@@ -45,6 +45,26 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     addAndMakeVisible (muteButton);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (armButton);
+
+    // Compact volume slider — horizontal, no text box, wired to MixerEngine
+    volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    volumeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    volumeSlider.setRange (-60.0, 6.0, 0.1);
+    volumeSlider.setDoubleClickReturnValue (true, 0.0);  // double-click resets to 0 dB
+    volumeSlider.setValue (mixerEngine.getVolume (track), juce::dontSendNotification);
+    volumeSlider.setTooltip ("Volume");
+    volumeSlider.onValueChange = [this]
+    {
+        mixerEngine.setVolume (track, (float) volumeSlider.getValue());
+    };
+    addAndMakeVisible (volumeSlider);
+
+    // Pan readout label — shows current pan as L/C/R text, non-interactive
+    panLabel.setFont (juce::FontOptions (9.0f));
+    panLabel.setColour (juce::Label::textColourId, juce::Colour (0xff999999));
+    panLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (panLabel);
+    updatePanLabel();
 }
 
 //==============================================================================
@@ -57,13 +77,21 @@ void TrackHeader::resized()
     trackNameLabel.setBounds (area.removeFromTop (20));
     area.removeFromTop (2);
 
-    // Buttons in a row at bottom
+    // Volume slider: horizontal, full width minus pan label, 16px tall, near bottom
+    auto controlArea = area.reduced (0, 0);
+    auto volumeRow = controlArea.removeFromBottom (16);
+    // Pan label: 24px wide on the right, same row as volume slider
+    panLabel.setBounds (volumeRow.removeFromRight (24));
+    volumeSlider.setBounds (volumeRow);
+    controlArea.removeFromBottom (2);
+
+    // Buttons in a row at the remaining area (top of what's left)
     const int btnW = 28;
-    muteButton.setBounds (area.removeFromLeft (btnW));
-    area.removeFromLeft (2);
-    soloButton.setBounds (area.removeFromLeft (btnW));
-    area.removeFromLeft (2);
-    armButton.setBounds  (area.removeFromLeft (btnW));
+    muteButton.setBounds (controlArea.removeFromLeft (btnW));
+    controlArea.removeFromLeft (2);
+    soloButton.setBounds (controlArea.removeFromLeft (btnW));
+    controlArea.removeFromLeft (2);
+    armButton.setBounds  (controlArea.removeFromLeft (btnW));
 }
 
 void TrackHeader::paint (juce::Graphics& g)
@@ -286,4 +314,17 @@ void TrackHeader::armClicked()
     // a recording session.
     const bool armed = armButton.getToggleState();
     track.state.setProperty ("armed", armed, nullptr);
+}
+
+//==============================================================================
+
+void TrackHeader::updatePanLabel()
+{
+    float pan = mixerEngine.getPan (track);
+    if (std::abs (pan) < 0.01f)
+        panLabel.setText ("C", juce::dontSendNotification);
+    else if (pan < 0.0f)
+        panLabel.setText ("L" + juce::String ((int)(-pan * 100)), juce::dontSendNotification);
+    else
+        panLabel.setText ("R" + juce::String ((int)(pan * 100)), juce::dontSendNotification);
 }

@@ -62,11 +62,16 @@ private:
     juce::TextButton soloButton { "S" };
     juce::TextButton armButton  { "R" };
 
+    juce::Slider volumeSlider;
+    juce::Label  panLabel;
+
     bool selected = false;
 
     void muteClicked();
     void soloClicked();
     void armClicked();
+
+    void updatePanLabel();
 
     // Context menu
     void showContextMenu();
