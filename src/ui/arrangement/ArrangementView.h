@@ -169,6 +169,7 @@ private:
     struct ZoomViewport : public NonScrollingViewport
     {
         std::function<void (const juce::MouseEvent&, const juce::MouseWheelDetails&)> onZoomWheel;
+        std::function<void (double scaleFactor)> onPinchZoom;
 
         void mouseWheelMove (const juce::MouseEvent& e,
                              const juce::MouseWheelDetails& w) override
@@ -177,6 +178,12 @@ private:
                 onZoomWheel (e, w);
             else
                 NonScrollingViewport::mouseWheelMove (e, w);
+        }
+
+        void mouseMagnify (const juce::MouseEvent&, float scaleFactor) override
+        {
+            if (onPinchZoom)
+                onPinchZoom (static_cast<double> (scaleFactor));
         }
     };
 

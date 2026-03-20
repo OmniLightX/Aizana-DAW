@@ -194,6 +194,15 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         mouseWheelMove (e.getEventRelativeTo (this), w);
     };
 
+    // Wire pinch-to-zoom callback — macOS trackpad pinch gesture fires
+    // magnificationChanged (not mouseWheelMove) in JUCE. scaleFactor > 1.0 = zoom in,
+    // < 1.0 = zoom out. Clamped to the same range as Ctrl+scroll zoom [10, 2000] pps.
+    timelineViewport.onPinchZoom = [this] (double scaleFactor)
+    {
+        const double newPPS = juce::jlimit (10.0, 2000.0, pixelsPerSecond * scaleFactor);
+        setPixelsPerSecond (newPPS);
+    };
+
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
 
