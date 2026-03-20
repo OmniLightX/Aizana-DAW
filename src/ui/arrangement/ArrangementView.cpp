@@ -312,9 +312,10 @@ void ArrangementView::paint (juce::Graphics& g)
     // Apple Final Cut Pro style playhead: thin platinum/white vertical line
     if (appState.editManager.getEdit() != nullptr)
     {
-        const double posX = (playheadPositionSecs - scrollPositionSecs) * pixelsPerSecond;
-        const int screenX = kHeaderWidth + (int)posX
-                            - timelineViewport.getViewPositionX();
+        // Playhead X in absolute timeline pixels
+        const int absolutePlayheadX = (int)(playheadPositionSecs * pixelsPerSecond);
+        // Convert to screen coordinates: subtract viewport scroll, add header width
+        const int screenX = kHeaderWidth + absolutePlayheadX - timelineViewport.getViewPositionX();
         const int rulerBottom = kHeaderStripHeight + kRulerHeight;
 
         if (screenX >= kHeaderWidth && screenX <= getWidth())
