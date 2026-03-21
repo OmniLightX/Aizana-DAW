@@ -868,26 +868,53 @@ void ArrangementView::layoutTrackRows()
 
 void ArrangementView::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree& child)
 {
-    // Only react to track/clip changes inside the Edit state
-    if (auto* edit = appState.editManager.getEdit())
-    {
-        if (parent == edit->state || parent.isAChildOf (edit->state))
-        {
-            juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
-        }
-    }
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    // Only rebuild on structural changes: tracks added/removed at the top level,
+    // or clips added to a track.  Automation point changes (deeply nested children)
+    // must NOT trigger a rebuild — that destroys expanded TrackRows and closes
+    // any open automation lanes (gap-42).
+    const auto parentType = parent.getType().toString();
+    const auto childType  = child.getType().toString();
+
+    // Track-level structural changes: child is a track, or parent is the edit root
+    const bool isTrackChange = parent == edit->state
+                            || childType  == "TRACK"
+                            || childType  == "AUDIOTRACK"
+                            || parentType == "TRACKS";
+
+    // Clip-level changes: a clip was added to a track
+    const bool isClipChange = childType == "AUDIOCLIP"
+                           || childType == "MIDICLIP"
+                           || childType == "CLIP";
+
+    if (isTrackChange || isClipChange)
+        juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+
     juce::ignoreUnused (parent, child);
 }
 
 void ArrangementView::valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree& child, int)
 {
-    if (auto* edit = appState.editManager.getEdit())
-    {
-        if (parent == edit->state || parent.isAChildOf (edit->state))
-        {
-            juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
-        }
-    }
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    const auto parentType = parent.getType().toString();
+    const auto childType  = child.getType().toString();
+
+    const bool isTrackChange = parent == edit->state
+                            || childType  == "TRACK"
+                            || childType  == "AUDIOTRACK"
+                            || parentType == "TRACKS";
+
+    const bool isClipChange = childType == "AUDIOCLIP"
+                           || childType == "MIDICLIP"
+                           || childType == "CLIP";
+
+    if (isTrackChange || isClipChange)
+        juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+
     juce::ignoreUnused (parent, child);
 }
 
