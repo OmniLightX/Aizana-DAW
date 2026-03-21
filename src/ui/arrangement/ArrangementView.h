@@ -86,6 +86,9 @@ public:
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
     void   setPixelsPerSecond (double pps);
 
+    // Vertical zoom — Cmd+scroll scales track heights (0.5 = compact, 3.0 = tall)
+    double getTrackHeightScale() const noexcept { return trackHeightScale; }
+
     // Add Track button accessor — used by MainComponent for Cmd+T shortcut
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton; }
 
@@ -243,6 +246,7 @@ private:
 
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
+    double trackHeightScale   =   1.0;  // Vertical zoom: 0.5 (compact) to 3.0 (tall)
 
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();

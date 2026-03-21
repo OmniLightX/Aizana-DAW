@@ -269,7 +269,7 @@ void ArrangementView::resized()
     int headerY = 0;
     for (int i = 0; i < trackHeaders.size() && i < trackRows.size(); ++i)
     {
-        const int rowH = trackRows[i]->getPreferredHeight();
+        const int rowH = (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
         trackHeaders[i]->setBounds (0, headerY, kHeaderWidth, rowH);
         headerY += rowH;
     }
@@ -282,10 +282,10 @@ void ArrangementView::resized()
     // Lay out TrackRows in the timeline container
     layoutTrackRows();
 
-    // Timeline container height = sum of all TrackRow preferred heights
+    // Timeline container height = sum of all TrackRow preferred heights (scaled)
     int totalRowH = 0;
     for (auto* row : trackRows)
-        totalRowH += row->getPreferredHeight();
+        totalRowH += (int)(row->getPreferredHeight() * trackHeightScale);
 
     timelineContainer.setSize (juce::jmax ((int)timelineWidthPx, timelineViewport.getWidth()),
                                juce::jmax (totalRowH, timelineViewport.getHeight()));
@@ -312,8 +312,11 @@ void ArrangementView::paint (juce::Graphics& g)
     // Drop indicator: thin Apple system blue line between rows during track drag-reorder
     if (dragOverRowIndex >= 0)
     {
-        const int indicatorY = kHeaderStripHeight + kRulerHeight
-                             + dragOverRowIndex * kTrackHeight;
+        // Calculate cumulative height of rows 0..dragOverRowIndex-1 to get correct Y
+        int cumulativeRowH = 0;
+        for (int i = 0; i < dragOverRowIndex && i < trackRows.size(); ++i)
+            cumulativeRowH += (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
+        const int indicatorY = kHeaderStripHeight + kRulerHeight + cumulativeRowH;
         g.setColour (juce::Colour (0xff3d9eff));  // Apple system blue accent
         g.fillRect (0, indicatorY - 1, getWidth(), 2);
     }
@@ -385,6 +388,17 @@ void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
     // Also handle Cmd+scroll for explicit keyboard+scroll zoom
     if (event.mods.isCtrlDown() || event.mods.isCommandDown())
     {
+        // Vertical zoom: Cmd+scroll when deltaY is dominant (Logic Pro convention)
+        if (std::abs (wheel.deltaY) > std::abs (wheel.deltaX) && event.mods.isCommandDown())
+        {
+            const double zoomFactor = 1.0 + wheel.deltaY * 2.0;
+            trackHeightScale = juce::jlimit (0.5, 3.0, trackHeightScale * zoomFactor);
+            resized();
+            repaint();
+            return;
+        }
+
+        // Horizontal zoom: Ctrl+scroll or Cmd+horizontal scroll
         // deltaY > 0 = zoom in, deltaY < 0 = zoom out
         const double zoomFactor = 1.0 + wheel.deltaY * 2.0;
         const double newPPS = juce::jlimit (10.0, 2000.0, pixelsPerSecond * zoomFactor);
@@ -700,7 +714,7 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
     for (int ri = 0; ri < trackRows.size(); ++ri)
     {
         auto* row = trackRows[ri];
-        const int rowH = row->getPreferredHeight();
+        const int rowH = (int)(row->getPreferredHeight() * trackHeightScale);
 
         if (rowLocalY >= cumY && rowLocalY < cumY + rowH)
         {
@@ -824,7 +838,7 @@ void ArrangementView::rebuildTrackRows()
             const double endSecs   = clip->getPosition().getEnd().inSeconds();
             const int    x = (int)(startSecs * pixelsPerSecond);
             const int    w = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
-            cc->setBounds (x, 2, w, TrackRow::kCollapsedHeight - 4);
+            cc->setBounds (x, 2, w, (int)(TrackRow::kCollapsedHeight * trackHeightScale) - 4);
         }
     }
 
@@ -842,7 +856,7 @@ void ArrangementView::layoutTrackRows()
 
     for (auto* row : trackRows)
     {
-        const int h = row->getPreferredHeight();
+        const int h = (int)(row->getPreferredHeight() * trackHeightScale);
         row->setBounds (0, y, timelineW, h);
         row->layoutClips (pixelsPerSecond);   // reposition clips at new zoom level
         y += h;
