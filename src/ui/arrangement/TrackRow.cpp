@@ -94,10 +94,10 @@ void TrackRow::resized()
 {
     auto area = getLocalBounds();
 
-    // Disclosure button: 24x24px, bottom-right corner of the clip area zone
-    // 2px inset from right and bottom edges — accessible, non-dominant
+    // Disclosure button: 24x24px, bottom-left corner of the clip area zone
+    // 2px inset from left and bottom edges — always visible regardless of horizontal scroll
     const int btnSize = kDisclosureButtonSize;
-    disclosureButton.setBounds (area.getWidth() - btnSize - 2,
+    disclosureButton.setBounds (2,
                                 kCollapsedHeight - btnSize - 2,
                                 btnSize,
                                 btnSize);

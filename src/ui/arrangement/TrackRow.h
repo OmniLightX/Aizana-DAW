@@ -13,7 +13,7 @@ namespace te = tracktion::engine;
  *   - clipArea: a plain juce::Component into which ClipComponents are placed.
  *   - AutomationLane (optional): shown below the clip area when expanded.
  *
- * A small "A" disclosure button in the top-right of the clip area toggles
+ * A small "A" disclosure button in the bottom-left of the clip area toggles
  * the lane.  When collapsed the lane is destroyed; automation data persists
  * in the Edit ValueTree via AutomationEngine.
  *
