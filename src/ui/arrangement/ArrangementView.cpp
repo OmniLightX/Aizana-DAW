@@ -1,4 +1,5 @@
 #include "ArrangementView.h"
+#include <set>
 
 namespace te = tracktion::engine;
 
@@ -789,6 +790,15 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
 
 void ArrangementView::rebuildTrackRows()
 {
+    // Capture expansion state before destroying TrackRows so open automation
+    // lanes survive structural rebuilds (e.g. clip split, track reorder).
+    std::set<tracktion::engine::EditItemID> expandedTrackIDs;
+    for (auto* row : trackRows)
+    {
+        if (row->isExpanded())
+            expandedTrackIDs.insert (row->getTrack().itemID);
+    }
+
     // Clear existing children
     headerContainer.removeAllChildren();
     timelineContainer.removeAllChildren();
@@ -840,6 +850,13 @@ void ArrangementView::rebuildTrackRows()
             const int    w = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
             cc->setBounds (x, 2, w, (int)(TrackRow::kCollapsedHeight * trackHeightScale) - 4);
         }
+    }
+
+    // Restore expansion state for tracks that were open before the rebuild
+    for (auto* row : trackRows)
+    {
+        if (expandedTrackIDs.count (row->getTrack().itemID) > 0)
+            row->setExpanded (true);
     }
 
     // Trigger layout

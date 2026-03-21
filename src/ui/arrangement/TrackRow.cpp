@@ -84,6 +84,13 @@ void TrackRow::toggleAutomationLane()
 }
 
 //==============================================================================
+void TrackRow::setExpanded (bool shouldExpand)
+{
+    if (expanded == shouldExpand) return;
+    toggleAutomationLane();  // reuse existing toggle logic
+}
+
+//==============================================================================
 int TrackRow::getPreferredHeight() const
 {
     return expanded ? kExpandedHeight : kCollapsedHeight;

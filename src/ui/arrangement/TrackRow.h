@@ -40,6 +40,13 @@ public:
     int  getPreferredHeight() const;  // Returns kCollapsedHeight or kExpandedHeight
     void toggleAutomationLane();      // Called by disclosure button
 
+    /** Expand or collapse the automation lane without toggling — used to restore
+     *  state after a rebuildTrackRows() call. No-op if already in the target state. */
+    void setExpanded (bool shouldExpand);
+
+    /** Returns the AudioTrack owned by this row — used for EditItemID-based state tracking. */
+    te::AudioTrack& getTrack() const noexcept { return track; }
+
     /** Repositions all ClipComponent children at the given zoom level.
      *  Call this from layoutTrackRows() on every zoom/resize cycle. */
     void layoutClips (double pixelsPerSecond);
