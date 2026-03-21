@@ -725,8 +725,9 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
                     undoManager.beginNewTransaction ("Split Clip");
 
                     // Duplicate-and-trim fallback:
-                    // 1. Record original range before trimming the original
-                    const double originalEnd   = end;
+                    // 1. Record original range AND offset before any mutation
+                    const double originalEnd    = end;
+                    const double originalOffset = waveClip->getPosition().getOffset().inSeconds();
 
                     // 2. Trim the original clip's end to the split point
                     waveClip->setEnd (tracktion::TimePosition::fromSeconds (timeSecs), false);
@@ -755,7 +756,6 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
 
                         // Shift the source offset so the new clip plays the correct
                         // portion: original offset + shift into the source.
-                        const double originalOffset = waveClip->getPosition().getOffset().inSeconds();
                         newWave->setOffset (
                             tracktion::TimeDuration::fromSeconds (originalOffset + offsetShift));
                     }
@@ -822,7 +822,7 @@ void ArrangementView::rebuildTrackRows()
             // Position clip within the clip area
             const double startSecs = clip->getPosition().getStart().inSeconds();
             const double endSecs   = clip->getPosition().getEnd().inSeconds();
-            const int    x = (int)((startSecs - scrollPositionSecs) * pixelsPerSecond);
+            const int    x = (int)(startSecs * pixelsPerSecond);
             const int    w = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
             cc->setBounds (x, 2, w, TrackRow::kCollapsedHeight - 4);
         }
