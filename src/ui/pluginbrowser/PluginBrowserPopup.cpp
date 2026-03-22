@@ -58,7 +58,7 @@ void PluginBrowserPopup::updateFilteredList (const juce::String& searchText)
 {
     filteredPlugins.clear();
 
-    const auto& allPlugins = knownPlugins.getTypes();
+    const auto allPlugins = knownPlugins.getTypes();  // value copy — avoids data race with background scan thread
     for (const auto& desc : allPlugins)
     {
         if (searchText.isEmpty()

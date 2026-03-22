@@ -18,8 +18,17 @@ MainComponent::MainComponent (ApplicationState& appState_)
     mixerView.setVisible (mixerVisible);
 
     // Load previously-scanned plugin list so the browser is populated on startup.
-    // If no cache exists (first launch), the browser remains empty until user triggers Scan.
+    // If no cache exists (first launch), auto-scan immediately so the browser populates.
     pluginScanner.loadPluginList (getPluginListCacheFile());
+
+    // Auto-scan on first launch when no cached plugins are found
+    if (pluginScanner.getKnownPlugins().getNumTypes() == 0)
+    {
+        juce::MessageManager::callAsync ([this]
+        {
+            handleScanPlugins();
+        });
+    }
 
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
