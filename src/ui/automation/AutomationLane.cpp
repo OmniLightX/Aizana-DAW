@@ -169,6 +169,28 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    // Cmd+click: segment drag — drag the line between two points up/down
+    if (e.mods.isCommandDown())
+    {
+        int leftIdx = -1, rightIdx = -1;
+        // Only enter segment mode if NOT on an existing point (point drag takes priority)
+        if (findPointNear (e.position) < 0 && findSegmentAtPosition (e.position, leftIdx, rightIdx))
+        {
+            isSegmentDragging = true;
+            segmentLeftIndex  = leftIdx;
+            segmentRightIndex = rightIdx;
+            segmentDragStartY = e.position.y;
+
+            auto* param = getParam();
+            if (param != nullptr)
+            {
+                segmentLeftStartValue  = param->getCurve().getPoint (leftIdx).value;
+                segmentRightStartValue = param->getCurve().getPoint (rightIdx).value;
+            }
+            return;
+        }
+    }
+
     // Left-click near existing point: start drag
     draggingPointIndex = findPointNear (e.position);
     if (draggingPointIndex >= 0)
@@ -179,6 +201,11 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
             auto pt        = param->getCurve().getPoint (draggingPointIndex);
             dragStartTime  = pt.time.inSeconds();
             dragStartValue = pt.value;
+
+            // Begin a single undo transaction for the entire drag gesture.
+            // movePoint calls inside mouseDrag do NOT open new transactions,
+            // so the whole drag folds into one undo step.
+            param->getEdit().getUndoManager().beginNewTransaction ("Move automation point");
         }
     }
     else
@@ -192,6 +219,40 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
 
 void AutomationLane::mouseDrag (const juce::MouseEvent& e)
 {
+    if (isSegmentDragging)
+    {
+        auto* param = getParam();
+        if (param == nullptr) return;
+
+        // Calculate value delta from Y movement
+        float deltaY     = e.position.y - segmentDragStartY;
+        float deltaValue = -(deltaY / static_cast<float> (getHeight())); // negative because Y is inverted
+
+        // Move both bounding points by the same value delta
+        auto& curve = param->getCurve();
+        if (segmentLeftIndex  >= 0 && segmentLeftIndex  < curve.getNumPoints()
+         && segmentRightIndex >= 0 && segmentRightIndex < curve.getNumPoints())
+        {
+            float newLeftVal  = juce::jlimit (0.0f, 1.0f, segmentLeftStartValue  + deltaValue);
+            float newRightVal = juce::jlimit (0.0f, 1.0f, segmentRightStartValue + deltaValue);
+
+            // Snapshot times before any removal (indices shift after each remove)
+            auto ptL = curve.getPoint (segmentLeftIndex);
+            auto ptR = curve.getPoint (segmentRightIndex);
+
+            automationEngine.removeAutomationPoint (track, parameterID, ptL.time.inSeconds());
+            // After removing left point the right point index has shifted down by 1
+            auto ptR2 = curve.getPoint (segmentRightIndex - 1);
+            automationEngine.removeAutomationPoint (track, parameterID, ptR2.time.inSeconds());
+
+            automationEngine.addAutomationPoint (track, parameterID, ptL.time.inSeconds(), newLeftVal);
+            automationEngine.addAutomationPoint (track, parameterID, ptR.time.inSeconds(), newRightVal);
+        }
+
+        repaint();
+        return;
+    }
+
     if (draggingPointIndex < 0) return;
 
     // Remove old point position, re-add at new position
@@ -211,6 +272,9 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
 void AutomationLane::mouseUp (const juce::MouseEvent& /*e*/)
 {
     draggingPointIndex = -1;
+    isSegmentDragging  = false;
+    segmentLeftIndex   = -1;
+    segmentRightIndex  = -1;
 }
 
 void AutomationLane::mouseDoubleClick (const juce::MouseEvent& /*e*/)
@@ -262,6 +326,49 @@ int AutomationLane::findPointNear (juce::Point<float> pos, float thresh) const
             return i;
     }
     return -1;
+}
+
+//==============================================================================
+// Find segment between two adjacent points
+//==============================================================================
+
+bool AutomationLane::findSegmentAtPosition (juce::Point<float> pos, int& leftIdx, int& rightIdx, float thresh) const
+{
+    auto* param = getParam();
+    if (param == nullptr) return false;
+
+    auto& curve = param->getCurve();
+    if (curve.getNumPoints() < 2) return false;
+
+    // Check each consecutive pair of points
+    for (int i = 0; i < curve.getNumPoints() - 1; ++i)
+    {
+        auto ptL = curve.getPoint (i);
+        auto ptR = curve.getPoint (i + 1);
+
+        float x1 = timeToX (ptL.time.inSeconds());
+        float y1 = valueToY (ptL.value);
+        float x2 = timeToX (ptR.time.inSeconds());
+        float y2 = valueToY (ptR.value);
+
+        // Check if pos.x is between x1 and x2
+        if (pos.x < x1 || pos.x > x2) continue;
+
+        // Distance from point to line segment
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = std::sqrt (dx * dx + dy * dy);
+        if (len < 1.0f) continue;
+
+        float dist = std::abs (dy * pos.x - dx * pos.y + x2 * y1 - y2 * x1) / len;
+        if (dist < thresh)
+        {
+            leftIdx  = i;
+            rightIdx = i + 1;
+            return true;
+        }
+    }
+    return false;
 }
 
 //==============================================================================

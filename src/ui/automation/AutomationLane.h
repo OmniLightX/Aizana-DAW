@@ -64,6 +64,14 @@ private:
     double dragStartTime      = 0.0;
     float  dragStartValue     = 0.0f;
 
+    // Segment drag state (Cmd+click between points)
+    bool   isSegmentDragging      = false;
+    int    segmentLeftIndex       = -1;   // index of the left bounding point
+    int    segmentRightIndex      = -1;   // index of the right bounding point
+    float  segmentDragStartY      = 0.0f; // mouse Y at drag start
+    float  segmentLeftStartValue  = 0.0f; // left point value at drag start
+    float  segmentRightStartValue = 0.0f; // right point value at drag start
+
     // Parameter selector (Volume / Pan)
     juce::ComboBox paramSelector;
 
@@ -79,6 +87,10 @@ private:
      * within the given pixel threshold.  Returns -1 if none found.
      */
     int findPointNear (juce::Point<float> mousePos, float thresholdPx = 8.0f) const;
+
+    /** Find the segment (two bounding point indices) at a given position.
+     *  Returns true if position is on the line between two points (within threshold). */
+    bool findSegmentAtPosition (juce::Point<float> pos, int& leftIdx, int& rightIdx, float thresh = 6.0f) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AutomationLane)
 };
