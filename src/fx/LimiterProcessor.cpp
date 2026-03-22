@@ -1,10 +1,11 @@
 #include "LimiterProcessor.h"
+#include "plugins/BuiltInPluginFormat.h"
 #include <cmath>
 
 LimiterProcessor::LimiterProcessor()
-    : juce::AudioProcessor(BusesProperties()
-          .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    : juce::AudioPluginInstance (BusesProperties()
+          .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+          .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
 }
 
@@ -86,4 +87,18 @@ void LimiterProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     // GR = input peak - output peak (positive when limiting is occurring)
     float gr = juce::jmax(0.0f, peakInDB - peakOutDB);
     gainReductionDB.store(gr, std::memory_order_relaxed);
+}
+
+// ---------------------------------------------------------------------------
+// AudioPluginInstance interface
+// ---------------------------------------------------------------------------
+
+void LimiterProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
+{
+    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Limiter");
+}
+
+juce::AudioProcessorEditor* LimiterProcessor::createEditor()
+{
+    return new juce::GenericAudioProcessorEditor (*this);
 }

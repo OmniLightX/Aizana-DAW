@@ -5,6 +5,8 @@
 #include <atomic>
 #include <vector>
 
+class BuiltInPluginFormat;
+
 enum class ReverbMode { Room, Hall, Plate };
 
 /**
@@ -25,7 +27,7 @@ enum class ReverbMode { Room, Hall, Plate };
  *
  * FX-03 requirements: Room/Hall/Plate modes, wet/dry control, no latency.
  */
-class ReverbProcessor : public juce::AudioProcessor
+class ReverbProcessor : public juce::AudioPluginInstance
 {
 public:
     ReverbProcessor();
@@ -56,8 +58,11 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-    bool hasEditor() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    // AudioPluginInstance interface
+    void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
 private:
     // -------------------------------------------------------------------------

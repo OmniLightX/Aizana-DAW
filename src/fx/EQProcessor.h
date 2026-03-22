@@ -4,6 +4,10 @@
 #include <array>
 #include <atomic>
 
+// Forward declare so processors can call BuiltInPluginFormat::getDescriptionFor
+// without a circular include — the full include is in the .cpp file.
+class BuiltInPluginFormat;
+
 enum class EQBandType { LowShelf, Peak, HighShelf, LowPass, HighPass };
 
 struct EQBand
@@ -32,7 +36,7 @@ struct EQBand
  *
  * FX-01 requirement: minimum 4 independent parametric bands.
  */
-class EQProcessor : public juce::AudioProcessor
+class EQProcessor : public juce::AudioPluginInstance
 {
 public:
     static constexpr int NumBands = 4;
@@ -70,8 +74,11 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-    bool hasEditor() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    // AudioPluginInstance interface
+    void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
 private:
     using EQChain = juce::dsp::ProcessorChain<

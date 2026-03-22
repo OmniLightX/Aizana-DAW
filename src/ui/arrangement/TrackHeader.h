@@ -76,6 +76,7 @@ private:
     // Context menu
     void showContextMenu();
     void handleAddPlugin();
+    void handleInsertBuiltInFX (const juce::String& fxName);
     void handleCreateBus();
     void handleSetSidechainSource();
     void handleRenameTrack();

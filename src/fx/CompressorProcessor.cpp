@@ -1,8 +1,9 @@
 #include "CompressorProcessor.h"
+#include "plugins/BuiltInPluginFormat.h"
 #include <cmath>
 
 CompressorProcessor::CompressorProcessor()
-    : juce::AudioProcessor(BusesProperties()
+    : juce::AudioPluginInstance (BusesProperties()
           .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
@@ -121,4 +122,18 @@ void CompressorProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     // Update GR meter (audio thread write, message thread read)
     currentGainReductionDB.store(maxGainReductionDB, std::memory_order_relaxed);
+}
+
+// ---------------------------------------------------------------------------
+// AudioPluginInstance interface
+// ---------------------------------------------------------------------------
+
+void CompressorProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
+{
+    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Compressor");
+}
+
+juce::AudioProcessorEditor* CompressorProcessor::createEditor()
+{
+    return new juce::GenericAudioProcessorEditor (*this);
 }

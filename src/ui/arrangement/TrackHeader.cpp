@@ -1,5 +1,6 @@
 #include "TrackHeader.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
+#include "plugins/BuiltInPluginFormat.h"
 
 //==============================================================================
 
@@ -164,7 +165,15 @@ void TrackHeader::setSelected (bool shouldBeSelected)
 
 void TrackHeader::showContextMenu()
 {
+    juce::PopupMenu builtInMenu;
+    builtInMenu.addItem (10, "EQ (4-Band Parametric)");
+    builtInMenu.addItem (11, "Compressor");
+    builtInMenu.addItem (12, "Reverb");
+    builtInMenu.addItem (13, "Limiter");
+
     juce::PopupMenu menu;
+    menu.addSubMenu ("Built-in FX", builtInMenu);
+    menu.addSeparator();
     menu.addItem (1, "Add Plugin...");
     menu.addSeparator();
     menu.addItem (2, "Create Bus from Track");
@@ -178,11 +187,15 @@ void TrackHeader::showContextMenu()
         {
             switch (result)
             {
-                case 1: handleAddPlugin();          break;
-                case 2: handleCreateBus();          break;
-                case 3: handleSetSidechainSource(); break;
-                case 4: handleRenameTrack();        break;
-                case 5: handleDeleteTrack();        break;
+                case 1:  handleAddPlugin();                             break;
+                case 2:  handleCreateBus();                            break;
+                case 3:  handleSetSidechainSource();                   break;
+                case 4:  handleRenameTrack();                          break;
+                case 5:  handleDeleteTrack();                          break;
+                case 10: handleInsertBuiltInFX ("Cloudes EQ");         break;
+                case 11: handleInsertBuiltInFX ("Cloudes Compressor"); break;
+                case 12: handleInsertBuiltInFX ("Cloudes Reverb");     break;
+                case 13: handleInsertBuiltInFX ("Cloudes Limiter");    break;
                 default: break;
             }
         });
@@ -206,6 +219,22 @@ void TrackHeader::handleAddPlugin()
                 pluginWindowManager.openPluginWindow (*newPlugin);
             }
         });
+}
+
+void TrackHeader::handleInsertBuiltInFX (const juce::String& fxName)
+{
+    // Retrieve the pre-built PluginDescription for this built-in FX.
+    // BuiltInPluginFormat is registered in PluginScanner's AudioPluginFormatManager,
+    // so PluginManager::insertPlugin will route through the standard ExternalPlugin path.
+    auto desc = BuiltInPluginFormat::getDescriptionFor (fxName);
+
+    auto* newPlugin = pluginManager.insertPlugin (track, desc);
+    if (newPlugin != nullptr)
+    {
+        // Open the plugin's editor window (shows EQComponent for EQ,
+        // GenericAudioProcessorEditor for Compressor/Reverb/Limiter).
+        pluginWindowManager.openPluginWindow (*newPlugin);
+    }
 }
 
 void TrackHeader::handleCreateBus()

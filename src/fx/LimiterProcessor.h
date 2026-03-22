@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
 
+class BuiltInPluginFormat;
+
 /**
  * LimiterProcessor — Hard brick-wall limiter for master bus.
  *
@@ -19,7 +21,7 @@
  *
  * FX-04 requirements: hard limiter, 0 dBFS default ceiling, GR meter.
  */
-class LimiterProcessor : public juce::AudioProcessor
+class LimiterProcessor : public juce::AudioPluginInstance
 {
 public:
     LimiterProcessor();
@@ -53,8 +55,11 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-    bool hasEditor() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    // AudioPluginInstance interface
+    void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
 private:
     juce::dsp::Limiter<float> limiter;

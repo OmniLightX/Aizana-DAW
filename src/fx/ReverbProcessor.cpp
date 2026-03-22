@@ -1,4 +1,5 @@
 #include "ReverbProcessor.h"
+#include "plugins/BuiltInPluginFormat.h"
 #include <cmath>
 
 // ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ static const ModeConfig& configForMode(ReverbMode mode)
 // ---------------------------------------------------------------------------
 
 ReverbProcessor::ReverbProcessor()
-    : juce::AudioProcessor(BusesProperties()
+    : juce::AudioPluginInstance (BusesProperties()
           .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
@@ -199,4 +200,18 @@ void ReverbProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         if (numChannels > 1)
             buffer.setSample(1, n, dry * inputR + wet * reverbR);
     }
+}
+
+// ---------------------------------------------------------------------------
+// AudioPluginInstance interface
+// ---------------------------------------------------------------------------
+
+void ReverbProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
+{
+    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Reverb");
+}
+
+juce::AudioProcessorEditor* ReverbProcessor::createEditor()
+{
+    return new juce::GenericAudioProcessorEditor (*this);
 }

@@ -1,4 +1,5 @@
 #include "PluginScanner.h"
+#include "BuiltInPluginFormat.h"
 
 // ---------------------------------------------------------------------------
 // Background scan thread (multi-format, self-contained)
@@ -26,6 +27,17 @@ PluginScanner::PluginScanner()
     // Register CLAP format using the direct C API (RESEARCH.md Pitfall 1:
     // the alpha juce_clap_hosting module is NOT used)
     formatManager.addFormat (new ClapPluginFormat());
+
+    // Register BuiltInPluginFormat so TE's ExternalPlugin/AudioPluginFormatManager
+    // can instantiate our custom src/fx/ processors via the normal createPluginInstance path.
+    formatManager.addFormat (new BuiltInPluginFormat());
+
+    // Pre-populate KnownPluginList with the 4 built-in FX descriptions.
+    // This makes them appear in PluginBrowserPopup immediately without scanning.
+    juce::OwnedArray<juce::PluginDescription> builtIns;
+    BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
+    for (auto* desc : builtIns)
+        knownPlugins.addType (*desc);
 }
 
 PluginScanner::~PluginScanner()
@@ -54,31 +66,54 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
                      onProgress = std::move (onProgress),
                      onComplete = std::move (onComplete)]()
     {
+        DBG ("PluginScanner: scanning " + juce::String (formatManager.getNumFormats()) + " formats");
         for (int i = 0; i < formatManager.getNumFormats(); ++i)
         {
             auto* format = formatManager.getFormat (i);
             if (format == nullptr || ! format->canScanForPlugins())
                 continue;
 
+            DBG ("  Format: " + format->getName()
+                 + " canScan=" + juce::String (format->canScanForPlugins() ? "yes" : "no"));
+
+            const auto paths = getDefaultSearchPaths();
+            DBG ("  Search paths: " + paths.toString());
+
             juce::PluginDirectoryScanner scanner (
                 knownPlugins,
                 *format,
-                getDefaultSearchPaths(),
+                paths,
                 true,             // recursive search
                 deadPluginsFile,
                 true              // allowPluginsWhichRequireAsynchronousInstantiation
             );
 
             juce::String pluginName;
-            while (! (scanThread != nullptr && scanThread->threadShouldExit()))
+            try
             {
-                const bool more = scanner.scanNextFile (true, pluginName);
-                if (onProgress)
-                    onProgress (scanner.getProgress());
-                if (! more)
-                    break;
+                while (! (scanThread != nullptr && scanThread->threadShouldExit()))
+                {
+                    const bool more = scanner.scanNextFile (true, pluginName);
+                    DBG ("  Scanned: " + pluginName);
+                    if (onProgress)
+                        onProgress (scanner.getProgress());
+                    if (! more)
+                        break;
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                DBG ("PluginScanner: exception during scan of "
+                     + format->getName() + ": " + juce::String (ex.what()));
+            }
+            catch (...)
+            {
+                DBG ("PluginScanner: unknown exception during scan of " + format->getName());
             }
         }
+
+        DBG ("PluginScanner: scan complete — "
+             + juce::String (knownPlugins.getNumTypes()) + " plugins found");
 
         if (onComplete)
             onComplete();

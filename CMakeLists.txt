@@ -72,6 +72,7 @@ target_sources(Cloudes PRIVATE
     src/audio/MetronomeGenerator.cpp
     # Plugin hosting (PLUG-01 through PLUG-04)
     src/plugins/ClapPluginFormat.cpp
+    src/plugins/BuiltInPluginFormat.cpp
     src/plugins/PluginScanner.cpp
     src/plugins/PluginManager.cpp
     # DSP effects (FX-01 through FX-04)

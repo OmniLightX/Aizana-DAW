@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
 
+class BuiltInPluginFormat;
+
 /**
  * CompressorProcessor — Transparent utility compressor (SSL G-Bus style).
  *
@@ -20,7 +22,7 @@
  *
  * FX-02 requirements: attack, release, threshold, ratio, knee, GR meter.
  */
-class CompressorProcessor : public juce::AudioProcessor
+class CompressorProcessor : public juce::AudioPluginInstance
 {
 public:
     CompressorProcessor();
@@ -56,8 +58,11 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-    bool hasEditor() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    // AudioPluginInstance interface
+    void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
 private:
     // Parameters (atomic for lock-free message-thread writes)

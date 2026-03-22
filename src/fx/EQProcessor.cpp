@@ -1,9 +1,34 @@
 #include "EQProcessor.h"
+#include "plugins/BuiltInPluginFormat.h"
+#include "ui/eq/EQComponent.h"
+
+// ---------------------------------------------------------------------------
+// EQEditor — thin AudioProcessorEditor wrapper for EQComponent
+// ---------------------------------------------------------------------------
+class EQEditor : public juce::AudioProcessorEditor
+{
+public:
+    EQEditor (EQProcessor& proc)
+        : juce::AudioProcessorEditor (proc), eqComponent (proc)
+    {
+        addAndMakeVisible (eqComponent);
+        setSize (700, 350);
+    }
+
+    void resized() override { eqComponent.setBounds (getLocalBounds()); }
+
+private:
+    EQComponent eqComponent;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQEditor)
+};
+
+// ---------------------------------------------------------------------------
 
 EQProcessor::EQProcessor()
-    : juce::AudioProcessor(BusesProperties()
-          .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    : juce::AudioPluginInstance (BusesProperties()
+          .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+          .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
     // Default: all bands are flat peak filters (0 dB gain = unity)
     for (int i = 0; i < NumBands; ++i)
@@ -163,4 +188,18 @@ void EQProcessor::applyCoefficients(int bandIndex,
         case 3: *eqChain.get<3>().coefficients = *coeffs; break;
         default: jassertfalse; break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// AudioPluginInstance interface
+// ---------------------------------------------------------------------------
+
+void EQProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
+{
+    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes EQ");
+}
+
+juce::AudioProcessorEditor* EQProcessor::createEditor()
+{
+    return new EQEditor (*this);
 }
