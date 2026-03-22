@@ -255,14 +255,23 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
 
     if (draggingPointIndex < 0) return;
 
-    // Remove old point position, re-add at new position
-    automationEngine.removeAutomationPoint (track, parameterID, dragStartTime);
+    auto* param = getParam();
+    if (param == nullptr) return;
+
+    auto& curve = param->getCurve();
+    if (draggingPointIndex >= curve.getNumPoints()) return;
 
     double newTime  = juce::jmax (0.0, xToTime (e.position.x));
     float  newValue = juce::jlimit (0.0f, 1.0f, yToValue (e.position.y));
-    automationEngine.addAutomationPoint (track, parameterID, newTime, newValue);
 
-    // Update drag state so next mouseDrag removes the point we just added
+    // Move the point directly via the curve API — avoids remove+add cycle and the
+    // undo transaction explosion it caused.  The single transaction opened in mouseDown
+    // groups the entire drag into one undo step.
+    curve.movePoint (draggingPointIndex,
+                     tracktion::core::TimePosition::fromSeconds (newTime),
+                     newValue,
+                     false);
+
     dragStartTime  = newTime;
     dragStartValue = newValue;
 

@@ -70,7 +70,7 @@ void AutomationEngine::removeAutomationPoint (te::Track& track,
     // Find the index of the point closest to the given time
     TimePos time = TimePos::fromSeconds (timeSeconds);
     float dummyValue = 0.0f;
-    int index = curve.getNearestPoint (time, dummyValue, 1.0);
+    int index = curve.getNearestPoint (time, dummyValue, 0.001);
 
     if (index >= 0)
     {
