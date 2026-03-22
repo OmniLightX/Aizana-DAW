@@ -813,47 +813,43 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
                 if (timeSecs <= start || timeSecs >= end)
                     continue;   // click is outside this clip
 
-                // Attempt to use TE v3.2.0 splitClipAt if available.
-                // If the free-function is not available, fall back to duplicate-and-trim.
                 if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (clip))
                 {
                     auto& undoManager = appState.editManager.getUndoManager();
                     undoManager.beginNewTransaction ("Split Clip");
 
-                    // Duplicate-and-trim fallback:
-                    // 1. Record original range AND offset before any mutation
-                    const double originalEnd    = end;
-                    const double originalOffset = waveClip->getPosition().getOffset().inSeconds();
+                    // 1. Snapshot EVERYTHING before any mutation
+                    const double clipStart      = start;
+                    const double clipEnd        = end;
+                    const auto   originalOffset = waveClip->getPosition().getOffset();
+                    const auto   sourceFile     = waveClip->getSourceFileReference().getFile();
 
-                    // 2. Trim the original clip's end to the split point
+                    // 2. Trim original clip's end to split point
                     waveClip->setEnd (tracktion::TimePosition::fromSeconds (timeSecs), false);
 
-                    // 3. Insert a new clip from the split point to the original end,
-                    //    referencing the same source file with the offset shifted.
-                    const double offsetShift = timeSecs - start;  // seconds into the source file
+                    // 3. Calculate right-half source offset:
+                    //    originalOffset + (splitTime - clipStart) = where in source file the right half starts
+                    const double rightOffset = originalOffset.inSeconds() + (timeSecs - clipStart);
+
+                    // 4. Create new clip with the CORRECT offset in ClipPosition (single application — no setOffset after)
                     te::ClipPosition newPos {
                         tracktion::TimeRange (
                             tracktion::TimePosition::fromSeconds (timeSecs),
-                            tracktion::TimePosition::fromSeconds (originalEnd)),
-                        tracktion::TimeDuration()
+                            tracktion::TimePosition::fromSeconds (clipEnd)),
+                        tracktion::TimeDuration::fromSeconds (rightOffset)
                     };
 
-                    auto newClipState = track->insertNewClip (
+                    auto newClipPtr = track->insertNewClip (
                         te::TrackItem::Type::wave,
-                        "Split",
+                        clip->getName() + " (R)",
                         newPos,
                         nullptr);   // no SelectionManager in Phase 1
 
-                    if (auto* newWave = dynamic_cast<te::WaveAudioClip*> (newClipState))
+                    if (auto* newWave = dynamic_cast<te::WaveAudioClip*> (newClipPtr))
                     {
-                        // Point new clip at the same source file
-                        newWave->getSourceFileReference().setToDirectFileReference (
-                            waveClip->getSourceFileReference().getFile(), true);
-
-                        // Shift the source offset so the new clip plays the correct
-                        // portion: original offset + shift into the source.
-                        newWave->setOffset (
-                            tracktion::TimeDuration::fromSeconds (originalOffset + offsetShift));
+                        // Point at the same source file
+                        newWave->getSourceFileReference().setToDirectFileReference (sourceFile, true);
+                        // Do NOT call setOffset again — the ClipPosition already has it
                     }
                 }
                 break;  // only split one clip per click
