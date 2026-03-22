@@ -150,18 +150,65 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
 
     // Add Track button — header strip, top-left
     addAndMakeVisible (addTrackButton);
-    addTrackButton.setTooltip ("Add a new audio track (Cmd+T)");
+    addTrackButton.setTooltip ("Add a new track (Cmd+T)");
     addTrackButton.onClick = [this]
     {
         auto* edit = this->appState.editManager.getEdit();
         if (edit == nullptr) return;
 
-        auto& undoManager = this->appState.editManager.getUndoManager();
-        undoManager.beginNewTransaction ("Add Audio Track");
-        edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, nullptr),
-                                   nullptr);  // nullptr = no SelectionManager
-        // ArrangementView's ValueTree listener (valueTreeChildAdded) will
-        // automatically call rebuildTrackRows() — no manual update needed
+        juce::PopupMenu menu;
+        menu.addItem (1, "Audio Track");
+        menu.addItem (2, "MIDI Track");
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addTrackButton),
+            [this, edit] (int result)
+            {
+                if (result == 0) return;  // dismissed
+
+                auto& undoManager = this->appState.editManager.getUndoManager();
+
+                if (result == 1)
+                {
+                    // Audio track (existing behaviour)
+                    undoManager.beginNewTransaction ("Add Audio Track");
+                    edit->insertNewAudioTrack (
+                        te::TrackInsertPoint (nullptr, nullptr), nullptr);
+                    // ArrangementView's ValueTree listener (valueTreeChildAdded) will
+                    // automatically call rebuildTrackRows() — no manual update needed
+                }
+                else if (result == 2)
+                {
+                    // MIDI track: create an AudioTrack and insert an empty MIDI clip
+                    undoManager.beginNewTransaction ("Add MIDI Track");
+                    te::AudioTrack::Ptr newTrack = edit->insertNewAudioTrack (
+                        te::TrackInsertPoint (nullptr, nullptr), nullptr);
+
+                    if (newTrack != nullptr)
+                    {
+                        newTrack->setName ("MIDI " + juce::String (te::getAudioTracks (*edit).size()));
+
+                        // Insert a 4-bar MIDI clip so the user has something to double-click
+                        const double bpm = (edit->tempoSequence.getNumTempos() > 0)
+                                             ? edit->tempoSequence.getTempo (0)->getBpm()
+                                             : 120.0;
+                        const double barLengthSecs  = 60.0 / bpm * 4.0;   // 4 beats per bar
+                        const double clipLengthSecs = barLengthSecs * 4.0; // 4 bars
+
+                        te::ClipPosition midiPos {
+                            tracktion::TimeRange (
+                                tracktion::TimePosition::fromSeconds (0.0),
+                                tracktion::TimePosition::fromSeconds (clipLengthSecs)),
+                            tracktion::TimeDuration()
+                        };
+
+                        newTrack->insertNewClip (
+                            te::TrackItem::Type::midi,
+                            "MIDI Clip",
+                            midiPos,
+                            nullptr);
+                    }
+                }
+            });
     };
 
     // Zoom buttons — header strip, top-right corner
@@ -185,14 +232,48 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     zoomInButton.onClick  = [this] { setPixelsPerSecond (pixelsPerSecond * 1.4); };
     zoomOutButton.onClick = [this] { setPixelsPerSecond (pixelsPerSecond / 1.4); };
 
-    // Wire ZoomViewport callback — intercepts Ctrl/Cmd+scroll over the timeline and
-    // delegates to the existing zoom logic in ArrangementView::mouseWheelMove.
-    // e.getEventRelativeTo(this) converts the event coordinates from viewport-local
-    // to ArrangementView-local so the zoom-to-cursor calculation works correctly.
+    // Wire ZoomViewport callback — intercepts Ctrl/Cmd+scroll over the timeline.
+    // ZoomViewport routes ALL modifier+scroll events here, so we must branch
+    // explicitly: Cmd+scroll = vertical zoom, Ctrl+scroll = horizontal zoom.
+    // Delegating back to mouseWheelMove was unreliable because JUCE deltaX/deltaY
+    // dominance heuristics differ per platform; handling both paths here is direct.
     timelineViewport.onZoomWheel = [this] (const juce::MouseEvent& e,
                                             const juce::MouseWheelDetails& w)
     {
-        mouseWheelMove (e.getEventRelativeTo (this), w);
+        // Vertical zoom: Cmd+scroll (Logic Pro convention).
+        // On macOS Cmd key sets isCommandDown; trackpad pinch sets isCtrlDown (synthetic).
+        // The isCommandDown && !isCtrlDown guard keeps the two paths mutually exclusive.
+        if (e.mods.isCommandDown() && !e.mods.isCtrlDown())
+        {
+            const double zoomFactor = 1.0 + w.deltaY * 2.0;
+            trackHeightScale = juce::jlimit (0.5, 3.0, trackHeightScale * zoomFactor);
+            resized();
+            repaint();
+            return;
+        }
+
+        // Horizontal zoom: Ctrl+scroll or trackpad pinch (macOS synthetic Ctrl).
+        // Convert event to ArrangementView-local coords for zoom-to-cursor math.
+        const auto eventInAV = e.getEventRelativeTo (this);
+        const double zoomFactor = 1.0 + w.deltaY * 2.0;
+        const double newPPS = juce::jlimit (10.0, 2000.0, pixelsPerSecond * zoomFactor);
+
+        // Zoom towards the mouse cursor: keep the time under the cursor fixed.
+        const int mouseXInTimeline = eventInAV.getPosition().x - kHeaderWidth
+                                     + timelineViewport.getViewPositionX();
+        const double timeAtCursor = mouseXInTimeline / pixelsPerSecond;
+
+        pixelsPerSecond = newPPS;
+
+        const int newMouseXInTimeline = (int)(timeAtCursor * pixelsPerSecond);
+        const int newScrollX = newMouseXInTimeline - (eventInAV.getPosition().x - kHeaderWidth);
+        timelineViewport.setViewPosition (juce::jmax (0, newScrollX),
+                                          timelineViewport.getViewPositionY());
+        scrollPositionSecs = juce::jmax (0.0, (double)newScrollX / pixelsPerSecond);
+
+        resized();
+        rulerStrip.repaint();
+        repaint();
     };
 
     // Wire pinch-to-zoom callback — macOS trackpad pinch gesture fires
