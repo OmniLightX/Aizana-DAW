@@ -124,7 +124,17 @@ te::FolderTrack* MixerEngine::createBus (const juce::String& name)
     auto bus = edit->insertNewFolderTrack (te::TrackInsertPoint { nullptr, nullptr }, nullptr, true);
 
     if (bus != nullptr)
+    {
         bus->setName (name);
+
+        // Ensure the bus has a VolumeAndPanPlugin so the bus fader is controllable.
+        // FolderTrack::getVolumePlugin() searches pluginList; if nullptr, insert one.
+        if (bus->getVolumePlugin() == nullptr)
+        {
+            auto volState = te::VolumeAndPanPlugin::create();
+            bus->pluginList.insertPlugin (volState, 0);
+        }
+    }
 
     return bus;
 }
@@ -149,6 +159,33 @@ te::AuxSendPlugin* MixerEngine::createSend (te::AudioTrack& sourceTrack,
     auto* sendPlugin = dynamic_cast<te::AuxSendPlugin*> (pluginPtr.get());
     if (sendPlugin != nullptr)
         sendPlugin->setGainDb (sendLeveldB);
+
+    // Ensure the destination FolderTrack has a matching AuxReturnPlugin for this
+    // bus number. AuxSend/AuxReturn work as a pair in TE — the Send routes audio
+    // to a bus number and the Return on the receiving track listens to that number.
+    // Without the AuxReturnPlugin the audio has nowhere to arrive at the bus.
+    bool hasReturn = false;
+    for (auto* p : destBus.pluginList.getPlugins())
+    {
+        if (auto* ret = dynamic_cast<te::AuxReturnPlugin*> (p))
+        {
+            if (ret->busNumber.get() == busNumber)
+            {
+                hasReturn = true;
+                break;
+            }
+        }
+    }
+
+    if (! hasReturn)
+    {
+        // AuxReturnPlugin has no static create() method; build the ValueTree directly
+        // using the same pattern as AuxSendPlugin::create() — PLUGIN node with type property.
+        juce::ValueTree returnState (te::IDs::PLUGIN);
+        returnState.setProperty (te::IDs::type, te::AuxReturnPlugin::xmlTypeName, nullptr);
+        returnState.setProperty (te::IDs::busNum, busNumber, nullptr);
+        destBus.pluginList.insertPlugin (returnState, -1);
+    }
 
     return sendPlugin;
 }
