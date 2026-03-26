@@ -14,6 +14,7 @@
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "ui/preferences/PreferencesDialog.h"
 #include "ui/export/ExportDialog.h"
+#include "ui/pianoroll/PianoRollView.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -52,6 +53,11 @@ public:
 
     /** Access the PluginWindowManager for opening plugin editor windows. */
     PluginWindowManager& getPluginWindowManager() noexcept { return pluginWindowManager; }
+
+    /** Show the docked Piano Roll for the given MIDI clip. Called by ClipComponent::mouseDoubleClick. */
+    void showPianoRoll (te::MidiClip& midiClip);
+    /** Hide the docked Piano Roll panel. */
+    void hidePianoRoll();
 
     // -------------------------------------------------------------------------
     // juce::MenuBarModel overrides (pure virtual — all three must be implemented)
@@ -94,6 +100,11 @@ private:
     // dockedPanel is inside pluginWindowManager — added to our layout via getDockedPanel()
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
+
+    bool pianoRollVisible = false;
+    std::unique_ptr<PianoRollView> pianoRollView;  // current docked Piano Roll (nullptr when hidden)
+    juce::TextButton pianoRollCloseButton { "X" };  // close button in piano roll header
+    static constexpr int kPianoRollHeight = 250;  // default docked height
 
     static constexpr int kDockedPanelWidth = 350;  // px when plugins are docked
 

@@ -33,6 +33,9 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
 
+    addChildComponent (pianoRollCloseButton);  // hidden by default
+    pianoRollCloseButton.onClick = [this] { hidePianoRoll(); };
+
     setSize (1280, 800);
 }
 
@@ -47,6 +50,14 @@ void MainComponent::resized()
     auto& dockedPanel = pluginWindowManager.getDockedPanel();
     const int dockedWidth = dockedPanel.isEmpty() ? 0 : kDockedPanelWidth;
     dockedPanel.setBounds (area.removeFromRight (dockedWidth));
+
+    if (pianoRollVisible && pianoRollView != nullptr)
+    {
+        auto pianoRollArea = area.removeFromBottom (kPianoRollHeight);
+        // Close button in top-right corner of piano roll area (20x20)
+        pianoRollCloseButton.setBounds (pianoRollArea.getRight() - 24, pianoRollArea.getY() + 4, 20, 20);
+        pianoRollView->setBounds (pianoRollArea);
+    }
 
     if (mixerVisible)
     {
@@ -121,6 +132,13 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Escape: hide Piano Roll if visible
+    if (key == juce::KeyPress::escapeKey && pianoRollVisible)
+    {
+        hidePianoRoll();
+        return true;
+    }
+
     // Spacebar: global play/stop — works from anywhere in the app (no focus trap)
     if (key == juce::KeyPress::spaceKey)
     {
@@ -143,6 +161,30 @@ void MainComponent::toggleMixer()
     mixerVisible = !mixerVisible;
     mixerView.setVisible (mixerVisible);
     resized();   // Re-layout so ArrangementView expands/collapses accordingly
+}
+
+void MainComponent::showPianoRoll (te::MidiClip& midiClip)
+{
+    // Destroy any existing piano roll, then create new one for this clip
+    pianoRollView.reset();
+    pianoRollView = std::make_unique<PianoRollView> (midiClip, appState.editManager);
+    addAndMakeVisible (*pianoRollView);
+    pianoRollVisible = true;
+    pianoRollCloseButton.setVisible (true);
+    pianoRollCloseButton.toFront (false);
+    resized();
+}
+
+void MainComponent::hidePianoRoll()
+{
+    pianoRollVisible = false;
+    pianoRollCloseButton.setVisible (false);
+    if (pianoRollView != nullptr)
+    {
+        removeChildComponent (pianoRollView.get());
+        pianoRollView.reset();
+    }
+    resized();
 }
 
 //==============================================================================
