@@ -71,12 +71,14 @@ void ClipComponent::paint (juce::Graphics& g)
             // Semi-transparent white waveform over the clip body colour
             g.setColour (juce::Colours::white.withAlpha (0.35f));
 
-            // Draw from clip start to end (clip's own timeline, not absolute edit position)
+            // Draw from the clip's source offset into the file so that split (offset) clips
+            // show the correct portion of the waveform, not always the beginning of the file.
+            const double clipOffset     = clip.getPosition().getOffset().inSeconds();
             const double clipLengthSecs = clip.getPosition().getLength().inSeconds();
             thumbnail.drawChannel (g,
                                    waveArea,
-                                   0.0,                    // start at clip start
-                                   juce::jmax (0.001, clipLengthSecs),  // end at clip end
+                                   clipOffset,                                   // start at source offset
+                                   juce::jmax (0.001, clipOffset + clipLengthSecs), // end = offset + length
                                    0,                      // channel 0 (left/mono)
                                    1.0f);                  // vertical zoom = 1.0 (full amplitude)
         }
