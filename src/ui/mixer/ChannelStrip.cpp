@@ -97,14 +97,23 @@ void MeterBar::paint (juce::Graphics& g)
     // Reserve bottom 14px for LUFS label
     area.removeFromBottom (14.0f);
 
-    const float barW = area.getWidth() * 0.45f;
-    const float barX = (area.getWidth() - barW * 2.0f - 2.0f) * 0.5f + area.getX();
+    // ---- Layout: dedicated dB scale column on the left, meter bars on the right ----
+    // kScaleW: reserved for dB text labels (right-justified in this column).
+    // Bars start at area.getX() + kScaleW so labels never overlap bar fill areas.
+    // Reference: Studio One draws dB scale in a narrow left column beside the bars.
+    const float kScaleW = 16.0f;
 
-    // Background track
+    // Bar geometry — two equal-width bars (Peak + RMS) packed into the right region
+    const float barsLeft  = area.getX() + kScaleW;
+    const float barsWidth = area.getRight() - barsLeft;
+    const float barW      = (barsWidth - 2.0f) * 0.5f;
+    const float barX      = barsLeft;
+
+    // Background track (full area including scale column)
     g.setColour (juce::Colour (0xff111111));
     g.fillRect (area);
 
-    // ---- Peak bar (left half) ----
+    // ---- Peak bar (left of the two bars) ----
     {
         const float norm = dbToNorm (displayPeakDB);
         const float barH = norm * area.getHeight();
@@ -133,7 +142,7 @@ void MeterBar::paint (juce::Graphics& g)
         }
     }
 
-    // ---- RMS bar (right half) ----
+    // ---- RMS bar (right of the two bars) ----
     {
         const float rmsNorm = dbToNorm (displayRMSDB);
         const float rmsH    = rmsNorm * area.getHeight();
@@ -144,25 +153,25 @@ void MeterBar::paint (juce::Graphics& g)
         g.fillRect (rmsX, rmsY, barW, rmsH);
     }
 
-    // Tick marks at -6, -12, -18, -24 dBFS with dB scale labels
+    // Tick marks at -6, -12, -18, -24 dBFS with dB scale labels in the left column
     for (float dB : { -6.0f, -12.0f, -18.0f, -24.0f })
     {
         const float norm  = dbToNorm (dB);
         const float tickY = area.getBottom() - norm * area.getHeight();
 
-        // Tick line
+        // Tick line — spans only the bar area (right of scale column) to avoid
+        // drawing through the text label
         g.setColour (juce::Colour (0xff444444));
-        g.drawHorizontalLine ((int)tickY, area.getX(), area.getRight());
+        g.drawHorizontalLine ((int)tickY, barsLeft, area.getRight());
 
-        // dB text label — drawn inside the meter bar with semi-transparent colour
-        // so it's visible at any strip width without needing external space
+        // dB label — right-justified in the dedicated scale column on the left
         g.setFont (juce::FontOptions (8.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.45f));
+        g.setColour (juce::Colours::white.withAlpha (0.6f));
         g.drawText (juce::String (static_cast<int> (dB)),
                     (int)area.getX(),
-                    (int)(tickY - 9.0f),  // above the tick line
-                    (int)area.getWidth(),
-                    9,
+                    (int)(tickY - 7.0f),
+                    (int)kScaleW - 2,
+                    14,
                     juce::Justification::centredRight,
                     false);
     }
@@ -513,8 +522,9 @@ void ChannelStrip::resized()
     panValueLabel.setBounds (area.removeFromTop (12));  // numeric readout: L33 / C / R48
     panLabel.setBounds (area.removeFromTop (12));
 
-    // Meter bar on the left ~30% width, volume fader on the right ~70%
-    const int meterW = juce::jmax (16, area.getWidth() * 30 / 100);
+    // Meter bar on the left ~40% width, volume fader on the right ~60%
+    // At 96px strip (area ~88px): meterW = ~35px giving 35-16=19px for bars after kScaleW reserve
+    const int meterW = juce::jmax (24, area.getWidth() * 40 / 100);
     meterBar.setBounds (area.removeFromLeft (meterW));
 
     // Volume fader takes remaining space
