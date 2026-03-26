@@ -156,17 +156,6 @@ void AutomationLane::drawPoints (juce::Graphics& g) const
         float x = timeToX (pt.time.inSeconds());
         float y = valueToY (pt.value);
         g.fillEllipse (x - 4.0f, y - 4.0f, 8.0f, 8.0f);
-
-        // Draw dB value label next to each point for volume automation
-        if (parameterID.equalsIgnoreCase ("volume"))
-        {
-            float dB = te::volumeFaderPositionToDB (pt.value);
-            g.setFont (juce::FontOptions (9.0f));
-            g.setColour (juce::Colours::white.withAlpha (0.7f));
-            g.drawText (juce::String (dB, 1), static_cast<int> (x) + 6,
-                        static_cast<int> (y) - 6, 36, 12, juce::Justification::centredLeft);
-            g.setColour (juce::Colours::orange);  // restore for next point ellipse
-        }
     }
 }
 
@@ -187,12 +176,6 @@ void AutomationLane::drawDBScale (juce::Graphics& g) const
         // Faint horizontal reference line
         g.setColour (juce::Colours::grey.withAlpha (0.2f));
         g.drawHorizontalLine (static_cast<int> (y), 0.0f, static_cast<float> (getWidth()));
-
-        // dB text label on left edge
-        g.setColour (juce::Colours::grey.withAlpha (0.6f));
-        g.setFont (juce::FontOptions (9.0f));
-        juce::String label = (dB == 0.0f) ? "0 dB" : juce::String (dB, 0) + " dB";
-        g.drawText (label, 2, static_cast<int> (y) - 7, 40, 14, juce::Justification::centredLeft);
     }
 }
 
@@ -366,6 +349,40 @@ void AutomationLane::mouseUp (const juce::MouseEvent& /*e*/)
     isSegmentDragging  = false;
     segmentLeftIndex   = -1;
     segmentRightIndex  = -1;
+}
+
+void AutomationLane::mouseMove (const juce::MouseEvent& e)
+{
+    // Show dB tooltip when hovering near a volume automation point
+    if (!parameterID.equalsIgnoreCase ("volume"))
+    {
+        dBLabel.setVisible (false);
+        return;
+    }
+
+    int idx = findPointNear (e.position);
+    if (idx >= 0)
+    {
+        auto* param = getParam();
+        if (param != nullptr)
+        {
+            auto pt  = param->getCurve().getPoint (idx);
+            float x  = timeToX (pt.time.inSeconds());
+            float y  = valueToY (pt.value);
+            float dB = te::volumeFaderPositionToDB (pt.value);
+
+            int labelX = juce::jmin (static_cast<int> (x) + 8, getWidth() - 50);
+            int labelY = juce::jmax (0, static_cast<int> (y) - 20);
+
+            dBLabel.setText (juce::String (dB, 1) + " dB", juce::dontSendNotification);
+            dBLabel.setBounds (labelX, labelY, 52, 18);
+            dBLabel.setVisible (true);
+        }
+    }
+    else
+    {
+        dBLabel.setVisible (false);
+    }
 }
 
 void AutomationLane::mouseDoubleClick (const juce::MouseEvent& /*e*/)
