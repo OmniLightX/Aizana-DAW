@@ -1,6 +1,6 @@
 #include "ClipComponent.h"
 #include "ArrangementView.h"
-#include "ui/pianoroll/PianoRollView.h"
+#include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
 
 //==============================================================================
@@ -147,27 +147,11 @@ void ClipComponent::mouseUp (const juce::MouseEvent&)
 
 void ClipComponent::mouseDoubleClick (const juce::MouseEvent&)
 {
-    // Double-click on a MIDI clip → open Piano Roll editor in floating window
+    // Double-click on a MIDI clip -> open Piano Roll in docked bottom panel
     if (auto* midiClip = dynamic_cast<te::MidiClip*> (&clip))
     {
-        // Self-deleting DocumentWindow subclass that closes on X button press
-        struct PianoRollWindow : public juce::DocumentWindow
-        {
-            PianoRollWindow (const juce::String& name, juce::Colour bg)
-                : juce::DocumentWindow (name, bg, juce::DocumentWindow::closeButton)
-            {}
-            void closeButtonPressed() override { delete this; }
-        };
-
-        auto* editor = new PianoRollWindow (
-            "Piano Roll - " + clip.getName(),
-            juce::Colour (0xff2a2a2a));
-
-        editor->setContentOwned (new PianoRollView (*midiClip, editManager), true);
-        editor->setSize (900, 500);
-        editor->setResizable (true, false);
-        editor->setUsingNativeTitleBar (true);
-        editor->setVisible (true);
+        if (auto* mainComp = findParentComponentOfClass<MainComponent>())
+            mainComp->showPianoRoll (*midiClip);
     }
     // Audio clips: no action in Phase 1 (future: waveform editor)
 }
