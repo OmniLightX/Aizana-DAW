@@ -668,6 +668,17 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // ---- Zoom reset ----
+    // Cmd+0: reset track height to default (trackHeightScale = 1.0, 60px per track).
+    if (key.getModifiers().isCommandDown()
+        && (key.getKeyCode() == '0' || key.getKeyCode() == juce::KeyPress::numberPad0))
+    {
+        trackHeightScale = 1.0;
+        resized();
+        repaint();
+        return true;
+    }
+
     // ---- Tool shortcuts ----
     // Escape always returns to Pointer — no modifier check needed.
     if (key.getKeyCode() == juce::KeyPress::escapeKey)
@@ -976,7 +987,9 @@ void ArrangementView::rebuildTrackRows()
             const double endSecs   = clip->getPosition().getEnd().inSeconds();
             const int    x = (int)(startSecs * pixelsPerSecond);
             const int    w = juce::jmax (4, (int)((endSecs - startSecs) * pixelsPerSecond));
-            cc->setBounds (x, 2, w, (int)(TrackRow::kCollapsedHeight * trackHeightScale) - 4);
+            // Clip height is set correctly by layoutClips() inside resized() below;
+            // this initial placement just establishes horizontal position.
+            cc->setBounds (x, 0, w, TrackRow::kCollapsedHeight);
         }
     }
 
@@ -1158,8 +1171,20 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
     // Determine which track row the drop landed on.
     // dropY is relative to ArrangementView; subtract the header strip height and
     // ruler strip height to get the y within the track-rows area.
-    int rowY = dropY - kHeaderStripHeight - kRulerHeight;
-    int trackIndex = juce::jlimit (0, juce::jmax (0, tracks.size() - 1), rowY / kTrackHeight);
+    // Walk track rows to find which row the drop Y falls into, respecting trackHeightScale.
+    int rowY      = dropY - kHeaderStripHeight - kRulerHeight;
+    int trackIndex = 0;
+    {
+        int cumY = 0;
+        for (int ri = 0; ri < trackRows.size(); ++ri)
+        {
+            const int rh = (int)(trackRows[ri]->getPreferredHeight() * trackHeightScale);
+            if (rowY < cumY + rh) { trackIndex = ri; break; }
+            cumY += rh;
+            trackIndex = ri;
+        }
+        trackIndex = juce::jlimit (0, juce::jmax (0, tracks.size() - 1), trackIndex);
+    }
 
     // If no tracks exist, auto-create one before importing
     if (tracks.isEmpty())
@@ -1217,9 +1242,19 @@ void ArrangementView::itemDragMove (
     const juce::DragAndDropTarget::SourceDetails& details)
 {
     // Calculate which row the drag is over for the drop indicator line.
-    // localPosition is relative to this component; subtract header strip and ruler.
+    // Walk scaled row heights so the indicator stays accurate at all zoom levels.
     const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
-    dragOverRowIndex = juce::jlimit (0, trackHeaders.size(), y / kTrackHeight);
+    {
+        int cumY = 0, idx = 0;
+        for (int ri = 0; ri < trackRows.size(); ++ri)
+        {
+            const int rh = (int)(trackRows[ri]->getPreferredHeight() * trackHeightScale);
+            if (y < cumY + rh) { idx = ri; break; }
+            cumY += rh;
+            idx = ri + 1;
+        }
+        dragOverRowIndex = juce::jlimit (0, trackHeaders.size(), idx);
+    }
     repaint();
 }
 
@@ -1242,9 +1277,20 @@ void ArrangementView::itemDropped (
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr) return;
 
-    // Determine drop index from y position
+    // Determine drop index from y position, walking scaled row heights.
     const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
-    const int dropIndex = juce::jlimit (0, trackHeaders.size() - 1, y / kTrackHeight);
+    int dropIndex = 0;
+    {
+        int cumY = 0;
+        for (int ri = 0; ri < trackRows.size(); ++ri)
+        {
+            const int rh = (int)(trackRows[ri]->getPreferredHeight() * trackHeightScale);
+            if (y < cumY + rh) { dropIndex = ri; break; }
+            cumY += rh;
+            dropIndex = ri;
+        }
+        dropIndex = juce::jlimit (0, juce::jmax (0, trackHeaders.size() - 1), dropIndex);
+    }
 
     // Find current index of the dragged track header
     const int sourceIndex = trackHeaders.indexOf (sourceHeader);

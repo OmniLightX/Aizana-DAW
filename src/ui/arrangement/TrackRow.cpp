@@ -101,20 +101,27 @@ void TrackRow::resized()
 {
     auto area = getLocalBounds();
 
+    // The actual clip area height depends on the total row height set by ArrangementView
+    // (which applies trackHeightScale). The automation lane always stays at kAutomationLaneHeight;
+    // the clip area takes everything above it so vertical zoom visibly expands clip blocks.
+    const int totalH    = area.getHeight();
+    const int clipAreaH = expanded ? juce::jmax (kCollapsedHeight, totalH - kAutomationLaneHeight)
+                                   : totalH;
+
     // Disclosure button: 24x24px, bottom-left corner of the clip area zone
     // 2px inset from left and bottom edges — always visible regardless of horizontal scroll
     const int btnSize = kDisclosureButtonSize;
     disclosureButton.setBounds (2,
-                                kCollapsedHeight - btnSize - 2,
+                                clipAreaH - btnSize - 2,
                                 btnSize,
                                 btnSize);
 
-    // Clip area: top kCollapsedHeight, full width (disclosure button overlaps via z-order)
-    clipArea.setBounds (0, 0, area.getWidth(), kCollapsedHeight);
+    // Clip area: grows with vertical zoom; full width
+    clipArea.setBounds (0, 0, area.getWidth(), clipAreaH);
 
-    // Automation lane: below the clip area when expanded
+    // Automation lane: fixed height below the (now variable-height) clip area
     if (expanded && automationLane != nullptr)
-        automationLane->setBounds (0, kCollapsedHeight, area.getWidth(), kAutomationLaneHeight);
+        automationLane->setBounds (0, clipAreaH, area.getWidth(), kAutomationLaneHeight);
 }
 
 //==============================================================================
@@ -140,10 +147,13 @@ void TrackRow::paint (juce::Graphics& g)
     g.setColour (juce::Colours::darkgrey);
     g.drawHorizontalLine (getHeight() - 1, 0.0f, static_cast<float> (getWidth()));
 
-    // Subtle tint behind the automation lane when expanded
+    // Subtle tint behind the automation lane when expanded.
+    // The automation lane sits below the clip area; use getHeight() - kAutomationLaneHeight
+    // as the Y origin so the tint tracks vertical zoom correctly.
     if (expanded)
     {
+        const int laneY = getHeight() - kAutomationLaneHeight;
         g.setColour (juce::Colour (0xFF1A1A2E).withAlpha (0.7f));
-        g.fillRect (0, kCollapsedHeight, getWidth(), kAutomationLaneHeight);
+        g.fillRect (0, laneY, getWidth(), kAutomationLaneHeight);
     }
 }
