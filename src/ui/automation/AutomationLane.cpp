@@ -245,6 +245,15 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
         }
     }
 
+    // Alt+click: always create a new point, even if near an existing one
+    if (e.mods.isAltDown())
+    {
+        double clickTime  = xToTime (e.position.x);
+        float  clickValue = yToValue (e.position.y);
+        automationEngine.addAutomationPoint (track, parameterID, clickTime, clickValue);
+        return;
+    }
+
     // Left-click near existing point: start drag
     draggingPointIndex = findPointNear (e.position);
     if (draggingPointIndex >= 0)

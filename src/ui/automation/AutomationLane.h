@@ -90,7 +90,7 @@ private:
      * Find the index of the automation point closest to a mouse position
      * within the given pixel threshold.  Returns -1 if none found.
      */
-    int findPointNear (juce::Point<float> mousePos, float thresholdPx = 8.0f) const;
+    int findPointNear (juce::Point<float> mousePos, float thresholdPx = 5.0f) const;
 
     /** Find the segment (two bounding point indices) at a given position.
      *  Returns true if position is on the line between two points (within threshold). */
