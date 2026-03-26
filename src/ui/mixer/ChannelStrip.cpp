@@ -1,4 +1,9 @@
 #include "ChannelStrip.h"
+#include "plugins/PluginManager.h"
+#include "plugins/PluginScanner.h"
+#include "plugins/BuiltInPluginFormat.h"
+#include "ui/pluginwin/PluginWindowManager.h"
+#include "ui/pluginbrowser/PluginBrowserPopup.h"
 
 //==============================================================================
 // MeterBar
@@ -105,7 +110,7 @@ void MeterBar::paint (juce::Graphics& g)
         const float barH = norm * area.getHeight();
         const float barY = area.getBottom() - barH;
 
-        // Colour gradient: green → yellow → red
+        // Colour gradient: green -> yellow -> red
         juce::ColourGradient grad;
         grad.isRadial = false;
         grad.point1 = { barX, area.getBottom() };
@@ -164,13 +169,248 @@ void MeterBar::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+// InsertSlotPanel::SlotButton
+
+void ChannelStrip::InsertSlotPanel::SlotButton::paint (juce::Graphics& g)
+{
+    const bool occupied = (plugin != nullptr);
+
+    // Background
+    g.fillAll (occupied ? juce::Colour (0xff2a2a2a) : juce::Colour (0xff1a1a1a));
+
+    // Border
+    if (occupied)
+    {
+        g.setColour (juce::Colour (0xff666666));
+        g.drawRect (getLocalBounds(), 1);
+    }
+    else
+    {
+        // Dashed border for empty slot
+        g.setColour (juce::Colour (0xff444444));
+        g.drawRect (getLocalBounds().reduced (0), 1);
+    }
+
+    g.setFont (juce::FontOptions (8.0f));
+
+    if (occupied)
+    {
+        // Plugin name truncated to fit, white text
+        g.setColour (juce::Colours::white);
+        g.drawText (plugin->getName(), getLocalBounds().reduced (2, 1),
+                    juce::Justification::centredLeft, true);
+    }
+    else
+    {
+        // "+" centred in grey
+        g.setColour (juce::Colour (0xff888888));
+        g.drawText ("+", getLocalBounds(), juce::Justification::centred, false);
+    }
+}
+
+void ChannelStrip::InsertSlotPanel::SlotButton::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+    {
+        if (onRightClick)
+            onRightClick();
+    }
+    else
+    {
+        if (onClick)
+            onClick();
+    }
+}
+
+void ChannelStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::MouseEvent& /*e*/)
+{
+    if (onDoubleClick)
+        onDoubleClick();
+}
+
+//==============================================================================
+// InsertSlotPanel
+
+ChannelStrip::InsertSlotPanel::InsertSlotPanel (te::AudioTrack& track_,
+                                                 PluginManager& pluginManager_,
+                                                 PluginWindowManager& pluginWindowManager_,
+                                                 PluginScanner& pluginScanner_)
+    : track (track_)
+    , pluginManager (pluginManager_)
+    , pluginWindowManager (pluginWindowManager_)
+    , pluginScanner (pluginScanner_)
+{
+    for (int i = 0; i < kMaxSlots; ++i)
+    {
+        auto* slot = slots.add (new SlotButton());
+
+        const int slotIndex = i;
+
+        slot->onClick = [this, slotIndex]
+        {
+            auto* btn = slots[slotIndex];
+            if (btn->plugin == nullptr)
+                showAddPluginMenu (slotIndex);
+        };
+
+        slot->onDoubleClick = [this, slotIndex]
+        {
+            auto* btn = slots[slotIndex];
+            if (btn->plugin != nullptr)
+                pluginWindowManager.openPluginWindow (*btn->plugin);
+        };
+
+        slot->onRightClick = [this, slotIndex]
+        {
+            auto* btn = slots[slotIndex];
+            if (btn->plugin != nullptr)
+                showRemovePluginMenu (btn->plugin);
+        };
+
+        addAndMakeVisible (slot);
+    }
+
+    refresh();
+}
+
+void ChannelStrip::InsertSlotPanel::resized()
+{
+    for (int i = 0; i < slots.size(); ++i)
+        slots[i]->setBounds (0, i * kSlotHeight, getWidth(), kSlotHeight);
+}
+
+void ChannelStrip::InsertSlotPanel::paint (juce::Graphics& g)
+{
+    // Subtle background for the insert panel area
+    g.fillAll (juce::Colour (0xff181818));
+}
+
+void ChannelStrip::InsertSlotPanel::refresh()
+{
+    // Clear all slot plugin pointers
+    for (auto* slot : slots)
+        slot->plugin = nullptr;
+
+    // Get the plugin chain and assign user-visible plugins to slots.
+    // Skip internal TE plugins: VolumeAndPanPlugin (type="volume") and
+    // LevelMeterPlugin (type="level") — these are internal housekeeping plugins
+    // not meaningful for the user insert panel.
+    const auto chain = pluginManager.getPluginChain (track);
+
+    int slotIdx = 0;
+    for (auto* plugin : chain)
+    {
+        if (slotIdx >= kMaxSlots)
+            break;
+
+        // Skip internal TE plugins by checking their xmlTypeName
+        const juce::String pluginType = plugin->getPluginType();
+        if (pluginType == "volume" || pluginType == "level")
+            continue;
+
+        slots[slotIdx]->plugin = plugin;
+        ++slotIdx;
+    }
+
+    repaint();
+}
+
+void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
+{
+    juce::PopupMenu menu;
+
+    // Built-in FX section
+    menu.addSectionHeader ("Built-in FX");
+
+    juce::OwnedArray<juce::PluginDescription> builtIns;
+    BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
+
+    int itemId = 1;
+    juce::Array<juce::PluginDescription> descs;
+    for (auto* desc : builtIns)
+    {
+        descs.add (*desc);
+        menu.addItem (itemId++, desc->name);
+    }
+
+    menu.addSeparator();
+    menu.addItem (itemId, "Browse Plugins...");
+
+    const int browseId = itemId;
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        [this, slotIndex, descs, browseId] (int result)
+        {
+            if (result <= 0)
+                return;
+
+            if (result == browseId)
+            {
+                // Open full plugin browser popup
+                PluginBrowserPopup::showForComponent (
+                    *this,
+                    pluginScanner.getKnownPlugins(),
+                    [this, slotIndex] (const juce::PluginDescription& desc)
+                    {
+                        auto* newPlugin = pluginManager.insertPlugin (track, desc, slotIndex);
+                        if (newPlugin != nullptr)
+                        {
+                            pluginWindowManager.openPluginWindow (*newPlugin);
+                            refresh();
+                        }
+                    });
+            }
+            else
+            {
+                // Built-in FX: result is 1-based index into descs
+                const int descIdx = result - 1;
+                if (descIdx >= 0 && descIdx < descs.size())
+                {
+                    auto* newPlugin = pluginManager.insertPlugin (track, descs[descIdx], slotIndex);
+                    if (newPlugin != nullptr)
+                    {
+                        pluginWindowManager.openPluginWindow (*newPlugin);
+                        refresh();
+                    }
+                }
+            }
+        });
+}
+
+void ChannelStrip::InsertSlotPanel::showRemovePluginMenu (te::Plugin* plugin)
+{
+    if (plugin == nullptr)
+        return;
+
+    juce::PopupMenu menu;
+    menu.addItem (1, "Remove \"" + plugin->getName() + "\"");
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        [this, plugin] (int result)
+        {
+            if (result == 1)
+            {
+                pluginManager.removePlugin (track, *plugin);
+                refresh();
+            }
+        });
+}
+
+//==============================================================================
 // ChannelStrip
 
 ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
-                             MeterProcessor& meterProcessor_)
+                             MeterProcessor& meterProcessor_,
+                             PluginManager& pluginManager_,
+                             PluginWindowManager& pluginWindowManager_,
+                             PluginScanner& pluginScanner_)
     : track (track_)
     , mixerEngine (mixerEngine_)
+    , pluginManager (pluginManager_)
+    , pluginWindowManager (pluginWindowManager_)
+    , pluginScanner (pluginScanner_)
     , meterBar (meterProcessor_)
+    , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
 {
     // ---- Volume fader ----
     volumeFader.setSliderStyle    (juce::Slider::LinearVertical);
@@ -237,9 +477,10 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     addAndMakeVisible (soloButton);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (trackNameLabel);
+    addAndMakeVisible (insertSlotPanel);
 
     // Listen to track's ValueTree so we can sync fader when state changes externally
-    // (e.g., undo/redo, AI automation writes)
+    // (e.g., undo/redo, AI automation writes) and refresh insert slots on plugin changes
     track.state.addListener (this);
 }
 
@@ -256,7 +497,12 @@ void ChannelStrip::resized()
     trackNameLabel.setBounds (area.removeFromBottom (18));
     area.removeFromBottom (2);
 
-    // Solo + Mute buttons above name
+    // Insert slot panel above track name (6 slots * 16px = 96px)
+    const int insertH = InsertSlotPanel::kMaxSlots * InsertSlotPanel::kSlotHeight;
+    insertSlotPanel.setBounds (area.removeFromBottom (insertH));
+    area.removeFromBottom (2);
+
+    // Solo + Mute buttons above insert panel
     auto buttonArea = area.removeFromBottom (22);
     soloButton.setBounds (buttonArea.removeFromLeft (buttonArea.getWidth() / 2).reduced (1));
     muteButton.setBounds (buttonArea.reduced (1));
@@ -337,4 +583,18 @@ void ChannelStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
         panKnob.setValue (pan, juce::dontSendNotification);
         panValueLabel.setText (formatPanValue (pan), juce::dontSendNotification);
     }
+}
+
+void ChannelStrip::valueTreeChildAdded (juce::ValueTree& /*parent*/, juce::ValueTree& child)
+{
+    // Refresh insert slots when a plugin is added to the track
+    if (child.hasType (juce::Identifier ("PLUGIN")))
+        insertSlotPanel.refresh();
+}
+
+void ChannelStrip::valueTreeChildRemoved (juce::ValueTree& /*parent*/, juce::ValueTree& child, int)
+{
+    // Refresh insert slots when a plugin is removed from the track
+    if (child.hasType (juce::Identifier ("PLUGIN")))
+        insertSlotPanel.refresh();
 }

@@ -113,8 +113,10 @@ void MixerView::rebuildStrips()
         auto* meterPtr = meter.get();
         meterProcessors[audioTrack] = std::move (meter);
 
-        // Create the ChannelStrip passing the MeterProcessor reference
-        auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr));
+        // Create the ChannelStrip passing MeterProcessor and plugin management references
+        auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr,
+                                                     pluginManager, pluginWindowManager,
+                                                     pluginScanner));
         channelStripContainer.addAndMakeVisible (strip);
     }
 

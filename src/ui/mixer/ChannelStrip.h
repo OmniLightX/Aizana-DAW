@@ -5,6 +5,11 @@
 #include "engine/MixerEngine.h"
 #include "metering/MeterProcessor.h"
 
+// Forward declarations — full includes in ChannelStrip.cpp
+class PluginManager;
+class PluginWindowManager;
+class PluginScanner;
+
 namespace te = tracktion::engine;
 
 //==============================================================================
@@ -67,10 +72,11 @@ private:
  *
  * Contains (top to bottom):
  *   - MeterBar  — real-time peak + LUFS meter (plan 01-10, EXP-03)
- *   - Track name label (bottom)
- *   - Solo (S) and Mute (M) buttons
  *   - Pan knob (Rotary slider, -1.0 to +1.0)
  *   - Volume fader (Vertical slider, -60 to +6 dB)
+ *   - Solo (S) and Mute (M) buttons
+ *   - InsertSlotPanel — 6 insert slots for FX (plan 01-68)
+ *   - Track name label (bottom)
  *
  * All controls are wired to MixerEngine so mutations go through the shared
  * UndoManager (MIX-01 requirement).
@@ -83,7 +89,10 @@ class ChannelStrip : public juce::Component,
 {
 public:
     ChannelStrip (te::AudioTrack& track, MixerEngine& mixerEngine,
-                  MeterProcessor& meterProcessor);
+                  MeterProcessor& meterProcessor,
+                  PluginManager& pluginManager,
+                  PluginWindowManager& pluginWindowManager,
+                  PluginScanner& pluginScanner);
     ~ChannelStrip() override;
 
     void resized() override;
@@ -100,9 +109,66 @@ public:
      */
     void setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI);
 
+    // ---- InsertSlotPanel ----
+
+    /**
+     * InsertSlotPanel — Studio One-style insert FX slots shown at the bottom of the strip.
+     *
+     * Displays up to kMaxSlots insert slots vertically.
+     * - Empty slot: shows "+" — click to open a popup menu (Built-in FX + Browse)
+     * - Occupied slot: shows plugin name — double-click to open editor, right-click to remove
+     *
+     * Auto-refreshes via ChannelStrip::valueTreeChildAdded/Removed when plugins are changed.
+     */
+    class InsertSlotPanel : public juce::Component
+    {
+    public:
+        InsertSlotPanel (te::AudioTrack& track,
+                         PluginManager& pluginManager,
+                         PluginWindowManager& pluginWindowManager,
+                         PluginScanner& pluginScanner);
+
+        void resized() override;
+        void paint (juce::Graphics& g) override;
+
+        /** Rebuild slot display from track's current plugin chain. */
+        void refresh();
+
+        static constexpr int kMaxSlots  = 6;
+        static constexpr int kSlotHeight = 16;
+
+    private:
+        te::AudioTrack&      track;
+        PluginManager&       pluginManager;
+        PluginWindowManager& pluginWindowManager;
+        PluginScanner&       pluginScanner;
+
+        struct SlotButton : public juce::Component
+        {
+            te::Plugin* plugin = nullptr;  // nullptr = empty slot
+            std::function<void()> onClick;
+            std::function<void()> onDoubleClick;
+            std::function<void()> onRightClick;
+
+            void paint (juce::Graphics& g) override;
+            void mouseDown (const juce::MouseEvent& e) override;
+            void mouseDoubleClick (const juce::MouseEvent& e) override;
+        };
+
+        juce::OwnedArray<SlotButton> slots;
+
+        void showAddPluginMenu (int slotIndex);
+        void showRemovePluginMenu (te::Plugin* plugin);
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InsertSlotPanel)
+    };
+
 private:
     te::AudioTrack& track;
     MixerEngine& mixerEngine;
+    PluginManager& pluginManager;
+    PluginWindowManager& pluginWindowManager;
+    PluginScanner& pluginScanner;
 
     MeterBar         meterBar;
     juce::Slider     volumeFader;
@@ -112,6 +178,7 @@ private:
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
     juce::Label      trackNameLabel;
+    InsertSlotPanel  insertSlotPanel;
 
     // Called when the fader value changes (user interaction)
     void volumeChanged();
@@ -123,8 +190,8 @@ private:
     // ValueTree::Listener — keeps UI in sync when track state changes externally
     void valueTreePropertyChanged (juce::ValueTree& tree,
                                    const juce::Identifier& property) override;
-    void valueTreeChildAdded       (juce::ValueTree&, juce::ValueTree&) override {}
-    void valueTreeChildRemoved     (juce::ValueTree&, juce::ValueTree&, int) override {}
+    void valueTreeChildAdded       (juce::ValueTree& parent, juce::ValueTree& child) override;
+    void valueTreeChildRemoved     (juce::ValueTree& parent, juce::ValueTree& child, int) override;
     void valueTreeChildOrderChanged(juce::ValueTree&, int, int) override {}
     void valueTreeParentChanged    (juce::ValueTree&) override {}
 
