@@ -30,6 +30,14 @@ AutomationLane::AutomationLane (te::AudioTrack&    track_,
     };
     addAndMakeVisible (paramSelector);
 
+    // dB tooltip label — shown near cursor while dragging a volume automation point/segment
+    dBLabel.setFont (juce::FontOptions (11.0f));
+    dBLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    dBLabel.setColour (juce::Label::backgroundColourId, juce::Colours::black.withAlpha (0.7f));
+    dBLabel.setJustificationType (juce::Justification::centred);
+    dBLabel.setVisible (false);
+    addChildComponent (dBLabel);
+
     setOpaque (false);
 }
 
@@ -93,6 +101,10 @@ void AutomationLane::paint (juce::Graphics& g)
     g.setColour (juce::Colours::grey.withAlpha (0.4f));
     g.drawHorizontalLine (static_cast<int> (zeroY), 0.0f, static_cast<float> (getWidth()));
 
+    // Draw dB scale labels for volume parameter
+    if (parameterID.equalsIgnoreCase ("volume"))
+        drawDBScale (g);
+
     drawCurve  (g);
     drawPoints (g);
 }
@@ -144,6 +156,43 @@ void AutomationLane::drawPoints (juce::Graphics& g) const
         float x = timeToX (pt.time.inSeconds());
         float y = valueToY (pt.value);
         g.fillEllipse (x - 4.0f, y - 4.0f, 8.0f, 8.0f);
+
+        // Draw dB value label next to each point for volume automation
+        if (parameterID.equalsIgnoreCase ("volume"))
+        {
+            float dB = te::volumeFaderPositionToDB (pt.value);
+            g.setFont (juce::FontOptions (9.0f));
+            g.setColour (juce::Colours::white.withAlpha (0.7f));
+            g.drawText (juce::String (dB, 1), static_cast<int> (x) + 6,
+                        static_cast<int> (y) - 6, 36, 12, juce::Justification::centredLeft);
+            g.setColour (juce::Colours::orange);  // restore for next point ellipse
+        }
+    }
+}
+
+void AutomationLane::drawDBScale (juce::Graphics& g) const
+{
+    // Standard dB reference values and their normalized fader positions
+    const float dBValues[] = { 0.0f, -6.0f, -12.0f, -24.0f, -48.0f };
+
+    for (auto dB : dBValues)
+    {
+        float faderPos = te::decibelsToVolumeFaderPosition (dB);
+        float y = valueToY (faderPos);
+
+        // Don't draw if outside visible bounds (with margin)
+        if (y < 2.0f || y > static_cast<float> (getHeight()) - 2.0f)
+            continue;
+
+        // Faint horizontal reference line
+        g.setColour (juce::Colours::grey.withAlpha (0.2f));
+        g.drawHorizontalLine (static_cast<int> (y), 0.0f, static_cast<float> (getWidth()));
+
+        // dB text label on left edge
+        g.setColour (juce::Colours::grey.withAlpha (0.6f));
+        g.setFont (juce::FontOptions (9.0f));
+        juce::String label = (dB == 0.0f) ? "0 dB" : juce::String (dB, 0) + " dB";
+        g.drawText (label, 2, static_cast<int> (y) - 7, 40, 14, juce::Justification::centredLeft);
     }
 }
 
@@ -247,6 +296,18 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
             auto ptR = curve.getPoint (segmentRightIndex);
             curve.movePoint (segmentLeftIndex,  ptL.time, newLeftVal,  false);
             curve.movePoint (segmentRightIndex, ptR.time, newRightVal, false);
+
+            // Show dB tooltip for segment drag (average of left/right, volume param only)
+            if (parameterID.equalsIgnoreCase ("volume"))
+            {
+                float avgVal = (newLeftVal + newRightVal) * 0.5f;
+                float dB = te::volumeFaderPositionToDB (avgVal);
+                dBLabel.setText (juce::String (dB, 1) + " dB", juce::dontSendNotification);
+                dBLabel.setBounds (static_cast<int> (e.position.x) + 12,
+                                   static_cast<int> (e.position.y) - 10,
+                                   52, 18);
+                dBLabel.setVisible (true);
+            }
         }
 
         repaint();
@@ -275,11 +336,23 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
     dragStartTime  = newTime;
     dragStartValue = newValue;
 
+    // Show dB tooltip while dragging a single point (volume parameter only)
+    if (parameterID.equalsIgnoreCase ("volume"))
+    {
+        float dB = te::volumeFaderPositionToDB (newValue);
+        dBLabel.setText (juce::String (dB, 1) + " dB", juce::dontSendNotification);
+        dBLabel.setBounds (static_cast<int> (e.position.x) + 12,
+                           static_cast<int> (e.position.y) - 10,
+                           52, 18);
+        dBLabel.setVisible (true);
+    }
+
     repaint();
 }
 
 void AutomationLane::mouseUp (const juce::MouseEvent& /*e*/)
 {
+    dBLabel.setVisible (false);
     draggingPointIndex = -1;
     isSegmentDragging  = false;
     segmentLeftIndex   = -1;

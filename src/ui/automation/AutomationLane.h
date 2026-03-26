@@ -75,9 +75,13 @@ private:
     // Parameter selector (Volume / Pan)
     juce::ComboBox paramSelector;
 
+    // dB tooltip label — shown near cursor during point/segment drag (volume param only)
+    juce::Label dBLabel;
+
     // Drawing helpers
-    void drawCurve  (juce::Graphics& g) const;
-    void drawPoints (juce::Graphics& g) const;
+    void drawCurve   (juce::Graphics& g) const;
+    void drawPoints  (juce::Graphics& g) const;
+    void drawDBScale (juce::Graphics& g) const;
 
     /** Returns the AutomatableParameter for the current parameterID, or nullptr. */
     te::AutomatableParameter* getParam() const;
