@@ -1,11 +1,18 @@
 #include "EditManager.h"
+#include "plugins/BuiltInPluginFormat.h"
 
 // Convenience aliases for Tracktion's strong time types
 using TimePos = tracktion::core::TimePosition;
 using TimeRng = tracktion::core::TimeRange;
 
 //==============================================================================
-EditManager::EditManager() = default;
+EditManager::EditManager()
+{
+    // Register BuiltInPluginFormat with TE's own AudioPluginFormatManager
+    // so ExternalPlugin can instantiate built-in FX processors.
+    // This MUST happen before any Edit is created (i.e., before createNewEdit / loadEdit).
+    engine.getPluginManager().pluginFormatManager.addFormat (new BuiltInPluginFormat());
+}
 EditManager::~EditManager() = default;
 
 //==============================================================================
