@@ -815,42 +815,11 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
 
                 if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (clip))
                 {
-                    auto& undoManager = appState.editManager.getUndoManager();
-                    undoManager.beginNewTransaction ("Split Clip");
-
-                    // 1. Snapshot EVERYTHING before any mutation
-                    const double clipStart      = start;
-                    const double clipEnd        = end;
-                    const auto   originalOffset = waveClip->getPosition().getOffset();
-                    const auto   sourceFile     = waveClip->getSourceFileReference().getFile();
-
-                    // 2. Trim original clip's end to split point
-                    waveClip->setEnd (tracktion::TimePosition::fromSeconds (timeSecs), false);
-
-                    // 3. Calculate right-half source offset:
-                    //    originalOffset + (splitTime - clipStart) = where in source file the right half starts
-                    const double rightOffset = originalOffset.inSeconds() + (timeSecs - clipStart);
-
-                    // 4. Create new clip with the CORRECT offset in ClipPosition (single application — no setOffset after)
-                    te::ClipPosition newPos {
-                        tracktion::TimeRange (
-                            tracktion::TimePosition::fromSeconds (timeSecs),
-                            tracktion::TimePosition::fromSeconds (clipEnd)),
-                        tracktion::TimeDuration::fromSeconds (rightOffset)
-                    };
-
-                    auto newClipPtr = track->insertNewClip (
-                        te::TrackItem::Type::wave,
-                        clip->getName() + " (R)",
-                        newPos,
-                        nullptr);   // no SelectionManager in Phase 1
-
-                    if (auto* newWave = dynamic_cast<te::WaveAudioClip*> (newClipPtr))
-                    {
-                        // Point at the same source file
-                        newWave->getSourceFileReference().setToDirectFileReference (sourceFile, true);
-                        // Do NOT call setOffset again — the ClipPosition already has it
-                    }
+                    // Delegate to ClipEditor which correctly uses setPosition()
+                    // instead of setEnd(preserveSync=false) — the latter silently
+                    // corrupts the left clip's source offset (TE subtracts the
+                    // trim delta from offset when preserveSync is false).
+                    clipEditor.cutClip (*waveClip, timeSecs);
                 }
                 break;  // only split one clip per click
             }
