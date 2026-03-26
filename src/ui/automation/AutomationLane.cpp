@@ -186,6 +186,11 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
             {
                 segmentLeftStartValue  = param->getCurve().getPoint (leftIdx).value;
                 segmentRightStartValue = param->getCurve().getPoint (rightIdx).value;
+
+                // Begin a single undo transaction for the entire segment drag gesture.
+                // movePoint calls in mouseDrag will NOT open new transactions,
+                // so the whole drag folds into one undo step.
+                param->getEdit().getUndoManager().beginNewTransaction ("Move automation segment");
             }
             return;
         }
@@ -236,17 +241,12 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
             float newLeftVal  = juce::jlimit (0.0f, 1.0f, segmentLeftStartValue  + deltaValue);
             float newRightVal = juce::jlimit (0.0f, 1.0f, segmentRightStartValue + deltaValue);
 
-            // Snapshot times before any removal (indices shift after each remove)
+            // Use movePoint — no index shift, no remove+add cycle, no extra undo transactions.
+            // The single transaction opened in mouseDown groups the entire drag into one undo step.
             auto ptL = curve.getPoint (segmentLeftIndex);
             auto ptR = curve.getPoint (segmentRightIndex);
-
-            automationEngine.removeAutomationPoint (track, parameterID, ptL.time.inSeconds());
-            // After removing left point the right point index has shifted down by 1
-            auto ptR2 = curve.getPoint (segmentRightIndex - 1);
-            automationEngine.removeAutomationPoint (track, parameterID, ptR2.time.inSeconds());
-
-            automationEngine.addAutomationPoint (track, parameterID, ptL.time.inSeconds(), newLeftVal);
-            automationEngine.addAutomationPoint (track, parameterID, ptR.time.inSeconds(), newRightVal);
+            curve.movePoint (segmentLeftIndex,  ptL.time, newLeftVal,  false);
+            curve.movePoint (segmentRightIndex, ptR.time, newRightVal, false);
         }
 
         repaint();
