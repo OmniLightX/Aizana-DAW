@@ -84,7 +84,8 @@ private:
      * Apple approach: buses appear immediately with distinct visual style
      * (darker, tagged "BUS") so users get instant confirmation of creation.
      */
-    class BusStrip : public juce::Component
+    class BusStrip : public juce::Component,
+                     private juce::ValueTree::Listener
     {
     public:
         BusStrip (te::FolderTrack&     track_,
@@ -95,22 +96,41 @@ private:
             , pluginManager (pluginManager_)
             , pluginWindowManager (pluginWindowManager_)
             , pluginScanner (pluginScanner_)
+            , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
         {
             nameLabel.setText ("BUS\n" + track.getName(), juce::dontSendNotification);
             nameLabel.setJustificationType (juce::Justification::centred);
             nameLabel.setColour (juce::Label::textColourId, juce::Colour (0xffbbbbbb));
             nameLabel.setFont (juce::FontOptions (10.0f));
             addAndMakeVisible (nameLabel);
+            addAndMakeVisible (insertSlotPanel);
 
             // Ensure this component receives mouse events even when child
             // components (e.g. nameLabel) are present. The 'false' argument
             // means children do not absorb clicks intended for the parent.
             setInterceptsMouseClicks (true, false);
+
+            // Listen to FolderTrack state so insertSlotPanel.refresh() fires
+            // when plugins are added/removed from this bus's plugin chain.
+            track.state.addListener (this);
+        }
+
+        ~BusStrip() override
+        {
+            track.state.removeListener (this);
         }
 
         void resized() override
         {
-            nameLabel.setBounds (getLocalBounds().reduced (4));
+            auto area = getLocalBounds();
+
+            // Insert slot panel at the bottom — same height as ChannelStrip
+            const int insertH = ChannelStrip::InsertSlotPanel::kMaxSlots
+                                 * ChannelStrip::InsertSlotPanel::kSlotHeight;
+            insertSlotPanel.setBounds (area.removeFromBottom (insertH));
+
+            // Remaining area for name label and BUS header visuals
+            nameLabel.setBounds (area.reduced (4));
         }
 
         void paint (juce::Graphics& g) override
@@ -138,13 +158,30 @@ private:
         void mouseDown (const juce::MouseEvent& e) override;
 
     private:
-        te::FolderTrack&      track;
-        PluginManager&        pluginManager;
-        PluginWindowManager&  pluginWindowManager;
-        PluginScanner&        pluginScanner;
-        juce::Label           nameLabel;
+        te::FolderTrack&                   track;
+        PluginManager&                     pluginManager;
+        PluginWindowManager&               pluginWindowManager;
+        PluginScanner&                     pluginScanner;
+        // insertSlotPanel declared after refs — C++ member init order constraint
+        ChannelStrip::InsertSlotPanel      insertSlotPanel;
+        juce::Label                        nameLabel;
 
         void showContextMenu();
+
+        // juce::ValueTree::Listener — refresh insert slots on plugin add/remove
+        void valueTreeChildAdded (juce::ValueTree& /*parent*/, juce::ValueTree& child) override
+        {
+            if (child.hasType (juce::Identifier ("PLUGIN")))
+                insertSlotPanel.refresh();
+        }
+        void valueTreeChildRemoved (juce::ValueTree& /*parent*/, juce::ValueTree& child, int) override
+        {
+            if (child.hasType (juce::Identifier ("PLUGIN")))
+                insertSlotPanel.refresh();
+        }
+        void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+        void valueTreePropertyChanged   (juce::ValueTree&, const juce::Identifier&) override {}
+        void valueTreeParentChanged     (juce::ValueTree&) override {}
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusStrip)
     };

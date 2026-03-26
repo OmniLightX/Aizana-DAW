@@ -164,7 +164,10 @@ void MixerView::BusStrip::showContextMenu()
                     {
                         auto* newPlugin = pluginManager.insertPlugin (track, desc);
                         if (newPlugin != nullptr)
+                        {
                             pluginWindowManager.openPluginWindow (*newPlugin);
+                            insertSlotPanel.refresh();
+                        }
                     });
             }
             else if (result == 2)
