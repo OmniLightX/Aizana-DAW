@@ -210,6 +210,22 @@ private:
     // Changes the active tool and refreshes cursor
     void setActiveTool (EditTool tool);
 
+    // ---- Tool selector strip — slim toolbar showing Pointer + Scissors buttons ----
+    // Positioned in the header strip between the Add Track button and the zoom buttons.
+    // Active tool is highlighted with an accent colour; clicking switches the tool.
+    class ToolSelectorStrip : public juce::Component
+    {
+    public:
+        ToolSelectorStrip (EditTool& activeTool, std::function<void(EditTool)> onToolSelected);
+        void paint (juce::Graphics& g) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+    private:
+        EditTool& activeTool;
+        std::function<void(EditTool)> onToolSelected;
+    };
+
+    ToolSelectorStrip toolSelector;
+
     // ---- Track selection and drag-to-reorder ----
     TrackHeader* selectedTrackHeader = nullptr;
     int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none

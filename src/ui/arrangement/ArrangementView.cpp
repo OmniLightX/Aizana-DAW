@@ -113,6 +113,69 @@ juce::MouseCursor ArrangementView::RulerStrip::getMouseCursor()
 }
 
 //==============================================================================
+// ToolSelectorStrip
+
+ArrangementView::ToolSelectorStrip::ToolSelectorStrip (EditTool& activeTool_,
+                                                        std::function<void(EditTool)> onToolSelected_)
+    : activeTool     (activeTool_)
+    , onToolSelected (std::move (onToolSelected_))
+{
+}
+
+void ArrangementView::ToolSelectorStrip::paint (juce::Graphics& g)
+{
+    // Dark background matching header strip
+    g.fillAll (juce::Colour (0xff1a1a1a));
+
+    // Two tool buttons: Pointer (V) and Scissors (S), each 36px wide
+    constexpr int kButtonW = 36;
+    constexpr int kButtonH = 20;
+    const int     stripH   = getHeight();
+    const int     yOff     = (stripH - kButtonH) / 2;
+
+    struct ButtonDef { EditTool tool; const char* label; int x; };
+    const ButtonDef buttons[2] = {
+        { EditTool::Pointer,  "V", 0        },
+        { EditTool::Scissors, "S", kButtonW },
+    };
+
+    for (const auto& btn : buttons)
+    {
+        juce::Rectangle<int> r (btn.x, yOff, kButtonW, kButtonH);
+        const bool isActive = (activeTool == btn.tool);
+
+        if (isActive)
+        {
+            // Highlighted: accent fill (Apple blue, 40% opacity)
+            g.setColour (juce::Colour (0xff4488ff).withAlpha (0.40f));
+            g.fillRoundedRectangle (r.toFloat().reduced (1.0f), 3.0f);
+        }
+
+        // Label — bright white when active, dim grey when inactive
+        g.setColour (isActive ? juce::Colour (0xffffffff) : juce::Colour (0xff888888));
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawText (btn.label, r, juce::Justification::centred, false);
+    }
+
+    // 1px separator between the two buttons
+    g.setColour (juce::Colour (0xff333333));
+    const int sepX = kButtonW;
+    const int sepY0 = yOff + 2;
+    const int sepY1 = yOff + kButtonH - 2;
+    g.drawVerticalLine (sepX, (float)sepY0, (float)sepY1);
+}
+
+void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
+{
+    // Hit-test x to determine which button was clicked (only Pointer + Scissors)
+    constexpr int kButtonW = 36;
+    if (e.x < kButtonW)
+        onToolSelected (EditTool::Pointer);
+    else
+        onToolSelected (EditTool::Scissors);
+}
+
+//==============================================================================
 
 ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   ClipEditor&          clipEditor_,
@@ -129,6 +192,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     , pluginScanner       (pluginScanner_)
     , automationEngine    (automationEngine_)
     , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs)
+    , toolSelector        (activeTool, [this] (EditTool t) { setActiveTool (t); })
 {
     // Header viewport — scrolls vertically only (no horizontal scroll)
     headerViewport.setScrollBarsShown (true, false);
@@ -288,6 +352,9 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
 
+    // Tool selector strip — visible in header area between Add Track and zoom buttons
+    addAndMakeVisible (toolSelector);
+
     // Keyboard focus: any mouse click in the arrangement area reclaims focus so
     // E/R/S tool shortcuts work reliably without requiring manual tab navigation.
     setWantsKeyboardFocus (true);
@@ -324,6 +391,9 @@ void ArrangementView::resized()
     // Header strip at top: Add Track button (height 28px)
     auto headerStrip = area.removeFromTop (kHeaderStripHeight);
     addTrackButton.setBounds (headerStrip.removeFromLeft (80).reduced (2));
+
+    // Tool selector strip — 76px wide, immediately to the right of the Add Track button
+    toolSelector.setBounds (headerStrip.removeFromLeft (76).reduced (2));
 
     // Zoom buttons — top-right of the header strip, 20×20 each with 4px gap
     // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
@@ -598,11 +668,20 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
-    // ---- Tool shortcuts (standard DAW: E = Pointer, R = Range Select, S = Scissors) ----
-    // These must not require modifiers — plain letter keys only.
+    // ---- Tool shortcuts ----
+    // Escape always returns to Pointer — no modifier check needed.
+    if (key.getKeyCode() == juce::KeyPress::escapeKey)
+    {
+        setActiveTool (EditTool::Pointer);
+        return true;
+    }
+
+    // Letter-key shortcuts (plain keys only, no modifiers):
+    // V/E = Pointer (Logic Pro convention + backward compat), R = Range Select, S = Scissors.
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
-        if (key.getKeyCode() == 'e' || key.getKeyCode() == 'E')
+        if (key.getKeyCode() == 'v' || key.getKeyCode() == 'V'
+            || key.getKeyCode() == 'e' || key.getKeyCode() == 'E')
         {
             setActiveTool (EditTool::Pointer);
             return true;
@@ -781,6 +860,9 @@ void ArrangementView::setActiveTool (EditTool tool)
     activeTool = tool;
     // Refresh cursor immediately so the change is visible without moving the mouse
     updateMouseCursor();
+    // Update toolbar highlight so it reflects the new tool regardless of how the
+    // tool was changed (keyboard shortcut, right-click menu, or toolbar click)
+    toolSelector.repaint();
 }
 
 void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
