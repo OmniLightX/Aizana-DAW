@@ -53,7 +53,8 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     setUsingNativeTitleBar (true);
     setResizable (true, true);
 
-    // Create and own the plugin's editor via TE's Plugin::createEditor()
+    // Stage 1: Try TE's Plugin::createEditor() (works for external VST/AU plugins
+    //           that register a TE editor via the TE plugin editor system).
     auto editorOwned = plugin.createEditor();
     if (editorOwned != nullptr)
     {
@@ -64,13 +65,44 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     }
     else
     {
-        // Fallback: create a placeholder component if plugin has no UI
-        auto* placeholder = new juce::Label ("", "No editor available");
-        placeholder->setSize (400, 200);
-        placeholder->setJustificationType (juce::Justification::centred);
-        placeholder->setColour (juce::Label::textColourId, juce::Colours::grey);
-        setContentOwned (placeholder, true);
-        centreWithSize (400, 200 + getTitleBarHeight());
+        // Stage 2: For built-in plugins registered via BuiltInPluginFormat,
+        //          te::Plugin::createEditor() returns null because the TE editor
+        //          system doesn't know about them. Cast to te::ExternalPlugin and
+        //          get the underlying juce::AudioPluginInstance to call createEditor()
+        //          directly on the AudioProcessor.
+        juce::AudioProcessorEditor* apiEditor = nullptr;
+
+        if (auto* externalPlugin = dynamic_cast<te::ExternalPlugin*> (&plugin))
+        {
+            if (auto* pi = externalPlugin->getAudioPluginInstance())
+            {
+                // createEditor() returns a fresh owned pointer (unlike
+                // createEditorIfNeeded which the processor tracks internally).
+                apiEditor = pi->createEditor();
+            }
+        }
+
+        if (apiEditor != nullptr)
+        {
+            // Ensure editor has a non-zero size (GenericAudioProcessorEditor sets
+            // its own size in constructor; custom editors must do the same).
+            if (apiEditor->getWidth() == 0 || apiEditor->getHeight() == 0)
+                apiEditor->setSize (400, 300);
+
+            setContentOwned (apiEditor, true);
+            centreWithSize (apiEditor->getWidth(),
+                            apiEditor->getHeight() + getTitleBarHeight());
+        }
+        else
+        {
+            // Stage 3: True fallback — plugin has no UI at all.
+            auto* placeholder = new juce::Label ("", "No editor available");
+            placeholder->setSize (400, 200);
+            placeholder->setJustificationType (juce::Justification::centred);
+            placeholder->setColour (juce::Label::textColourId, juce::Colours::grey);
+            setContentOwned (placeholder, true);
+            centreWithSize (400, 200 + getTitleBarHeight());
+        }
     }
 
     // Add the pin button to the title bar area
