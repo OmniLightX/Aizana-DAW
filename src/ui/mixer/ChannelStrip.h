@@ -123,7 +123,7 @@ public:
     class InsertSlotPanel : public juce::Component
     {
     public:
-        InsertSlotPanel (te::AudioTrack& track,
+        InsertSlotPanel (te::Track& track,
                          PluginManager& pluginManager,
                          PluginWindowManager& pluginWindowManager,
                          PluginScanner& pluginScanner);
@@ -138,7 +138,7 @@ public:
         static constexpr int kSlotHeight = 16;
 
     private:
-        te::AudioTrack&      track;
+        te::Track&           track;
         PluginManager&       pluginManager;
         PluginWindowManager& pluginWindowManager;
         PluginScanner&       pluginScanner;

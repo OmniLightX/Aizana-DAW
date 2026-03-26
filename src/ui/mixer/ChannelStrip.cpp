@@ -231,7 +231,7 @@ void ChannelStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::Mo
 //==============================================================================
 // InsertSlotPanel
 
-ChannelStrip::InsertSlotPanel::InsertSlotPanel (te::AudioTrack& track_,
+ChannelStrip::InsertSlotPanel::InsertSlotPanel (te::Track& track_,
                                                  PluginManager& pluginManager_,
                                                  PluginWindowManager& pluginWindowManager_,
                                                  PluginScanner& pluginScanner_)
