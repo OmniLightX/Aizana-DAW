@@ -200,6 +200,43 @@ te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
 }
 
 //==============================================================================
+te::Clip* ClipEditor::duplicateClip (te::Clip& clip)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr) return nullptr;
+
+    auto* audioTrack = dynamic_cast<te::AudioTrack*> (clip.getClipTrack());
+    if (audioTrack == nullptr) return nullptr;
+
+    double endTime = clip.getPosition().getEnd().inSeconds();
+
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Duplicate Clip");
+    return copyClip (clip, *audioTrack, endTime);
+}
+
+//==============================================================================
+void ClipEditor::copyToClipboard (te::Clip& clip)
+{
+    clipboardClip        = &clip;
+    clipboardState       = clip.state.createCopy();
+    clipboardSourceTrack = dynamic_cast<te::AudioTrack*> (clip.getClipTrack());
+}
+
+//==============================================================================
+te::Clip* ClipEditor::pasteClip (te::AudioTrack& destTrack, double startTimeSecs)
+{
+    if (clipboardClip == nullptr || ! clipboardState.isValid())
+        return nullptr;
+
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr) return nullptr;
+
+    editManager.getUndoManager().beginNewTransaction ("Paste Clip");
+    return copyClip (*clipboardClip, destTrack, startTimeSecs);
+}
+
+//==============================================================================
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 {
     auto& undoManager = editManager.getUndoManager();

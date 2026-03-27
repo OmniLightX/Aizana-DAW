@@ -76,6 +76,90 @@ void PianoRollView::PianoKeyboard::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff555555));
     g.drawLine (static_cast<float> (getWidth()) - 0.5f, 0.0f,
                 static_cast<float> (getWidth()) - 0.5f, static_cast<float> (h), 1.0f);
+
+    // Highlight the actively-pressed key in blue
+    if (activePreviewNote >= 0)
+    {
+        const float ky = owner.yAtPitch (activePreviewNote);
+        const float kh = static_cast<float> (owner.rowHeightPx());
+        g.setColour (juce::Colour (0xff4488ff).withAlpha (0.75f));
+        g.fillRect (juce::Rectangle<float> (0.0f, ky,
+                                            static_cast<float> (getWidth()) - 1.0f, kh));
+    }
+}
+
+//==============================================================================
+// PianoKeyboard mouse / MIDI preview
+//==============================================================================
+
+int PianoRollView::PianoKeyboard::pitchFromY (float y) const noexcept
+{
+    // owner.pitchAtY maps a y-coordinate (relative to PianoRollView) to a MIDI pitch.
+    // PianoKeyboard is a direct child of PianoRollView with identical y-offset, so
+    // local y == PianoRollView-local y for the keyboard strip.
+    return juce::jlimit (0, 127, owner.pitchAtY (y));
+}
+
+void PianoRollView::PianoKeyboard::startPreviewNote (int pitch)
+{
+    if (pitch == activePreviewNote) return;
+    stopPreviewNote();
+    activePreviewNote = pitch;
+    owner.sendPreviewNoteOn (pitch, 100);
+    repaint();
+}
+
+void PianoRollView::PianoKeyboard::stopPreviewNote()
+{
+    if (activePreviewNote >= 0)
+    {
+        owner.sendPreviewNoteOff (activePreviewNote);
+        activePreviewNote = -1;
+        repaint();
+    }
+}
+
+void PianoRollView::PianoKeyboard::mouseDown (const juce::MouseEvent& e)
+{
+    startPreviewNote (pitchFromY (static_cast<float> (e.y)));
+}
+
+void PianoRollView::PianoKeyboard::mouseDrag (const juce::MouseEvent& e)
+{
+    startPreviewNote (pitchFromY (static_cast<float> (e.y)));
+}
+
+void PianoRollView::PianoKeyboard::mouseUp (const juce::MouseEvent&)
+{
+    stopPreviewNote();
+}
+
+//==============================================================================
+// PianoRollView MIDI preview helpers
+//==============================================================================
+
+void PianoRollView::sendPreviewNoteOn (int pitch, int velocity)
+{
+    // Inject a MIDI note-on via the engine's device manager.
+    // This sends to all active MIDI output devices so the instrument
+    // assigned to the track hears the preview note.
+    // Approach: engine DeviceManager → all MIDI output devices (TE v3.2.0 path).
+    auto msg = juce::MidiMessage::noteOn (1, pitch, static_cast<juce::uint8> (velocity));
+    auto& deviceManager = clip.edit.engine.getDeviceManager();
+    for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
+        if (auto* dev = deviceManager.getMidiOutDevice (i))
+            if (dev->isEnabled())
+                dev->sendMessageNow (msg);
+}
+
+void PianoRollView::sendPreviewNoteOff (int pitch)
+{
+    auto msg = juce::MidiMessage::noteOff (1, pitch, static_cast<juce::uint8> (0));
+    auto& deviceManager = clip.edit.engine.getDeviceManager();
+    for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
+        if (auto* dev = deviceManager.getMidiOutDevice (i))
+            if (dev->isEnabled())
+                dev->sendMessageNow (msg);
 }
 
 //==============================================================================
@@ -425,6 +509,15 @@ void PianoRollView::paint (juce::Graphics& g)
                         static_cast<float> (w - kScrollBarThick), y, 1.0f);
         }
     }
+
+    // ---- Marquee rubber-band selection rectangle ----
+    if (isMarqueeActive)
+    {
+        g.setColour (juce::Colour (0x334488ff));
+        g.fillRect (marqueeRect);
+        g.setColour (juce::Colour (0xff4488ff));
+        g.drawRect (marqueeRect, 1.0f);
+    }
 }
 
 //==============================================================================
@@ -590,6 +683,48 @@ void PianoRollView::resizeNote (te::MidiNote& note, double newLengthBeats)
 }
 
 //==============================================================================
+// Selection
+//==============================================================================
+
+void PianoRollView::selectAll()
+{
+    for (auto* nc : noteComponents)
+        nc->setSelected (true);
+}
+
+void PianoRollView::deselectAll()
+{
+    for (auto* nc : noteComponents)
+        nc->setSelected (false);
+    isMarqueeActive = false;
+    repaint();
+}
+
+void PianoRollView::deleteSelectedNotes()
+{
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Delete Selected Notes");
+
+    // Collect notes to delete first to avoid iterator invalidation
+    juce::Array<te::MidiNote*> toDelete;
+    for (auto* nc : noteComponents)
+        if (nc->isSelected())
+            toDelete.add (&nc->getNote());
+
+    for (auto* n : toDelete)
+        removeNote (*n);
+}
+
+void PianoRollView::updateMarqueeSelection()
+{
+    for (auto* nc : noteComponents)
+    {
+        const bool intersects = marqueeRect.intersects (nc->getBounds().toFloat());
+        nc->setSelected (intersects);
+    }
+}
+
+//==============================================================================
 // Rebuild NoteComponents from MidiList
 //==============================================================================
 
@@ -606,6 +741,11 @@ void PianoRollView::rebuildNoteComponents()
         {
             auto* nc = noteComponents.add (new NoteComponent (*note, *this, editManager));
             nc->setInScale (isInScale (note->getNoteNumber()));
+            nc->onSelectionRequest = [this] (NoteComponent* clicked)
+            {
+                deselectAll();
+                clicked->setSelected (true);
+            };
             addAndMakeVisible (nc);
             updateNoteComponentBounds (*nc);
         }
@@ -646,10 +786,63 @@ void PianoRollView::mouseDown (const juce::MouseEvent& e)
     if (!e.mods.isLeftButtonDown())
         return;
 
+    // Click on empty grid space: deselect all notes and prepare marquee
+    deselectAll();
+    marqueeStart = e.position;
+    isMarqueeActive = false;
+
+    // Also add a note (existing draw behaviour — NoteComponent will intercept if a note is clicked)
     const double beat  = beatAtX (static_cast<float> (e.x));
     const int    pitch = pitchAtY (static_cast<float> (e.y));
-
     addNote (beat, pitch);
+
+    setWantsKeyboardFocus (true);
+    grabKeyboardFocus();
+}
+
+void PianoRollView::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.x < kKeyboardWidth || e.y < kHeaderHeight)
+        return;
+
+    if (!e.mods.isLeftButtonDown())
+        return;
+
+    if (!isMarqueeActive && e.position.getDistanceFrom (marqueeStart) > 4.0f)
+        isMarqueeActive = true;
+
+    if (isMarqueeActive)
+    {
+        marqueeRect = juce::Rectangle<float>::leftTopRightBottom (
+            juce::jmin (marqueeStart.x, e.position.x),
+            juce::jmin (marqueeStart.y, e.position.y),
+            juce::jmax (marqueeStart.x, e.position.x),
+            juce::jmax (marqueeStart.y, e.position.y));
+        updateMarqueeSelection();
+        repaint();
+    }
+}
+
+void PianoRollView::mouseUp (const juce::MouseEvent&)
+{
+    isMarqueeActive = false;
+    repaint();
+}
+
+bool PianoRollView::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress (juce::KeyPress::deleteKey)
+     || key == juce::KeyPress (juce::KeyPress::backspaceKey))
+    {
+        deleteSelectedNotes();
+        return true;
+    }
+    if (key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))
+    {
+        selectAll();
+        return true;
+    }
+    return false;
 }
 
 void PianoRollView::mouseWheelMove (const juce::MouseEvent& e,

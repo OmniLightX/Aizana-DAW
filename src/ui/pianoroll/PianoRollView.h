@@ -47,8 +47,11 @@ public:
     void resized() override;
     void paint   (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp   (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e,
                          const juce::MouseWheelDetails& wheel) override;
+    bool keyPressed (const juce::KeyPress& key) override;
 
     // ---- Zoom (called by Ctrl+scroll or pinch gesture) ----
     void setHorizontalZoom (double pixelsPerBeat);
@@ -114,9 +117,19 @@ private:
     {
     public:
         explicit PianoKeyboard (PianoRollView& owner) : owner (owner) {}
-        void paint (juce::Graphics& g) override;
+
+        void paint     (juce::Graphics& g) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+        void mouseUp   (const juce::MouseEvent& e) override;
+        void mouseDrag (const juce::MouseEvent& e) override;
+
     private:
         PianoRollView& owner;
+        int activePreviewNote = -1;   // pitch currently sounding, -1 = none
+
+        void startPreviewNote (int pitch);
+        void stopPreviewNote();
+        int  pitchFromY (float y) const noexcept;
     };
     PianoKeyboard pianoKeyboard { *this };
 
@@ -135,6 +148,20 @@ private:
         juce::OwnedArray<juce::TextButton> takeButtons;
     };
     std::unique_ptr<TakesPanel> takesPanel;
+
+    // ---- MIDI preview (used by PianoKeyboard mouse handlers) ----
+    void sendPreviewNoteOn  (int pitch, int velocity = 100);
+    void sendPreviewNoteOff (int pitch);
+
+    // ---- Selection ----
+    void selectAll();
+    void deselectAll();
+    void deleteSelectedNotes();
+    void updateMarqueeSelection();
+
+    juce::Rectangle<float> marqueeRect;       // current rubber-band rect in component coords
+    bool                   isMarqueeActive = false;
+    juce::Point<float>     marqueeStart;
 
     // ---- Private helpers ----
     void addNote (double beatPosition, int pitch, float velocity = 0.75f);

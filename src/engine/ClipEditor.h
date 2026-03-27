@@ -72,6 +72,26 @@ public:
      */
     te::Clip* copyClip (te::Clip& sourceClip, te::AudioTrack& destTrack, double startTimeSecs);
 
+    /**
+     * Duplicate a clip — creates a copy immediately after the original on the same track.
+     * The copy starts at the original clip's end time.
+     * Returns pointer to the new clip, or nullptr on failure.
+     */
+    te::Clip* duplicateClip (te::Clip& clip);
+
+    /**
+     * Paste a previously copied clip onto destTrack at startTimeSecs.
+     * Returns pointer to the pasted clip, or nullptr if clipboard is empty.
+     * ClipEditor owns a simple one-slot clipboard (last Cmd+C).
+     */
+    te::Clip* pasteClip (te::AudioTrack& destTrack, double startTimeSecs);
+
+    /** Copy clip reference to the internal one-slot clipboard. */
+    void copyToClipboard (te::Clip& clip);
+
+    /** True if the clipboard holds a clip reference. */
+    bool hasClipboardContents() const noexcept { return clipboardClip != nullptr; }
+
     // -------------------------------------------------------------------------
     // Comping — multi-take workflow
     // Takes on a MidiClip use MidiClip::setCurrentTake().
@@ -116,6 +136,12 @@ public:
 
 private:
     EditManager& editManager;
+
+    // One-slot clipboard — stores a reference to the last copied clip.
+    // Weak pointer pattern: store the clip's juce::ValueTree (always valid until clip deleted).
+    juce::ValueTree  clipboardState;
+    te::AudioTrack*  clipboardSourceTrack = nullptr;  // track the clipboard clip came from
+    te::Clip*        clipboardClip        = nullptr;  // raw ptr — checked against edit's clips before use
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipEditor)
 };
