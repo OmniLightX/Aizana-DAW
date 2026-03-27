@@ -21,7 +21,8 @@ class BuiltInPluginFormat;
  *
  * FX-04 requirements: hard limiter, 0 dBFS default ceiling, GR meter.
  */
-class LimiterProcessor : public juce::AudioPluginInstance
+class LimiterProcessor : public juce::AudioPluginInstance,
+                         public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     LimiterProcessor();
@@ -61,7 +62,11 @@ public:
     // AudioPluginInstance interface
     void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
+    // AudioProcessorValueTreeState::Listener
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+
 private:
+    juce::AudioProcessorValueTreeState apvts;
     juce::dsp::Limiter<float> limiter;
 
     std::atomic<float> thresholdDB { 0.0f };

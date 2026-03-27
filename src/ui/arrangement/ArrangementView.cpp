@@ -78,6 +78,26 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
             }
         }
     }
+
+    // Draw loop region overlay
+    {
+        const auto loopInX  = (float)((loopInSecs  - scrollPositionSecs) * pixelsPerSecond);
+        const auto loopOutX = (float)((loopOutSecs - scrollPositionSecs) * pixelsPerSecond);
+
+        if (loopOutX > loopInX)
+        {
+            g.setColour (juce::Colour (0x224488ff));  // translucent blue region
+            g.fillRect (loopInX, 0.0f, loopOutX - loopInX, (float)getHeight());
+        }
+
+        // Loop In marker — green vertical bar at bottom
+        g.setColour (juce::Colour (0xff44bb44));
+        g.fillRect (juce::Rectangle<float> (loopInX - 1.0f, (float)(getHeight() - 10), 2.0f, 10.0f));
+
+        // Loop Out marker — red vertical bar at bottom
+        g.setColour (juce::Colour (0xffbb4444));
+        g.fillRect (juce::Rectangle<float> (loopOutX - 1.0f, (float)(getHeight() - 10), 2.0f, 10.0f));
+    }
 }
 
 void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
@@ -87,12 +107,26 @@ void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr) return;
 
-    // Convert click x to an absolute timeline time, accounting for scroll offset.
-    // scrollPositionSecs * pixelsPerSecond gives the horizontal scroll in pixels;
-    // adding e.x yields the absolute pixel position in the timeline.
+    // Check if click is near a loop marker (within 8px) — loop marker drag takes priority
+    const double inX  = (loopInSecs  - scrollPositionSecs) * pixelsPerSecond;
+    const double outX = (loopOutSecs - scrollPositionSecs) * pixelsPerSecond;
+
+    if (std::abs ((double)e.x - inX) < 8.0)
+    {
+        dragging = DragTarget::LoopIn;
+        return;
+    }
+    if (std::abs ((double)e.x - outX) < 8.0)
+    {
+        dragging = DragTarget::LoopOut;
+        return;
+    }
+
+    // Default: click-to-seek
+    dragging = DragTarget::Seek;
     const double clickTimeSecs = juce::jmax (
         0.0,
-        (e.x + scrollPositionSecs * pixelsPerSecond) / pixelsPerSecond);
+        scrollPositionSecs + (double)e.x / pixelsPerSecond);
 
     edit->getTransport().setPosition (
         tracktion::TimePosition::fromSeconds (clickTimeSecs));
@@ -100,9 +134,46 @@ void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
 
 void ArrangementView::RulerStrip::mouseDrag (const juce::MouseEvent& e)
 {
-    // Dragging in the ruler = scrub: update playhead position continuously.
-    // Reuses mouseDown logic — no additional state needed.
-    mouseDown (e);
+    if (dragging == DragTarget::Seek)
+    {
+        // Scrub playhead
+        auto* edit = appState.editManager.getEdit();
+        if (edit == nullptr) return;
+        const double timeSecs = juce::jmax (0.0, scrollPositionSecs + (double)e.x / pixelsPerSecond);
+        edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (timeSecs));
+        return;
+    }
+
+    if (dragging == DragTarget::None) return;
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    const double timeSecs = juce::jmax (0.0, scrollPositionSecs + (double)e.x / pixelsPerSecond);
+
+    if (dragging == DragTarget::LoopIn)
+    {
+        loopInSecs = juce::jmin (timeSecs, loopOutSecs - 0.1);
+        edit->getTransport().setLoopRange (
+            tracktion::TimeRange (
+                tracktion::TimePosition::fromSeconds (loopInSecs),
+                tracktion::TimePosition::fromSeconds (loopOutSecs)));
+    }
+    else if (dragging == DragTarget::LoopOut)
+    {
+        loopOutSecs = juce::jmax (timeSecs, loopInSecs + 0.1);
+        edit->getTransport().setLoopRange (
+            tracktion::TimeRange (
+                tracktion::TimePosition::fromSeconds (loopInSecs),
+                tracktion::TimePosition::fromSeconds (loopOutSecs)));
+    }
+
+    repaint();
+}
+
+void ArrangementView::RulerStrip::mouseUp (const juce::MouseEvent&)
+{
+    dragging = DragTarget::None;
 }
 
 juce::MouseCursor ArrangementView::RulerStrip::getMouseCursor()
@@ -173,6 +244,16 @@ void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
         onToolSelected (EditTool::Pointer);
     else
         onToolSelected (EditTool::Scissors);
+}
+
+//==============================================================================
+// Snap-to-grid helper
+
+double ArrangementView::snapTimeToGrid (double timeSecs, bool altDown) const noexcept
+{
+    if (!snapEnabled || altDown || gridResolution <= 0.0)
+        return timeSecs;
+    return std::round (timeSecs / gridResolution) * gridResolution;
 }
 
 //==============================================================================
@@ -355,6 +436,53 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     // Tool selector strip — visible in header area between Add Track and zoom buttons
     addAndMakeVisible (toolSelector);
 
+    // ---- Snap-to-grid controls ----
+    // Snap button toggles snap on/off. Uses manual toggle-state management
+    // (setClickingTogglesState(false)) to avoid JUCE double-toggle race condition
+    // (plan 01-49 invariant: onClick fires AFTER auto-toggle when setClickingTogglesState(true)).
+    snapButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff333333));
+    snapButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
+    snapButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffaaaaaa));
+    snapButton.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffffffff));
+    snapButton.setClickingTogglesState (false);
+    snapButton.setToggleState (snapEnabled, juce::dontSendNotification);
+    snapButton.onClick = [this]
+    {
+        snapEnabled = !snapEnabled;
+        snapButton.setToggleState (snapEnabled, juce::dontSendNotification);
+        snapButton.repaint();
+    };
+    addAndMakeVisible (snapButton);
+
+    // Grid resolution ComboBox — 1/1 bar through 1/16 at current BPM.
+    // IDs 1-5 map to 1/1, 1/2, 1/4, 1/8, 1/16.
+    gridCombo.addItem ("1/1",  1);
+    gridCombo.addItem ("1/2",  2);
+    gridCombo.addItem ("1/4",  3);
+    gridCombo.addItem ("1/8",  4);
+    gridCombo.addItem ("1/16", 5);
+    gridCombo.setSelectedId (3, juce::dontSendNotification);  // default 1/4 note
+    gridCombo.onChange = [this]
+    {
+        auto* edit = appState.editManager.getEdit();
+        const double bpm = (edit != nullptr && edit->tempoSequence.getNumTempos() > 0)
+                               ? edit->tempoSequence.getTempo (0)->getBpm()
+                               : 120.0;
+        const double beatSecs = 60.0 / bpm;
+        switch (gridCombo.getSelectedId())
+        {
+            case 1:  gridResolution = beatSecs * 4.0;   break;  // 1/1 bar (4/4)
+            case 2:  gridResolution = beatSecs * 2.0;   break;  // 1/2
+            case 3:  gridResolution = beatSecs * 1.0;   break;  // 1/4
+            case 4:  gridResolution = beatSecs * 0.5;   break;  // 1/8
+            case 5:  gridResolution = beatSecs * 0.25;  break;  // 1/16
+            default: gridResolution = beatSecs;          break;
+        }
+    };
+    // Trigger initial resolution calculation
+    gridCombo.onChange();
+    addAndMakeVisible (gridCombo);
+
     // Keyboard focus: any mouse click in the arrangement area reclaims focus so
     // E/R/S tool shortcuts work reliably without requiring manual tab navigation.
     setWantsKeyboardFocus (true);
@@ -399,6 +527,12 @@ void ArrangementView::resized()
     // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
     zoomInButton.setBounds  (getWidth() - 28, headerStrip.getY() + 4, 20, 20);
     zoomOutButton.setBounds (getWidth() - 52, headerStrip.getY() + 4, 20, 20);
+
+    // Snap controls — to the right of the tool selector, before the zoom buttons.
+    // snapButton (40px) + 4px gap + gridCombo (56px) placed after toolSelector.
+    const int snapBtnX = 80 + 4 + 76 + 4;  // addTrackButton(80) + gap(4) + toolSelector(76) + gap(4)
+    snapButton.setBounds (snapBtnX, headerStrip.getY() + 4, 40, 20);
+    gridCombo.setBounds  (snapBtnX + 44, headerStrip.getY() + 4, 56, 20);
 
     // Ruler strip — full width, sits between header strip and track rows
     // The ruler portion under the header column (left of kHeaderWidth) is filled
@@ -956,6 +1090,7 @@ void ArrangementView::rebuildTrackRows()
         // Track header (left panel) — passes plugin management refs for right-click menu
         auto* header = trackHeaders.add (new TrackHeader (*audioTrack,
                                                           mixerEngine,
+                                                          automationEngine,
                                                           pluginManager,
                                                           pluginWindowManager,
                                                           pluginScanner));

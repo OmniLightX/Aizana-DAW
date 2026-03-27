@@ -6,7 +6,21 @@ LimiterProcessor::LimiterProcessor()
     : juce::AudioPluginInstance (BusesProperties()
           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+    , apvts (*this, nullptr, "LimiterState",
+        {
+            std::make_unique<juce::AudioParameterFloat>("threshold", "Threshold (dBFS)", -24.0f, 0.0f,    0.0f),
+            std::make_unique<juce::AudioParameterFloat>("release",   "Release (ms)",      10.0f, 1000.0f, 100.0f),
+        })
 {
+    apvts.addParameterListener("threshold", this);
+    apvts.addParameterListener("release",   this);
+}
+
+void LimiterProcessor::parameterChanged (const juce::String& paramID, float newValue)
+{
+    if      (paramID == "threshold") thresholdDB.store(newValue, std::memory_order_relaxed);
+    else if (paramID == "release")   releaseMs.store(newValue,   std::memory_order_relaxed);
+    paramsDirty.store(true, std::memory_order_relaxed);
 }
 
 void LimiterProcessor::setThreshold(float dBFS)
