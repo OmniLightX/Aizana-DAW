@@ -191,6 +191,50 @@ void EQProcessor::applyCoefficients(int bandIndex,
 }
 
 // ---------------------------------------------------------------------------
+// State persistence
+// ---------------------------------------------------------------------------
+
+void EQProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    juce::XmlElement xml ("EQState");
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        const EQBand& b = bands[i];
+        auto* bandXml = xml.createNewChildElement ("Band" + juce::String (i));
+        bandXml->setAttribute ("type",    (int) b.type);
+        bandXml->setAttribute ("freq",    (double) b.frequencyHz);
+        bandXml->setAttribute ("gain",    (double) b.gainDB);
+        bandXml->setAttribute ("q",       (double) b.Q);
+        bandXml->setAttribute ("enabled", b.enabled ? 1 : 0);
+    }
+
+    copyXmlToBinary (xml, destData);
+}
+
+void EQProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
+    if (xml == nullptr || ! xml->hasTagName ("EQState"))
+        return;
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        auto* bandXml = xml->getChildByName ("Band" + juce::String (i));
+        if (bandXml == nullptr)
+            continue;
+
+        EQBand b;
+        b.type        = (EQBandType) bandXml->getIntAttribute  ("type",    (int) EQBandType::Peak);
+        b.frequencyHz = (float)      bandXml->getDoubleAttribute ("freq",   1000.0);
+        b.gainDB      = (float)      bandXml->getDoubleAttribute ("gain",   0.0);
+        b.Q           = (float)      bandXml->getDoubleAttribute ("q",      0.707);
+        b.enabled     =              bandXml->getIntAttribute    ("enabled", 0) != 0;
+        setBand (i, b);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AudioPluginInstance interface
 // ---------------------------------------------------------------------------
 
