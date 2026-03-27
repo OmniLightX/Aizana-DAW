@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
+#include "engine/AutomationEngine.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/pluginwin/PluginWindowManager.h"
@@ -32,6 +33,7 @@ class TrackHeader : public juce::Component
 public:
     TrackHeader (te::AudioTrack&       track,
                  MixerEngine&          mixerEngine,
+                 AutomationEngine&     automationEngine,
                  PluginManager&        pluginManager,
                  PluginWindowManager&  pluginWindowManager,
                  PluginScanner&        pluginScanner);
@@ -53,6 +55,7 @@ public:
 private:
     te::AudioTrack&      track;
     MixerEngine&         mixerEngine;
+    AutomationEngine&    automationEngine;
     PluginManager&       pluginManager;
     PluginWindowManager& pluginWindowManager;
     PluginScanner&       pluginScanner;
@@ -62,6 +65,11 @@ private:
     juce::TextButton soloButton { "S" };
     juce::TextButton armButton  { "R" };
 
+    juce::TextButton readButton  { "R" };
+    juce::TextButton writeButton { "W" };
+    juce::TextButton touchButton { "T" };
+    juce::TextButton latchButton { "L" };
+
     juce::Slider volumeSlider;
     juce::Label  panLabel;
 
@@ -70,6 +78,9 @@ private:
     void muteClicked();
     void soloClicked();
     void armClicked();
+
+    void setAutomationMode (AutomationMode mode);
+    void updateModeButtonStates();
 
     void updatePanLabel();
 

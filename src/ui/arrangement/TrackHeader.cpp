@@ -6,11 +6,13 @@
 
 TrackHeader::TrackHeader (te::AudioTrack&       track_,
                           MixerEngine&          mixerEngine_,
+                          AutomationEngine&     automationEngine_,
                           PluginManager&        pluginManager_,
                           PluginWindowManager&  pluginWindowManager_,
                           PluginScanner&        pluginScanner_)
     : track             (track_)
     , mixerEngine       (mixerEngine_)
+    , automationEngine  (automationEngine_)
     , pluginManager     (pluginManager_)
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner     (pluginScanner_)
@@ -66,6 +68,22 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     panLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (panLabel);
     updatePanLabel();
+
+    // Automation mode buttons (R/W/T/L)
+    for (auto* btn : { &readButton, &writeButton, &touchButton, &latchButton })
+    {
+        btn->setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff2a2a2a));
+        btn->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
+        btn->setClickingTogglesState (false);
+        addAndMakeVisible (btn);
+    }
+
+    readButton.onClick  = [this] { setAutomationMode (AutomationMode::read);  };
+    writeButton.onClick = [this] { setAutomationMode (AutomationMode::write); };
+    touchButton.onClick = [this] { setAutomationMode (AutomationMode::touch); };
+    latchButton.onClick = [this] { setAutomationMode (AutomationMode::latch); };
+
+    updateModeButtonStates();
 }
 
 //==============================================================================
@@ -88,11 +106,22 @@ void TrackHeader::resized()
 
     // Buttons in a row at the remaining area (top of what's left)
     const int btnW = 28;
-    muteButton.setBounds (controlArea.removeFromLeft (btnW));
-    controlArea.removeFromLeft (2);
-    soloButton.setBounds (controlArea.removeFromLeft (btnW));
-    controlArea.removeFromLeft (2);
-    armButton.setBounds  (controlArea.removeFromLeft (btnW));
+    auto msrRow = controlArea.removeFromTop (20);
+    muteButton.setBounds (msrRow.removeFromLeft (btnW));
+    msrRow.removeFromLeft (2);
+    soloButton.setBounds (msrRow.removeFromLeft (btnW));
+    msrRow.removeFromLeft (2);
+    armButton.setBounds  (msrRow.removeFromLeft (btnW));
+
+    // Automation mode row: R/W/T/L below M/S/R row
+    controlArea.removeFromTop (2);
+    const int kModeRowH = 18;
+    auto modeRow = controlArea.removeFromTop (kModeRowH);
+    const int modeBtnW = modeRow.getWidth() / 4;
+    readButton.setBounds  (modeRow.removeFromLeft (modeBtnW));
+    writeButton.setBounds (modeRow.removeFromLeft (modeBtnW));
+    touchButton.setBounds (modeRow.removeFromLeft (modeBtnW));
+    latchButton.setBounds (modeRow);
 }
 
 void TrackHeader::paint (juce::Graphics& g)
@@ -343,6 +372,23 @@ void TrackHeader::armClicked()
     // a recording session.
     const bool armed = armButton.getToggleState();
     track.state.setProperty ("armed", armed, nullptr);
+}
+
+//==============================================================================
+
+void TrackHeader::setAutomationMode (AutomationMode mode)
+{
+    automationEngine.setMode (track, mode);
+    updateModeButtonStates();
+}
+
+void TrackHeader::updateModeButtonStates()
+{
+    AutomationMode current = automationEngine.getMode (track);
+    readButton.setToggleState  (current == AutomationMode::read,  juce::dontSendNotification);
+    writeButton.setToggleState (current == AutomationMode::write, juce::dontSendNotification);
+    touchButton.setToggleState (current == AutomationMode::touch, juce::dontSendNotification);
+    latchButton.setToggleState (current == AutomationMode::latch, juce::dontSendNotification);
 }
 
 //==============================================================================
