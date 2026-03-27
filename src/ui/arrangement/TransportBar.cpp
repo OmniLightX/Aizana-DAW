@@ -70,10 +70,27 @@ TransportBar::TransportBar (ApplicationState& appState_)
         appState.audioEngine.getMetronome().setEnabled (enabled);
     };
 
+    // Loop button — toggles transport looping; highlight synced by timerCallback
+    loopButton.setClickingTogglesState (false);   // manual toggle via onClick
+    loopButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    loopButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
+    loopButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
+    loopButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    loopButton.onClick = [this]
+    {
+        auto* edit = appState.editManager.getEdit();
+        if (edit == nullptr) return;
+        auto& transport = edit->getTransport();
+        bool newLooping = ! transport.looping;
+        transport.looping = newLooping;
+        loopButton.setToggleState (newLooping, juce::dontSendNotification);
+    };
+
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
     addAndMakeVisible (recordButton);
     addAndMakeVisible (metronomeButton);
+    addAndMakeVisible (loopButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
     addAndMakeVisible (sampleRateLabel);
@@ -102,6 +119,8 @@ void TransportBar::resized()
     recordButton.setBounds    (area.removeFromLeft (buttonW).withHeight (buttonH));
     area.removeFromLeft (4);
     metronomeButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
+    area.removeFromLeft (4);
+    loopButton.setBounds      (area.removeFromLeft (44).withHeight (buttonH));
 
     // Right side: sample rate + BPM display (rightmost to leftmost)
     sampleRateLabel.setBounds (area.removeFromRight (70));
@@ -143,6 +162,7 @@ void TransportBar::timerCallback()
     // Toggle button states based on playback
     playButton.setToggleState (transport.isPlaying(), juce::dontSendNotification);
     recordButton.setToggleState (transport.isRecording(), juce::dontSendNotification);
+    loopButton.setToggleState (transport.looping.get(), juce::dontSendNotification);
 
     // Keep BPM label in sync (handles undo/redo changes)
     if (! bpmLabel.isBeingEdited())

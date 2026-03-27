@@ -35,6 +35,9 @@ private:
     /** Enables/disables the metronome click track. */
     juce::TextButton metronomeButton { "Click" };
 
+    /** Enables/disables loop playback; lit when transport.looping is true. */
+    juce::TextButton loopButton { "Loop" };
+
     /** Shows current playback position — e.g. "0:00:00.000". Updated every 30ms. */
     juce::Label positionLabel;
 
