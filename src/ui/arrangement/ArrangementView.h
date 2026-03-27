@@ -126,6 +126,10 @@ public:
     // Track header column width — needed by ClipComponent for scissors coordinate conversion
     static constexpr int kHeaderWidth = 160;
 
+    // Snap helper — public so ClipComponent can call it during drag without needing
+    // a separate reference. Returns snapped time; bypasses snap when Alt is held.
+    double snapTimeToGrid (double timeSecs, bool altDown = false) const noexcept;
+
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
@@ -136,8 +140,10 @@ private:
 
         // Click-to-seek: left-click on ruler positions the playhead
         void mouseDown (const juce::MouseEvent& e) override;
-        // Drag-to-scrub: dragging along the ruler updates playhead continuously
+        // Drag loop markers or scrub
         void mouseDrag (const juce::MouseEvent& e) override;
+        // Release drag target
+        void mouseUp   (const juce::MouseEvent& e) override;
         // Signal to users that the ruler is an interactive scrub target
         juce::MouseCursor getMouseCursor() override;
 
@@ -145,6 +151,13 @@ private:
         ApplicationState& appState;
         double& pixelsPerSecond;
         double& scrollPositionSecs;
+
+        // Loop marker positions in seconds
+        double loopInSecs  = 1.0;
+        double loopOutSecs = 5.0;
+
+        enum class DragTarget { None, LoopIn, LoopOut, Seek };
+        DragTarget dragging = DragTarget::None;
     };
 
     // ---- Viewport subclass that lets left/right arrow keys pass to parent ----
@@ -263,6 +276,12 @@ private:
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
     double trackHeightScale   =   1.0;  // Vertical zoom: 0.5 (compact) to 3.0 (tall)
+
+    // ---- Snap-to-grid ----
+    bool            snapEnabled    = true;
+    double          gridResolution = 0.5;   // seconds per grid division (1/4 note at 120 BPM)
+    juce::TextButton snapButton    { "Snap" };
+    juce::ComboBox   gridCombo;             // 1/1, 1/2, 1/4, 1/8, 1/16
 
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();
