@@ -843,6 +843,55 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         }
     }
 
+    // ---- Clip clipboard shortcuts (Cmd+C / Cmd+D / Cmd+V) ----
+
+    // Cmd+C — copy selected clip to clipboard
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'c' || key.getKeyCode() == 'C'))
+    {
+        if (auto* cc = selectedClips.getFirst())
+            clipEditor.copyToClipboard (cc->getClip());
+        return true;
+    }
+
+    // Cmd+D — duplicate selected clip (places copy immediately after original)
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'd' || key.getKeyCode() == 'D'))
+    {
+        if (auto* cc = selectedClips.getFirst())
+        {
+            clipEditor.duplicateClip (cc->getClip());
+            rebuildTrackRows();
+        }
+        return true;
+    }
+
+    // Cmd+V — paste clipboard clip at playhead position
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'v' || key.getKeyCode() == 'V'))
+    {
+        if (clipEditor.hasClipboardContents())
+        {
+            if (auto* currentEdit = appState.editManager.getEdit())
+            {
+                // Paste to the track of the selected clip, or the first audio track
+                te::AudioTrack* targetTrack = nullptr;
+                if (auto* cc = selectedClips.getFirst())
+                    targetTrack = dynamic_cast<te::AudioTrack*> (cc->getClip().getClipTrack());
+                if (targetTrack == nullptr)
+                {
+                    auto tracks = te::getAudioTracks (*currentEdit);
+                    if (tracks.size() > 0)
+                        targetTrack = tracks[0];
+                }
+                if (targetTrack != nullptr)
+                {
+                    double pasteTime = currentEdit->getTransport().getPosition().inSeconds();
+                    clipEditor.pasteClip (*targetTrack, pasteTime);
+                    rebuildTrackRows();
+                }
+            }
+        }
+        return true;
+    }
+
     return false;
 }
 
