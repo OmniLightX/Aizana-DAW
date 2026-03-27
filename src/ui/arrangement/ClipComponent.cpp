@@ -129,7 +129,14 @@ void ClipComponent::mouseDrag (const juce::MouseEvent& e)
     const int currentX = e.getEventRelativeTo (getParentComponent()).x;
     const int deltaX = currentX - dragStartMouseX;
     const double deltaSecs = deltaX / pixelsPerSecond;
-    const double newStartSecs = juce::jmax (0.0, dragStartClipTimeSecs + deltaSecs);
+    const double rawNewStartSecs = juce::jmax (0.0, dragStartClipTimeSecs + deltaSecs);
+
+    // Apply snap-to-grid: ask the parent ArrangementView to snap the time.
+    // Alt held during drag bypasses snap (standard DAW convention).
+    double snappedStart = rawNewStartSecs;
+    if (auto* av = findParentComponentOfClass<ArrangementView>())
+        snappedStart = av->snapTimeToGrid (rawNewStartSecs, e.mods.isAltDown());
+    const double newStartSecs = snappedStart;
 
     // Move clip position (undoable via ClipEditor)
     clipEditor.moveClip (clip, newStartSecs);
