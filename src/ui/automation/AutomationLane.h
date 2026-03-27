@@ -34,6 +34,10 @@ public:
     void setParameterID (const juce::String& newParamID);
     juce::String getParameterID() const { return parameterID; }
 
+    /** Switch between pointer mode (drag existing points) and draw mode (always create). */
+    void setDrawMode (bool drawModeActive);
+    bool isDrawMode() const noexcept { return drawMode; }
+
     void paint           (juce::Graphics& g)                  override;
     void resized         ()                                    override;
     void mouseDown       (const juce::MouseEvent& e)           override;
@@ -72,6 +76,9 @@ private:
     float  segmentDragStartY      = 0.0f; // mouse Y at drag start
     float  segmentLeftStartValue  = 0.0f; // left point value at drag start
     float  segmentRightStartValue = 0.0f; // right point value at drag start
+
+    bool drawMode = false;
+    juce::TextButton drawModeButton { "P" };   // Pencil toggle in the lane header
 
     // Parameter selector (Volume / Pan)
     juce::ComboBox paramSelector;

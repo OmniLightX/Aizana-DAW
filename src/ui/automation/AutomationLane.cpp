@@ -30,6 +30,13 @@ AutomationLane::AutomationLane (te::AudioTrack&    track_,
     };
     addAndMakeVisible (paramSelector);
 
+    // Draw mode (Pencil) button — toggles always-create mode
+    drawModeButton.setClickingTogglesState (false);   // manual toggle via setDrawMode
+    drawModeButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff333333));
+    drawModeButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
+    drawModeButton.onClick = [this] { setDrawMode (!drawMode); };
+    addAndMakeVisible (drawModeButton);
+
     // dB tooltip label — shown near cursor while dragging a volume automation point/segment
     dBLabel.setFont (juce::FontOptions (11.0f));
     dBLabel.setColour (juce::Label::textColourId, juce::Colours::white);
@@ -185,6 +192,16 @@ void AutomationLane::drawDBScale (juce::Graphics& g) const
 
 void AutomationLane::mouseDown (const juce::MouseEvent& e)
 {
+    // Draw mode: always create a new point, skip proximity check
+    if (drawMode && e.mods.isLeftButtonDown() && !e.mods.isAltDown())
+    {
+        double timeSecs  = xToTime (e.position.x);
+        float  normValue = yToValue (e.position.y);
+        normValue = juce::jlimit (0.0f, 1.0f, normValue);
+        automationEngine.addAutomationPoint (track, parameterID, timeSecs, normValue);
+        return;
+    }
+
     // Right-click: delete the nearest point if within threshold
     if (e.mods.isRightButtonDown())
     {
@@ -485,8 +502,9 @@ bool AutomationLane::findSegmentAtPosition (juce::Point<float> pos, int& leftIdx
 
 void AutomationLane::resized()
 {
-    // Parameter selector in top-right corner
+    // Parameter selector in top-right corner; 'P' pencil button just to its left
     paramSelector.setBounds (getWidth() - 84, 2, 80, 20);
+    drawModeButton.setBounds (paramSelector.getX() - 24, 2, 20, 18);
 }
 
 //==============================================================================
@@ -496,6 +514,20 @@ void AutomationLane::resized()
 void AutomationLane::setParameterID (const juce::String& newParamID)
 {
     parameterID = newParamID;
+    repaint();
+}
+
+//==============================================================================
+// setDrawMode
+//==============================================================================
+
+void AutomationLane::setDrawMode (bool drawModeActive)
+{
+    drawMode = drawModeActive;
+    drawModeButton.setToggleState (drawModeActive, juce::dontSendNotification);
+    setMouseCursor (drawModeActive
+        ? juce::MouseCursor::CrosshairCursor
+        : juce::MouseCursor::NormalCursor);
     repaint();
 }
 
