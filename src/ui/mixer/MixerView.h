@@ -72,7 +72,7 @@ private:
     // In Phase 1 the master meter from AudioEngine feeds all strips instead.
     std::map<te::AudioTrack*, std::unique_ptr<MeterProcessor>> meterProcessors;
 
-    static constexpr int kStripWidth = 96;  // Widened from 80 to accommodate 16px dB scale column in MeterBar
+    static constexpr int kStripWidth = 120;  // Widened from 96 to 120 to allow dB scale + insert slots to coexist (gap-59)
     int cachedStripHeight = 200;  // Never go below 200px; updated on valid resized() calls
 
     /**

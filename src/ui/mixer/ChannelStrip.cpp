@@ -500,35 +500,49 @@ ChannelStrip::~ChannelStrip()
 
 void ChannelStrip::resized()
 {
-    auto area = getLocalBounds().reduced (4);
+    auto area = getLocalBounds();
 
-    // Track name at bottom
-    trackNameLabel.setBounds (area.removeFromBottom (18));
-    area.removeFromBottom (2);
+    // Fixed heights for all bottom elements (allocated from bottom up):
+    //   pan row = knob(36) + value label(12) + PAN label(12) = 60px
+    //   fader = 80px
+    //   solo/mute buttons = 22px
+    //   insert slots = 6 * 16 = 96px
+    //   track name = 18px
+    // Total fixed = 276px; MeterBar gets whatever remains (guarded >=0).
 
-    // Insert slot panel above track name (6 slots * 16px = 96px)
-    const int insertH = InsertSlotPanel::kMaxSlots * InsertSlotPanel::kSlotHeight;
-    insertSlotPanel.setBounds (area.removeFromBottom (insertH));
-    area.removeFromBottom (2);
+    const int kNameH   = 18;
+    const int kSlotH   = InsertSlotPanel::kMaxSlots * InsertSlotPanel::kSlotHeight; // 96
+    const int kBtnH    = 22;
+    const int kFaderH  = 80;
+    const int kPanH    = 36;
+    const int kPanValH = 12;
+    const int kPanLblH = 12;
 
-    // Solo + Mute buttons above insert panel
-    auto buttonArea = area.removeFromBottom (22);
-    soloButton.setBounds (buttonArea.removeFromLeft (buttonArea.getWidth() / 2).reduced (1));
-    muteButton.setBounds (buttonArea.reduced (1));
+    auto nameArea   = area.removeFromBottom (kNameH);
+    auto slotArea   = area.removeFromBottom (juce::jmax (0, kSlotH));
+    auto btnArea    = area.removeFromBottom (juce::jmax (0, kBtnH));
+    auto faderArea  = area.removeFromBottom (juce::jmax (0, kFaderH));
+    auto panLblArea = area.removeFromBottom (juce::jmax (0, kPanLblH));
+    auto panValArea = area.removeFromBottom (juce::jmax (0, kPanValH));
+    auto panArea    = area.removeFromBottom (juce::jmax (0, kPanH));
 
-    // Without text box, the full height is the rotary dial itself — use 55px to make it prominent
-    const int panH = juce::jmax (48, juce::jmin (60, area.getHeight() / 4));
-    panKnob.setBounds (area.removeFromTop (panH));
-    panValueLabel.setBounds (area.removeFromTop (12));  // numeric readout: L33 / C / R48
-    panLabel.setBounds (area.removeFromTop (12));
+    // Remaining area goes to the meter bar — guard against negative height
+    auto meterArea = area;
+    if (meterArea.getHeight() < 0)
+        meterArea.setHeight (0);
 
-    // Meter bar on the left ~40% width, volume fader on the right ~60%
-    // At 96px strip (area ~88px): meterW = ~35px giving 35-16=19px for bars after kScaleW reserve
-    const int meterW = juce::jmax (24, area.getWidth() * 40 / 100);
-    meterBar.setBounds (area.removeFromLeft (meterW));
+    meterBar.setBounds     (meterArea);
+    panKnob.setBounds      (panArea);
+    panValueLabel.setBounds(panValArea);
+    panLabel.setBounds     (panLblArea);
+    volumeFader.setBounds  (faderArea);
 
-    // Volume fader takes remaining space
-    volumeFader.setBounds (area);
+    // Solo and Mute buttons side by side
+    soloButton.setBounds (btnArea.removeFromLeft (btnArea.getWidth() / 2).reduced (1));
+    muteButton.setBounds (btnArea.reduced (1));
+
+    insertSlotPanel.setBounds (slotArea);
+    trackNameLabel.setBounds  (nameArea);
 }
 
 void ChannelStrip::paint (juce::Graphics& g)
