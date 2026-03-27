@@ -149,7 +149,7 @@ void PianoRollView::sendPreviewNoteOn (int pitch, int velocity)
     for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
         if (auto* dev = deviceManager.getMidiOutDevice (i))
             if (dev->isEnabled())
-                dev->sendMessageNow (msg);
+                dev->fireMessage (msg);
 }
 
 void PianoRollView::sendPreviewNoteOff (int pitch)
@@ -159,7 +159,7 @@ void PianoRollView::sendPreviewNoteOff (int pitch)
     for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
         if (auto* dev = deviceManager.getMidiOutDevice (i))
             if (dev->isEnabled())
-                dev->sendMessageNow (msg);
+                dev->fireMessage (msg);
 }
 
 //==============================================================================
