@@ -150,6 +150,24 @@ void CompressorProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 }
 
 // ---------------------------------------------------------------------------
+// State persistence
+// ---------------------------------------------------------------------------
+
+void CompressorProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    copyXmlToBinary (*xml, destData);
+}
+
+void CompressorProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
+    if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
+        apvts.replaceState (juce::ValueTree::fromXml (*xml));
+}
+
+// ---------------------------------------------------------------------------
 // AudioPluginInstance interface
 // ---------------------------------------------------------------------------
 
