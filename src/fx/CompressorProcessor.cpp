@@ -6,7 +6,32 @@ CompressorProcessor::CompressorProcessor()
     : juce::AudioPluginInstance (BusesProperties()
           .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    , apvts (*this, nullptr, "CompressorState",
+        {
+            std::make_unique<juce::AudioParameterFloat>("threshold", "Threshold",    -60.0f, 0.0f,    -20.0f),
+            std::make_unique<juce::AudioParameterFloat>("ratio",     "Ratio",          1.0f, 20.0f,     4.0f),
+            std::make_unique<juce::AudioParameterFloat>("attack",    "Attack (ms)",    0.1f, 200.0f,   10.0f),
+            std::make_unique<juce::AudioParameterFloat>("release",   "Release (ms)",  10.0f, 2000.0f, 100.0f),
+            std::make_unique<juce::AudioParameterFloat>("knee",      "Knee (dB)",      0.0f, 24.0f,     6.0f),
+            std::make_unique<juce::AudioParameterFloat>("makeup",    "Makeup (dB)",  -12.0f, 24.0f,     0.0f),
+        })
 {
+    apvts.addParameterListener("threshold", this);
+    apvts.addParameterListener("ratio",     this);
+    apvts.addParameterListener("attack",    this);
+    apvts.addParameterListener("release",   this);
+    apvts.addParameterListener("knee",      this);
+    apvts.addParameterListener("makeup",    this);
+}
+
+void CompressorProcessor::parameterChanged (const juce::String& paramID, float newValue)
+{
+    if      (paramID == "threshold") thresholdDB.store(newValue,  std::memory_order_relaxed);
+    else if (paramID == "ratio")     ratio.store(newValue,        std::memory_order_relaxed);
+    else if (paramID == "attack")    attackMs.store(newValue,     std::memory_order_relaxed);
+    else if (paramID == "release")   releaseMs.store(newValue,    std::memory_order_relaxed);
+    else if (paramID == "knee")      kneeDB.store(newValue,       std::memory_order_relaxed);
+    else if (paramID == "makeup")    makeupGainDB.store(newValue, std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setThreshold(float dBFS)  { thresholdDB.store(dBFS, std::memory_order_relaxed); }

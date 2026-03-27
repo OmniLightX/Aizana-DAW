@@ -27,7 +27,8 @@ enum class ReverbMode { Room, Hall, Plate };
  *
  * FX-03 requirements: Room/Hall/Plate modes, wet/dry control, no latency.
  */
-class ReverbProcessor : public juce::AudioPluginInstance
+class ReverbProcessor : public juce::AudioPluginInstance,
+                        public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     ReverbProcessor();
@@ -64,7 +65,11 @@ public:
     // AudioPluginInstance interface
     void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
+    // AudioProcessorValueTreeState::Listener
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+
 private:
+    juce::AudioProcessorValueTreeState apvts;
     // -------------------------------------------------------------------------
     // Internal comb filter: delay line + damping low-pass in the feedback path
     // -------------------------------------------------------------------------

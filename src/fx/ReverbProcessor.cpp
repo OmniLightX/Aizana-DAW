@@ -53,7 +53,30 @@ ReverbProcessor::ReverbProcessor()
     : juce::AudioPluginInstance (BusesProperties()
           .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    , apvts (*this, nullptr, "ReverbState",
+        {
+            std::make_unique<juce::AudioParameterFloat>("roomSize",  "Room Size",         0.0f, 1.0f,   0.5f),
+            std::make_unique<juce::AudioParameterFloat>("damping",   "Damping",           0.0f, 1.0f,   0.5f),
+            std::make_unique<juce::AudioParameterFloat>("preDelay",  "Pre-Delay (ms)",    0.0f, 100.0f, 0.0f),
+            std::make_unique<juce::AudioParameterFloat>("wet",       "Wet/Dry",           0.0f, 1.0f,   0.3f),
+            std::make_unique<juce::AudioParameterChoice>("mode",     "Mode",
+                juce::StringArray{"Room", "Hall", "Plate"}, 0),
+        })
 {
+    apvts.addParameterListener("roomSize", this);
+    apvts.addParameterListener("damping",  this);
+    apvts.addParameterListener("preDelay", this);
+    apvts.addParameterListener("wet",      this);
+    apvts.addParameterListener("mode",     this);
+}
+
+void ReverbProcessor::parameterChanged (const juce::String& paramID, float newValue)
+{
+    if      (paramID == "roomSize") roomSizeParam.store(newValue,            std::memory_order_relaxed);
+    else if (paramID == "damping")  dampingParam.store(newValue,             std::memory_order_relaxed);
+    else if (paramID == "preDelay") preDelayMs.store(newValue,               std::memory_order_relaxed);
+    else if (paramID == "wet")      wetParam.store(newValue,                 std::memory_order_relaxed);
+    else if (paramID == "mode")     currentMode.store((int)newValue,         std::memory_order_relaxed);
 }
 
 void ReverbProcessor::setMode(ReverbMode mode)    { currentMode.store(static_cast<int>(mode), std::memory_order_relaxed); }

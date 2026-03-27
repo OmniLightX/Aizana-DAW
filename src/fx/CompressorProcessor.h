@@ -22,7 +22,8 @@ class BuiltInPluginFormat;
  *
  * FX-02 requirements: attack, release, threshold, ratio, knee, GR meter.
  */
-class CompressorProcessor : public juce::AudioPluginInstance
+class CompressorProcessor : public juce::AudioPluginInstance,
+                            public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     CompressorProcessor();
@@ -64,7 +65,11 @@ public:
     // AudioPluginInstance interface
     void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
+    // AudioProcessorValueTreeState::Listener
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+
 private:
+    juce::AudioProcessorValueTreeState apvts;
     // Parameters (atomic for lock-free message-thread writes)
     std::atomic<float> thresholdDB    { -20.0f };
     std::atomic<float> ratio          { 4.0f };
