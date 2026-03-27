@@ -39,12 +39,20 @@ public:
     /** Called by PianoRollView when scale settings change so colour can update. */
     void setInScale (bool inScale);
 
+    /** Selection state — highlighted with a brighter fill when selected. */
+    void setSelected (bool shouldBeSelected);
+    bool isSelected() const noexcept { return selected; }
+
+    /** Callback invoked on left-click so PianoRollView can deselect others first. */
+    std::function<void(NoteComponent*)> onSelectionRequest;
+
 private:
     te::MidiNote&  note;
     PianoRollView& parent;
     EditManager&   editManager;
 
     bool inScale          = true;   // Affects rendering colour
+    bool selected         = false;  // Selection state — shown as brighter fill
     bool isDraggingLength = false;  // True when dragging the right edge to resize
     bool isDraggingNote   = false;  // True when dragging the body to move
 

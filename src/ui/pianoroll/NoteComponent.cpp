@@ -23,6 +23,15 @@ void NoteComponent::setInScale (bool inScaleFlag)
     }
 }
 
+void NoteComponent::setSelected (bool shouldBeSelected)
+{
+    if (selected != shouldBeSelected)
+    {
+        selected = shouldBeSelected;
+        repaint();
+    }
+}
+
 //==============================================================================
 
 void NoteComponent::paint (juce::Graphics& g)
@@ -33,6 +42,10 @@ void NoteComponent::paint (juce::Graphics& g)
     juce::Colour baseColour = inScale
         ? juce::Colour (0xff1fa882)   // teal
         : juce::Colour (0xffb84040);  // muted red — out of scale
+
+    // Brighter when selected
+    if (selected)
+        baseColour = baseColour.brighter (0.5f);
 
     // Slightly brighter when mouse-over
     if (isMouseOver())
@@ -76,6 +89,13 @@ void NoteComponent::mouseDown (const juce::MouseEvent& e)
     // Determine drag mode: right edge = resize, body = move
     isDraggingLength = (e.x >= getWidth() - kResizeEdgeWidth);
     isDraggingNote   = !isDraggingLength;
+
+    // Left-click selects this note (callback lets PianoRollView deselect others)
+    if (e.mods.isLeftButtonDown() && !e.mods.isCommandDown())
+    {
+        if (onSelectionRequest)
+            onSelectionRequest (this);
+    }
 
     editManager.getUndoManager().beginNewTransaction();
 }
