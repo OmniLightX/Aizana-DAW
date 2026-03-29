@@ -63,7 +63,7 @@ private:
     juce::Label      trackNameLabel;
     juce::TextButton muteButton { "M" };
     juce::TextButton soloButton { "S" };
-    juce::TextButton armButton  { "R" };
+    juce::TextButton armButton  { "REC" };
 
     juce::TextButton readButton  { "R" };
     juce::TextButton writeButton { "W" };

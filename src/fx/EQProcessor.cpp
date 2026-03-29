@@ -30,12 +30,13 @@ EQProcessor::EQProcessor()
           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
-    // Default: all bands are flat peak filters (0 dB gain = unity)
-    for (int i = 0; i < NumBands; ++i)
-    {
-        bands[i] = EQBand{};
-        bands[i].enabled = false;  // Start with all bands bypassed
-    }
+    // Default: 4 bands spread across spectrum, all flat (0 dB), all enabled so
+    // the EQ handles are immediately visible and draggable in the editor.
+    // The EQ is transparent at 0 dB — enabling bands doesn't change the sound.
+    bands[0] = { EQBandType::LowShelf,    80.0f, 0.0f, 0.707f, true };
+    bands[1] = { EQBandType::Peak,       500.0f, 0.0f, 0.707f, true };
+    bands[2] = { EQBandType::Peak,      3000.0f, 0.0f, 0.707f, true };
+    bands[3] = { EQBandType::HighShelf, 10000.0f, 0.0f, 0.707f, true };
 }
 
 void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock)

@@ -502,9 +502,11 @@ bool AutomationLane::findSegmentAtPosition (juce::Point<float> pos, int& leftIdx
 
 void AutomationLane::resized()
 {
-    // Parameter selector in top-right corner; 'P' pencil button just to its left
-    paramSelector.setBounds (getWidth() - 84, 2, 80, 20);
-    drawModeButton.setBounds (paramSelector.getX() - 24, 2, 20, 18);
+    // Controls anchored to the LEFT of the lane so they remain visible
+    // at any horizontal scroll position.  The P (pencil) button is first,
+    // then the parameter ComboBox immediately to its right.
+    drawModeButton.setBounds (4, 2, 20, 18);
+    paramSelector.setBounds (28, 2, 80, 20);
 }
 
 //==============================================================================
