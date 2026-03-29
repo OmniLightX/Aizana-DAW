@@ -61,8 +61,8 @@ void MainComponent::resized()
 
     if (mixerVisible)
     {
-        // MixerView takes bottom ~35% of remaining area
-        const int mixerHeight = (int)(area.getHeight() * 0.35f);
+        // MixerView takes bottom ~50% of remaining area (ChannelStrip needs ~276px minimum)
+        const int mixerHeight = (int)(area.getHeight() * 0.50f);
         mixerView.setBounds (area.removeFromBottom (mixerHeight));
     }
 
@@ -137,6 +137,15 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     {
         hidePianoRoll();
         return true;
+    }
+
+    // Cmd+C / Cmd+D / Cmd+V — forward to ArrangementView so they work regardless
+    // of which component currently holds keyboard focus.
+    if (key.getModifiers().isCommandDown())
+    {
+        const int k = key.getKeyCode();
+        if (k == 'c' || k == 'C' || k == 'd' || k == 'D' || k == 'v' || k == 'V')
+            return arrangementView.keyPressed (key);
     }
 
     // Spacebar: global play/stop — works from anywhere in the app (no focus trap)

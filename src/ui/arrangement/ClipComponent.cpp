@@ -12,6 +12,9 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
       pixelsPerSecond (pixelsPerSecond_), activeTool_ (activeTool)
 {
     setRepaintsOnMouseActivity (true);
+    // Tell JUCE 8's Viewport DragToScrollListener not to hijack drag events
+    // over clips — the clip handles its own dragging.
+    setViewportIgnoreDragFlag (true);
 
     // Register standard audio formats so the thumbnail knows how to read WAV/AIFF/etc.
     formatManager.registerBasicFormats();
@@ -116,6 +119,9 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
     // Normal pointer tool — start drag
     dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
     dragStartMouseX = e.getEventRelativeTo (getParentComponent()).x;
+    // Record Y in timelineContainer (grandparent of clipArea) for inter-track detection
+    auto* container = getParentComponent() != nullptr ? getParentComponent()->getParentComponent() : nullptr;
+    dragStartMouseY = container != nullptr ? e.getEventRelativeTo (container).y : e.getScreenY();
     isDragging = false;
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
 }
@@ -146,6 +152,20 @@ void ClipComponent::mouseDrag (const juce::MouseEvent& e)
     const int newX = (int)(newStartSecs * pixelsPerSecond);
     const int newW = juce::jmax (4, (int)((endSecs - newStartSecs) * pixelsPerSecond));
     setBounds (newX, getY(), newW, getHeight());
+
+    // Inter-track drag: if the mouse moves >30px vertically, fire the callback.
+    // ArrangementView handles the actual track move and rebuilds.
+    if (onInterTrackDrag)
+    {
+        auto* container = getParentComponent() != nullptr ? getParentComponent()->getParentComponent() : nullptr;
+        if (container != nullptr)
+        {
+            const int currentY = e.getEventRelativeTo (container).y;
+            const int deltaY = currentY - dragStartMouseY;
+            if (std::abs (deltaY) > 30)
+                onInterTrackDrag (clip, newStartSecs, deltaY);
+        }
+    }
 }
 
 void ClipComponent::mouseUp (const juce::MouseEvent&)

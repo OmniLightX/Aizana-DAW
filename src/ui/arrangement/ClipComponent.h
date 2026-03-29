@@ -34,6 +34,10 @@ public:
 
     te::Clip& getClip() const noexcept { return clip; }
 
+    /** Fired during drag when the mouse crosses a track boundary.
+     *  ArrangementView wires this in rebuildTrackRows(). */
+    std::function<void(te::Clip&, double startTimeSecs, int deltaYPx)> onInterTrackDrag;
+
 private:
     te::Clip&          clip;
     EditManager&       editManager;
@@ -44,6 +48,7 @@ private:
     // Drag state
     double dragStartClipTimeSecs = 0.0;  // clip start time when drag began
     int    dragStartMouseX       = 0;    // mouse X in parent coords when drag began
+    int    dragStartMouseY       = 0;    // mouse Y in timelineContainer coords when drag began
     bool   isDragging            = false;
 
     // Waveform thumbnail — loaded asynchronously from the clip's source file

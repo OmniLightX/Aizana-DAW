@@ -12,6 +12,15 @@ EditManager::EditManager()
     // so ExternalPlugin can instantiate built-in FX processors.
     // This MUST happen before any Edit is created (i.e., before createNewEdit / loadEdit).
     engine.getPluginManager().pluginFormatManager.addFormat (new BuiltInPluginFormat());
+
+    // Also add built-in descriptions to TE's knownPluginList so ExternalPlugin::findMatchingPlugin()
+    // can locate them. TE's ExternalPlugin::doFullInitialisation() searches engine.getPluginManager().knownPluginList
+    // — which is a separate object from PluginScanner::knownPlugins. Without this, getAudioPluginInstance()
+    // returns null and FloatingPluginWindow shows "No editor available".
+    juce::OwnedArray<juce::PluginDescription> builtIns;
+    BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
+    for (auto* desc : builtIns)
+        engine.getPluginManager().knownPluginList.addType (*desc);
 }
 EditManager::~EditManager() = default;
 

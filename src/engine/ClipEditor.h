@@ -92,6 +92,13 @@ public:
     /** True if the clipboard holds a clip reference. */
     bool hasClipboardContents() const noexcept { return clipboardClip != nullptr; }
 
+    /**
+     * Move a clip to a different track, preserving its start time.
+     * Uses te::Clip::moveTo() which handles all clip types (audio + MIDI).
+     * The operation is undoable.
+     */
+    void moveClipToTrack (te::Clip& clip, te::AudioTrack& destTrack);
+
     // -------------------------------------------------------------------------
     // Comping — multi-take workflow
     // Takes on a MidiClip use MidiClip::setCurrentTake().

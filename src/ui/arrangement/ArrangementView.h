@@ -130,12 +130,17 @@ public:
     // a separate reference. Returns snapped time; bypasses snap when Alt is held.
     double snapTimeToGrid (double timeSecs, bool altDown = false) const noexcept;
 
+    // Inter-track drag — called by ClipComponent's onInterTrackDrag callback.
+    // Moves clip to whichever track corresponds to deltaYPx offset from its current row.
+    void moveClipByTrackDelta (te::Clip& clip, double startTimeSecs, int deltaYPx);
+
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
     {
     public:
-        RulerStrip (ApplicationState& appState, double& pixelsPerSecond, double& scrollPositionSecs);
+        RulerStrip (ApplicationState& appState, double& pixelsPerSecond, double& scrollPositionSecs,
+                    double& gridResolution, bool& snapEnabled);
         void paint (juce::Graphics& g) override;
 
         // Click-to-seek: left-click on ruler positions the playhead
@@ -151,6 +156,8 @@ private:
         ApplicationState& appState;
         double& pixelsPerSecond;
         double& scrollPositionSecs;
+        double& gridResolution;
+        bool&   snapEnabled;
 
         // Loop marker positions in seconds
         double loopInSecs  = 1.0;

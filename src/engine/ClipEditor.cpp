@@ -237,6 +237,16 @@ te::Clip* ClipEditor::pasteClip (te::AudioTrack& destTrack, double startTimeSecs
 }
 
 //==============================================================================
+void ClipEditor::moveClipToTrack (te::Clip& clip, te::AudioTrack& destTrack)
+{
+    if (clip.getClipTrack() == &destTrack)
+        return;  // already on target track
+
+    auto& undoManager = editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Move clip to track");
+    clip.moveTo (destTrack);
+}
+
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 {
     auto& undoManager = editManager.getUndoManager();

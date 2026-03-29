@@ -26,7 +26,7 @@ namespace te = tracktion::engine;
 class TrackRow : public juce::Component
 {
 public:
-    static constexpr int kCollapsedHeight      = 60;
+    static constexpr int kCollapsedHeight      = 88;
     static constexpr int kAutomationLaneHeight = 80;
     static constexpr int kExpandedHeight       = kCollapsedHeight + kAutomationLaneHeight;
     static constexpr int kDisclosureButtonSize = 24;

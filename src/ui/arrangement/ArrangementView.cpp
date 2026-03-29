@@ -8,10 +8,14 @@ namespace te = tracktion::engine;
 
 ArrangementView::RulerStrip::RulerStrip (ApplicationState& appState_,
                                           double& pixelsPerSecond_,
-                                          double& scrollPositionSecs_)
-    : appState          (appState_)
-    , pixelsPerSecond   (pixelsPerSecond_)
+                                          double& scrollPositionSecs_,
+                                          double& gridResolution_,
+                                          bool&   snapEnabled_)
+    : appState           (appState_)
+    , pixelsPerSecond    (pixelsPerSecond_)
     , scrollPositionSecs (scrollPositionSecs_)
+    , gridResolution     (gridResolution_)
+    , snapEnabled        (snapEnabled_)
 {
 }
 
@@ -75,6 +79,29 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
                     g.setColour (juce::Colour (0xff333333));
                     g.drawVerticalLine (bx, (float)getHeight() / 2.0f, (float)getHeight());
                 }
+            }
+        }
+    }
+
+    // Snap grid lines — faint ticks at the snap resolution, drawn only when snap is on
+    // and the resolution is finer than one beat. Only rendered when grid divisions are
+    // at least 4px wide to avoid a visual blur of lines.
+    if (snapEnabled && gridResolution > 0.0)
+    {
+        const double gridWidthPx = gridResolution * pixelsPerSecond;
+        if (gridWidthPx >= 4.0)
+        {
+            const double startGrid = std::floor (scrollPositionSecs / gridResolution);
+            const int    firstGrid = juce::jmax (0, (int)startGrid);
+            const int    numGrids  = (int)(getWidth() / gridWidthPx) + 2;
+            g.setColour (juce::Colour (0xff3a6030));  // subtle green tint — distinct from bar/beat lines
+            for (int i = firstGrid; i < firstGrid + numGrids; ++i)
+            {
+                const double gridTimeSecs = i * gridResolution;
+                const int    gx = (int)((gridTimeSecs - scrollPositionSecs) * pixelsPerSecond);
+                if (gx < 0 || gx > getWidth()) continue;
+                // Draw only in the bottom third so they don't overlap bar-number text
+                g.drawVerticalLine (gx, getHeight() * (2.0f / 3.0f), (float)getHeight());
             }
         }
     }
@@ -272,7 +299,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner       (pluginScanner_)
     , automationEngine    (automationEngine_)
-    , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs)
+    , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs, gridResolution, snapEnabled)
     , toolSelector        (activeTool, [this] (EditTool t) { setActiveTool (t); })
 {
     // Header viewport — scrolls vertically only (no horizontal scroll)
@@ -283,6 +310,10 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     // Timeline viewport — scrolls both horizontally and vertically
     timelineViewport.setScrollBarsShown (true, true);
     timelineViewport.setViewedComponent (&timelineContainer, false);
+    // Disable JUCE 8 drag-to-scroll: the DAW controls scrolling explicitly.
+    // Without this, the Viewport's DragToScrollListener can steal mouse events
+    // from ClipComponents (e.g., double-click to open Piano Roll).
+    timelineViewport.setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::never);
     addAndMakeVisible (timelineViewport);
 
     // Keep vertical scroll positions in sync between header and timeline.
@@ -478,6 +509,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
             case 5:  gridResolution = beatSecs * 0.25;  break;  // 1/16
             default: gridResolution = beatSecs;          break;
         }
+        rulerStrip.repaint();  // redraw grid lines at new resolution
     };
     // Trigger initial resolution calculation
     gridCombo.onChange();
@@ -1166,6 +1198,12 @@ void ArrangementView::rebuildTrackRows()
             auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond, activeTool);
             row->getClipArea().addAndMakeVisible (cc);
 
+            // Wire inter-track drag: moving the clip >30px vertically triggers a track move
+            cc->onInterTrackDrag = [this] (te::Clip& c, double startSecs, int deltaY)
+            {
+                moveClipByTrackDelta (c, startSecs, deltaY);
+            };
+
             // Position clip within the clip area
             const double startSecs = clip->getPosition().getStart().inSeconds();
             const double endSecs   = clip->getPosition().getEnd().inSeconds();
@@ -1495,4 +1533,40 @@ void ArrangementView::itemDropped (
 
     edit->state.moveChild (currentChildIndex, targetIndex, &undoManager);
     // valueTreeChildOrderChanged listener will call rebuildTrackRows() asynchronously
+}
+
+void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs,
+                                             int deltaYPx)
+{
+    // Find which track the clip currently lives on
+    int sourceTrackIndex = -1;
+    for (int i = 0; i < trackRows.size(); ++i)
+    {
+        if (&trackRows[i]->getTrack() == clip.getClipTrack())
+        {
+            sourceTrackIndex = i;
+            break;
+        }
+    }
+    if (sourceTrackIndex < 0)
+        return;
+
+    // Calculate target track from vertical pixel delta
+    const int rowH = (int)(TrackRow::kCollapsedHeight * trackHeightScale);
+    const int rowDelta = deltaYPx / juce::jmax (1, rowH);
+    const int targetTrackIndex = juce::jlimit (0, trackRows.size() - 1,
+                                               sourceTrackIndex + rowDelta);
+    if (targetTrackIndex == sourceTrackIndex)
+        return;
+
+    auto* destTrack = dynamic_cast<te::AudioTrack*> (&trackRows[targetTrackIndex]->getTrack());
+    if (destTrack == nullptr)
+        return;
+
+    // Move the clip to the target track and reposition
+    clipEditor.moveClipToTrack (clip, *destTrack);
+    clipEditor.moveClip (clip, startTimeSecs);
+
+    // Rebuild after the move (callAsync to avoid re-entrancy from within drag callback)
+    juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
 }
