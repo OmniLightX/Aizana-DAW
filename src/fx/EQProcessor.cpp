@@ -30,13 +30,17 @@ EQProcessor::EQProcessor()
           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
           .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
-    // Default: 4 bands spread across spectrum, all flat (0 dB), all enabled so
-    // the EQ handles are immediately visible and draggable in the editor.
+    // Default: 8 bands spread across the audible spectrum, all flat (0 dB), all enabled.
     // The EQ is transparent at 0 dB — enabling bands doesn't change the sound.
-    bands[0] = { EQBandType::LowShelf,    80.0f, 0.0f, 0.707f, true };
-    bands[1] = { EQBandType::Peak,       500.0f, 0.0f, 0.707f, true };
-    bands[2] = { EQBandType::Peak,      3000.0f, 0.0f, 0.707f, true };
-    bands[3] = { EQBandType::HighShelf, 10000.0f, 0.0f, 0.707f, true };
+    // Frequencies match professional DAW defaults (Logic Pro / Pro-Q style).
+    bands[0] = { EQBandType::HighPass,    40.0f, 0.0f, 0.707f, true };
+    bands[1] = { EQBandType::LowShelf,   100.0f, 0.0f, 0.707f, true };
+    bands[2] = { EQBandType::Peak,       250.0f, 0.0f, 0.707f, true };
+    bands[3] = { EQBandType::Peak,       800.0f, 0.0f, 0.707f, true };
+    bands[4] = { EQBandType::Peak,      2500.0f, 0.0f, 0.707f, true };
+    bands[5] = { EQBandType::Peak,      5000.0f, 0.0f, 0.707f, true };
+    bands[6] = { EQBandType::HighShelf, 10000.0f, 0.0f, 0.707f, true };
+    bands[7] = { EQBandType::LowPass,   20000.0f, 0.0f, 0.707f, true };
 }
 
 void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -187,6 +191,10 @@ void EQProcessor::applyCoefficients(int bandIndex,
         case 1: *eqChain.get<1>().coefficients = *coeffs; break;
         case 2: *eqChain.get<2>().coefficients = *coeffs; break;
         case 3: *eqChain.get<3>().coefficients = *coeffs; break;
+        case 4: *eqChain.get<4>().coefficients = *coeffs; break;
+        case 5: *eqChain.get<5>().coefficients = *coeffs; break;
+        case 6: *eqChain.get<6>().coefficients = *coeffs; break;
+        case 7: *eqChain.get<7>().coefficients = *coeffs; break;
         default: jassertfalse; break;
     }
 }

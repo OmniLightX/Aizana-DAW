@@ -31,6 +31,13 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
     }
 }
 
+void ClipComponent::setSelected (bool shouldBeSelected)
+{
+    if (selected == shouldBeSelected) return;
+    selected = shouldBeSelected;
+    repaint();
+}
+
 void ClipComponent::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
@@ -86,6 +93,16 @@ void ClipComponent::paint (juce::Graphics& g)
                                    1.0f);                  // vertical zoom = 1.0 (full amplitude)
         }
     }
+
+    // ---- Selection highlight ----
+    if (selected)
+    {
+        // Bright white border + semi-transparent overlay so selection is obvious
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRoundedRectangle (bounds.reduced (1.0f), 3.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.9f));
+        g.drawRoundedRectangle (bounds.reduced (1.0f), 3.0f, 2.0f);
+    }
 }
 
 void ClipComponent::mouseDown (const juce::MouseEvent& e)
@@ -116,7 +133,10 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         return;  // Do NOT start drag
     }
 
-    // Normal pointer tool — start drag
+    // Normal pointer tool — notify ArrangementView to select this clip, then start drag
+    if (onSelectRequest)
+        onSelectRequest (this);
+
     dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
     dragStartMouseX = e.getEventRelativeTo (getParentComponent()).x;
     // Record Y in timelineContainer (grandparent of clipArea) for inter-track detection

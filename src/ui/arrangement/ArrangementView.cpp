@@ -94,14 +94,14 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
             const double startGrid = std::floor (scrollPositionSecs / gridResolution);
             const int    firstGrid = juce::jmax (0, (int)startGrid);
             const int    numGrids  = (int)(getWidth() / gridWidthPx) + 2;
-            g.setColour (juce::Colour (0xff3a6030));  // subtle green tint — distinct from bar/beat lines
+            g.setColour (juce::Colour (0xff7acc55));  // bright green — clearly visible against dark background
             for (int i = firstGrid; i < firstGrid + numGrids; ++i)
             {
                 const double gridTimeSecs = i * gridResolution;
                 const int    gx = (int)((gridTimeSecs - scrollPositionSecs) * pixelsPerSecond);
                 if (gx < 0 || gx > getWidth()) continue;
-                // Draw only in the bottom third so they don't overlap bar-number text
-                g.drawVerticalLine (gx, getHeight() * (2.0f / 3.0f), (float)getHeight());
+                // Draw in lower half so they don't cover bar-number text
+                g.drawVerticalLine (gx, getHeight() * 0.4f, (float)getHeight());
             }
         }
     }
@@ -974,8 +974,12 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
     switch (activeTool)
     {
         case EditTool::Pointer:
-            // Seek playhead — existing behaviour. Clip dragging is handled
-            // by ClipComponent itself (does not reach this handler).
+            // Seek playhead — click on empty timeline space deselects all clips.
+            // (Clip clicks are handled by ClipComponent and never reach here.)
+            for (auto* row : trackRows)
+                for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
+                    if (auto* cc = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
+                        cc->setSelected (false);
             selectedClips.clear();
             if (auto* edit = appState.editManager.getEdit())
                 edit->getTransport().setPosition (
@@ -1197,6 +1201,21 @@ void ArrangementView::rebuildTrackRows()
         {
             auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond, activeTool);
             row->getClipArea().addAndMakeVisible (cc);
+
+            // Wire single-click selection — notifies ArrangementView so Cmd+C/V works
+            cc->onSelectRequest = [this] (ClipComponent* clicked)
+            {
+                // Deselect all clips, then select the clicked one
+                for (auto* row : trackRows)
+                    for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
+                        if (auto* other = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
+                            other->setSelected (false);
+
+                selectedClips.clear();
+                clicked->setSelected (true);
+                selectedClips.add (clicked);
+                grabKeyboardFocus();
+            };
 
             // Wire inter-track drag: moving the clip >30px vertically triggers a track move
             cc->onInterTrackDrag = [this] (te::Clip& c, double startSecs, int deltaY)

@@ -34,6 +34,13 @@ public:
 
     te::Clip& getClip() const noexcept { return clip; }
 
+    // Selection state — visual highlight + enables Cmd+C/V in ArrangementView
+    bool isSelected() const noexcept { return selected; }
+    void setSelected (bool shouldBeSelected);
+
+    /** Fired on left-click (Pointer tool) so ArrangementView can update selectedClips. */
+    std::function<void(ClipComponent*)> onSelectRequest;
+
     /** Fired during drag when the mouse crosses a track boundary.
      *  ArrangementView wires this in rebuildTrackRows(). */
     std::function<void(te::Clip&, double startTimeSecs, int deltaYPx)> onInterTrackDrag;
@@ -44,6 +51,8 @@ private:
     ClipEditor&        clipEditor;
     double&            pixelsPerSecond;
     const EditTool&    activeTool_;   // reference to ArrangementView::activeTool
+
+    bool selected = false;
 
     // Drag state
     double dragStartClipTimeSecs = 0.0;  // clip start time when drag began

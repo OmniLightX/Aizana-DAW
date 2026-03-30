@@ -39,7 +39,7 @@ struct EQBand
 class EQProcessor : public juce::AudioPluginInstance
 {
 public:
-    static constexpr int NumBands = 4;
+    static constexpr int NumBands = 8;
 
     EQProcessor();
     ~EQProcessor() override = default;
@@ -85,7 +85,11 @@ private:
         juce::dsp::IIR::Filter<float>,   // Band 0
         juce::dsp::IIR::Filter<float>,   // Band 1
         juce::dsp::IIR::Filter<float>,   // Band 2
-        juce::dsp::IIR::Filter<float>>;  // Band 3
+        juce::dsp::IIR::Filter<float>,   // Band 3
+        juce::dsp::IIR::Filter<float>,   // Band 4
+        juce::dsp::IIR::Filter<float>,   // Band 5
+        juce::dsp::IIR::Filter<float>,   // Band 6
+        juce::dsp::IIR::Filter<float>>;  // Band 7
 
     EQChain eqChain;
     std::array<EQBand, NumBands> bands;

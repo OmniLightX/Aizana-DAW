@@ -7,8 +7,12 @@ EQComponent::EQComponent (EQProcessor& eqProcessor_)
     : eqProcessor  (eqProcessor_)
     , spectrumAnalyzer (eqProcessor_)
 {
-    // SpectrumAnalyzer is a child — rendered first (behind EQ curve)
+    // SpectrumAnalyzer is a child — rendered first (behind EQ curve).
+    // Must NOT intercept mouse events — EQComponent handles all mouse interaction
+    // for band handle dragging. Without this, SpectrumAnalyzer (which fills 100% of
+    // our bounds) would steal every mouseDown before it reaches EQComponent::mouseDown.
     addAndMakeVisible (spectrumAnalyzer);
+    spectrumAnalyzer.setInterceptsMouseClicks (false, false);
 
     setSize (600, 200);
 }
@@ -237,12 +241,16 @@ void EQComponent::drawEQCurve (juce::Graphics& g) const
 
 void EQComponent::drawBandHandles (juce::Graphics& g) const
 {
-    // Band colours (one per band)
+    // Band colours (one per band — 8 bands)
     static const juce::Colour kBandColours[EQProcessor::NumBands] = {
         juce::Colour (0xff4488ff),  // Band 0: blue
-        juce::Colour (0xff44ff88),  // Band 1: green
-        juce::Colour (0xffffaa44),  // Band 2: orange
-        juce::Colour (0xffff4488),  // Band 3: red
+        juce::Colour (0xff44ccff),  // Band 1: cyan-blue
+        juce::Colour (0xff44ff88),  // Band 2: green
+        juce::Colour (0xffaaff44),  // Band 3: yellow-green
+        juce::Colour (0xffffcc44),  // Band 4: yellow
+        juce::Colour (0xffffaa44),  // Band 5: orange
+        juce::Colour (0xffff6644),  // Band 6: orange-red
+        juce::Colour (0xffff4488),  // Band 7: red-pink
     };
 
     for (int i = 0; i < EQProcessor::NumBands; ++i)
