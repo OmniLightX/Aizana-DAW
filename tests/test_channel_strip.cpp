@@ -209,9 +209,9 @@ TEST_CASE ("ChannelStrip: solo and mute persist through ValueTree XML round-trip
 }
 
 // ---------------------------------------------------------------------------
-// MIX-02: createBus creates a FolderTrack in the edit
+// MIX-02: createBus creates an AudioTrack with AuxReturnPlugin in the edit
 // ---------------------------------------------------------------------------
-TEST_CASE ("Bus routing: createBus returns a valid FolderTrack", "[mixer][MIX-02]")
+TEST_CASE ("Bus routing: createBus returns a valid AudioTrack with AuxReturnPlugin", "[mixer][MIX-02]")
 {
     EditManager em;
     em.createNewEdit();
@@ -219,10 +219,17 @@ TEST_CASE ("Bus routing: createBus returns a valid FolderTrack", "[mixer][MIX-02
 
     auto* bus = mixer.createBus ("Drums Bus");
     REQUIRE (bus != nullptr);
-    CHECK (bus->isFolderTrack());
+    CHECK (bus->isAudioTrack());
 
     // Bus should have the given name
     CHECK (bus->getName().containsIgnoreCase ("Drums"));
+
+    // Bus should have an AuxReturnPlugin in its plugin chain
+    bool hasReturn = false;
+    for (auto* p : bus->pluginList.getPlugins())
+        if (dynamic_cast<te::AuxReturnPlugin*> (p) != nullptr)
+            hasReturn = true;
+    CHECK (hasReturn);
 }
 
 // ---------------------------------------------------------------------------

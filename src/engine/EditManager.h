@@ -2,6 +2,7 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_core/juce_core.h>
+#include "CloudesUIBehaviour.h"
 
 namespace te = tracktion::engine;
 
@@ -93,7 +94,7 @@ public:
     void trimClip (te::Clip& clip, double newStartTime, double newEndTime);
 
 private:
-    te::Engine engine { "Cloudes" };
+    te::Engine engine { "Cloudes", std::make_unique<CloudesUIBehaviour>(), nullptr };
     std::unique_ptr<te::Edit> edit;
 
     // ---- Autosave (RESEARCH.md Open Question 4) ----

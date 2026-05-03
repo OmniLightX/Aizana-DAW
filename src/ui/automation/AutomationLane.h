@@ -36,6 +36,10 @@ public:
 
     /** Switch between pointer mode (drag existing points) and draw mode (always create). */
     void setDrawMode (bool drawModeActive);
+
+    /** Call whenever the timeline scroll position or zoom changes so the controls
+     *  (P button, param selector) stay anchored to the visible left edge. */
+    void updateScrollOffset();
     bool isDrawMode() const noexcept { return drawMode; }
 
     void paint           (juce::Graphics& g)                  override;
@@ -82,6 +86,9 @@ private:
 
     // Parameter selector (Volume / Pan)
     juce::ComboBox paramSelector;
+
+    // Automation mode selector (Read / Touch / Latch / Write) — shown only in lane header
+    juce::ComboBox modeSelector;
 
     // dB tooltip label — shown near cursor during point/segment drag (volume param only)
     juce::Label dBLabel;

@@ -225,52 +225,32 @@ void ArrangementView::ToolSelectorStrip::paint (juce::Graphics& g)
     // Dark background matching header strip
     g.fillAll (juce::Colour (0xff1a1a1a));
 
-    // Two tool buttons: Pointer (V) and Scissors (S), each 36px wide
+    // Single Scissors button — tools are keyboard-only; this button is a visual
+    // indicator and toggle for the Scissors tool.  Pointer (default) shows it unlit.
     constexpr int kButtonW = 36;
     constexpr int kButtonH = 20;
     const int     stripH   = getHeight();
     const int     yOff     = (stripH - kButtonH) / 2;
 
-    struct ButtonDef { EditTool tool; const char* label; int x; };
-    const ButtonDef buttons[2] = {
-        { EditTool::Pointer,  "V", 0        },
-        { EditTool::Scissors, "S", kButtonW },
-    };
+    const juce::Rectangle<int> r (0, yOff, kButtonW, kButtonH);
+    const bool scissorsActive = (activeTool == EditTool::Scissors);
 
-    for (const auto& btn : buttons)
+    if (scissorsActive)
     {
-        juce::Rectangle<int> r (btn.x, yOff, kButtonW, kButtonH);
-        const bool isActive = (activeTool == btn.tool);
-
-        if (isActive)
-        {
-            // Highlighted: accent fill (Apple blue, 40% opacity)
-            g.setColour (juce::Colour (0xff4488ff).withAlpha (0.40f));
-            g.fillRoundedRectangle (r.toFloat().reduced (1.0f), 3.0f);
-        }
-
-        // Label — bright white when active, dim grey when inactive
-        g.setColour (isActive ? juce::Colour (0xffffffff) : juce::Colour (0xff888888));
-        g.setFont (juce::FontOptions (12.0f));
-        g.drawText (btn.label, r, juce::Justification::centred, false);
+        g.setColour (juce::Colour (0xff4488ff).withAlpha (0.40f));
+        g.fillRoundedRectangle (r.toFloat().reduced (1.0f), 3.0f);
     }
 
-    // 1px separator between the two buttons
-    g.setColour (juce::Colour (0xff333333));
-    const int sepX = kButtonW;
-    const int sepY0 = yOff + 2;
-    const int sepY1 = yOff + kButtonH - 2;
-    g.drawVerticalLine (sepX, (float)sepY0, (float)sepY1);
+    g.setColour (scissorsActive ? juce::Colour (0xffffffff) : juce::Colour (0xff888888));
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("C", r, juce::Justification::centred, false);
 }
 
 void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
 {
-    // Hit-test x to determine which button was clicked (only Pointer + Scissors)
-    constexpr int kButtonW = 36;
-    if (e.x < kButtonW)
-        onToolSelected (EditTool::Pointer);
-    else
-        onToolSelected (EditTool::Scissors);
+    // Single Scissors button: clicking toggles Scissors ↔ Pointer.
+    juce::ignoreUnused (e);
+    onToolSelected (activeTool == EditTool::Scissors ? EditTool::Pointer : EditTool::Scissors);
 }
 
 //==============================================================================
@@ -278,9 +258,54 @@ void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
 
 double ArrangementView::snapTimeToGrid (double timeSecs, bool altDown) const noexcept
 {
-    if (!snapEnabled || altDown || gridResolution <= 0.0)
+    if (!snapEnabled || altDown)
         return timeSecs;
-    return std::round (timeSecs / gridResolution) * gridResolution;
+
+    // Recompute resolution dynamically from the current BPM so snap is always correct
+    // even after a tempo change (gridResolution is pre-computed and can become stale).
+    auto* edit = appState.editManager.getEdit();
+    const double bpm = (edit != nullptr && edit->tempoSequence.getNumTempos() > 0)
+                           ? edit->tempoSequence.getTempo (0)->getBpm()
+                           : 120.0;
+    const double beatSecs = 60.0 / bpm;
+    double resolution = beatSecs;  // default: 1/4 note
+    switch (gridCombo.getSelectedId())
+    {
+        case 1:  resolution = beatSecs * 4.0;   break;  // 1/1 bar
+        case 2:  resolution = beatSecs * 2.0;   break;  // 1/2 note
+        case 3:  resolution = beatSecs * 1.0;   break;  // 1/4 note
+        case 4:  resolution = beatSecs * 0.5;   break;  // 1/8 note
+        case 5:  resolution = beatSecs * 0.25;  break;  // 1/16 note
+        default: break;
+    }
+    if (resolution <= 0.0)
+        return timeSecs;
+    return std::round (timeSecs / resolution) * resolution;
+}
+
+double ArrangementView::snapDeltaToGrid (double deltaSecs, bool altDown) const noexcept
+{
+    if (!snapEnabled || altDown)
+        return deltaSecs;
+
+    auto* edit = appState.editManager.getEdit();
+    const double bpm = (edit != nullptr && edit->tempoSequence.getNumTempos() > 0)
+                           ? edit->tempoSequence.getTempo (0)->getBpm()
+                           : 120.0;
+    const double beatSecs = 60.0 / bpm;
+    double resolution = beatSecs;
+    switch (gridCombo.getSelectedId())
+    {
+        case 1:  resolution = beatSecs * 4.0;   break;  // 1/1 bar
+        case 2:  resolution = beatSecs * 2.0;   break;  // 1/2 note
+        case 3:  resolution = beatSecs * 1.0;   break;  // 1/4 note
+        case 4:  resolution = beatSecs * 0.5;   break;  // 1/8 note
+        case 5:  resolution = beatSecs * 0.25;  break;  // 1/16 note
+        default: break;
+    }
+    if (resolution <= 0.0)
+        return deltaSecs;
+    return std::round (deltaSecs / resolution) * resolution;
 }
 
 //==============================================================================
@@ -343,12 +368,27 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
 
                 auto& undoManager = this->appState.editManager.getUndoManager();
 
+                // Insert AFTER the last existing track so existing clips stay on their tracks.
+                // TrackInsertPoint(nullptr, nullptr) inserts at the beginning — wrong.
+                // TrackInsertPoint(nullptr, lastTrack) inserts after lastTrack — correct.
+                auto existingTracks = te::getAudioTracks (*edit);
+                te::AudioTrack* lastExistingTrack = existingTracks.isEmpty()
+                    ? nullptr : existingTracks.getLast();
+
                 if (result == 1)
                 {
-                    // Audio track (existing behaviour)
+                    // Audio track
                     undoManager.beginNewTransaction ("Add Audio Track");
-                    edit->insertNewAudioTrack (
-                        te::TrackInsertPoint (nullptr, nullptr), nullptr);
+                    auto newTrack = edit->insertNewAudioTrack (
+                        te::TrackInsertPoint (nullptr, lastExistingTrack), nullptr);
+                    // Clear solo-isolated so solo shortcuts work correctly on this track.
+                    // Bake the default name into state so it is never re-derived from position
+                    // after a drag-reorder (TE generates "Track N" lazily from position).
+                    if (newTrack != nullptr)
+                    {
+                        newTrack->setSoloIsolate (false);
+                        newTrack->setName (newTrack->getName());
+                    }
                     // ArrangementView's ValueTree listener (valueTreeChildAdded) will
                     // automatically call rebuildTrackRows() — no manual update needed
                 }
@@ -357,10 +397,11 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
                     // MIDI track: create an AudioTrack and insert an empty MIDI clip
                     undoManager.beginNewTransaction ("Add MIDI Track");
                     te::AudioTrack::Ptr newTrack = edit->insertNewAudioTrack (
-                        te::TrackInsertPoint (nullptr, nullptr), nullptr);
+                        te::TrackInsertPoint (nullptr, lastExistingTrack), nullptr);
 
                     if (newTrack != nullptr)
                     {
+                        newTrack->setSoloIsolate (false);
                         newTrack->setName ("MIDI " + juce::String (te::getAudioTracks (*edit).size()));
 
                         // Insert a 4-bar MIDI clip so the user has something to double-click
@@ -441,13 +482,20 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
 
         pixelsPerSecond = newPPS;
 
+        // resized() FIRST so timelineContainer is sized for the new zoom level.
+        // setViewPosition after resize so the viewport can actually reach newScrollX
+        // without being clamped by a still-undersized content area.
+        resized();
+
         const int newMouseXInTimeline = (int)(timeAtCursor * pixelsPerSecond);
         const int newScrollX = newMouseXInTimeline - (eventInAV.getPosition().x - kHeaderWidth);
         timelineViewport.setViewPosition (juce::jmax (0, newScrollX),
                                           timelineViewport.getViewPositionY());
-        scrollPositionSecs = juce::jmax (0.0, (double)newScrollX / pixelsPerSecond);
 
-        resized();
+        // Read back the actual scroll position (handles any residual clamping),
+        // so ruler and clips always read the same scrollPositionSecs.
+        scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
+
         rulerStrip.repaint();
         repaint();
     };
@@ -515,6 +563,23 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     gridCombo.onChange();
     addAndMakeVisible (gridCombo);
 
+    // Autoscroll toggle — F key / toolbar button.
+    // Same style as snapButton: blue when ON, grey when OFF.
+    autoScrollButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff333333));
+    autoScrollButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
+    autoScrollButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffaaaaaa));
+    autoScrollButton.setColour (juce::TextButton::textColourOnId,   juce::Colour (0xffffffff));
+    autoScrollButton.setClickingTogglesState (false);
+    autoScrollButton.setToggleState (autoScrollEnabled, juce::dontSendNotification);
+    autoScrollButton.setTooltip ("Follow playhead during playback (F)");
+    autoScrollButton.onClick = [this]
+    {
+        autoScrollEnabled = !autoScrollEnabled;
+        autoScrollButton.setToggleState (autoScrollEnabled, juce::dontSendNotification);
+        autoScrollButton.repaint();
+    };
+    addAndMakeVisible (autoScrollButton);
+
     // Keyboard focus: any mouse click in the arrangement area reclaims focus so
     // E/R/S tool shortcuts work reliably without requiring manual tab navigation.
     setWantsKeyboardFocus (true);
@@ -552,8 +617,8 @@ void ArrangementView::resized()
     auto headerStrip = area.removeFromTop (kHeaderStripHeight);
     addTrackButton.setBounds (headerStrip.removeFromLeft (80).reduced (2));
 
-    // Tool selector strip — 76px wide, immediately to the right of the Add Track button
-    toolSelector.setBounds (headerStrip.removeFromLeft (76).reduced (2));
+    // Tool selector strip — 3 tools × 36px = 108px, immediately right of Add Track button
+    toolSelector.setBounds (headerStrip.removeFromLeft (108).reduced (2));
 
     // Zoom buttons — top-right of the header strip, 20×20 each with 4px gap
     // Place right-to-left: zoomIn (+) rightmost, then zoomOut (−) to its left.
@@ -561,10 +626,12 @@ void ArrangementView::resized()
     zoomOutButton.setBounds (getWidth() - 52, headerStrip.getY() + 4, 20, 20);
 
     // Snap controls — to the right of the tool selector, before the zoom buttons.
-    // snapButton (40px) + 4px gap + gridCombo (56px) placed after toolSelector.
-    const int snapBtnX = 80 + 4 + 76 + 4;  // addTrackButton(80) + gap(4) + toolSelector(76) + gap(4)
+    const int snapBtnX = 80 + 4 + 108 + 4;  // addTrackButton(80) + gap(4) + toolSelector(108) + gap(4)
     snapButton.setBounds (snapBtnX, headerStrip.getY() + 4, 40, 20);
     gridCombo.setBounds  (snapBtnX + 44, headerStrip.getY() + 4, 56, 20);
+
+    // Autoscroll button — immediately right of gridCombo
+    autoScrollButton.setBounds (snapBtnX + 44 + 60, headerStrip.getY() + 4, 28, 20);
 
     // Ruler strip — full width, sits between header strip and track rows
     // The ruler portion under the header column (left of kHeaderWidth) is filled
@@ -639,34 +706,6 @@ void ArrangementView::paint (juce::Graphics& g)
         g.fillRect (0, indicatorY - 1, getWidth(), 2);
     }
 
-    // Apple Final Cut Pro style playhead: thin platinum/white vertical line
-    if (appState.editManager.getEdit() != nullptr)
-    {
-        // Playhead X in absolute timeline pixels
-        const int absolutePlayheadX = (int)(playheadPositionSecs * pixelsPerSecond);
-        // Convert to screen coordinates: subtract viewport scroll, add header width
-        const int screenX = kHeaderWidth + absolutePlayheadX - timelineViewport.getViewPositionX();
-        const int rulerBottom = kHeaderStripHeight + kRulerHeight;
-
-        if (screenX >= kHeaderWidth && screenX <= getWidth())
-        {
-            g.setColour (juce::Colour (0xffd0d0d0).withAlpha (0.85f));
-            g.drawVerticalLine (screenX, (float)rulerBottom, (float)getHeight());
-        }
-    }
-
-    // ---- Marquee selection rectangle ----
-    if (isMarqueeActive && ! marqueeRect.isEmpty())
-    {
-        // Semi-transparent blue fill
-        g.setColour (juce::Colours::dodgerblue.withAlpha (0.15f));
-        g.fillRect (marqueeRect);
-
-        // Blue border
-        g.setColour (juce::Colours::dodgerblue.withAlpha (0.6f));
-        g.drawRect (marqueeRect, 1);
-    }
-
     // ---- Selected clip highlights ----
     if (! selectedClips.isEmpty())
     {
@@ -692,11 +731,92 @@ void ArrangementView::paint (juce::Graphics& g)
     }
 }
 
+void ArrangementView::paintOverChildren (juce::Graphics& g)
+{
+    // Drawn AFTER all child components (clips, tracks) so all overlays are
+    // always visible on top — paint() would be invisible behind the opaque TrackRows.
+
+    // ---- Playhead — drawn first so it goes under selection overlays if both are visible ----
+    // Must be in paintOverChildren (not paint) so it renders ON TOP of ClipComponents.
+    if (appState.editManager.getEdit() != nullptr)
+    {
+        const int absolutePlayheadX = (int)(playheadPositionSecs * pixelsPerSecond);
+        const int screenX = kHeaderWidth + absolutePlayheadX - timelineViewport.getViewPositionX();
+        const int rulerBottom = kHeaderStripHeight + kRulerHeight;
+
+        if (screenX >= kHeaderWidth && screenX <= getWidth())
+        {
+            g.setColour (juce::Colour (0xffd0d0d0).withAlpha (0.85f));
+            g.drawVerticalLine (screenX, (float)rulerBottom, (float)getHeight());
+        }
+    }
+
+    // ---- Time-range highlight (Marquee tool / Cmd+drag / Click Zone) ----
+    // Constrained to the selected track row band; shown as a tinted region with
+    // solid boundary lines (Studio One / Pro Tools style).
+    if (rangeActive && rangeEndSecs > rangeStartSecs && !trackRows.isEmpty())
+    {
+        // Use timelineViewport.getViewPositionX() (always current) instead of
+        // scrollPositionSecs (cached member that can lag after zoom-induced reposition).
+        // This matches the playhead drawing pattern for pixel-accurate alignment.
+        const int x1 = kHeaderWidth + (int)(rangeStartSecs * pixelsPerSecond) - timelineViewport.getViewPositionX();
+        const int x2 = kHeaderWidth + (int)(rangeEndSecs   * pixelsPerSecond) - timelineViewport.getViewPositionX();
+        const int viewScrollY    = timelineViewport.getViewPositionY();
+        const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+
+        int cumY = 0;
+        for (int i = 0; i < rangeTrackStart && i < trackRows.size(); ++i)
+            cumY += (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
+        const int trackTopPx = timelineOriginY + cumY - viewScrollY;
+
+        int tracksBotCumY = cumY;
+        for (int i = rangeTrackStart; i <= rangeTrackEnd && i < trackRows.size(); ++i)
+            tracksBotCumY += (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
+        const int trackBotPx = timelineOriginY + tracksBotCumY - viewScrollY;
+
+        // Translucent tint — visible on top of clips
+        g.setColour (juce::Colour (0x554488ff));
+        g.fillRect (x1, trackTopPx, x2 - x1, trackBotPx - trackTopPx);
+
+        // Solid boundary lines
+        g.setColour (juce::Colour (0xff4488ff));
+        g.drawVerticalLine (x1, (float)trackTopPx, (float)trackBotPx);
+        g.drawVerticalLine (x2, (float)trackTopPx, (float)trackBotPx);
+    }
+
+    // ---- Marquee selection rectangle (RangeSelect tool) ----
+    if (isMarqueeActive && ! marqueeRect.isEmpty())
+    {
+        g.setColour (juce::Colours::dodgerblue.withAlpha (0.25f));
+        g.fillRect (marqueeRect);
+        g.setColour (juce::Colours::dodgerblue.withAlpha (0.8f));
+        g.drawRect (marqueeRect, 1);
+    }
+
+    // ---- Pointer rubber-band (Arrow tool clip selection) ----
+    // Thin blue outline + very light fill — Studio One rubber-band style.
+    if (pointerBandActive && ! pointerBandRect.isEmpty())
+    {
+        g.setColour (juce::Colour (0x224488ff));
+        g.fillRect (pointerBandRect);
+        g.setColour (juce::Colour (0xff4488ff));
+        g.drawRect (pointerBandRect, 1);
+    }
+}
+
 void ArrangementView::setPixelsPerSecond (double pps)
 {
     pixelsPerSecond = juce::jlimit (10.0, 2000.0, pps);
     resized();
+    // Sync scrollPositionSecs from the viewport's actual position after resize.
+    // pixelsPerSecond just changed, so the old cached value is wrong:
+    // scrollPositionSecs must always == getViewPositionX() / pixelsPerSecond.
+    scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
+    rulerStrip.repaint();
     repaint();
+    // Reposition automation lane controls for new zoom level
+    for (auto* row : trackRows)
+        row->updateScrollOffset();
 }
 
 void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
@@ -730,14 +850,18 @@ void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
         // Apply new zoom
         pixelsPerSecond = newPPS;
 
+        // resized() FIRST so content is sized for new zoom before scrolling.
+        resized();
+
         // Scroll so the same time position remains under the cursor
         const int newMouseXInTimeline = (int)(timeAtCursor * pixelsPerSecond);
         const int newScrollX = newMouseXInTimeline - (event.getPosition().x - kHeaderWidth);
         timelineViewport.setViewPosition (juce::jmax (0, newScrollX),
                                           timelineViewport.getViewPositionY());
-        scrollPositionSecs = juce::jmax (0.0, (double)newScrollX / pixelsPerSecond);
 
-        resized();
+        // Read back actual scroll (handles clamping); ruler and clips share this value.
+        scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
+
         rulerStrip.repaint();
         repaint();
         return;
@@ -762,11 +886,11 @@ void ArrangementView::timerCallback()
         // Repaint timeline container and ruler (not headers — avoids layout flicker)
         timelineContainer.repaint();
         rulerStrip.repaint();
-        repaint();  // repaints the playhead line drawn in ArrangementView::paint()
+        repaint();  // repaints the playhead line (paintOverChildren — always on top of clips)
     }
 
-    // Auto-follow playhead during playback
-    if (edit->getTransport().isPlaying())
+    // Auto-follow playhead during playback (only when autoscroll is enabled)
+    if (autoScrollEnabled && edit->getTransport().isPlaying())
     {
         const double viewportWidthSecs = timelineViewport.getWidth() / pixelsPerSecond;
         const double visibleStartSecs = scrollPositionSecs;
@@ -846,33 +970,147 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
     }
 
     // ---- Tool shortcuts ----
-    // Escape always returns to Pointer — no modifier check needed.
+    // Escape always returns to Pointer and deselects all clips
     if (key.getKeyCode() == juce::KeyPress::escapeKey)
     {
         setActiveTool (EditTool::Pointer);
+        deselectAllClips();
+        rangeActive = false;
+        repaint();
+        return true;
+    }
+
+    // Tab: toggle between Pointer and Marquee (like Studio One)
+    if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
+    {
+        setActiveTool (activeTool == EditTool::Marquee ? EditTool::Pointer : EditTool::Marquee);
         return true;
     }
 
     // Letter-key shortcuts (plain keys only, no modifiers):
-    // V/E = Pointer (Logic Pro convention + backward compat), R = Range Select, S = Scissors.
+    // Tool shortcuts:   C = Scissors
+    // Track shortcuts:  M = Mute,  S = Solo,  R = Record arm
     if (! key.getModifiers().isAnyModifierKeyDown())
     {
-        if (key.getKeyCode() == 'v' || key.getKeyCode() == 'V'
-            || key.getKeyCode() == 'e' || key.getKeyCode() == 'E')
+        if (key.getKeyCode() == 'f' || key.getKeyCode() == 'F')
         {
-            setActiveTool (EditTool::Pointer);
+            autoScrollEnabled = !autoScrollEnabled;
+            autoScrollButton.setToggleState (autoScrollEnabled, juce::dontSendNotification);
+            autoScrollButton.repaint();
             return true;
         }
-        if (key.getKeyCode() == 'r' || key.getKeyCode() == 'R')
-        {
-            setActiveTool (EditTool::RangeSelect);
-            return true;
-        }
-        if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
+        if (key.getKeyCode() == 'c' || key.getKeyCode() == 'C')
         {
             setActiveTool (EditTool::Scissors);
             return true;
         }
+        if (key.getKeyCode() == 'm' || key.getKeyCode() == 'M')
+        {
+            if (selectedTrackHeader != nullptr)
+            {
+                // toggleMute() sets button state directly (no TE read-back) — guarantees visual update.
+                selectedTrackHeader->toggleMute();
+            }
+            else if (! selectedClips.isEmpty())
+            {
+                // Collect unique tracks from selected clips and toggle mute together
+                juce::Array<te::AudioTrack*> uniqueTracks;
+                for (auto* cc : selectedClips)
+                    if (auto* at = dynamic_cast<te::AudioTrack*> (cc->getClip().getClipTrack()))
+                        if (! uniqueTracks.contains (at)) uniqueTracks.add (at);
+                // If ANY track is unmuted, mute all; otherwise unmute all
+                bool anyUnmuted = false;
+                for (auto* t : uniqueTracks) if (! t->isMuted (false)) { anyUnmuted = true; break; }
+                for (auto* t : uniqueTracks) t->setMute (anyUnmuted);
+            }
+            else
+            {
+                // No selection: toggle mute on all tracks (matches R else-branch behaviour)
+                for (auto* h : trackHeaders)
+                    h->toggleMute();
+            }
+            // Sync all TrackHeader visuals (other headers may have changed state)
+            for (auto* h : trackHeaders) h->refresh();
+            return true;
+        }
+        if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
+        {
+            if (selectedTrackHeader != nullptr)
+            {
+                // toggleSolo() sets button state directly (no TE read-back) — guarantees visual update.
+                selectedTrackHeader->toggleSolo();
+            }
+            else if (! selectedClips.isEmpty())
+            {
+                // Collect unique tracks from selected clips and toggle solo together
+                juce::Array<te::AudioTrack*> uniqueTracks;
+                for (auto* cc : selectedClips)
+                    if (auto* at = dynamic_cast<te::AudioTrack*> (cc->getClip().getClipTrack()))
+                        if (! uniqueTracks.contains (at)) uniqueTracks.add (at);
+                bool anySoloed = false;
+                for (auto* t : uniqueTracks) if (t->isSolo (false)) { anySoloed = true; break; }
+                for (auto* t : uniqueTracks) { t->setSoloIsolate (false); t->setSolo (! anySoloed); }
+            }
+            else
+            {
+                // No selection: toggle solo on all tracks (matches R else-branch behaviour)
+                for (auto* h : trackHeaders)
+                    h->toggleSolo();
+            }
+            // Sync all TrackHeader visuals
+            for (auto* h : trackHeaders) h->refresh();
+            return true;
+        }
+        if (key.getKeyCode() == 'r' || key.getKeyCode() == 'R')
+        {
+            if (selectedTrackHeader != nullptr)
+            {
+                selectedTrackHeader->toggleArm();
+                selectedTrackHeader->refresh();
+            }
+            else
+            {
+                // Cmd+A path: arm/disarm all tracks simultaneously
+                for (auto* h : trackHeaders)
+                {
+                    h->toggleArm();
+                    h->refresh();
+                }
+            }
+            return true;
+        }
+        if (key.getKeyCode() == 'x' || key.getKeyCode() == 'X')
+        {
+            applyCrossfadeToSelectedClips();
+            return true;
+        }
+    }
+
+    // Delete key with active time-range: remove the selected region from all clips
+    if ((key.getKeyCode() == juce::KeyPress::deleteKey
+         || key.getKeyCode() == juce::KeyPress::backspaceKey)
+        && rangeActive && rangeEndSecs > rangeStartSecs)
+    {
+        deleteTimeRange();
+        return true;
+    }
+
+    // ---- Cmd+A — select all clips on all tracks ----
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'a' || key.getKeyCode() == 'A'))
+    {
+        // Clear track-header selection so subsequent S/M/R apply to ALL tracks
+        // (same behaviour as MixerView: Cmd+A deselects the single strip and selects all).
+        setSelectedTrackHeader (nullptr);
+        selectedClips.clear();
+        for (auto* row : trackRows)
+            for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
+                if (auto* cc = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
+                {
+                    cc->setSelected (true);
+                    selectedClips.add (cc);
+                }
+        repaint();
+        return true;
     }
 
     // ---- Clip clipboard shortcuts (Cmd+C / Cmd+D / Cmd+V) ----
@@ -909,9 +1147,14 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
                     targetTrack = dynamic_cast<te::AudioTrack*> (cc->getClip().getClipTrack());
                 if (targetTrack == nullptr)
                 {
-                    auto tracks = te::getAudioTracks (*currentEdit);
-                    if (tracks.size() > 0)
-                        targetTrack = tracks[0];
+                    for (auto* t : te::getAudioTracks (*currentEdit))
+                    {
+                        if (MixerEngine::isAudioChannel (*t))
+                        {
+                            targetTrack = t;
+                            break;
+                        }
+                    }
                 }
                 if (targetTrack != nullptr)
                 {
@@ -928,37 +1171,139 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
 }
 
 //==============================================================================
+// Crossfade
+
+void ArrangementView::applyCrossfadeToSelectedClips()
+{
+    if (selectedClips.size() < 2)
+        return;
+
+    // Collect only WaveAudioClips from the selection
+    juce::Array<te::WaveAudioClip*> waveClips;
+    for (auto* cc : selectedClips)
+        if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&cc->getClip()))
+            waveClips.add (wc);
+
+    if (waveClips.size() < 2)
+        return;
+
+    // Check every pair of wave clips on the same track for an overlap
+    bool foundCrossfade = false;
+    for (int i = 0; i < waveClips.size() - 1 && ! foundCrossfade; ++i)
+    {
+        for (int j = i + 1; j < waveClips.size() && ! foundCrossfade; ++j)
+        {
+            auto* clipA = waveClips[i];
+            auto* clipB = waveClips[j];
+
+            // Must be on the same track
+            if (clipA->getClipTrack() != clipB->getClipTrack())
+                continue;
+
+            const double aStart = clipA->getPosition().getStart().inSeconds();
+            const double aEnd   = clipA->getPosition().getEnd().inSeconds();
+            const double bStart = clipB->getPosition().getStart().inSeconds();
+            const double bEnd   = clipB->getPosition().getEnd().inSeconds();
+
+            const double overlapStart = juce::jmax (aStart, bStart);
+            const double overlapEnd   = juce::jmin (aEnd,   bEnd);
+
+            if (overlapEnd <= overlapStart)
+                continue;   // no overlap — skip this pair
+
+            const double overlapSecs = overlapEnd - overlapStart;
+
+            // Determine which clip is earlier (starts first = fade-out; later = fade-in)
+            te::WaveAudioClip* earlier = (aStart <= bStart) ? clipA : clipB;
+            te::WaveAudioClip* later   = (aStart <= bStart) ? clipB : clipA;
+
+            auto& undoMgr = earlier->edit.getUndoManager();
+            undoMgr.beginNewTransaction ("Crossfade");
+
+            // Fade OUT on the earlier clip — Equal Power curve (type 1)
+            earlier->state.setProperty (te::IDs::fadeOut,     overlapSecs, &undoMgr);
+            earlier->state.setProperty (te::IDs::fadeOutType, 1,           &undoMgr);
+
+            // Fade IN on the later clip — Equal Power curve (type 1)
+            later->state.setProperty (te::IDs::fadeIn,     overlapSecs, &undoMgr);
+            later->state.setProperty (te::IDs::fadeInType, 1,           &undoMgr);
+
+            foundCrossfade = true;
+        }
+    }
+
+    // Force immediate repaint so fade lines appear without waiting for a timer tick
+    if (foundCrossfade)
+    {
+        for (auto* row : trackRows)
+            row->getClipArea().repaint();
+        repaint();
+    }
+}
+
+//==============================================================================
 // Tool-dispatching mouse handlers
 
 void ArrangementView::mouseDown (const juce::MouseEvent& e)
 {
-    // Right-click anywhere in the arrangement shows a context menu for tool selection.
-    // Using isPopupMenu() covers right-click AND Ctrl+click (macOS convention).
+    // Right-click: show context menu for empty arrangement space.
+    // (Right-click on a ClipComponent is handled by ClipComponent itself.)
     if (e.mods.isPopupMenu())
     {
-        juce::PopupMenu menu;
-        menu.addSectionHeader ("Edit Tool");
-        menu.addItem (1, juce::String ("Pointer")
-                         + (activeTool == EditTool::Pointer     ? "  \xe2\x9c\x93" : "")
-                         + "   E");
-        menu.addItem (2, juce::String ("Range Select")
-                         + (activeTool == EditTool::RangeSelect ? "  \xe2\x9c\x93" : "")
-                         + "   R");
-        menu.addItem (3, juce::String ("Scissors")
-                         + (activeTool == EditTool::Scissors    ? "  \xe2\x9c\x93" : "")
-                         + "   S");
+        auto* edit = appState.editManager.getEdit();
+        if (edit == nullptr) return;
 
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-            [this] (int result) {
-                switch (result)
+        const int xInTimeline   = (e.x - kHeaderWidth) + timelineViewport.getViewPositionX();
+        const double clickTime  = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
+        const int    clickY     = e.y;
+
+        juce::PopupMenu menu;
+        menu.addItem (1, "Add Audio Track");
+        menu.addItem (2, "Add MIDI Track");
+        menu.addSeparator();
+        menu.addItem (3, "Paste Clip Here",
+                      clipEditor.hasClipboardContents());
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [this, edit, clickTime, clickY] (int result)
+            {
+                auto existingTracks = te::getAudioTracks (*edit);
+                te::AudioTrack* lastTrack = existingTracks.isEmpty() ? nullptr : existingTracks.getLast();
+
+                if (result == 1)
                 {
-                    case 1: setActiveTool (EditTool::Pointer);     break;
-                    case 2: setActiveTool (EditTool::RangeSelect); break;
-                    case 3: setActiveTool (EditTool::Scissors);    break;
-                    default: break;
+                    appState.editManager.getUndoManager().beginNewTransaction ("Add Audio Track");
+                    auto t = edit->insertNewAudioTrack (
+                        te::TrackInsertPoint (nullptr, lastTrack), nullptr);
+                    if (t != nullptr)
+                    {
+                        t->setSoloIsolate (false);
+                        t->setName (t->getName());  // bake default name into state
+                    }
+                }
+                else if (result == 2)
+                {
+                    appState.editManager.getUndoManager().beginNewTransaction ("Add MIDI Track");
+                    auto t = edit->insertNewAudioTrack (
+                        te::TrackInsertPoint (nullptr, lastTrack), nullptr);
+                    if (t != nullptr)
+                    {
+                        t->setSoloIsolate (false);
+                        t->setName ("MIDI " + juce::String (existingTracks.size() + 1));
+                    }
+                }
+                else if (result == 3)
+                {
+                    // Paste onto the nearest track below the click Y
+                    const int yInContainer = (clickY - kHeaderStripHeight - kRulerHeight)
+                                             + timelineViewport.getViewPositionY();
+                    const int trackIdx = yContainerToTrackIndex (yInContainer);
+                    auto tracks = te::getAudioTracks (*edit);
+                    if (trackIdx >= 0 && trackIdx < tracks.size())
+                        clipEditor.pasteClip (*tracks[trackIdx], clickTime);
                 }
             });
-        return;  // Don't start marquee on right-click
+        return;
     }
 
     if (! e.mods.isLeftButtonDown()) return;
@@ -971,11 +1316,42 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
     const int xInTimeline = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
     const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
 
+    // Command+drag: temporary Marquee (Logic Pro X convention).
+    // Handled inline here — NOT via modifierKeysChanged, which also fires on Cmd+scroll (zoom).
+    if (e.mods.isCommandDown())
+    {
+        commandDragMarqueeActive = true;
+        rangeActive         = true;
+        rangeDragOriginSecs = snapTimeToGrid (clickTimeSecs, false);
+        rangeStartSecs      = rangeDragOriginSecs;
+        rangeEndSecs        = rangeDragOriginSecs;
+        const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+                                 + timelineViewport.getViewPositionY();
+        rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
+        rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
+        grabKeyboardFocus();
+        repaint();
+        return;
+    }
+
     switch (activeTool)
     {
         case EditTool::Pointer:
-            // Seek playhead — click on empty timeline space deselects all clips.
-            // (Clip clicks are handled by ClipComponent and never reach here.)
+        {
+            // Store the rubber-band origin FIRST — before any call that may trigger
+            // async repaints or ValueTree callbacks — so pointerBandOrigin is always
+            // set before mouseDrag fires, even if setPosition has side-effects.
+            pointerBandOrigin = e.getPosition();
+            pointerBandActive = false;
+
+            // If clicking INSIDE an existing time-range, preserve it so the user can:
+            //   draw range with Marquee → switch to Pointer → double-click inside → split.
+            // Only seek and deselect when clicking OUTSIDE the current range.
+            if (rangeActive && rangeEndSecs > rangeStartSecs
+                && clickTimeSecs >= rangeStartSecs && clickTimeSecs <= rangeEndSecs)
+                break;
+
+            // Normal pointer click: deselect all clips and seek playhead.
             for (auto* row : trackRows)
                 for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
                     if (auto* cc = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
@@ -985,6 +1361,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
                 edit->getTransport().setPosition (
                     tracktion::TimePosition::fromSeconds (clickTimeSecs));
             break;
+        }
 
         case EditTool::RangeSelect:
             // Start marquee — existing behaviour, now tool-gated
@@ -1000,6 +1377,31 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
             // clicks on empty timeline space are handled here.
             splitClipAtTime (clickTimeSecs, e.y);
             break;
+
+        case EditTool::Marquee:
+        {
+            const double snapped = snapTimeToGrid (clickTimeSecs, e.mods.isAltDown());
+
+            // If clicking INSIDE an existing range, preserve it so mouseDoubleClick
+            // can split at both boundaries.  Without this guard the second mouseDown
+            // of a double-click sequence resets the range to zero-width before
+            // mouseDoubleClick fires, silently aborting the split.
+            if (rangeActive && rangeEndSecs > rangeStartSecs
+                && snapped >= rangeStartSecs && snapped <= rangeEndSecs)
+                break;
+
+            // Start a new time-range selection; drag will extend it.
+            rangeActive         = true;
+            rangeDragOriginSecs = snapped;
+            rangeStartSecs      = rangeDragOriginSecs;
+            rangeEndSecs        = rangeDragOriginSecs;
+            // Record which track the drag starts on for track-aware selection
+            const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+                                     + timelineViewport.getViewPositionY();
+            rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
+            rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
+            break;
+        }
     }
 
     // Reclaim keyboard focus so E/R/S shortcuts work after any left-click in the arrangement.
@@ -1010,6 +1412,75 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
 void ArrangementView::mouseDrag (const juce::MouseEvent& e)
 {
+    // Marquee (time-range) drag — track-aware.
+    // Covers both the Marquee tool and temporary Marquee (Command+drag / Click Zone).
+    if ((activeTool == EditTool::Marquee || commandDragMarqueeActive) && rangeActive)
+    {
+        const int xInTimeline = (e.x - kHeaderWidth) + timelineViewport.getViewPositionX();
+        const double timeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
+        const double snapped  = snapTimeToGrid (timeSecs, e.mods.isAltDown());
+        rangeStartSecs = juce::jmin (rangeDragOriginSecs, snapped);
+        rangeEndSecs   = juce::jmax (rangeDragOriginSecs, snapped);
+
+        // Update track range from current Y
+        const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+                                 + timelineViewport.getViewPositionY();
+        const int currentTrack = yContainerToTrackIndex (yInContainer);
+        rangeTrackStart = juce::jmin (rangeDragTrackIndex, currentTrack);
+        rangeTrackEnd   = juce::jmax (rangeDragTrackIndex, currentTrack);
+
+        repaint();
+        return;
+    }
+
+    // ---- Pointer rubber-band (Arrow tool) — drag from empty timeline space ----
+    // Activates after a 4px threshold; Cmd+drag is already handled above as a time-range.
+    if (activeTool == EditTool::Pointer && !commandDragMarqueeActive)
+    {
+        const float dx = (float)(e.x - pointerBandOrigin.x);
+        const float dy = (float)(e.y - pointerBandOrigin.y);
+        if (!pointerBandActive && std::hypot (dx, dy) > 4.0f)
+            pointerBandActive = true;
+
+        if (pointerBandActive)
+        {
+            const int x1 = juce::jmin (pointerBandOrigin.x, e.x);
+            const int y1 = juce::jmin (pointerBandOrigin.y, e.y);
+            const int x2 = juce::jmax (pointerBandOrigin.x, e.x);
+            const int y2 = juce::jmax (pointerBandOrigin.y, e.y);
+            pointerBandRect = { x1, y1, x2 - x1, y2 - y1 };
+
+            // Convert to timelineContainer coordinates to test clip intersection
+            const int timelineLeft = kHeaderWidth;
+            const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+            juce::Rectangle<int> containerBand (
+                pointerBandRect.getX() - timelineLeft + timelineViewport.getViewPositionX(),
+                pointerBandRect.getY() - timelineTop  + timelineViewport.getViewPositionY(),
+                pointerBandRect.getWidth(),
+                pointerBandRect.getHeight());
+
+            selectedClips.clear();
+            for (auto* row : trackRows)
+            {
+                auto& clipArea = row->getClipArea();
+                for (int i = 0; i < clipArea.getNumChildComponents(); ++i)
+                {
+                    if (auto* cc = dynamic_cast<ClipComponent*> (clipArea.getChildComponent (i)))
+                    {
+                        const auto clipBounds = cc->getBounds().translated (
+                            clipArea.getX() + row->getX(),
+                            clipArea.getY() + row->getY());
+                        const bool inside = containerBand.intersects (clipBounds);
+                        cc->setSelected (inside);
+                        if (inside) selectedClips.add (cc);
+                    }
+                }
+            }
+            repaint();
+        }
+        return;
+    }
+
     if (! isMarqueeActive || activeTool != EditTool::RangeSelect) return;
 
     // Build rectangle from start point to current position
@@ -1059,6 +1530,16 @@ void ArrangementView::mouseDrag (const juce::MouseEvent& e)
 
 void ArrangementView::mouseUp (const juce::MouseEvent&)
 {
+    commandDragMarqueeActive = false;  // reset temporary Marquee (Command+drag or Click Zone)
+
+    // Clear pointer rubber-band — selection was already updated live during drag
+    if (pointerBandActive)
+    {
+        pointerBandActive = false;
+        pointerBandRect   = {};
+        repaint();
+    }
+
     if (isMarqueeActive)
     {
         isMarqueeActive = false;
@@ -1067,6 +1548,107 @@ void ArrangementView::mouseUp (const juce::MouseEvent&)
         marqueeRect = {};
         repaint();
     }
+}
+
+void ArrangementView::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    // Double-click within an active time range: split clip at both boundaries.
+    // Studio One workflow: select a region → double-click → Delete to remove it.
+    if (!rangeActive || rangeEndSecs <= rangeStartSecs)
+        return;
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    juce::ignoreUnused (e);
+
+    auto allTracks = te::getAudioTracks (*edit);
+
+    appState.editManager.getUndoManager().beginNewTransaction ("Split at Range Boundaries");
+
+    // Collect all wave clips that overlap the range on the selected track rows.
+    juce::Array<te::WaveAudioClip*> clipsToSplit;
+    for (int ti = rangeTrackStart; ti <= rangeTrackEnd && ti < allTracks.size(); ++ti)
+    {
+        auto* track = allTracks[ti];
+        for (auto* clip : track->getClips())
+        {
+            auto* wc = dynamic_cast<te::WaveAudioClip*> (clip);
+            if (wc == nullptr) continue;
+            const double start = wc->getPosition().getStart().inSeconds();
+            const double end   = wc->getPosition().getEnd().inSeconds();
+            // Clip must overlap the range (not just touch it)
+            if (end > rangeStartSecs && start < rangeEndSecs)
+                clipsToSplit.add (wc);
+        }
+    }
+
+    // Split at right boundary first so clip positions don't shift before the left split.
+    for (auto* wc : clipsToSplit)
+    {
+        const double clipStart = wc->getPosition().getStart().inSeconds();
+        const double clipEnd   = wc->getPosition().getEnd().inSeconds();
+        if (rangeEndSecs > clipStart && rangeEndSecs < clipEnd)
+            clipEditor.cutClip (*wc, rangeEndSecs);
+    }
+
+    // Re-fetch clips — the right-boundary split created new clips; old pointers may be stale.
+    clipsToSplit.clear();
+    for (int ti = rangeTrackStart; ti <= rangeTrackEnd && ti < allTracks.size(); ++ti)
+    {
+        auto* track = allTracks[ti];
+        for (auto* clip : track->getClips())
+        {
+            auto* wc = dynamic_cast<te::WaveAudioClip*> (clip);
+            if (wc == nullptr) continue;
+            const double start = wc->getPosition().getStart().inSeconds();
+            const double end   = wc->getPosition().getEnd().inSeconds();
+            if (end > rangeStartSecs && start < rangeEndSecs)
+                clipsToSplit.add (wc);
+        }
+    }
+
+    // Split at left boundary.
+    for (auto* wc : clipsToSplit)
+    {
+        const double clipStart = wc->getPosition().getStart().inSeconds();
+        const double clipEnd   = wc->getPosition().getEnd().inSeconds();
+        if (rangeStartSecs > clipStart && rangeStartSecs < clipEnd)
+            clipEditor.cutClip (*wc, rangeStartSecs);
+    }
+
+    // Rebuild the track rows to show the new clip boundaries.
+    // After rebuild, auto-select the middle segment (the isolated region) so the
+    // user can immediately press Delete — Studio One workflow:
+    //   Range → double-click → isolated segment selected → Delete removes it.
+    const double rStart = rangeStartSecs;  // capture before potential mutation
+    const double rEnd   = rangeEndSecs;
+    juce::MessageManager::callAsync ([this, rStart, rEnd]
+    {
+        rebuildTrackRows();
+        // Select all clips whose time span exactly matches the split range.
+        // These are the newly isolated middle segments from the double-click split.
+        selectedClips.clear();
+        for (auto* row : trackRows)
+        {
+            auto& clipArea = row->getClipArea();
+            for (int i = 0; i < clipArea.getNumChildComponents(); ++i)
+            {
+                if (auto* cc = dynamic_cast<ClipComponent*> (clipArea.getChildComponent (i)))
+                {
+                    const double s = cc->getClip().getPosition().getStart().inSeconds();
+                    const double e2 = cc->getClip().getPosition().getEnd().inSeconds();
+                    // Tolerance: TE may shift clip boundaries slightly due to snap/sample rounding
+                    if (std::abs (s - rStart) < 0.005 && std::abs (e2 - rEnd) < 0.005)
+                    {
+                        cc->setSelected (true);
+                        selectedClips.add (cc);
+                    }
+                }
+            }
+        }
+        repaint();
+    });
 }
 
 juce::MouseCursor ArrangementView::getMouseCursor()
@@ -1081,6 +1663,8 @@ juce::MouseCursor ArrangementView::getMouseCursor()
             // No dedicated scissors cursor in JUCE — crosshair is universally
             // understood as a precision tool in DAW conventions.
             return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
+        case EditTool::Marquee:
+            return juce::MouseCursor (juce::MouseCursor::IBeamCursor);
     }
     return juce::MouseCursor (juce::MouseCursor::NormalCursor);
 }
@@ -1148,6 +1732,9 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
 
 void ArrangementView::rebuildTrackRows()
 {
+    // Clear the inter-track drag guard so future ValueTree changes trigger rebuilds normally.
+    isInterTrackDragActive = false;
+
     // Capture expansion state before destroying TrackRows so open automation
     // lanes survive structural rebuilds (e.g. clip split, track reorder).
     std::set<tracktion::engine::EditItemID> expandedTrackIDs;
@@ -1172,6 +1759,10 @@ void ArrangementView::rebuildTrackRows()
 
     for (auto* audioTrack : te::getAudioTracks (*edit))
     {
+        // Bus and FX channels are mixer-only — skip them in the arrangement
+        if (! MixerEngine::isAudioChannel (*audioTrack))
+            continue;
+
         // Track header (left panel) — passes plugin management refs for right-click menu
         auto* header = trackHeaders.add (new TrackHeader (*audioTrack,
                                                           mixerEngine,
@@ -1202,9 +1793,18 @@ void ArrangementView::rebuildTrackRows()
             auto* cc = new ClipComponent (*clip, appState.editManager, clipEditor, pixelsPerSecond, activeTool);
             row->getClipArea().addAndMakeVisible (cc);
 
-            // Wire single-click selection — notifies ArrangementView so Cmd+C/V works
+            // Wire single-click selection — notifies ArrangementView so Cmd+C/V works.
+            // When the clicked clip is already selected within a multi-selection (e.g. after
+            // Cmd+A), preserve the group so the user can start a group drag immediately.
             cc->onSelectRequest = [this] (ClipComponent* clicked)
             {
+                if (clicked->isSelected() && selectedClips.size() > 1)
+                {
+                    // Keep the group selected; drag will start on the whole selection.
+                    grabKeyboardFocus();
+                    return;
+                }
+
                 // Deselect all clips, then select the clicked one
                 for (auto* row : trackRows)
                     for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
@@ -1217,10 +1817,65 @@ void ArrangementView::rebuildTrackRows()
                 grabKeyboardFocus();
             };
 
-            // Wire inter-track drag: moving the clip >30px vertically triggers a track move
-            cc->onInterTrackDrag = [this] (te::Clip& c, double startSecs, int deltaY)
+            // Wire Cmd+click: toggle this clip in/out of the current selection without
+            // clearing other selected clips. Enables selecting exactly 2 clips for crossfade.
+            cc->onCmdSelectRequest = [this] (ClipComponent* clicked)
             {
-                moveClipByTrackDelta (c, startSecs, deltaY);
+                if (clicked->isSelected())
+                {
+                    clicked->setSelected (false);
+                    selectedClips.removeAllInstancesOf (clicked);
+                }
+                else
+                {
+                    clicked->setSelected (true);
+                    selectedClips.add (clicked);
+                }
+                grabKeyboardFocus();
+            };
+
+            // Wire inter-track drag: reparents the ClipComponent in-place so the drag
+            // continues uninterrupted.  rebuildTrackRows() is deferred to mouseUp.
+            cc->onInterTrackDrag = [this] (te::Clip& c, double startSecs, int absY,
+                                           ClipComponent* comp)
+            {
+                moveClipByTrackDelta (c, startSecs, absY, comp);
+            };
+            cc->onDragEnded = [this]
+            {
+                // Deferred rebuild — runs after mouseUp returns so the component
+                // remains alive for the rest of the current event delivery.
+                juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+            };
+
+            // Snapshot initial positions of ALL selected clips when a drag begins.
+            // Stored in multiDragClips / multiDragInitialTimes for onMultiClipDrag.
+            cc->onDragWillStart = [this] (ClipComponent* /*comp*/)
+            {
+                multiDragClips.clear();
+                multiDragInitialTimes.clear();
+                for (auto* sel : selectedClips)
+                {
+                    multiDragClips.add (sel);
+                    multiDragInitialTimes.add (sel->getClip().getPosition().getStart().inSeconds());
+                }
+            };
+
+            // Move all OTHER selected clips by the same snapped delta as the primary.
+            cc->onMultiClipDrag = [this] (te::Clip& primaryClip, double deltaSecs)
+            {
+                for (int i = 0; i < multiDragClips.size(); ++i)
+                {
+                    auto* sel = multiDragClips[i];
+                    if (sel == nullptr || &sel->getClip() == &primaryClip)
+                        continue;
+                    const double newStart = juce::jmax (0.0, multiDragInitialTimes[i] + deltaSecs);
+                    clipEditor.moveClip (sel->getClip(), newStart);
+                    const double endSecs = newStart + sel->getClip().getPosition().getLength().inSeconds();
+                    sel->setBounds ((int)(newStart * pixelsPerSecond), sel->getY(),
+                                    juce::jmax (4, (int)((endSecs - newStart) * pixelsPerSecond)),
+                                    sel->getHeight());
+                }
             };
 
             // Position clip within the clip area
@@ -1288,7 +1943,12 @@ void ArrangementView::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueT
                            || childType == "MIDICLIP"
                            || childType == "CLIP";
 
-    if (isTrackChange || isClipChange)
+    // Suppress mid-drag rebuilds: clip.moveTo() in moveClipByTrackDelta fires
+    // valueTreeChildAdded/Removed between mouseDrag events.  Rebuilding mid-drag
+    // destroys the live ClipComponent and snaps the clip to the wrong position.
+    // isInterTrackDragActive is cleared at the start of rebuildTrackRows() (called
+    // from onDragEnded on mouseUp) so the rebuild still happens after the drag ends.
+    if ((isTrackChange || isClipChange) && !isInterTrackDragActive)
         juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
 
     juce::ignoreUnused (parent, child);
@@ -1311,7 +1971,7 @@ void ArrangementView::valueTreeChildRemoved (juce::ValueTree& parent, juce::Valu
                            || childType == "MIDICLIP"
                            || childType == "CLIP";
 
-    if (isTrackChange || isClipChange)
+    if ((isTrackChange || isClipChange) && !isInterTrackDragActive)
         juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
 
     juce::ignoreUnused (parent, child);
@@ -1331,12 +1991,15 @@ void ArrangementView::valueTreeChildOrderChanged (juce::ValueTree& parent, int, 
 
 void ArrangementView::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&)
 {
-    // Clip/track property changes (name, position, BPM) may require a repaint
-    // rulerStrip.repaint() ensures Gap 9 (BPM change → ruler update) is reactive
+    // Clip/track property changes (name, position, BPM) may require a repaint.
+    // gridCombo.onChange() recomputes gridResolution from the current BPM so the ruler
+    // grid lines stay correct after a tempo change (ruler reads gridResolution by ref).
     juce::MessageManager::callAsync ([this] {
         resized();
         repaint();
         rulerStrip.repaint();
+        if (gridCombo.onChange)
+            gridCombo.onChange();  // recompute gridResolution using live BPM
     });
 }
 
@@ -1361,6 +2024,10 @@ void ArrangementView::scrollBarMoved (juce::ScrollBar* scrollBar, double newRang
         scrollPositionSecs = newRangeStart / pixelsPerSecond;
         rulerStrip.repaint();
         repaint();  // repaint playhead line with updated scroll offset
+
+        // Reposition automation lane controls so they stay at the visible left edge
+        for (auto* row : trackRows)
+            row->updateScrollOffset();
     }
 }
 
@@ -1432,26 +2099,59 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
     {
         auto& undoManager = appState.editManager.getUndoManager();
         undoManager.beginNewTransaction ("Add Audio Track for Import");
-        edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, nullptr), nullptr);
+        te::AudioTrack::Ptr firstTrack = edit->insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (*edit), nullptr);
+        if (firstTrack != nullptr)
+            firstTrack->setName (firstTrack->getName());  // bake default name into state
         tracks = te::getAudioTracks (*edit);
         if (tracks.isEmpty()) return;
         trackIndex = 0;
     }
 
-    // Import all audio files in the drop (multi-file drops stack sequentially)
+    // Import audio files.
+    // Multiple files dropped at once: each gets its own track (Studio One / Logic Pro X
+    // behaviour — one stem per track, ready for parallel mixing).
+    // Single file dropped: lands on the target track at the drop position.
     static const juce::StringArray audioExtensions { ".wav", ".aif", ".aiff", ".mp3", ".flac", ".ogg" };
-    double offsetSecs = 0.0;
+
+    // Collect valid audio files from the drop
+    juce::Array<juce::File> audioFiles;
     for (const auto& filePath : files)
     {
         juce::File f (filePath);
-        if (! audioExtensions.contains (f.getFileExtension().toLowerCase()))
-            continue;
+        if (audioExtensions.contains (f.getFileExtension().toLowerCase()))
+            audioFiles.add (f);
+    }
 
-        auto* clip = clipEditor.importAudioFile (f, *tracks[trackIndex], dropTimeSecs + offsetSecs);
-        if (clip != nullptr)
+    if (audioFiles.isEmpty())
+        return;
+
+    auto& undoManager = appState.editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Import Audio Files");
+
+    if (audioFiles.size() == 1)
+    {
+        // Single file: import onto the target track (existing behaviour)
+        clipEditor.importAudioFile (audioFiles[0], *tracks[trackIndex], dropTimeSecs);
+    }
+    else
+    {
+        // Multiple files: create one track per file (Logic / Studio One behaviour).
+        // The first file lands on the target track; subsequent files each get a
+        // new track inserted after the previous one.
+        te::AudioTrack* currentTrack = tracks[trackIndex];
+        for (int i = 0; i < audioFiles.size(); ++i)
         {
-            // Advance offset so the next file starts after this one
-            offsetSecs += clip->getPosition().getLength().inSeconds();
+            if (i > 0)
+            {
+                // Insert a new audio track for each additional file
+                currentTrack = edit->insertNewAudioTrack (
+                    te::TrackInsertPoint::getEndOfTracks (*edit), nullptr);
+                if (currentTrack == nullptr) break;
+                // Bake the filename-derived name immediately so reorders don't change it
+                currentTrack->setName (audioFiles[i].getFileNameWithoutExtension());
+                currentTrack->setName (audioFiles[i].getFileNameWithoutExtension());
+            }
+            clipEditor.importAudioFile (audioFiles[i], *currentTrack, dropTimeSecs);
         }
     }
 }
@@ -1468,6 +2168,11 @@ void ArrangementView::setSelectedTrackHeader (TrackHeader* header)
 
     if (header != nullptr)
         header->setSelected (true);
+
+    // Reclaim keyboard focus so S/M/R shortcuts work after TrackHeader clicks.
+    // TrackHeader mouseDown never bubbles to ArrangementView::mouseDown(), so focus
+    // must be grabbed here explicitly — same pattern as MixerView::setMixerSelectedTrack().
+    grabKeyboardFocus();
 }
 
 //==============================================================================
@@ -1541,21 +2246,83 @@ void ArrangementView::itemDropped (
     auto& undoManager = appState.editManager.getUndoManager();
     undoManager.beginNewTransaction ("Reorder Track");
 
-    // TE tracks are direct children of edit->state
-    const auto& trackState = sourceHeader->getTrack().state;
-    const int currentChildIndex = edit->state.indexOf (trackState);
-    if (currentChildIndex < 0) return;
+    // Build the filtered visible-track list (same filter as rebuildTrackRows) so we
+    // can map row indices to actual ValueTree child positions in edit->state.
+    // edit->state also contains non-track children (TempoSequence, etc.) so we cannot
+    // use the row index directly as the moveChild target index — it must be the real
+    // child index of the target track in edit->state.
+    juce::Array<te::AudioTrack*> visibleTracks;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (MixerEngine::isAudioChannel (*t))
+            visibleTracks.add (t);
 
-    // Adjust target index: when moving down, +1 compensates for the source removal
-    int targetIndex = dropIndex;
-    if (dropIndex > sourceIndex) targetIndex++;
+    if (sourceIndex < 0 || sourceIndex >= visibleTracks.size()) return;
+    if (dropIndex   < 0 || dropIndex   >= visibleTracks.size()) return;
 
-    edit->state.moveChild (currentChildIndex, targetIndex, &undoManager);
+    // JUCE ValueTree::moveChild (src, dst) places the item at final position dst in
+    // the result array (no +1 adjustment needed).  Using the state index of the track
+    // currently occupying dropIndex as dst gives the correct result for both up and
+    // down moves:
+    //   Moving UP   (dropIndex < sourceIndex): item lands before visibleTracks[dropIndex] ✓
+    //   Moving DOWN (dropIndex > sourceIndex): item lands at visibleTracks[dropIndex]'s
+    //       old position, pushing that track one step forward ✓
+    const int sourceChildIndex = edit->state.indexOf (visibleTracks[sourceIndex]->state);
+    const int targetChildIndex = edit->state.indexOf (visibleTracks[dropIndex]->state);
+    if (sourceChildIndex < 0 || targetChildIndex < 0) return;
+
+    edit->state.moveChild (sourceChildIndex, targetChildIndex, &undoManager);
     // valueTreeChildOrderChanged listener will call rebuildTrackRows() asynchronously
 }
 
+int ArrangementView::yContainerToTrackIndex (int yInContainer) const
+{
+    int cumY = 0;
+    for (int i = 0; i < trackRows.size(); ++i)
+    {
+        const int h = (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
+        if (yInContainer < cumY + h)
+            return i;
+        cumY += h;
+    }
+    return juce::jmax (0, trackRows.size() - 1);  // clamp to last row
+}
+
+void ArrangementView::deselectAllClips()
+{
+    for (auto* row : trackRows)
+        for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
+            if (auto* cc = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
+                cc->setSelected (false);
+    selectedClips.clear();
+    repaint();
+}
+
+void ArrangementView::startRangeSelectionFromClickZone (const juce::MouseEvent& e)
+{
+    // Called by ClipComponent when Pointer tool + mouse in lower half of clip.
+    // Starts a temporary time-range selection without switching activeTool.
+    commandDragMarqueeActive = true;
+
+    const int timelineLeft = kHeaderWidth;
+    const int xInTimeline  = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
+    const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
+
+    rangeActive         = true;
+    rangeDragOriginSecs = snapTimeToGrid (clickTimeSecs, e.mods.isAltDown());
+    rangeStartSecs      = rangeDragOriginSecs;
+    rangeEndSecs        = rangeDragOriginSecs;
+
+    const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+                             + timelineViewport.getViewPositionY();
+    rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
+    rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
+
+    repaint();
+}
+
 void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs,
-                                             int deltaYPx)
+                                             int absoluteYInContainer,
+                                             ClipComponent* draggedComp)
 {
     // Find which track the clip currently lives on
     int sourceTrackIndex = -1;
@@ -1570,11 +2337,9 @@ void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs
     if (sourceTrackIndex < 0)
         return;
 
-    // Calculate target track from vertical pixel delta
-    const int rowH = (int)(TrackRow::kCollapsedHeight * trackHeightScale);
-    const int rowDelta = deltaYPx / juce::jmax (1, rowH);
-    const int targetTrackIndex = juce::jlimit (0, trackRows.size() - 1,
-                                               sourceTrackIndex + rowDelta);
+    // Determine target track from absolute Y in timelineContainer
+    const int targetTrackIndex = yContainerToTrackIndex (absoluteYInContainer);
+
     if (targetTrackIndex == sourceTrackIndex)
         return;
 
@@ -1582,10 +2347,101 @@ void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs
     if (destTrack == nullptr)
         return;
 
-    // Move the clip to the target track and reposition
+    // Suppress ValueTree-triggered rebuildTrackRows() while the drag is live.
+    // clip.moveTo() fires valueTreeChildRemoved + valueTreeChildAdded which would
+    // otherwise queue callAsync(rebuildTrackRows) and destroy this component mid-drag.
+    isInterTrackDragActive = true;
+
+    // Move the TE clip data to the target track at the given position.
+    // moveClipToTrack begins its own undo transaction; moveClip appends to it.
     clipEditor.moveClipToTrack (clip, *destTrack);
     clipEditor.moveClip (clip, startTimeSecs);
 
-    // Rebuild after the move (callAsync to avoid re-entrancy from within drag callback)
+    // Physically reparent the ClipComponent to the destination track's clip area so
+    // the drag continues uninterrupted.  All clip areas share the same screen X origin
+    // (each clipArea is at x=0 in its TrackRow; each TrackRow is at x=0 in
+    // timelineContainer), so the component's X coordinates remain valid after reparent.
+    // rebuildTrackRows() is deferred to mouseUp via ClipComponent::onDragEnded.
+    if (draggedComp != nullptr)
+    {
+        auto& destClipArea = trackRows[targetTrackIndex]->getClipArea();
+        // Derive X from startTimeSecs (the clean original position), NOT from
+        // draggedComp->getX().  The component's current X was set by setBounds()
+        // in mouseDrag using newStartSecs (which included snappedDelta drift),
+        // so reading it back would place the clip at the wrong visual position.
+        const int savedX = (int)(startTimeSecs * pixelsPerSecond);
+        const int savedW = draggedComp->getWidth();
+        const int destH  = destClipArea.getHeight();
+
+        draggedComp->getParentComponent()->removeChildComponent (draggedComp);
+        destClipArea.addAndMakeVisible (draggedComp);
+        draggedComp->setBounds (savedX, 0, savedW, destH);
+
+        // Signal the component to rebuild on mouseUp
+        draggedComp->pendingRebuild = true;
+    }
+}
+
+//==============================================================================
+// deleteTimeRange — Marquee tool: delete the selected time region from all clips
+
+void ArrangementView::deleteTimeRange()
+{
+    if (!rangeActive || rangeEndSecs <= rangeStartSecs)
+        return;
+
+    const double rStart = rangeStartSecs;
+    const double rEnd   = rangeEndSecs;
+
+    auto& undoManager = appState.editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Delete Time Range");
+
+    // Collect clips only from the tracks covered by the Marquee selection
+    juce::Array<te::Clip*> allClips;
+    for (int ri = rangeTrackStart; ri <= rangeTrackEnd && ri < trackRows.size(); ++ri)
+        for (int i = 0; i < trackRows[ri]->getClipArea().getNumChildComponents(); ++i)
+            if (auto* cc = dynamic_cast<ClipComponent*> (trackRows[ri]->getClipArea().getChildComponent (i)))
+                allClips.add (&cc->getClip());
+
+    for (auto* clip : allClips)
+    {
+        const double cStart = clip->getPosition().getStart().inSeconds();
+        const double cEnd   = clip->getPosition().getEnd().inSeconds();
+
+        if (cEnd <= rStart || cStart >= rEnd)
+            continue;  // no overlap
+
+        if (cStart >= rStart && cEnd <= rEnd)
+        {
+            // Clip entirely inside range: delete it
+            clipEditor.deleteClip (*clip);
+        }
+        else if (cStart < rStart && cEnd > rEnd)
+        {
+            // Range is a hole inside the clip: cut at rStart, then trim the right piece
+            if (auto* wave = dynamic_cast<te::WaveAudioClip*> (clip))
+            {
+                // After cutClip: original clip = [cStart, rStart]; newClip = [rStart, cEnd]
+                if (auto* rightPiece = clipEditor.cutClip (*wave, rStart))
+                {
+                    // Trim the right piece so it starts at rEnd (skip the deleted region)
+                    clipEditor.trimClip (*rightPiece, rEnd, cEnd);
+                }
+            }
+        }
+        else if (cStart < rStart)
+        {
+            // Clip overlaps range on the right: trim clip end to range start
+            clipEditor.trimClip (*clip, cStart, rStart);
+        }
+        else
+        {
+            // Clip overlaps range on the left: trim clip start to range end
+            clipEditor.trimClip (*clip, rEnd, cEnd);
+        }
+    }
+
+    rangeActive = false;
     juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+    repaint();
 }

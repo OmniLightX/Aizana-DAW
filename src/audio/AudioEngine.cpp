@@ -58,15 +58,33 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
     // behaviour of always routing to the best available output on launch.
     {
         auto setup = adm.getAudioDeviceSetup();
+        bool needsUpdate = false;
+
         if (setup.outputChannels.countNumberOfSetBits() == 0 && adm.getCurrentAudioDevice() != nullptr)
         {
             setup.outputChannels.setRange (0, numOutputChannels, true);
+            needsUpdate = true;
+            juce::Logger::writeToLog ("AudioEngine: activating " + juce::String (numOutputChannels)
+                                      + " output channels (restored from empty bitmask)");
+        }
+
+        // Same guard for input channels: TE may have saved 0 input channels in its XML
+        // (e.g., if the previous session was opened with the old default numInputChannels = 0).
+        // Force-enable the requested count so WaveInputDevice objects are created for each
+        // physical input — without this, the per-track input selector shows "No inputs".
+        if (setup.inputChannels.countNumberOfSetBits() == 0 && adm.getCurrentAudioDevice() != nullptr)
+        {
+            setup.inputChannels.setRange (0, numInputChannels, true);
+            needsUpdate = true;
+            juce::Logger::writeToLog ("AudioEngine: activating " + juce::String (numInputChannels)
+                                      + " input channels (restored from empty bitmask)");
+        }
+
+        if (needsUpdate)
+        {
             auto setupErr = adm.setAudioDeviceSetup (setup, true);
             if (setupErr.isNotEmpty())
-                juce::Logger::writeToLog ("AudioEngine: output routing fallback failed: " + setupErr);
-            else
-                juce::Logger::writeToLog ("AudioEngine: activated " + juce::String (numOutputChannels)
-                                          + " output channels (restored from empty bitmask)");
+                juce::Logger::writeToLog ("AudioEngine: channel routing fallback failed: " + setupErr);
         }
     }
 

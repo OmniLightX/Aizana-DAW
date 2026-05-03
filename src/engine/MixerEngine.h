@@ -3,13 +3,30 @@
 #include "EditManager.h"
 
 /**
- * MixerEngine — Channel strip parameters, bus/send routing, and sidechain routing
+ * MixerEngine — Channel strip parameters, bus/FX routing, and sidechain routing
  * over Tracktion Engine.
  *
  * Covers requirements:
  *   MIX-01: Volume, pan, solo, mute on each AudioTrack
- *   MIX-02: Bus (FolderTrack) and send (AuxSendPlugin) routing for submixing
+ *   MIX-02: Bus Channel and FX Channel creation, routing, and send management
  *   MIX-03: Sidechain routing — connect sourceTrack as sidechain for a plugin
+ *
+ * Channel type tagging:
+ *   Bus and FX channel tracks carry the property kChannelTypeProp on their
+ *   ValueTree state so MixerView and ArrangementView can distinguish them from
+ *   normal audio tracks without scanning plugin chains.
+ *
+ *   kChannelTypeBus — Bus Channel: source tracks redirect their main output to
+ *                     this track via TrackOutput::setOutputToTrack(). The bus
+ *                     receives the summed signal, applies its insert chain and
+ *                     fader, then outputs to master. Source track no longer feeds
+ *                     master directly — true submix routing, not a copy.
+ *
+ *   kChannelTypeFX  — FX Channel: source tracks add an AuxSendPlugin (parallel
+ *                     tap) targeting this track's AuxReturnPlugin. Source tracks
+ *                     continue to master simultaneously (wet/dry send model).
+ *                     FX Channel inserts (e.g. Reverb at 100% wet) process the
+ *                     tapped signal before it reaches master.
  *
  * Design invariants:
  *   - All parameter mutations route through editManager.getUndoManager()
@@ -18,6 +35,20 @@
  *   - AI batch mutations should call editManager.beginAITransaction() once
  *     before calling multiple MixerEngine methods
  */
+
+/** ValueTree property name used to tag Bus and FX AudioTracks. */
+static const juce::Identifier kChannelTypeProp { "cloudesChannelType" };
+/** Property value for Bus Channel AudioTracks. */
+static const juce::String kChannelTypeBus { "bus" };
+/** Property value for FX Channel AudioTracks. */
+static const juce::String kChannelTypeFX  { "fx" };
+
+/** Custom property stored on a source track when it is routed to a Bus Channel.
+ *  Caches the bus name so the channel strip button can display it reliably even
+ *  when TE's getDestinationTrack() is transiently unavailable during graph updates.
+ *  Cleared by unrouteFromBus(). */
+static const juce::Identifier kOutputBusNameProp { "cloudesOutputBusName" };
+
 class MixerEngine
 {
 public:
@@ -52,30 +83,117 @@ public:
     bool isMuted (const te::AudioTrack& track) const;
 
     // -------------------------------------------------------------------------
-    // MIX-02: Bus and send routing
+    // MIX-02: Bus Channel and FX Channel creation + routing
     // -------------------------------------------------------------------------
 
     /**
-     * Create a submix bus (FolderTrack). Returns the new FolderTrack.
-     * The FolderTrack acts as a submix bus — insert tracks under it or route
-     * sends to it via createSend().
+     * Create a Bus Channel — an AudioTrack tagged kChannelTypeBus.
+     *
+     * Signal path: source tracks redirect their main output via
+     * TrackOutput::setOutputToTrack() → Bus inserts → Bus fader → master.
+     * The source track's direct-to-master path is replaced (not parallel).
+     *
+     * Returns the new AudioTrack, or nullptr on failure.
      */
-    te::FolderTrack* createBus (const juce::String& name);
+    te::AudioTrack* createBusChannel (const juce::String& name);
 
     /**
-     * Insert an AuxSendPlugin on sourceTrack targeting destBus, at sendLeveldB.
+     * Create an FX Channel — an AudioTrack with AuxReturnPlugin, tagged kChannelTypeFX.
+     *
+     * Signal path: source tracks add AuxSendPlugin (parallel tap) →
+     * FX Channel AuxReturnPlugin → inserts (e.g. Reverb 100% wet) → FX fader → master.
+     * Source track main output continues to master simultaneously.
+     *
+     * Returns the new AudioTrack, or nullptr on failure.
+     */
+    te::AudioTrack* createFXChannel (const juce::String& name);
+
+    /**
+     * Redirect sourceTrack's main output into busChannel.
+     * Uses TrackOutput::setOutputToTrack() — source track no longer feeds master directly.
+     * No-op if busChannel is not tagged as kChannelTypeBus.
+     */
+    void routeTrackToBus (te::AudioTrack& sourceTrack, te::AudioTrack& busChannel);
+
+    /**
+     * Restore sourceTrack's main output to the default audio output (master).
+     * Call this when removing a track from a Bus Channel.
+     */
+    void unrouteFromBus (te::AudioTrack& sourceTrack);
+
+    /**
+     * Returns the Bus Channel that sourceTrack currently routes its main output to,
+     * or nullptr if the track goes directly to master (or to a non-bus track).
+     */
+    te::AudioTrack* getBusChannelFor (const te::AudioTrack& sourceTrack) const;
+
+    /**
+     * Insert an AuxSendPlugin on sourceTrack targeting fxChannel at sendLeveldB.
      * Returns the new AuxSendPlugin, or nullptr on failure.
-     * The bus number is derived from destBus's position in the edit track list.
+     * No-op (returns nullptr) if fxChannel is not tagged as kChannelTypeFX.
      */
-    te::AuxSendPlugin* createSend (te::AudioTrack& sourceTrack,
-                                   te::FolderTrack& destBus,
-                                   float sendLeveldB);
+    te::AuxSendPlugin* createFXSend (te::AudioTrack& sourceTrack,
+                                     te::AudioTrack& fxChannel,
+                                     float sendLeveldB = -6.0f);
 
     /**
-     * Remove the AuxSendPlugin(s) on sourceTrack that target destBus.
+     * Remove the AuxSendPlugin on sourceTrack that targets fxChannel.
      * No-op if no matching send is found.
      */
-    void removeSend (te::AudioTrack& sourceTrack, te::FolderTrack& destBus);
+    void removeFXSend (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel);
+
+    /**
+     * Set the send level (dB) for the AuxSendPlugin on sourceTrack targeting fxChannel.
+     * No-op if no send exists.
+     */
+    void setFXSendLevel (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel, float dB);
+
+    /** Returns the current send level in dB, or -100.0f if no send exists. */
+    float getFXSendLevel (const te::AudioTrack& sourceTrack, const te::AudioTrack& fxChannel) const;
+
+    /**
+     * Enable or disable the AuxSendPlugin on sourceTrack targeting fxChannel.
+     */
+    void setFXSendEnabled (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel, bool enabled);
+
+    /** Returns true if the send from sourceTrack to fxChannel exists and is enabled. */
+    bool isFXSendEnabled (const te::AudioTrack& sourceTrack, const te::AudioTrack& fxChannel) const;
+
+    /**
+     * Returns true if the send from sourceTrack to fxChannel is pre-fader
+     * (AuxSendPlugin positioned before the VolumeAndPanPlugin in the chain).
+     * Returns false if post-fader (after VolumeAndPanPlugin) or if no send exists.
+     */
+    bool isFXSendPreFader (const te::AudioTrack& sourceTrack, const te::AudioTrack& fxChannel) const;
+
+    /**
+     * Move the AuxSendPlugin on sourceTrack for fxChannel to a pre-fader or
+     * post-fader position relative to the track's VolumeAndPanPlugin.
+     * No-op if no send exists or VolumeAndPanPlugin is not found.
+     */
+    void setFXSendPreFader (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel, bool preFader);
+
+    /** Returns all Bus Channel AudioTracks in the current Edit. */
+    juce::Array<te::AudioTrack*> getBusChannels() const;
+
+    /** Returns all FX Channel AudioTracks in the current Edit. */
+    juce::Array<te::AudioTrack*> getFXChannels() const;
+
+    /** Returns true if track is tagged as a Bus Channel. */
+    static bool isBusChannel (const te::AudioTrack& track);
+
+    /** Returns true if track is tagged as an FX Channel. */
+    static bool isFXChannel (const te::AudioTrack& track);
+
+    /** Returns true if track is a plain audio track (no channel-type tag). */
+    static bool isAudioChannel (const te::AudioTrack& track);
+
+    // ---- Legacy API (for existing callers) ----
+    te::AudioTrack*    createBus  (const juce::String& name);
+    te::AuxSendPlugin* createSend (te::AudioTrack& sourceTrack,
+                                   te::AudioTrack& returnTrack,
+                                   float sendLeveldB);
+    void               removeSend (te::AudioTrack& sourceTrack, te::AudioTrack& returnTrack);
 
     // -------------------------------------------------------------------------
     // MIX-03: Sidechain routing
@@ -98,8 +216,13 @@ public:
 private:
     EditManager& editManager;
 
-    /** Return the bus number for a FolderTrack (its 0-based index in edit track list). */
-    int getBusNumberForFolderTrack (const te::FolderTrack& bus) const;
+    /** Return the bus number stored in the AuxReturnPlugin on returnTrack, or -1 if none. */
+    int getBusNumberForReturnTrack (const te::AudioTrack& returnTrack) const;
+
+    /** Shared helper for createFXSend and legacy createSend. */
+    te::AuxSendPlugin* createAuxSend (te::AudioTrack& sourceTrack,
+                                      te::AudioTrack& returnTrack,
+                                      float sendLeveldB);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerEngine)
 };

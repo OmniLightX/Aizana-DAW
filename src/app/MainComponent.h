@@ -14,6 +14,7 @@
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "ui/preferences/PreferencesDialog.h"
 #include "ui/export/ExportDialog.h"
+#include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
 
 /**
@@ -101,6 +102,78 @@ private:
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
 
+    // ---- Mixer divider — click to toggle, drag to resize (Studio One style) ----
+    // Replaces the former juce::TextButton mixerToggleButton.
+    // The component handles both a click (< 5px movement = toggle) and a
+    // vertical drag (adjusts mixerHeightPx).
+    class MixerDivider : public juce::Component
+    {
+    public:
+        MixerDivider() = default;
+
+        std::function<void()>    onToggleClick;   // fired on short click
+        std::function<void(int)> onDragDelta;     // fired during drag: delta Y in screen pixels
+        bool mixerExpanded = true;                // controls arrow direction in paint()
+
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (juce::Colour (0xff1a1a1a));
+            // Subtle top/bottom border lines
+            g.setColour (juce::Colour (0xff444444));
+            g.drawHorizontalLine (0, 0.0f, (float)getWidth());
+            g.drawHorizontalLine (getHeight() - 1, 0.0f, (float)getWidth());
+            // Arrow + label
+            const juce::juce_wchar arrow = mixerExpanded ? 0x25BC : 0x25B2;
+            const juce::String text = juce::String::charToString (arrow) + "  Mixer";
+            g.setColour (juce::Colour (0xff888888));
+            g.setFont (juce::FontOptions (11.0f));
+            g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            dragStartScreenY = e.getScreenY();
+            dragDeltaAccum   = 0;
+        }
+
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (onDragDelta == nullptr) return;
+            const int total = e.getScreenY() - dragStartScreenY;
+            const int step  = total - dragDeltaAccum;
+            if (step != 0)
+            {
+                onDragDelta (step);
+                dragDeltaAccum = total;
+            }
+        }
+
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            // Treat as click only when the mouse barely moved (< 5px)
+            if (e.getDistanceFromDragStart() < 5 && onToggleClick)
+                onToggleClick();
+        }
+
+        juce::MouseCursor getMouseCursor() override
+        {
+            return juce::MouseCursor::UpDownResizeCursor;
+        }
+
+    private:
+        int dragStartScreenY = 0;
+        int dragDeltaAccum   = 0;
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerDivider)
+    };
+
+    MixerDivider      mixerDivider;
+    int               mixerHeightPx       = 0;   // 0 = unset; initialised on first resized()
+    static constexpr int kMixerToggleBarHeight  = 18;
+    static constexpr int kMixerMinHeight        = 120; // minimum mixer panel height (px)
+    static constexpr int kArrangementMinHeight  = 60;  // minimum arrangement panel height (px)
+
+    void updateMixerDivider();
+
     bool pianoRollVisible = false;
     std::unique_ptr<PianoRollView> pianoRollView;  // current docked Piano Roll (nullptr when hidden)
     juce::TextButton pianoRollCloseButton { "X" };  // close button in piano roll header
@@ -133,7 +206,14 @@ private:
         // Export menu
         ExportMixdown = 301,
         ExportStems   = 302,
+
+        // Song Setup menu
+        SongSetupAudioIO = 401,
     };
+
+    // Double-tap Space = Rewind: tracks timestamp of the previous Space press.
+    juce::int64 lastSpaceKeyTimeMs = 0;
+    static constexpr juce::int64 kDoubleSpaceThresholdMs = 400;
 
     // Async file chooser — stored as member to keep alive across async callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;

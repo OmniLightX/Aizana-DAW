@@ -26,6 +26,13 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
     auto origEnd    = clip.getPosition().getEnd().inSeconds();
     auto origOffset = clip.getPosition().getOffset().inSeconds();
 
+    // Capture fade state before split — needed to correctly transfer fades to right clip.
+    // After the left clip is trimmed, its inherited fadeOut would be measured from the new
+    // (shorter) end, positioning the fade at the wrong absolute timeline location.
+    const double origFadeOut     = (double)clip.state.getProperty (te::IDs::fadeOut,     0.0);
+    const double origFadeIn      = (double)clip.state.getProperty (te::IDs::fadeIn,      0.0);
+    const int    origFadeOutType = (int)(double)clip.state.getProperty (te::IDs::fadeOutType, 0);
+
     // Clamp split time to be within the clip
     splitTimeSecs = juce::jlimit (origStart, origEnd, splitTimeSecs);
     if (splitTimeSecs <= origStart || splitTimeSecs >= origEnd)
@@ -49,12 +56,15 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
     }
 
     // ---- Right side: create a new clip at [splitTime, origEnd] ----
-    // The right clip's offset into the source file = origOffset + (splitTime - origStart)
+    // The right clip's offset into the source file = origOffset + (splitTime - origStart).
+    // Pass the correct offset directly to insertNewClip so there is never an intermediate
+    // zero-offset state in the TE data model (which caused orphan state when origOffset > 0).
     double rightOffsetSecs = origOffset + (splitTimeSecs - origStart);
 
     auto rightStart = TimePos::fromSeconds (splitTimeSecs);
     auto rightEnd   = TimePos::fromSeconds (origEnd);
-    te::ClipPosition rightPos { TimeRng (rightStart, rightEnd), {} };
+    te::ClipPosition rightPos { TimeRng (rightStart, rightEnd),
+                                TimeDur::fromSeconds (rightOffsetSecs) };
 
     auto* newClipBase = audioTrack->insertNewClip (te::TrackItem::Type::wave,
                                                     "clip",
@@ -64,12 +74,57 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
     if (newClip == nullptr)
         return nullptr;
 
-    // Wire the new clip to the same source file as the original
+    // Wire the new clip to the same source file as the original.
+    // setToDirectFileReference does not affect timeline position or offset.
     newClip->getSourceFileReference().setToDirectFileReference (clip.getCurrentSourceFile(), true);
 
-    // Set the offset so the new clip plays from the correct position in the source file
+    // Reaffirm position in case insertNewClip did not persist the offset from ClipPosition.
+    // This is a no-op when TE respects ClipPosition.offset; it is the authoritative
+    // correction when TE ignores it (some TE versions reset offset to 0 on insert).
     newClip->setPosition ({ TimeRng (rightStart, rightEnd),
                             TimeDur::fromSeconds (rightOffsetSecs) });
+
+    // ---- Fade correction after split ----
+    // Studio One 7 standard: the clip that retains the original edge keeps the fade;
+    // the clip that lost the edge loses it.
+    //   - LEFT clip (original, now ending at splitTimeSecs) inherits fadeOut but it now
+    //     measures from the wrong end. Fix: clear or truncate, and transfer to RIGHT clip.
+    //   - RIGHT clip owns origEnd, so it should carry the original fadeOut.
+    //   - LEFT clip owns origStart, so it keeps fadeIn (just clamp if oversized).
+
+    if (origFadeOut > 0.0)
+    {
+        // Absolute timeline position where the original fade region began
+        const double fadeOutStartSecs = origEnd - origFadeOut;
+
+        if (fadeOutStartSecs >= splitTimeSecs)
+        {
+            // Entire fade region is in the RIGHT clip — clear from LEFT, set on RIGHT
+            clip.state.setProperty     (te::IDs::fadeOut,     0.0,             &undoManager);
+            newClip->state.setProperty (te::IDs::fadeOut,     origFadeOut,     &undoManager);
+            newClip->state.setProperty (te::IDs::fadeOutType, origFadeOutType, &undoManager);
+        }
+        else
+        {
+            // Fade region starts in LEFT clip, extends to (or past) the split point.
+            // LEFT clip: truncate fade to the portion that fits within [origStart, splitTimeSecs].
+            const double newFadeOut = juce::jmax (0.0, splitTimeSecs - fadeOutStartSecs);
+            clip.state.setProperty (te::IDs::fadeOut, newFadeOut, &undoManager);
+            // RIGHT clip: keep original fade — it owns origEnd so the fade is still correct.
+            newClip->state.setProperty (te::IDs::fadeOut,     origFadeOut,     &undoManager);
+            newClip->state.setProperty (te::IDs::fadeOutType, origFadeOutType, &undoManager);
+        }
+    }
+
+    // fadeIn: measured from origStart forward — LEFT clip owns origStart so it keeps it.
+    // Clamp to left clip duration if oversized (prevents fade extending past new clip end).
+    if (origFadeIn > 0.0)
+    {
+        const double leftDuration = splitTimeSecs - origStart;
+        if (origFadeIn > leftDuration)
+            clip.state.setProperty (te::IDs::fadeIn, leftDuration, &undoManager);
+    }
+    // RIGHT clip (new blank clip) has no fadeIn by default — correct.
 
     return newClip;
 }
@@ -98,17 +153,18 @@ void ClipEditor::trimClip (te::Clip& clip, double newStartTimeSecs, double newEn
 }
 
 //==============================================================================
+void ClipEditor::beginMoveTransaction()
+{
+    editManager.getUndoManager().beginNewTransaction ("Move Clip");
+}
+
 void ClipEditor::moveClip (te::Clip& clip, double newStartTimeSecs)
 {
-    auto* edit = editManager.getEdit();
-    if (edit == nullptr)
-        return;
-
-    auto& undoManager = editManager.getUndoManager();
-    undoManager.beginNewTransaction ("Move clip");
-
-    double lengthSecs  = clip.getPosition().getLength().inSeconds();
-    double offsetSecs  = clip.getPosition().getOffset().inSeconds();
+    // No beginNewTransaction here — the caller is responsible for the undo boundary.
+    // For drag moves, call beginMoveTransaction() in mouseDown so that the entire
+    // drag resolves to a single Cmd+Z step.
+    double lengthSecs = clip.getPosition().getLength().inSeconds();
+    double offsetSecs = clip.getPosition().getOffset().inSeconds();
 
     auto newStart = TimePos::fromSeconds (newStartTimeSecs);
     auto newEnd   = TimePos::fromSeconds (newStartTimeSecs + lengthSecs);
@@ -245,6 +301,17 @@ void ClipEditor::moveClipToTrack (te::Clip& clip, te::AudioTrack& destTrack)
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Move clip to track");
     clip.moveTo (destTrack);
+}
+
+void ClipEditor::deleteClip (te::Clip& clip)
+{
+    auto& undoManager = editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Delete clip");
+    // Remove the clip's ValueTree node from its parent (track state tree).
+    // This is the canonical TE way to delete a clip — no TE API call needed.
+    juce::ValueTree parent = clip.state.getParent();
+    if (parent.isValid())
+        parent.removeChild (clip.state, &undoManager);
 }
 
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)

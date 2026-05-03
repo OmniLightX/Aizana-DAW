@@ -19,12 +19,6 @@ void MixerEngine::setVolume (te::AudioTrack& track, float dB)
     if (vp == nullptr)
         return;
 
-    // Write the normalized fader position to the ValueTree via CachedValue with
-    // UndoManager so the change is individually undoable. Call setValue() first
-    // so the UndoManager captures the correct before-state from the ValueTree.
-    // Then call setSliderPos() to update volParam->currentValue synchronously
-    // (TE's ValueTree property-changed callback does NOT propagate the new value
-    // back to currentValue, so setSliderPos() is still required after setValue).
     const float faderPos = te::decibelsToVolumeFaderPosition (dB);
     edit->getUndoManager().beginNewTransaction ("Set volume");
     vp->volume.setValue (faderPos, &edit->getUndoManager());
@@ -33,12 +27,6 @@ void MixerEngine::setVolume (te::AudioTrack& track, float dB)
 
 float MixerEngine::getVolume (const te::AudioTrack& track) const
 {
-    // Read from the volume CachedValue (the ValueTree-backed source of truth)
-    // rather than volParam->getCurrentValue(). After undo, the ValueTree property
-    // is restored and the CachedValue is updated synchronously via
-    // forceUpdateOfCachedValue(), but volParam->currentValue is NOT propagated
-    // back by the property-changed callback. Reading from the CachedValue
-    // ensures correct values both after setVolume() and after undoLastAction().
     if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
         return te::volumeFaderPositionToDB (vp->volume.get());
 
@@ -54,11 +42,6 @@ void MixerEngine::setPan (te::AudioTrack& track, float pan)
     if (vp == nullptr)
         return;
 
-    // Write the pan CachedValue with UndoManager first so the UndoManager
-    // captures the correct before-state. Then call vp->setPan() to sync
-    // panParam->currentValue (TE's ValueTree property-changed callback does
-    // NOT propagate the new value back to currentValue, so vp->setPan() is
-    // still required after setValue — same invariant as setVolume/setSliderPos).
     const float clamped = juce::jlimit (-1.0f, 1.0f, pan);
     edit->getUndoManager().beginNewTransaction ("Set pan");
     vp->pan.setValue (clamped, &edit->getUndoManager());
@@ -67,9 +50,6 @@ void MixerEngine::setPan (te::AudioTrack& track, float pan)
 
 float MixerEngine::getPan (const te::AudioTrack& track) const
 {
-    // Read from the pan CachedValue (ValueTree-backed source of truth).
-    // After undo, the CachedValue is updated synchronously via forceUpdateOfCachedValue()
-    // but panParam->currentValue is NOT propagated back — same invariant as getVolume.
     if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
         return vp->pan.get();
 
@@ -81,11 +61,10 @@ void MixerEngine::setSolo (te::AudioTrack& track, bool solo)
     auto* edit = editManager.getEdit();
     jassert (edit != nullptr);
 
-    // Set via ValueTree state with UndoManager so the change is undoable.
-    // Track::setSolo() sets the muted CachedValue without an UndoManager (no undo).
-    // We go directly to the state so undo is tracked.
     edit->getUndoManager().beginNewTransaction (solo ? "Solo track" : "Unsolo track");
-    track.state.setProperty (te::IDs::solo, solo, &edit->getUndoManager());
+    // setSoloIsolate(false) MUST be called before setSolo, or TE silently ignores the call.
+    track.setSoloIsolate (false);
+    track.setSolo (solo);
 }
 
 void MixerEngine::setMute (te::AudioTrack& track, bool mute)
@@ -93,10 +72,8 @@ void MixerEngine::setMute (te::AudioTrack& track, bool mute)
     auto* edit = editManager.getEdit();
     jassert (edit != nullptr);
 
-    // Set via ValueTree state with UndoManager so the change is undoable.
-    // Track::setMute() sets the muted CachedValue without an UndoManager (no undo).
     edit->getUndoManager().beginNewTransaction (mute ? "Mute track" : "Unmute track");
-    track.state.setProperty (te::IDs::mute, mute, &edit->getUndoManager());
+    track.setMute (mute);
 }
 
 bool MixerEngine::isSoloed (const te::AudioTrack& track) const
@@ -110,128 +87,421 @@ bool MixerEngine::isMuted (const te::AudioTrack& track) const
 }
 
 //==============================================================================
-// MIX-02: Bus and send routing
+// MIX-02: Bus Channel and FX Channel
 //==============================================================================
 
-te::FolderTrack* MixerEngine::createBus (const juce::String& name)
+// ---- Static classification helpers ----
+
+bool MixerEngine::isBusChannel (const te::AudioTrack& track)
 {
-    auto* edit = editManager.getEdit();
-    jassert (edit != nullptr);
-
-    // insertNewFolderTrack(insertPoint, selectionManager, asSubmix)
-    // asSubmix=true creates a FolderTrack that acts as a submix bus.
-    // Insert at the end of the track list (after the last existing track).
-    auto bus = edit->insertNewFolderTrack (te::TrackInsertPoint { nullptr, nullptr }, nullptr, true);
-
-    if (bus != nullptr)
-    {
-        bus->setName (name);
-
-        // Ensure the bus has a VolumeAndPanPlugin so the bus fader is controllable.
-        // FolderTrack::getVolumePlugin() searches pluginList; if nullptr, insert one.
-        if (bus->getVolumePlugin() == nullptr)
-        {
-            auto volState = te::VolumeAndPanPlugin::create();
-            bus->pluginList.insertPlugin (volState, 0);
-        }
-    }
-
-    return bus;
+    return track.state.getProperty (kChannelTypeProp).toString() == kChannelTypeBus;
 }
 
-te::AuxSendPlugin* MixerEngine::createSend (te::AudioTrack& sourceTrack,
-                                             te::FolderTrack& destBus,
-                                             float sendLeveldB)
+bool MixerEngine::isFXChannel (const te::AudioTrack& track)
+{
+    return track.state.getProperty (kChannelTypeProp).toString() == kChannelTypeFX;
+}
+
+bool MixerEngine::isAudioChannel (const te::AudioTrack& track)
+{
+    const juce::String tag = track.state.getProperty (kChannelTypeProp).toString();
+    return tag.isEmpty();   // no tag → plain audio track
+}
+
+// ---- Creation ----
+
+te::AudioTrack* MixerEngine::createBusChannel (const juce::String& name)
 {
     auto* edit = editManager.getEdit();
     jassert (edit != nullptr);
 
-    // Insert an AuxSendPlugin into the source track's plugin chain.
-    // The bus number is the 0-based index of the FolderTrack in the edit.
-    int busNumber = getBusNumberForFolderTrack (destBus);
+    // Append after all existing tracks.
+    // TrackInsertPoint { nullptr, nullptr } means INSERT AT START (preceding=nullptr),
+    // which would shift Track 1 → Track 2 and break all track-number-based routing.
+    // getEndOfTracks() is the correct way to append without renumbering.
+    auto track = edit->insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (*edit), nullptr);
+    if (track == nullptr)
+        return nullptr;
 
-    // Build the ValueTree for an AuxSendPlugin with the target bus number
+    track->setName (name);
+
+    // Tag as Bus Channel — ArrangementView and MixerView use this to classify strips
+    track->state.setProperty (kChannelTypeProp, kChannelTypeBus, nullptr);
+
+    // Ensure Bus Channel output goes to master (default device).
+    // Explicit call guards against edge cases where TE's default initialisation
+    // might not fire (e.g. the edit already has active playback).
+    track->getOutput().setOutputToDefaultDevice (false);
+
+    // New Bus tracks must not be solo-isolated — solo on other tracks must mute them.
+    track->setSoloIsolate (false);
+
+    // Guard: TE normally auto-creates VolumeAndPanPlugin for every AudioTrack, but
+    // ensure it exists so setVolume() / getVolume() don't silently no-op on this track.
+    if (track->getVolumePlugin() == nullptr)
+    {
+        auto vp = edit->getPluginCache().createNewPlugin (
+            te::VolumeAndPanPlugin::xmlTypeName, {});
+        track->pluginList.insertPlugin (vp, 0, nullptr);
+    }
+
+    return track.get();
+}
+
+te::AudioTrack* MixerEngine::createFXChannel (const juce::String& name)
+{
+    auto* edit = editManager.getEdit();
+    jassert (edit != nullptr);
+
+    // Find next unused bus number for the AuxReturn pair
+    int nextBusNum = 0;
+    for (auto* t : te::getAudioTracks (*edit))
+        for (auto* p : t->pluginList.getPlugins())
+            if (auto* ret = dynamic_cast<te::AuxReturnPlugin*> (p))
+                nextBusNum = juce::jmax (nextBusNum, ret->busNumber.get() + 1);
+
+    auto track = edit->insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (*edit), nullptr);
+    if (track == nullptr)
+        return nullptr;
+
+    track->setName (name);
+
+    // Tag as FX Channel — hides it from ArrangementView, identifies it in Mixer
+    track->state.setProperty (kChannelTypeProp, kChannelTypeFX, nullptr);
+
+    // Also store bus number directly on the track state so callers can read it
+    // without scanning the plugin chain (fallback if AuxReturnPlugin lookup fails).
+    track->state.setProperty ("cloudesBusNumber", nextBusNum, nullptr);
+
+    // New tracks default to solo-isolated off so solo works correctly on other tracks.
+    track->setSoloIsolate (false);
+
+    // Guard: ensure VolumeAndPanPlugin exists for fader control on this FX channel.
+    // TE normally auto-creates it, but guard against edge cases (same pattern as createBusChannel).
+    if (track->getVolumePlugin() == nullptr)
+    {
+        auto vp = edit->getPluginCache().createNewPlugin (
+            te::VolumeAndPanPlugin::xmlTypeName, {});
+        track->pluginList.insertPlugin (vp, 1, nullptr);  // index 1: after AuxReturnPlugin at 0
+    }
+
+    // Insert AuxReturnPlugin at position 0 so it receives sends before user inserts.
+    // Signal flow: AuxReturn (receives bus) → user inserts (Reverb etc.) → VolumeAndPan → master.
+    auto returnPlugin = edit->getPluginCache().createNewPlugin (
+        te::AuxReturnPlugin::xmlTypeName, {});
+    if (returnPlugin != nullptr)
+    {
+        if (auto* ret = dynamic_cast<te::AuxReturnPlugin*> (returnPlugin.get()))
+            ret->busNumber.setValue (nextBusNum, nullptr);
+        track->pluginList.insertPlugin (returnPlugin, 0, nullptr);
+    }
+
+    // Register the FX channel name in TE's aux bus name registry
+    edit->setAuxBusName (nextBusNum, name);
+
+    // Ensure FX Channel output goes to master — AuxReturn receives audio from
+    // the aux bus, processes through inserts, then fader outputs to master.
+    track->getOutput().setOutputToDefaultDevice (false);
+
+    return track.get();
+}
+
+// ---- Bus routing (main-output redirect) ----
+
+void MixerEngine::routeTrackToBus (te::AudioTrack& sourceTrack, te::AudioTrack& busChannel)
+{
+    if (! isBusChannel (busChannel))
+        return;
+
+    // Redirect sourceTrack's main output to the Bus AudioTrack.
+    // TE's render graph routes the source through the bus track's plugin chain
+    // (inserts + fader), which then outputs to master via busChannel's own output.
+    // The bus track output must remain on the default audio device (master) — it is
+    // set to that in createBusChannel() and must never be redirected to another track.
+    sourceTrack.getOutput().setOutputToTrack (&busChannel);
+
+    // Cache the bus name so the channel strip button can display it reliably.
+    // TE's getDestinationTrack() can transiently return nullptr during graph updates;
+    // kOutputBusNameProp is our authoritative display cache.
+    sourceTrack.state.setProperty (kOutputBusNameProp, busChannel.getName(), nullptr);
+}
+
+void MixerEngine::unrouteFromBus (te::AudioTrack& sourceTrack)
+{
+    // Restore the track's output to the default audio output device (master)
+    sourceTrack.getOutput().setOutputToDefaultDevice (false);
+    // Clear the cached display property so the button reverts to "▶ Master"
+    sourceTrack.state.removeProperty (kOutputBusNameProp, nullptr);
+}
+
+te::AudioTrack* MixerEngine::getBusChannelFor (const te::AudioTrack& sourceTrack) const
+{
+    auto* dest = const_cast<te::AudioTrack&> (sourceTrack).getOutput().getDestinationTrack();
+    if (dest == nullptr)
+        return nullptr;
+
+    return isBusChannel (*dest) ? dest : nullptr;
+}
+
+// ---- FX sends (parallel AuxSend/Return) ----
+
+te::AuxSendPlugin* MixerEngine::createAuxSend (te::AudioTrack& sourceTrack,
+                                                te::AudioTrack& returnTrack,
+                                                float sendLeveldB)
+{
+    const int busNumber = getBusNumberForReturnTrack (returnTrack);
+    if (busNumber < 0)
+        return nullptr;
+
     auto pluginState = te::AuxSendPlugin::create();
-    pluginState.setProperty ("busNum", busNumber, nullptr);
+    pluginState.setProperty (te::IDs::busNum, busNumber, nullptr);
 
     auto pluginPtr = sourceTrack.pluginList.insertPlugin (pluginState, -1);  // -1 = append
-
     auto* sendPlugin = dynamic_cast<te::AuxSendPlugin*> (pluginPtr.get());
     if (sendPlugin != nullptr)
         sendPlugin->setGainDb (sendLeveldB);
 
-    // Ensure the destination FolderTrack has a matching AuxReturnPlugin for this
-    // bus number. AuxSend/AuxReturn work as a pair in TE — the Send routes audio
-    // to a bus number and the Return on the receiving track listens to that number.
-    // Without the AuxReturnPlugin the audio has nowhere to arrive at the bus.
-    bool hasReturn = false;
-    for (auto* p : destBus.pluginList.getPlugins())
-    {
-        if (auto* ret = dynamic_cast<te::AuxReturnPlugin*> (p))
-        {
-            if (ret->busNumber.get() == busNumber)
-            {
-                hasReturn = true;
-                break;
-            }
-        }
-    }
-
-    if (! hasReturn)
-    {
-        // AuxReturnPlugin has no static create() method; build the ValueTree directly
-        // using the same pattern as AuxSendPlugin::create() — PLUGIN node with type property.
-        juce::ValueTree returnState (te::IDs::PLUGIN);
-        returnState.setProperty (te::IDs::type, te::AuxReturnPlugin::xmlTypeName, nullptr);
-        returnState.setProperty (te::IDs::busNum, busNumber, nullptr);
-        destBus.pluginList.insertPlugin (returnState, -1);
-    }
-
     return sendPlugin;
 }
 
-void MixerEngine::removeSend (te::AudioTrack& sourceTrack, te::FolderTrack& destBus)
+te::AuxSendPlugin* MixerEngine::createFXSend (te::AudioTrack& sourceTrack,
+                                               te::AudioTrack& fxChannel,
+                                               float sendLeveldB)
 {
-    auto* edit = editManager.getEdit();
-    jassert (edit != nullptr);
+    if (! isFXChannel (fxChannel))
+        return nullptr;
 
-    int busNumber = getBusNumberForFolderTrack (destBus);
+    return createAuxSend (sourceTrack, fxChannel, sendLeveldB);
+}
 
-    auto plugins = sourceTrack.pluginList.getPlugins();
-    for (auto* p : plugins)
+void MixerEngine::removeFXSend (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel)
+{
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return;
+
+    for (auto* p : sourceTrack.pluginList.getPlugins())
     {
         if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
         {
             if (send->getBusNumber() == busNumber)
             {
-                edit->getUndoManager().beginNewTransaction ("Remove send");
                 send->removeFromParent();
-                return;   // remove first matching send only
+                return;
             }
         }
     }
 }
 
-int MixerEngine::getBusNumberForFolderTrack (const te::FolderTrack& bus) const
+void MixerEngine::setFXSendLevel (te::AudioTrack& sourceTrack,
+                                   te::AudioTrack& fxChannel,
+                                   float dB)
 {
-    // Tracktion Engine bus numbers are 0-based indices of FolderTracks in the edit.
-    // We walk all tracks and count folder tracks to find this one's index.
-    auto* edit = editManager.getEdit();
-    if (edit == nullptr)
-        return 0;
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return;
 
-    int busIdx = 0;
-    for (auto* track : te::getAllTracks (*edit))
+    for (auto* p : sourceTrack.pluginList.getPlugins())
     {
-        if (auto* folder = dynamic_cast<te::FolderTrack*> (track))
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
         {
-            if (folder == &bus)
-                return busIdx;
-            ++busIdx;
+            if (send->getBusNumber() == busNumber)
+            {
+                send->setGainDb (dB);
+                return;
+            }
         }
     }
+}
 
-    return 0;
+float MixerEngine::getFXSendLevel (const te::AudioTrack& sourceTrack,
+                                    const te::AudioTrack& fxChannel) const
+{
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return -100.0f;
+
+    for (auto* p : const_cast<te::AudioTrack&> (sourceTrack).pluginList.getPlugins())
+    {
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+            if (send->getBusNumber() == busNumber)
+                return send->getGainDb();
+    }
+
+    return -100.0f;
+}
+
+void MixerEngine::setFXSendEnabled (te::AudioTrack& sourceTrack,
+                                     te::AudioTrack& fxChannel,
+                                     bool enabled)
+{
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return;
+
+    for (auto* p : sourceTrack.pluginList.getPlugins())
+    {
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+        {
+            if (send->getBusNumber() == busNumber)
+            {
+                send->setEnabled (enabled);
+                return;
+            }
+        }
+    }
+}
+
+bool MixerEngine::isFXSendEnabled (const te::AudioTrack& sourceTrack,
+                                    const te::AudioTrack& fxChannel) const
+{
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return false;
+
+    for (auto* p : const_cast<te::AudioTrack&> (sourceTrack).pluginList.getPlugins())
+    {
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+            if (send->getBusNumber() == busNumber)
+                return send->isEnabled();
+    }
+
+    return false;
+}
+
+juce::Array<te::AudioTrack*> MixerEngine::getBusChannels() const
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return {};
+
+    juce::Array<te::AudioTrack*> result;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (isBusChannel (*t))
+            result.add (t);
+    return result;
+}
+
+juce::Array<te::AudioTrack*> MixerEngine::getFXChannels() const
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return {};
+
+    juce::Array<te::AudioTrack*> result;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (isFXChannel (*t))
+            result.add (t);
+    return result;
+}
+
+// ---- Legacy API (retained for existing callers) ----
+
+te::AudioTrack* MixerEngine::createBus (const juce::String& name)
+{
+    return createBusChannel (name);
+}
+
+te::AuxSendPlugin* MixerEngine::createSend (te::AudioTrack& sourceTrack,
+                                             te::AudioTrack& returnTrack,
+                                             float sendLeveldB)
+{
+    return createAuxSend (sourceTrack, returnTrack, sendLeveldB);
+}
+
+void MixerEngine::removeSend (te::AudioTrack& sourceTrack, te::AudioTrack& returnTrack)
+{
+    const int busNumber = getBusNumberForReturnTrack (returnTrack);
+    if (busNumber < 0)
+        return;
+
+    for (auto* p : sourceTrack.pluginList.getPlugins())
+    {
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+        {
+            if (send->getBusNumber() == busNumber)
+            {
+                editManager.getEdit()->getUndoManager().beginNewTransaction ("Remove send");
+                send->removeFromParent();
+                return;
+            }
+        }
+    }
+}
+
+bool MixerEngine::isFXSendPreFader (const te::AudioTrack& sourceTrack,
+                                     const te::AudioTrack& fxChannel) const
+{
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return false;
+
+    auto& src = const_cast<te::AudioTrack&> (sourceTrack);
+    auto* vp = src.getVolumePlugin();
+    if (vp == nullptr)
+        return false;
+
+    auto& listState = src.pluginList.state;
+    const int vpIdx = listState.indexOf (vp->state);
+
+    for (auto* p : src.pluginList.getPlugins())
+    {
+        if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+        {
+            if (send->getBusNumber() == busNumber)
+                return listState.indexOf (send->state) < vpIdx;
+        }
+    }
+    return false;
+}
+
+void MixerEngine::setFXSendPreFader (te::AudioTrack& sourceTrack,
+                                      te::AudioTrack& fxChannel,
+                                      bool preFader)
+{
+    if (isFXSendPreFader (sourceTrack, fxChannel) == preFader)
+        return;
+
+    const int busNumber = getBusNumberForReturnTrack (fxChannel);
+    if (busNumber < 0)
+        return;
+
+    te::AuxSendPlugin* sendPlugin = nullptr;
+    for (auto* p : sourceTrack.pluginList.getPlugins())
+    {
+        if (auto* s = dynamic_cast<te::AuxSendPlugin*> (p))
+        {
+            if (s->getBusNumber() == busNumber)
+            {
+                sendPlugin = s;
+                break;
+            }
+        }
+    }
+    if (sendPlugin == nullptr)
+        return;
+
+    auto* vp = sourceTrack.getVolumePlugin();
+    if (vp == nullptr)
+        return;
+
+    auto& listState    = sourceTrack.pluginList.state;
+    const int sendIdx  = listState.indexOf (sendPlugin->state);
+    const int vpIdx    = listState.indexOf (vp->state);
+
+    if (preFader)
+        listState.moveChild (sendIdx, vpIdx, nullptr);
+    else
+        listState.moveChild (sendIdx, listState.getNumChildren() - 1, nullptr);
+}
+
+int MixerEngine::getBusNumberForReturnTrack (const te::AudioTrack& returnTrack) const
+{
+    for (auto* p : const_cast<te::AudioTrack&> (returnTrack).pluginList.getPlugins())
+        if (auto* ret = dynamic_cast<te::AuxReturnPlugin*> (p))
+            return ret->busNumber.get();
+
+    return -1;
 }
 
 //==============================================================================
@@ -240,9 +510,6 @@ int MixerEngine::getBusNumberForFolderTrack (const te::FolderTrack& bus) const
 
 void MixerEngine::setSidechainSource (te::Plugin& plugin, te::AudioTrack& sourceTrack)
 {
-    // Tracktion Engine's Plugin has setSidechainSourceID(EditItemID) which sets the
-    // ValueTree property "sidechainSourceID". The playback graph builder reads this
-    // to route audio from sourceTrack into the plugin's sidechain (auxiliary) bus.
     plugin.setSidechainSourceID (sourceTrack.itemID);
 }
 

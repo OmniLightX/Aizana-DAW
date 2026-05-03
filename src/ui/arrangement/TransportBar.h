@@ -28,9 +28,10 @@ private:
     void showSampleRateMenu();
     ApplicationState& appState;
 
-    juce::TextButton playButton      { "Play"  };
-    juce::TextButton stopButton      { "Stop"  };
-    juce::TextButton recordButton    { "Rec"   };
+    juce::TextButton rewindButton    { "|<" };  // Return to start
+    juce::TextButton playButton      { "Play" };
+    juce::TextButton stopButton      { "Stop" };
+    juce::TextButton recordButton    { "Rec"  };
 
     /** Enables/disables the metronome click track. */
     juce::TextButton metronomeButton { "Click" };
@@ -44,6 +45,15 @@ private:
     /** Shows the edit BPM — e.g. "120 BPM". Double-click to edit. */
     juce::Label bpmLabel;
 
+    /** Time signature numerator selector (2, 3, 4, 5, 6, 7, 8, 9, 12). */
+    juce::ComboBox timeSigNumerator;
+
+    /** "/" separator between numerator and denominator. */
+    juce::Label timeSigSlash;
+
+    /** Time signature denominator selector (2, 4, 8, 16). */
+    juce::ComboBox timeSigDenominator;
+
     /** Shows the audio device sample rate — e.g. "44.1 kHz". */
     juce::Label sampleRateLabel;
 
@@ -55,6 +65,10 @@ private:
     /** Refresh bpmLabel text from the current edit tempo. */
     void updateBpmLabel();
 
+    /** Refresh time signature combos from the current edit time signature. */
+    void updateTimeSigDisplay();
+
+    void rewindClicked();
     void playClicked();
     void stopClicked();
     void recordClicked();

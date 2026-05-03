@@ -37,6 +37,35 @@ AutomationLane::AutomationLane (te::AudioTrack&    track_,
     drawModeButton.onClick = [this] { setDrawMode (!drawMode); };
     addAndMakeVisible (drawModeButton);
 
+    // Automation mode selector — Read / Touch / Latch / Write
+    modeSelector.addItem ("Read",  1);
+    modeSelector.addItem ("Touch", 2);
+    modeSelector.addItem ("Latch", 3);
+    modeSelector.addItem ("Write", 4);
+
+    // Sync to current engine mode so re-opening the lane reflects any prior changes
+    {
+        const AutomationMode currentMode = automationEngine.getMode (track);
+        int modeId = 1; // read
+        if      (currentMode == AutomationMode::touch) modeId = 2;
+        else if (currentMode == AutomationMode::latch) modeId = 3;
+        else if (currentMode == AutomationMode::write) modeId = 4;
+        modeSelector.setSelectedId (modeId, juce::dontSendNotification);
+    }
+
+    modeSelector.onChange = [this]
+    {
+        switch (modeSelector.getSelectedId())
+        {
+            case 1: automationEngine.setMode (track, AutomationMode::read);  break;
+            case 2: automationEngine.setMode (track, AutomationMode::touch); break;
+            case 3: automationEngine.setMode (track, AutomationMode::latch); break;
+            case 4: automationEngine.setMode (track, AutomationMode::write); break;
+            default: break;
+        }
+    };
+    addAndMakeVisible (modeSelector);
+
     // dB tooltip label — shown near cursor while dragging a volume automation point/segment
     dBLabel.setFont (juce::FontOptions (11.0f));
     dBLabel.setColour (juce::Label::textColourId, juce::Colours::white);
@@ -413,12 +442,16 @@ void AutomationLane::mouseDoubleClick (const juce::MouseEvent& /*e*/)
 
 double AutomationLane::xToTime (float x) const
 {
-    return scrollPositionSeconds + static_cast<double> (x) / pixelsPerSecond;
+    // AutomationLane lives inside the full-width timelineContainer.
+    // Local x=0 always corresponds to timeline position 0s.
+    // The viewport scroll is handled by the container position — no offset here.
+    return static_cast<double> (x) / pixelsPerSecond;
 }
 
 float AutomationLane::timeToX (double time) const
 {
-    return static_cast<float> ((time - scrollPositionSeconds) * pixelsPerSecond);
+    // No scroll offset: lane is full-width, absolute position in container.
+    return static_cast<float> (time * pixelsPerSecond);
 }
 
 float AutomationLane::valueToY (float value) const
@@ -502,11 +535,20 @@ bool AutomationLane::findSegmentAtPosition (juce::Point<float> pos, int& leftIdx
 
 void AutomationLane::resized()
 {
-    // Controls anchored to the LEFT of the lane so they remain visible
-    // at any horizontal scroll position.  The P (pencil) button is first,
-    // then the parameter ComboBox immediately to its right.
-    drawModeButton.setBounds (4, 2, 20, 18);
-    paramSelector.setBounds (28, 2, 80, 20);
+    // The AutomationLane is full-width inside the scrollable timelineContainer,
+    // so local x=0 = timeline position 0s.  To keep controls visible at any
+    // scroll position we offset their x by the current scroll position in pixels.
+    const int scrollX = static_cast<int> (scrollPositionSeconds * pixelsPerSecond);
+    drawModeButton.setBounds (scrollX + 4,   2, 20, 18);
+    paramSelector.setBounds  (scrollX + 28,  2, 80, 20);
+    modeSelector.setBounds   (scrollX + 112, 2, 70, 20);
+}
+
+void AutomationLane::updateScrollOffset()
+{
+    // Called by TrackRow/ArrangementView whenever scroll or zoom changes.
+    resized();
+    repaint();
 }
 
 //==============================================================================

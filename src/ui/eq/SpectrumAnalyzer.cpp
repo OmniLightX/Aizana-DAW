@@ -6,6 +6,7 @@ SpectrumAnalyzer::SpectrumAnalyzer (EQProcessor& eqProcessor_)
     : eqProcessor (eqProcessor_)
 {
     spectrumMagnitudes.resize (kFFTSize / 2, -90.0f);
+    fftBuffer.resize (kFFTSize * 2, 0.0f);
     startTimerHz (24);  // ~24fps (~40ms interval) — RESEARCH.md Pitfall 6
 }
 
@@ -42,10 +43,36 @@ float SpectrumAnalyzer::yForMagnitudeDB (float dB) const
 
 void SpectrumAnalyzer::timerCallback()
 {
-    // EQProcessor::getSpectrumData() reads the lock-free FIFO and runs FFT.
-    // Returns false if no new data since the last call.
-    if (eqProcessor.getSpectrumData (spectrumMagnitudes, kFFTSize))
-        repaint();
+    // Read raw PCM samples from the lock-free FIFO
+    std::vector<float> rawSamples;
+    if (!eqProcessor.getSpectrumData (rawSamples, kFFTSize))
+        return;
+
+    // Copy into FFT buffer (first kFFTSize elements), zero out the second half
+    jassert ((int)rawSamples.size() >= kFFTSize);
+    std::copy (rawSamples.begin(), rawSamples.begin() + kFFTSize, fftBuffer.begin());
+    std::fill (fftBuffer.begin() + kFFTSize, fftBuffer.end(), 0.0f);
+
+    // Apply Hann window to reduce spectral leakage
+    for (int i = 0; i < kFFTSize; ++i)
+    {
+        const float window = 0.5f * (1.0f - std::cos (juce::MathConstants<float>::twoPi * (float)i / (float)(kFFTSize - 1)));
+        fftBuffer[(size_t)i] *= window;
+    }
+
+    // In-place forward FFT (result is interleaved real/imag pairs)
+    fft.performFrequencyOnlyForwardTransform (fftBuffer.data());
+
+    // Convert magnitude bins to dB and smooth with previous frame (60% smooth)
+    const int numBins = kFFTSize / 2;
+    for (int i = 0; i < numBins; ++i)
+    {
+        const float magnitude = fftBuffer[(size_t)i];
+        const float dB = juce::Decibels::gainToDecibels (magnitude / (float)kFFTSize, -90.0f);
+        spectrumMagnitudes[(size_t)i] = spectrumMagnitudes[(size_t)i] * 0.6f + dB * 0.4f;
+    }
+
+    repaint();
 }
 
 //==============================================================================

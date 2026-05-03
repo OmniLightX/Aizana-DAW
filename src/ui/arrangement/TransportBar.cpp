@@ -39,6 +39,64 @@ TransportBar::TransportBar (ApplicationState& appState_)
     // Update BPM display from edit tempo
     updateBpmLabel();
 
+    // ---- Time signature controls ----
+    timeSigNumerator.addItem ("2",  1);
+    timeSigNumerator.addItem ("3",  2);
+    timeSigNumerator.addItem ("4",  3);
+    timeSigNumerator.addItem ("5",  4);
+    timeSigNumerator.addItem ("6",  5);
+    timeSigNumerator.addItem ("7",  6);
+    timeSigNumerator.addItem ("8",  7);
+    timeSigNumerator.addItem ("9",  8);
+    timeSigNumerator.addItem ("12", 9);
+    timeSigNumerator.setSelectedId (3, juce::dontSendNotification);  // default 4/4
+
+    timeSigDenominator.addItem ("2",  1);
+    timeSigDenominator.addItem ("4",  2);
+    timeSigDenominator.addItem ("8",  3);
+    timeSigDenominator.addItem ("16", 4);
+    timeSigDenominator.setSelectedId (2, juce::dontSendNotification);  // default 4/4
+
+    // Shared handler: build "num/denom" string and call setStringTimeSig
+    auto applyTimeSig = [this]
+    {
+        auto* edit = appState.editManager.getEdit();
+        if (edit == nullptr) return;
+
+        const int numItems[] = { 2, 3, 4, 5, 6, 7, 8, 9, 12 };
+        const int denItems[] = { 2, 4, 8, 16 };
+
+        const int numIdx = timeSigNumerator.getSelectedId() - 1;
+        const int denIdx = timeSigDenominator.getSelectedId() - 1;
+        if (numIdx < 0 || numIdx >= 9 || denIdx < 0 || denIdx >= 4)
+            return;
+
+        const int newNum = numItems[numIdx];
+        const int newDen = denItems[denIdx];
+
+        auto& seq = edit->tempoSequence;
+        if (seq.getNumTimeSigs() > 0)
+        {
+            auto& undoManager = appState.editManager.getUndoManager();
+            undoManager.beginNewTransaction ("Set time signature");
+            seq.getTimeSig (0)->setStringTimeSig (
+                juce::String (newNum) + "/" + juce::String (newDen));
+        }
+
+        // Keep metronome beats per bar in sync
+        appState.audioEngine.getMetronome().setBeatsPerBar (newNum);
+    };
+
+    timeSigNumerator.onChange   = applyTimeSig;
+    timeSigDenominator.onChange = applyTimeSig;
+
+    timeSigSlash.setText ("/", juce::dontSendNotification);
+    timeSigSlash.setJustificationType (juce::Justification::centred);
+    timeSigSlash.setFont (juce::FontOptions (14.0f));
+    timeSigSlash.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
+
+    updateTimeSigDisplay();
+
     // Style sample rate label — brighter text + pointer cursor signals interactivity
     sampleRateLabel.setJustificationType (juce::Justification::centred);
     sampleRateLabel.setFont (juce::FontOptions (11.0f));
@@ -47,6 +105,9 @@ TransportBar::TransportBar (ApplicationState& appState_)
     sampleRateLabel.setText ("-- kHz", juce::dontSendNotification);
 
     // Style transport buttons
+    rewindButton.setColour (juce::TextButton::buttonColourId,     juce::Colour (0xff3a3a3a));
+    rewindButton.setColour (juce::TextButton::textColourOffId,    juce::Colour (0xffaaaaaa));
+    rewindButton.setTooltip ("Return to Start");
     playButton.setColour   (juce::TextButton::buttonColourId,     juce::Colour (0xff2d6a2d));
     playButton.setColour   (juce::TextButton::buttonOnColourId,   juce::Colour (0xff3a8f3a));
     stopButton.setColour   (juce::TextButton::buttonColourId,     juce::Colour (0xff3a3a3a));
@@ -54,6 +115,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     recordButton.setColour (juce::TextButton::buttonOnColourId,   juce::Colour (0xffcc3333));
 
     // Wire buttons
+    rewindButton.onClick = [this] { rewindClicked(); };
     playButton.onClick   = [this] { playClicked(); };
     stopButton.onClick   = [this] { stopClicked(); };
     recordButton.onClick = [this] { recordClicked(); };
@@ -86,6 +148,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
         loopButton.setToggleState (newLooping, juce::dontSendNotification);
     };
 
+    addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
     addAndMakeVisible (recordButton);
@@ -93,6 +156,9 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (loopButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
+    addAndMakeVisible (timeSigNumerator);
+    addAndMakeVisible (timeSigSlash);
+    addAndMakeVisible (timeSigDenominator);
     addAndMakeVisible (sampleRateLabel);
 
     // Start 30ms timer to update position display during playback
@@ -112,6 +178,8 @@ void TransportBar::resized()
     const int buttonW = 60;
     const int buttonH = area.getHeight();
 
+    rewindButton.setBounds    (area.removeFromLeft (36).withHeight (buttonH));
+    area.removeFromLeft (2);
     playButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
     area.removeFromLeft (4);
     stopButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
@@ -122,10 +190,18 @@ void TransportBar::resized()
     area.removeFromLeft (4);
     loopButton.setBounds      (area.removeFromLeft (44).withHeight (buttonH));
 
-    // Right side: sample rate + BPM display (rightmost to leftmost)
-    sampleRateLabel.setBounds (area.removeFromRight (70));
-    area.removeFromRight (4);  // gap
-    bpmLabel.setBounds (area.removeFromRight (100));
+    // Right side: sample rate → BPM → time sig combos (rightmost to leftmost)
+    sampleRateLabel.setBounds    (area.removeFromRight (70));
+    area.removeFromRight (4);
+    bpmLabel.setBounds           (area.removeFromRight (100));
+    area.removeFromRight (4);
+    // Time signature: den / slash / num (right to left) — visually "4 / 4" left of BPM
+    timeSigDenominator.setBounds (area.removeFromRight (36).withHeight (buttonH));
+    area.removeFromRight (2);
+    timeSigSlash.setBounds       (area.removeFromRight (10).withHeight (buttonH));
+    area.removeFromRight (2);
+    timeSigNumerator.setBounds   (area.removeFromRight (36).withHeight (buttonH));
+    area.removeFromRight (4);
 
     // Centre: position display
     positionLabel.setBounds (area);
@@ -164,10 +240,11 @@ void TransportBar::timerCallback()
     recordButton.setToggleState (transport.isRecording(), juce::dontSendNotification);
     loopButton.setToggleState (transport.looping.get(), juce::dontSendNotification);
 
-    // Keep BPM label in sync (handles undo/redo changes)
+    // Keep BPM label and time signature combos in sync (handles undo/redo changes)
     if (! bpmLabel.isBeingEdited())
     {
         updateBpmLabel();
+        updateTimeSigDisplay();
 
         // Keep metronome BPM in sync with the edit's current tempo
         if (auto* editForBpm = appState.editManager.getEdit())
@@ -215,6 +292,47 @@ void TransportBar::updateBpmLabel()
     }
 }
 
+void TransportBar::updateTimeSigDisplay()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    auto& seq = edit->tempoSequence;
+    if (seq.getNumTimeSigs() == 0) return;
+
+    const int num = seq.getTimeSig (0)->numerator;
+    const int den = seq.getTimeSig (0)->denominator;
+
+    // Map numerator value to combo ID (items: 2,3,4,5,6,7,8,9,12)
+    const int numItems[] = { 2, 3, 4, 5, 6, 7, 8, 9, 12 };
+    for (int i = 0; i < 9; ++i)
+        if (numItems[i] == num)
+        {
+            timeSigNumerator.setSelectedId (i + 1, juce::dontSendNotification);
+            break;
+        }
+
+    // Map denominator value to combo ID (items: 2, 4, 8, 16)
+    const int denItems[] = { 2, 4, 8, 16 };
+    for (int i = 0; i < 4; ++i)
+        if (denItems[i] == den)
+        {
+            timeSigDenominator.setSelectedId (i + 1, juce::dontSendNotification);
+            break;
+        }
+}
+
+void TransportBar::rewindClicked()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    auto& transport = edit->getTransport();
+    transport.stop (false, false);
+    transport.setPosition (tracktion::core::TimePosition::fromSeconds (0.0));
+}
+
 void TransportBar::playClicked()
 {
     auto* edit = appState.editManager.getEdit();
@@ -234,10 +352,8 @@ void TransportBar::stopClicked()
     if (edit == nullptr)
         return;
 
+    // Stop at current position. Use the dedicated Rewind button (|<) to return to start.
     edit->getTransport().stop (false, false);
-
-    // Return playhead to zero on second stop (Logic/Pro Tools behaviour)
-    // First stop: halt at current position. Already handled by transport.stop().
 }
 
 void TransportBar::recordClicked()

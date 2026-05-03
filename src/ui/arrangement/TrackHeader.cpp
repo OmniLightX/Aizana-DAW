@@ -26,28 +26,48 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     {
         track.setName (trackNameLabel.getText());
     };
+    // Forward label clicks to TrackHeader::mouseDown so clicking the track name
+    // sets selectedTrackHeader + calls grabKeyboardFocus(ArrangementView).
+    // Without this, the Label intercepts mouseDown and S/M shortcuts never fire.
+    // Same pattern as ChannelStrip (Session 2026-04-13 part 2).
+    trackNameLabel.addMouseListener (this, false);
 
     // Style mute/solo/arm buttons
     muteButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    muteButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbbbb00));
+    muteButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xFFCC2200));  // red, matches ChannelStrip
+    muteButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
     soloButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
     soloButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbbbb00));
-    armButton.setColour  (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    armButton.setColour  (juce::TextButton::buttonOnColourId, juce::Colour (0xffcc3333));
+    armButton.setColour    (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    armButton.setColour    (juce::TextButton::buttonOnColourId, juce::Colour (0xffcc3333));
+    monitorButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    monitorButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2255aa));  // blue = monitoring active
+    monitorButton.setTooltip ("Input Monitoring (I)");
 
-    muteButton.setClickingTogglesState (true);
-    soloButton.setClickingTogglesState (true);
-    armButton.setClickingTogglesState  (true);
+    muteButton.setClickingTogglesState    (true);
+    soloButton.setClickingTogglesState    (true);
+    armButton.setClickingTogglesState     (true);
+    monitorButton.setClickingTogglesState (true);
 
     // Wire button callbacks
-    muteButton.onClick = [this] { muteClicked(); };
-    soloButton.onClick = [this] { soloClicked(); };
-    armButton.onClick  = [this] { armClicked();  };
+    muteButton.onClick    = [this] { muteClicked();    };
+    soloButton.onClick    = [this] { soloClicked();    };
+    armButton.onClick     = [this] { armClicked();     };
+    monitorButton.onClick = [this] { monitorClicked(); };
+
+    // Input selector — Studio One style: small button below M/S/REC/I, click = popup
+    inputButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff252525));
+    inputButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff888888));
+    inputButton.setTooltip ("Audio Input — click to change");
+    inputButton.onClick = [this] { showInputMenu(); };
+    populateInputSelector();
 
     addAndMakeVisible (trackNameLabel);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (armButton);
+    addAndMakeVisible (monitorButton);
+    addAndMakeVisible (inputButton);
 
     // Compact volume slider — horizontal, no text box, wired to MixerEngine
     volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -69,21 +89,6 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     addAndMakeVisible (panLabel);
     updatePanLabel();
 
-    // Automation mode buttons (R/W/T/L)
-    for (auto* btn : { &readButton, &writeButton, &touchButton, &latchButton })
-    {
-        btn->setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff2a2a2a));
-        btn->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
-        btn->setClickingTogglesState (false);
-        addAndMakeVisible (btn);
-    }
-
-    readButton.onClick  = [this] { setAutomationMode (AutomationMode::read);  };
-    writeButton.onClick = [this] { setAutomationMode (AutomationMode::write); };
-    touchButton.onClick = [this] { setAutomationMode (AutomationMode::touch); };
-    latchButton.onClick = [this] { setAutomationMode (AutomationMode::latch); };
-
-    updateModeButtonStates();
 }
 
 //==============================================================================
@@ -104,24 +109,29 @@ void TrackHeader::resized()
     volumeSlider.setBounds (volumeRow);
     controlArea.removeFromBottom (2);
 
-    // Buttons in a row at the remaining area (top of what's left)
-    const int btnW = 28;
+    // Buttons in a row: M / S / REC / I (monitor)
+    // Widths: 24 / 24 / 30 / 18 = 96px + 3×2 gaps = 102px — fits any track header ≥110px wide
     auto msrRow = controlArea.removeFromTop (20);
-    muteButton.setBounds (msrRow.removeFromLeft (btnW));
+    muteButton.setBounds    (msrRow.removeFromLeft (24));
     msrRow.removeFromLeft (2);
-    soloButton.setBounds (msrRow.removeFromLeft (btnW));
+    soloButton.setBounds    (msrRow.removeFromLeft (24));
     msrRow.removeFromLeft (2);
-    armButton.setBounds  (msrRow.removeFromLeft (btnW));
+    armButton.setBounds     (msrRow.removeFromLeft (30));
+    msrRow.removeFromLeft (2);
+    monitorButton.setBounds (msrRow.removeFromLeft (18));
 
-    // Automation mode row: R/W/T/L below M/S/R row
-    controlArea.removeFromTop (2);
-    const int kModeRowH = 18;
-    auto modeRow = controlArea.removeFromTop (kModeRowH);
-    const int modeBtnW = modeRow.getWidth() / 4;
-    readButton.setBounds  (modeRow.removeFromLeft (modeBtnW));
-    writeButton.setBounds (modeRow.removeFromLeft (modeBtnW));
-    touchButton.setBounds (modeRow.removeFromLeft (modeBtnW));
-    latchButton.setBounds (modeRow);
+    // Input selector: full width, 14px tall (Studio One style small input label)
+    if (controlArea.getHeight() >= 14)
+    {
+        controlArea.removeFromTop (2);
+        inputButton.setBounds (controlArea.removeFromTop (14));
+        inputButton.setVisible (true);
+    }
+    else
+    {
+        inputButton.setVisible (false);
+    }
+
 }
 
 void TrackHeader::paint (juce::Graphics& g)
@@ -190,6 +200,177 @@ void TrackHeader::setSelected (bool shouldBeSelected)
     }
 }
 
+void TrackHeader::refresh()
+{
+    muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
+    soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
+
+    // Sync monitor button: lit when the assigned input is in automatic or on mode
+    bool isMonitoring = false;
+    for (auto* instance : track.edit.getAllInputDevices())
+    {
+        if (te::isOnTargetTrack (*instance, track, 0))
+        {
+            isMonitoring = (instance->getInputDevice().getMonitorMode()
+                            != te::InputDevice::MonitorMode::off);
+            break;
+        }
+    }
+    monitorButton.setToggleState (isMonitoring, juce::dontSendNotification);
+    refreshInputButton();
+}
+
+void TrackHeader::toggleMute()
+{
+    // Direct button state update (no TE read-back) — same pattern as toggleArm().
+    // muteButton.getToggleState() reflects the CURRENT visual state before the toggle.
+    const bool newMute = ! muteButton.getToggleState();
+    muteButton.setToggleState (newMute, juce::dontSendNotification);
+    mixerEngine.setMute (track, newMute);
+}
+
+void TrackHeader::toggleSolo()
+{
+    // Direct button state update (no TE read-back) — same pattern as toggleArm().
+    const bool newSolo = ! soloButton.getToggleState();
+    soloButton.setToggleState (newSolo, juce::dontSendNotification);
+    mixerEngine.setSolo (track, newSolo);
+}
+
+void TrackHeader::toggleArm()
+{
+    // Derive the new armed state from the current state property (not button visual),
+    // so this is idempotent regardless of visual sync state.
+    const bool newArmed = ! (bool) track.state.getProperty ("armed", false);
+    armButton.setToggleState (newArmed, juce::dontSendNotification);
+    armClicked();  // full TE recording API: assigns WaveInputDevice + setRecordingEnabled
+}
+
+//==============================================================================
+
+void TrackHeader::populateInputSelector()
+{
+    refreshInputButton();  // text is built dynamically in showInputMenu / refreshInputButton
+}
+
+void TrackHeader::showInputMenu()
+{
+    auto& dm = track.edit.engine.getDeviceManager();
+
+    juce::PopupMenu menu;
+    menu.addItem (1, "No Input", true, false);
+    menu.addSeparator();
+
+    int id = 2;
+    for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+    {
+        auto* dev = dm.getWaveInDevice (i);
+        if (dev == nullptr) continue;
+
+        const juce::String name = dev->getName();
+        bool isCurrent = false;
+        for (auto* instance : track.edit.getAllInputDevices())
+        {
+            if (te::isOnTargetTrack (*instance, track, 0)
+                && &instance->getInputDevice() == dev)
+            {
+                isCurrent = true;
+                break;
+            }
+        }
+        menu.addItem (id++, name, true, isCurrent);
+    }
+
+    // Capture `this` only — re-acquire DeviceManager inside the callback so we
+    // never hold a dangling reference to a stack-frame variable across the async gap.
+    menu.showMenuAsync (
+        juce::PopupMenu::Options().withTargetComponent (&inputButton),
+        [this] (int result)
+        {
+            if (result == 1)
+            {
+                assignInput (-1);  // No Input
+                return;
+            }
+            if (result < 2) return;
+
+            auto& dm2 = track.edit.engine.getDeviceManager();
+            int id2 = 2;
+            bool found = false;
+            for (int i = 0; i < dm2.getNumWaveInDevices(); ++i)
+            {
+                if (dm2.getWaveInDevice (i) == nullptr) continue;
+                if (id2 == result)
+                {
+                    assignInput (i);
+                    found = true;
+                    break;
+                }
+                ++id2;
+            }
+            if (! found)
+                assignInput (-1);  // safety fallback
+        });
+}
+
+void TrackHeader::assignInput (int deviceIndex)
+{
+    auto& edit = track.edit;
+    auto& dm   = edit.engine.getDeviceManager();
+
+    // Detach any existing assignment for this track
+    for (auto* instance : edit.getAllInputDevices())
+        if (te::isOnTargetTrack (*instance, track, 0))
+            instance->setRecordingEnabled (track.itemID, false);
+
+    if (deviceIndex < 0)
+    {
+        refreshInputButton();
+        return;
+    }
+
+    auto* waveIn = dm.getWaveInDevice (deviceIndex);
+    if (waveIn == nullptr)
+    {
+        refreshInputButton();
+        return;
+    }
+
+    for (auto* instance : edit.getAllInputDevices())
+    {
+        if (&instance->getInputDevice() == waveIn)
+        {
+            // Assign device to this track — does not enable recording yet (that requires REC arm)
+            auto result = instance->setTarget (track.itemID, true, nullptr);
+            (void) result;  // [[nodiscard]] — we don't need the result here
+            break;
+        }
+    }
+
+    refreshInputButton();
+}
+
+void TrackHeader::refreshInputButton()
+{
+    auto& edit = track.edit;
+    juce::String inputName = "No Input";
+
+    for (auto* instance : edit.getAllInputDevices())
+    {
+        if (te::isOnTargetTrack (*instance, track, 0))
+        {
+            inputName = instance->getInputDevice().getName();
+            break;
+        }
+    }
+
+    // Truncate long device names to fit the narrow header
+    if (inputName.length() > 18)
+        inputName = inputName.substring (0, 17) + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6")); // "…"
+
+    inputButton.setButtonText (inputName);
+}
+
 //==============================================================================
 
 void TrackHeader::showContextMenu()
@@ -206,6 +387,7 @@ void TrackHeader::showContextMenu()
     menu.addItem (1, "Add Plugin...");
     menu.addSeparator();
     menu.addItem (2, "Create Bus from Track");
+    menu.addItem (6, "Create FX Channel");
     menu.addItem (3, "Set Sidechain Source...");
     menu.addSeparator();
     menu.addItem (4, "Rename Track");
@@ -218,6 +400,7 @@ void TrackHeader::showContextMenu()
             {
                 case 1:  handleAddPlugin();                             break;
                 case 2:  handleCreateBus();                            break;
+                case 6:  handleCreateFXChannel();                      break;
                 case 3:  handleSetSidechainSource();                   break;
                 case 4:  handleRenameTrack();                          break;
                 case 5:  handleDeleteTrack();                          break;
@@ -268,11 +451,23 @@ void TrackHeader::handleInsertBuiltInFX (const juce::String& fxName)
 
 void TrackHeader::handleCreateBus()
 {
-    // Create a new bus folder track and wire this track to it via an AuxSend at 0 dB.
+    // Create a new Bus Channel and redirect this track's main output into it.
+    // routeTrackToBus() calls setOutputToTrack() — serial routing through the bus
+    // fader to master. createSend() would instead create a parallel AuxSend (FX-style),
+    // which is wrong for a bus channel and causes the bus fader to have no effect.
     const auto busName = track.getName() + " Bus";
     auto* bus = mixerEngine.createBus (busName);
     if (bus != nullptr)
-        mixerEngine.createSend (track, *bus, 0.0f);
+        mixerEngine.routeTrackToBus (track, *bus);
+}
+
+void TrackHeader::handleCreateFXChannel()
+{
+    // Create a new FX channel (AuxReturn) and add an AuxSend on this track targeting it.
+    const auto fxName = track.getName() + " FX";
+    auto* fxChannel = mixerEngine.createFXChannel (fxName);
+    if (fxChannel != nullptr)
+        mixerEngine.createFXSend (track, *fxChannel, -6.0f);
 }
 
 void TrackHeader::handleSetSidechainSource()
@@ -356,39 +551,92 @@ void TrackHeader::handleDeleteTrack()
 
 void TrackHeader::muteClicked()
 {
+    // Clicking any button implicitly selects the track (Studio One behaviour),
+    // so subsequent S/M keyboard shortcuts know which track to target.
+    if (onSelectionRequest) onSelectionRequest (this);
     mixerEngine.setMute (track, muteButton.getToggleState());
 }
 
 void TrackHeader::soloClicked()
 {
+    if (onSelectionRequest) onSelectionRequest (this);
     mixerEngine.setSolo (track, soloButton.getToggleState());
 }
 
 void TrackHeader::armClicked()
 {
-    // Record-arm: store armed state in the track's ValueTree.
-    // te::AudioTrack does not have setLivePlayEnabled() in TE v3.2.0 —
-    // the arm state is a custom property read by AudioRecorder when starting
-    // a recording session.
     const bool armed = armButton.getToggleState();
     track.state.setProperty ("armed", armed, nullptr);
+
+    auto& edit = track.edit;
+
+    if (armed)
+    {
+        // TE records only from tracks that have an InputDeviceInstance assigned and
+        // recording-enabled. Check if one is already assigned.
+        bool alreadyAssigned = false;
+        for (auto* instance : edit.getAllInputDevices())
+        {
+            if (te::isOnTargetTrack (*instance, track, 0))
+            {
+                alreadyAssigned = true;
+                instance->setRecordingEnabled (track.itemID, true);
+            }
+        }
+
+        // No input assigned yet — auto-assign the first enabled wave (audio) input.
+        // This mirrors Studio One: pressing REC on a track silently picks the default mic.
+        if (! alreadyAssigned)
+        {
+            auto& dm = edit.engine.getDeviceManager();
+            for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+            {
+                auto* waveIn = dm.getWaveInDevice (i);
+                if (waveIn == nullptr || ! waveIn->isEnabled())
+                    continue;
+
+                for (auto* instance : edit.getAllInputDevices())
+                {
+                    if (&instance->getInputDevice() == waveIn)
+                    {
+                        auto assignResult = instance->setTarget (track.itemID, true, nullptr);
+                        if (assignResult.has_value())
+                            instance->setRecordingEnabled (track.itemID, true);
+                        break;
+                    }
+                }
+                break;  // only first available device
+            }
+        }
+    }
+    else
+    {
+        // Disarm — disable recording on all instances targeting this track.
+        for (auto* instance : edit.getAllInputDevices())
+            if (te::isOnTargetTrack (*instance, track, 0))
+                instance->setRecordingEnabled (track.itemID, false);
+    }
 }
 
-//==============================================================================
-
-void TrackHeader::setAutomationMode (AutomationMode mode)
+void TrackHeader::monitorClicked()
 {
-    automationEngine.setMode (track, mode);
-    updateModeButtonStates();
-}
+    const bool monitorOn = monitorButton.getToggleState();
+    auto& edit = track.edit;
 
-void TrackHeader::updateModeButtonStates()
-{
-    AutomationMode current = automationEngine.getMode (track);
-    readButton.setToggleState  (current == AutomationMode::read,  juce::dontSendNotification);
-    writeButton.setToggleState (current == AutomationMode::write, juce::dontSendNotification);
-    touchButton.setToggleState (current == AutomationMode::touch, juce::dontSendNotification);
-    latchButton.setToggleState (current == AutomationMode::latch, juce::dontSendNotification);
+    // Find the input device assigned to this track and set its monitor mode.
+    // MonitorMode::automatic = monitor only while recording (Studio One default).
+    // MonitorMode::off = no monitoring.
+    for (auto* instance : edit.getAllInputDevices())
+    {
+        if (te::isOnTargetTrack (*instance, track, 0))
+        {
+            auto newMode = monitorOn
+                ? te::InputDevice::MonitorMode::automatic
+                : te::InputDevice::MonitorMode::off;
+            instance->getInputDevice().setMonitorMode (newMode);
+            break;
+        }
+    }
 }
 
 //==============================================================================

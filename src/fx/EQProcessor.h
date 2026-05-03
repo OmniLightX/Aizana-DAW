@@ -8,7 +8,7 @@
 // without a circular include — the full include is in the .cpp file.
 class BuiltInPluginFormat;
 
-enum class EQBandType { LowShelf, Peak, HighShelf, LowPass, HighPass };
+enum class EQBandType { LowShelf, Peak, HighShelf, LowPass, HighPass, Notch };
 
 struct EQBand
 {
@@ -17,6 +17,7 @@ struct EQBand
     float gainDB         = 0.0f;
     float Q              = 0.707f;
     bool  enabled        = true;
+    int   slopeOrder     = 2;  // dB/oct slope for HP/LP: 2=12dB, 4=24dB/oct
 };
 
 /**
@@ -81,19 +82,32 @@ public:
     void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
 private:
+    // ProcessorDuplicator wraps the mono IIR::Filter for stereo (and beyond).
+    // IIR::Filter<float> asserts numChannels==1 — using it directly in the chain
+    // with a stereo AudioBlock silently skips channel 1 (no audio change on right).
+    using EQFilter = juce::dsp::ProcessorDuplicator<
+        juce::dsp::IIR::Filter<float>,
+        juce::dsp::IIR::Coefficients<float>>;
+
     using EQChain = juce::dsp::ProcessorChain<
-        juce::dsp::IIR::Filter<float>,   // Band 0
-        juce::dsp::IIR::Filter<float>,   // Band 1
-        juce::dsp::IIR::Filter<float>,   // Band 2
-        juce::dsp::IIR::Filter<float>,   // Band 3
-        juce::dsp::IIR::Filter<float>,   // Band 4
-        juce::dsp::IIR::Filter<float>,   // Band 5
-        juce::dsp::IIR::Filter<float>,   // Band 6
-        juce::dsp::IIR::Filter<float>>;  // Band 7
+        EQFilter,   // Band 0
+        EQFilter,   // Band 1
+        EQFilter,   // Band 2
+        EQFilter,   // Band 3
+        EQFilter,   // Band 4
+        EQFilter,   // Band 5
+        EQFilter,   // Band 6
+        EQFilter>;  // Band 7
 
     EQChain eqChain;
     std::array<EQBand, NumBands> bands;
     double currentSampleRate = 44100.0;
+
+    // Secondary IIR filters for HP/LP slope 24dB/oct (slopeOrder=4).
+    // Each cascadeFilter[i] mirrors the coefficients of eqChain band i.
+    // cascadeActive[i] is true only when band i is HP/LP with slopeOrder >= 4.
+    std::array<EQFilter, NumBands> cascadeFilters;
+    std::array<bool, NumBands> cascadeActive {};
 
     // Lock-free FIFO for spectrum analyzer (RESEARCH.md Pitfall 6)
     // Audio thread pushes samples; message thread reads and runs FFT.

@@ -81,6 +81,7 @@ public:
 
     void resized() override;
     void paint (juce::Graphics& g) override;
+    void paintOverChildren (juce::Graphics& g) override;
 
     // Zoom control (pinch/scroll — also called by MainComponent)
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
@@ -112,9 +113,10 @@ public:
                          const juce::MouseWheelDetails& wheel) override;
 
     // Tool-dispatching mouse handlers (Pointer/RangeSelect/Scissors)
-    void mouseDown (const juce::MouseEvent& e) override;
-    void mouseDrag (const juce::MouseEvent& e) override;
-    void mouseUp   (const juce::MouseEvent& e) override;
+    void mouseDown        (const juce::MouseEvent& e) override;
+    void mouseDrag        (const juce::MouseEvent& e) override;
+    void mouseUp          (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
 
     // Cursor feedback per active tool
     juce::MouseCursor getMouseCursor() override;
@@ -130,9 +132,34 @@ public:
     // a separate reference. Returns snapped time; bypasses snap when Alt is held.
     double snapTimeToGrid (double timeSecs, bool altDown = false) const noexcept;
 
+    /** Snap a time DELTA (not an absolute position) to the nearest grid multiple.
+     *  Unlike snapTimeToGrid, this preserves a clip's offset from the grid so that
+     *  clips at non-grid positions stay there until moved by ≥ half a grid unit.
+     *  Bypasses snap when Alt is held. */
+    double snapDeltaToGrid (double deltaSecs, bool altDown = false) const noexcept;
+
     // Inter-track drag — called by ClipComponent's onInterTrackDrag callback.
-    // Moves clip to whichever track corresponds to deltaYPx offset from its current row.
-    void moveClipByTrackDelta (te::Clip& clip, double startTimeSecs, int deltaYPx);
+    // absoluteYInContainer is the mouse Y in timelineContainer coordinates.
+    // Moves clip to whichever track the mouse is currently over.
+    // draggedComp: the live ClipComponent being dragged — reparented in-place so the
+    // drag continues uninterrupted.  Rebuild is deferred to mouseUp via onDragEnded.
+    void moveClipByTrackDelta (te::Clip& clip, double startTimeSecs, int absoluteYInContainer,
+                               ClipComponent* draggedComp = nullptr);
+
+    // Deselects all clips — called directly by TrackRow on empty-space click.
+    void deselectAllClips();
+
+    /** Applies crossfade to the two selected overlapping WaveAudioClips.
+     *  If the two selected clips on the same track overlap, sets fade-out on the
+     *  earlier clip and fade-in on the later clip equal to the overlap length.
+     *  Uses Equal Power curve (type 1).  No-op if no pair overlaps.
+     *  Grouped into one undo transaction. */
+    void applyCrossfadeToSelectedClips();
+
+    // Called by ClipComponent when mouse-down lands in the click zone (lower half of clip
+    // in Pointer mode).  Starts a temporary time-range selection drag — same as Marquee
+    // tool behaviour — without permanently switching the active tool.
+    void startRangeSelectionFromClickZone (const juce::MouseEvent& e);
 
 private:
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
@@ -250,11 +277,52 @@ private:
     TrackHeader* selectedTrackHeader = nullptr;
     int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none
 
-    // ---- Marquee selection ----
+    // ---- Inter-track drag guard ----
+    // Set to true when moveClipByTrackDelta performs a cross-track move.
+    // Suppresses ValueTree-triggered rebuildTrackRows() calls that would fire
+    // from clip.moveTo() between mouseDrag events and destroy the live component.
+    // Reset to false at the start of rebuildTrackRows() (fired from onDragEnded on mouseUp).
+    bool isInterTrackDragActive = false;
+
+    // ---- Multi-clip drag: initial positions snapshot ----
+    // Populated by onDragWillStart when a drag starts on a selected clip.
+    // Indexed in parallel: multiDragClips[i] started at multiDragInitialTimes[i].
+    juce::Array<ClipComponent*> multiDragClips;
+    juce::Array<double>         multiDragInitialTimes;
+
+    // ---- Pointer rubber-band (Arrow tool) — drag from empty space selects whole clips ----
+    // Independent of the Range/Marquee time-range selection.  Shows a blue outline
+    // rectangle; any clip partially or fully inside becomes selected on release.
+    bool              pointerBandActive = false;
+    juce::Point<int>  pointerBandOrigin;        // AV-coordinate drag start
+    juce::Rectangle<int> pointerBandRect;       // current band in AV coordinates
+
+    // ---- Temporary Marquee (Command+drag or Click Zone) ----
+    // Set to true during the drag gesture; cleared in mouseUp.
+    // Does NOT change activeTool — the Pointer tool stays active in the toolbar.
+    bool commandDragMarqueeActive = false;
+
+    // ---- Marquee selection (RangeSelect tool — selects whole clips) ----
     bool             isMarqueeActive = false;
     juce::Point<int> marqueeStartPoint;          // in ArrangementView coordinates
     juce::Rectangle<int> marqueeRect;            // current marquee rectangle (screen coords)
     juce::Array<ClipComponent*> selectedClips;   // clips inside the marquee
+
+    // ---- Time-range selection (Marquee tool — track-aware region select) ----
+    bool   rangeActive         = false;
+    double rangeStartSecs      = 0.0;  // earlier boundary of the selected range
+    double rangeEndSecs        = 0.0;  // later boundary
+    double rangeDragOriginSecs = 0.0;  // drag start point (so dragging left works correctly)
+    // Track range: which rows the drag covers (inclusive indices into trackRows)
+    int    rangeTrackStart     = 0;
+    int    rangeTrackEnd       = 0;
+    int    rangeDragTrackIndex = 0;
+
+    // Delete the content of the active time range (splits clips at boundaries, removes middle)
+    void deleteTimeRange();
+
+    // Helper: map Y in timelineContainer coords to track row index (clamped to valid range)
+    int yContainerToTrackIndex (int yInContainer) const;
 
     void setSelectedTrackHeader (TrackHeader* header);
 
@@ -289,6 +357,10 @@ private:
     double          gridResolution = 0.5;   // seconds per grid division (1/4 note at 120 BPM)
     juce::TextButton snapButton    { "Snap" };
     juce::ComboBox   gridCombo;             // 1/1, 1/2, 1/4, 1/8, 1/16
+
+    // ---- Autoscroll — playhead-follow toggle ----
+    bool             autoScrollEnabled = true;
+    juce::TextButton autoScrollButton  { "F" };
 
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();

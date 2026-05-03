@@ -30,11 +30,27 @@ MainComponent::MainComponent (ApplicationState& appState_)
         });
     }
 
+    // Mixer divider bar — click to toggle, drag to resize (Studio One style)
+    mixerDivider.onToggleClick = [this] { toggleMixer(); menuItemsChanged(); };
+    mixerDivider.onDragDelta   = [this] (int dy)
+    {
+        // dy > 0 = dragged down → mixer shrinks; dy < 0 = dragged up → mixer grows
+        mixerHeightPx -= dy;
+        resized();
+    };
+    updateMixerDivider();
+    addAndMakeVisible (mixerDivider);
+
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
 
     addChildComponent (pianoRollCloseButton);  // hidden by default
     pianoRollCloseButton.onClick = [this] { hidePianoRoll(); };
+
+    // TransportBar must always render on top of all other components (arrangement,
+    // mixer, docked panel).  toFront() after all siblings are added guarantees this
+    // regardless of add-order — matching Studio One / Logic Pro fixed-transport behaviour.
+    transportBar.toFront (false);
 
     setSize (1280, 800);
 }
@@ -59,15 +75,27 @@ void MainComponent::resized()
         pianoRollView->setBounds (pianoRollArea);
     }
 
+    // Divider bar — always visible; sits between ArrangementView and MixerView
+    mixerDivider.setBounds (area.removeFromBottom (kMixerToggleBarHeight));
+
+    // MixerView — height is user-draggable; initialized to 50% of available area on first call
     if (mixerVisible)
     {
-        // MixerView takes bottom ~50% of remaining area (ChannelStrip needs ~276px minimum)
-        const int mixerHeight = (int)(area.getHeight() * 0.50f);
-        mixerView.setBounds (area.removeFromBottom (mixerHeight));
+        const int totalAvail = area.getHeight();
+        if (mixerHeightPx == 0)
+            mixerHeightPx = (int)(totalAvail * 0.50f);
+
+        const int maxMixerHeight = juce::jmax (kMixerMinHeight, totalAvail - kArrangementMinHeight);
+        mixerHeightPx = juce::jlimit (kMixerMinHeight, maxMixerHeight, mixerHeightPx);
+        mixerView.setBounds (area.removeFromBottom (mixerHeightPx));
     }
 
     // ArrangementView takes remaining upper area
     arrangementView.setBounds (area);
+
+    // Ensure TransportBar stays on top after every layout — adding or showing child
+    // components can change z-order and push the transport bar behind the arrangement.
+    transportBar.toFront (false);
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
@@ -148,16 +176,29 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
             return arrangementView.keyPressed (key);
     }
 
-    // Spacebar: global play/stop — works from anywhere in the app (no focus trap)
+    // Spacebar: global play/stop — double-tap within 400ms rewinds to start.
     if (key == juce::KeyPress::spaceKey)
     {
         if (auto* edit = appState.editManager.getEdit())
         {
             auto& transport = edit->getTransport();
-            if (transport.isPlaying())
+            const juce::int64 now = juce::Time::currentTimeMillis();
+            const bool isDoubleTap = (now - lastSpaceKeyTimeMs) < kDoubleSpaceThresholdMs;
+            lastSpaceKeyTimeMs = now;
+
+            if (isDoubleTap)
+            {
+                // Double-tap: stop + return to start (same as Rewind button)
                 transport.stop (false, false);
+                transport.setPosition (tracktion::core::TimePosition::fromSeconds (0.0));
+            }
             else
-                transport.play (false);
+            {
+                if (transport.isPlaying())
+                    transport.stop (false, false);
+                else
+                    transport.play (false);
+            }
         }
         return true;
     }
@@ -169,7 +210,14 @@ void MainComponent::toggleMixer()
 {
     mixerVisible = !mixerVisible;
     mixerView.setVisible (mixerVisible);
+    updateMixerDivider();
     resized();   // Re-layout so ArrangementView expands/collapses accordingly
+}
+
+void MainComponent::updateMixerDivider()
+{
+    mixerDivider.mixerExpanded = mixerVisible;
+    mixerDivider.repaint();
 }
 
 void MainComponent::showPianoRoll (te::MidiClip& midiClip)
@@ -202,7 +250,7 @@ void MainComponent::hidePianoRoll()
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Export" };
+    return { "File", "Edit", "View", "Song", "Export" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /*name*/)
@@ -250,7 +298,11 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (ScanPlugins, "Scan Plugins...", true);
             break;
 
-        case 3:  // Export
+        case 3:  // Song Setup
+            menu.addItem (SongSetupAudioIO, "Audio I/O Setup...", true);
+            break;
+
+        case 4:  // Export
             menu.addItem (ExportMixdown, "Export Mixdown...", hasEdit);
             menu.addItem (ExportStems,   "Export Stems...",   hasEdit);
             break;
@@ -288,6 +340,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case ScanPlugins:
             handleScanPlugins();
+            break;
+
+        case SongSetupAudioIO:
+            AudioIOSetupDialog::show (appState.editManager.getEngine());
             break;
 
         case ExportMixdown:

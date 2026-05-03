@@ -4,6 +4,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
 #include "metering/MeterProcessor.h"
+#include "SendSlotPanel.h"
 
 // Forward declarations — full includes in ChannelStrip.cpp
 class PluginManager;
@@ -56,7 +57,8 @@ private:
     int   peakHoldTicks = 0;
     static constexpr int kPeakHoldTicks = 60;  // ~2.5s at 24fps
 
-    juce::Label lufsLabel;  // Shows integrated LUFS value below the bar
+    juce::Label peakLabel;  // Primary: peak dB readout (e.g. "-5.4 dB")
+    juce::Label lufsLabel;  // Secondary: integrated LUFS (e.g. "-23.1 L")
 
     // Convert dBFS to normalised bar height (0.0 = silent, 1.0 = 0dBFS)
     static float dbToNorm (float dB);
@@ -97,8 +99,28 @@ public:
 
     void resized() override;
     void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
 
     te::AudioTrack& getTrack() const noexcept { return track; }
+
+    /** Called by MixerView when this strip is selected or deselected. */
+    void setSelected (bool s);
+
+    /** Sync all button/fader visuals from current engine state.
+     *  Safe to call on the message thread at any time. */
+    void refresh();
+
+    /** Callback invoked on mouseDown — MixerView wires this to its selection handler. */
+    std::function<void (te::AudioTrack*)> onTrackSelected;
+
+    /** Callbacks fired after solo/mute button clicks — MixerView wires for bus-group propagation. */
+    std::function<void()> onSoloClicked;
+    std::function<void()> onMuteClicked;
+
+    /** Fired after the output routing button assigns a bus (or Master).
+     *  targetBus == nullptr means "route to Master".
+     *  MixerView wires this to apply the same routing to all other selected strips. */
+    std::function<void (te::AudioTrack* targetBus)> onOutputRouted;
 
     /** Returns the MeterBar so MixerView::timerCallback can push master meter values. */
     MeterBar& getMeterBar() noexcept { return meterBar; }
@@ -109,12 +131,18 @@ public:
      */
     void setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI);
 
+    /**
+     * Rebuild send slots to reflect the current list of FX channels.
+     * Called by MixerView after creating/removing an FX Channel.
+     */
+    void rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels);
+
     // ---- InsertSlotPanel ----
 
     /**
      * InsertSlotPanel — Studio One-style insert FX slots shown at the bottom of the strip.
      *
-     * Displays up to kMaxSlots insert slots vertically.
+     * Displays slots vertically — no hard limit; scrolls when count exceeds kVisibleSlots.
      * - Empty slot: shows "+" — click to open a popup menu (Built-in FX + Browse)
      * - Occupied slot: shows plugin name — double-click to open editor, right-click to remove
      *
@@ -134,8 +162,9 @@ public:
         /** Rebuild slot display from track's current plugin chain. */
         void refresh();
 
-        static constexpr int kMaxSlots  = 6;
-        static constexpr int kSlotHeight = 16;
+        /** Number of slots visible without scrolling (used for fixed height in strip layout). */
+        static constexpr int kVisibleSlots = 6;
+        static constexpr int kSlotHeight   = 16;
 
     private:
         te::Track&           track;
@@ -155,6 +184,10 @@ public:
             void mouseDoubleClick (const juce::MouseEvent& e) override;
         };
 
+        // Scrollable container for unlimited slots
+        juce::Viewport   slotsViewport;
+        juce::Component  slotsContent;
+
         juce::OwnedArray<SlotButton> slots;
 
         void showAddPluginMenu (int slotIndex);
@@ -170,6 +203,7 @@ private:
     PluginWindowManager& pluginWindowManager;
     PluginScanner& pluginScanner;
 
+    bool             isSelected = false;
     MeterBar         meterBar;
     juce::Slider     volumeFader;
     juce::Slider     panKnob;
@@ -177,12 +211,19 @@ private:
     juce::Label      panLabel;      // "PAN" label below the pan knob
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
+    juce::TextButton outputButton;   // "▶ Master" / "▶ Drums" — output routing selector
     juce::Label      trackNameLabel;
     InsertSlotPanel  insertSlotPanel;
+    SendSlotPanel    sendSlotPanel;
 
     // Called when the fader value changes (user interaction)
     void volumeChanged();
     void panChanged();
+
+    // Output routing — popup menu lists available Bus Channels + "Master"
+    void showOutputRoutingMenu();
+    // Sync outputButton label from current engine routing state
+    void refreshOutputButton();
 
     // Format pan value as "L33", "C", or "R48" (absolute percent 0-100)
     static juce::String formatPanValue (double pan);

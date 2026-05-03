@@ -107,18 +107,37 @@ juce::String ExportPipeline::exportMixdown(te::Edit& edit, const ExportOptions& 
     params.realTimeRender     = false;
     params.usePlugins         = true;
     params.checkNodesForAudio = false;
-    params.tracksToDo         = {};  // all tracks
+    // tracksToDo set below after this block
+
+    // TE: empty tracksToDo (all bits zero) means "render nothing" — must set all track bits.
+    // ref: Renderer.cpp: `if (r.tracksToDo.countNumberOfSetBits() > 0 && ...)` — gate condition.
+    auto allTracks = te::getAllTracks (edit);
+    for (int i = 0; i < allTracks.size(); ++i)
+        params.tracksToDo.setBit (i);
+
+    params.useMasterPlugins = true;  // include master bus chain (limiter, EQ) in mixdown
+
+    // Ensure the output directory exists — Desktop is always present but user may have
+    // browsed to a custom path whose parent hasn't been created yet.
+    {
+        auto parentDir = params.destFile.getParentDirectory();
+        if (parentDir != juce::File{} && ! parentDir.isDirectory())
+            parentDir.createDirectory();
+    }
 
     if (onProgress)
         onProgress(0.0f);
 
-    te::Renderer::renderToFile("Cloudes Mixdown Export", params);
+    juce::File renderedFile = te::Renderer::renderToFile ("Cloudes Mixdown Export", params);
 
     if (onProgress)
         onProgress(1.0f);
 
-    // Consider success if destFile exists after render.
-    if (! options.outputFile.existsAsFile())
+    // Some TE builds return an empty File even when the render succeeded and wrote
+    // to params.destFile — check both to avoid a false-negative failure report.
+    const bool outputExists = renderedFile.existsAsFile()
+                           || params.destFile.existsAsFile();
+    if (! outputExists)
         return "Render produced no output file. Ensure the Edit contains audio content.";
 
     return {};

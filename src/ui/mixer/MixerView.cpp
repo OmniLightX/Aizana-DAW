@@ -1,5 +1,4 @@
 #include "MixerView.h"
-#include "ui/pluginbrowser/PluginBrowserPopup.h"
 
 //==============================================================================
 
@@ -16,16 +15,17 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
     channelStripViewport.setViewedComponent (&channelStripContainer, false);
     addAndMakeVisible (channelStripViewport);
 
+    channelStripContainer.onRightClick = [this] (const juce::MouseEvent& e) { showContextMenu (e); };
+
     // Register ValueTree listener so we rebuild on track add/remove
     if (auto* edit = appState.editManager.getEdit())
         edit->state.addListener (this);
 
     rebuildStrips();
 
-    // Start the 24fps meter update timer (plan 01-17 — EXP-03 gap closure).
-    // timerCallback() flushes the master MeterProcessor FIFO and pushes values
-    // to all channel strip MeterBars.
     startTimerHz (24);
+
+    setWantsKeyboardFocus (true);
 }
 
 MixerView::~MixerView()
@@ -35,21 +35,34 @@ MixerView::~MixerView()
     if (auto* edit = appState.editManager.getEdit())
         edit->state.removeListener (this);
 
-    // Clear strips first (they reference MeterProcessors); then clear MeterProcessors
+    // Unregister level clients from TE's LevelMeterPlugin before destruction.
+    for (auto& [track, client] : levelClients)
+        if (auto* lp = track->getLevelMeterPlugin())
+            lp->measurer.removeClient (*client);
+    levelClients.clear();
+
+    // Clear strips (they reference MeterProcessors); then clear MeterProcessors
     strips.clear();
+    busFXStrips.clear();
+    masterStrip.reset();
     meterProcessors.clear();
 }
 
 void MixerView::resized()
 {
-    channelStripViewport.setBounds (getLocalBounds());
+    auto area = getLocalBounds();
+
+    // Master strip is pinned to the right edge of MixerView (outside the scrollable
+    // viewport) so it stays visible regardless of how many tracks exist.
+    if (masterStrip != nullptr)
+        masterStrip->setBounds (area.removeFromRight (kMasterStripWidth));
+
+    channelStripViewport.setBounds (area);
 
     // Compute candidate strip height from current geometry.
-    // Use MixerView's own height (set by MainComponent::resized, stable).
-    const int viewH = getHeight();
+    const int viewH = area.getHeight();
 
     // Only update cached height if we have a meaningful parent-assigned height.
-    // During viewport internal relayout, getHeight() may be stale or zero.
     if (viewH > 100)
     {
         const int scrollBarH = channelStripViewport.getScrollBarThickness();
@@ -58,21 +71,19 @@ void MixerView::resized()
 
     const int stripH = cachedStripHeight;
 
-    // Size container to hold all strips side-by-side (audio + bus)
-    const int totalW = juce::jmax ((strips.size() + busStrips.size()) * kStripWidth,
+    // Total strip count: audio + bus/fx channels
+    const int totalStrips = strips.size() + busFXStrips.size();
+    const int totalW = juce::jmax (totalStrips * kStripWidth,
                                    channelStripViewport.getWidth());
     channelStripContainer.setSize (totalW, stripH);
 
-    // Lay out audio track strips horizontally
-    for (int i = 0; i < strips.size(); ++i)
-        strips[i]->setBounds (i * kStripWidth, 0, kStripWidth, stripH);
+    // Layout: audio strips first, then bus/fx strips (ordered as in busFXStrips)
+    int xPos = 0;
+    for (int i = 0; i < strips.size(); ++i, xPos += kStripWidth)
+        strips[i]->setBounds (xPos, 0, kStripWidth, stripH);
 
-    // Lay out bus strips after audio track strips
-    for (int i = 0; i < busStrips.size(); ++i)
-    {
-        const int busIdx = strips.size() + i;
-        busStrips[i]->setBounds (busIdx * kStripWidth, 0, kStripWidth, stripH);
-    }
+    for (int i = 0; i < busFXStrips.size(); ++i, xPos += kStripWidth)
+        busFXStrips[i]->setBounds (xPos, 0, kStripWidth, stripH);
 }
 
 void MixerView::paint (juce::Graphics& g)
@@ -82,6 +93,45 @@ void MixerView::paint (juce::Graphics& g)
     // Top border separating mixer from arrangement
     g.setColour (juce::Colour (0xff000000));
     g.drawLine (0.0f, 0.0f, (float)getWidth(), 0.0f, 2.0f);
+
+    // Vertical divider between scrollable strips and the pinned master strip
+    if (masterStrip != nullptr)
+    {
+        const float divX = (float)(getWidth() - kMasterStripWidth);
+        g.setColour (juce::Colour (0xff000000));
+        g.drawLine (divX, 0.0f, divX, (float)getHeight(), 2.0f);
+    }
+}
+
+void MixerView::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        showContextMenu (e);
+}
+
+void MixerView::showContextMenu (const juce::MouseEvent& /*e*/)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Add Channel");
+    menu.addItem (1, "Add Bus Channel");
+    menu.addItem (2, "Add FX Channel");
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+        [this] (int result)
+        {
+            if (result == 1)
+            {
+                mixerEngine.createBusChannel ("Bus " + juce::String (mixerEngine.getBusChannels().size() + 1));
+            }
+            else if (result == 2)
+            {
+                mixerEngine.createFXChannel ("FX " + juce::String (mixerEngine.getFXChannels().size() + 1));
+            }
+        });
 }
 
 MeterProcessor* MixerView::getMeterProcessorForTrack (const te::AudioTrack& track)
@@ -92,137 +142,428 @@ MeterProcessor* MixerView::getMeterProcessorForTrack (const te::AudioTrack& trac
 
 void MixerView::rebuildStrips()
 {
-    // Clear existing strips and processors
+    // Clear selection — strip pointers are about to be destroyed.
+    // All selection arrays must be cleared before strips.clear() to prevent dangling access.
+    selectedMixerTracks.clear();
+    selectedStrips.clear();
+    selectedBusFXStrips.clear();
+
+    // Unregister level clients before clearing
+    for (auto& [track, client] : levelClients)
+        if (auto* lp = track->getLevelMeterPlugin())
+            lp->measurer.removeClient (*client);
+    levelClients.clear();
+
     channelStripContainer.removeAllChildren();
     strips.clear();
-    busStrips.clear();
+    busFXStrips.clear();
+    masterStrip.reset();
     meterProcessors.clear();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
         return;
 
+    // ---- Audio track strips (plain audio channels only) ----
     for (auto* audioTrack : te::getAudioTracks (*edit))
     {
-        // Create a MeterProcessor for this track
-        auto meter = std::make_unique<MeterProcessor>();
-        // Initialise with nominal values; audio engine will call prepareToPlay
-        // with real values when it starts.
-        meter->prepareToPlay (44100.0, 512);
+        if (! MixerEngine::isAudioChannel (*audioTrack))
+            continue;   // Bus/FX channels get their own strip below
 
+        auto meter = std::make_unique<MeterProcessor>();
+        meter->prepareToPlay (44100.0, 512);
         auto* meterPtr = meter.get();
         meterProcessors[audioTrack] = std::move (meter);
 
-        // Create the ChannelStrip passing MeterProcessor and plugin management references
+        auto client = std::make_unique<te::LevelMeasurer::Client>();
+        if (auto* levelPlugin = audioTrack->getLevelMeterPlugin())
+            levelPlugin->measurer.addClient (*client);
+        levelClients[audioTrack] = std::move (client);
+
         auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr,
                                                      pluginManager, pluginWindowManager,
                                                      pluginScanner));
+        strip->onTrackSelected = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+
+        // Bus-group propagation: after a solo/mute button click, find all tracks on the
+        // same bus and apply the same new state so the entire bus group moves together.
+        strip->onSoloClicked = [this, strip]
+        {
+            const bool newState = strip->getTrack().isSolo (false);
+            for (auto* sibling : getTracksInSameBusGroup (strip->getTrack()))
+                if (sibling != &strip->getTrack())
+                    mixerEngine.setSolo (*sibling, newState);
+            refreshAllStrips();
+        };
+        strip->onMuteClicked = [this, strip]
+        {
+            const bool newState = strip->getTrack().isMuted (false);
+            for (auto* sibling : getTracksInSameBusGroup (strip->getTrack()))
+                if (sibling != &strip->getTrack())
+                    mixerEngine.setMute (*sibling, newState);
+            refreshAllStrips();
+        };
+
+        // Multi-selection routing: when one selected strip is routed to a bus (or Master),
+        // apply the same routing to all other selected strips simultaneously.
+        strip->onOutputRouted = [this, strip] (te::AudioTrack* targetBus)
+        {
+            for (auto* sibling : selectedStrips)
+            {
+                if (sibling == strip) continue;  // already routed by the strip itself
+                if (targetBus == nullptr)
+                    mixerEngine.unrouteFromBus (sibling->getTrack());
+                else
+                    mixerEngine.routeTrackToBus (sibling->getTrack(), *targetBus);
+            }
+            refreshAllStrips();
+        };
+
         channelStripContainer.addAndMakeVisible (strip);
     }
 
-    // Create BusStrips for FolderTracks (buses created via "Create Bus from Track")
-    for (auto* track : te::getAllTracks (*edit))
+    // ---- Bus and FX channel strips ----
+    // Order: Bus channels first, then FX channels (Studio One default)
+    auto addBusFXStrip = [&] (te::AudioTrack* audioTrack)
     {
-        if (auto* folderTrack = dynamic_cast<te::FolderTrack*> (track))
-        {
-            auto* busStrip = busStrips.add (new BusStrip (*folderTrack,
-                                                           pluginManager,
-                                                           pluginWindowManager,
-                                                           pluginScanner));
-            channelStripContainer.addAndMakeVisible (busStrip);
-        }
-    }
+        auto meter = std::make_unique<MeterProcessor>();
+        meter->prepareToPlay (44100.0, 512);
+        auto* meterPtr = meter.get();
+        meterProcessors[audioTrack] = std::move (meter);
+
+        auto client = std::make_unique<te::LevelMeasurer::Client>();
+        if (auto* levelPlugin = audioTrack->getLevelMeterPlugin())
+            levelPlugin->measurer.addClient (*client);
+        levelClients[audioTrack] = std::move (client);
+
+        auto* strip = busFXStrips.add (new BusFXStrip (*audioTrack, mixerEngine, *meterPtr,
+                                                        pluginManager, pluginWindowManager,
+                                                        pluginScanner));
+        strip->onTrackSelected = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+        channelStripContainer.addAndMakeVisible (strip);
+    };
+
+    for (auto* audioTrack : te::getAudioTracks (*edit))
+        if (MixerEngine::isBusChannel (*audioTrack))
+            addBusFXStrip (audioTrack);
+
+    for (auto* audioTrack : te::getAudioTracks (*edit))
+        if (MixerEngine::isFXChannel (*audioTrack))
+            addBusFXStrip (audioTrack);
+
+    // ---- Master strip (rightmost, pinned outside viewport) ----
+    masterStrip = std::make_unique<MasterStrip> (
+        *edit,
+        appState.audioEngine.getMasterMeterProcessor(),
+        pluginWindowManager,
+        pluginScanner);
+    addAndMakeVisible (*masterStrip);
+
+    // Rebuild send slots on all audio strips from current FX channels
+    rebuildAllSends();
 
     resized();
 }
 
-//==============================================================================
-// BusStrip — context menu and plugin insert (plan 01-27, MIX-02/PLUG-04 gap closure)
-
-void MixerView::BusStrip::mouseDown (const juce::MouseEvent& e)
+void MixerView::rebuildAllSends()
 {
-    if (e.mods.isPopupMenu())
-        showContextMenu();
+    const auto fxChannels = mixerEngine.getFXChannels();
+    for (auto* strip : strips)
+        strip->rebuildSends (fxChannels);
 }
 
-void MixerView::BusStrip::showContextMenu()
-{
-    juce::PopupMenu menu;
-    menu.addItem (1, "Add Plugin...");
-    menu.addSeparator();
-    menu.addItem (2, "Rename Bus");
+//==============================================================================
+// Track selection — used by S/M/R shortcuts when Mixer has keyboard focus
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-        [this] (int result)
+void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
+{
+    if (t == nullptr)
+    {
+        selectedMixerTracks.clear();
+        selectedStrips.clear();
+        selectedBusFXStrips.clear();
+        for (auto* s : strips)     s->setSelected (false);
+        for (auto* s : busFXStrips) s->setSelected (false);
+        grabKeyboardFocus();
+        return;
+    }
+
+    const bool cmdDown = juce::ModifierKeys::getCurrentModifiers().isCommandDown();
+
+    if (cmdDown)
+    {
+        // Toggle: add to selection or remove from it
+        if (selectedMixerTracks.contains (t))
+            selectedMixerTracks.removeAllInstancesOf (t);
+        else
+            selectedMixerTracks.addIfNotAlreadyThere (t);
+    }
+    else
+    {
+        // Single selection — clear everything first
+        selectedMixerTracks.clearQuick();
+        selectedMixerTracks.add (t);
+    }
+
+    // Rebuild strip selection arrays and update visual highlight on all strips
+    selectedStrips.clearQuick();
+    selectedBusFXStrips.clearQuick();
+
+    for (auto* s : strips)
+    {
+        const bool sel = selectedMixerTracks.contains (&s->getTrack());
+        s->setSelected (sel);
+        if (sel) selectedStrips.add (s);
+    }
+    for (auto* s : busFXStrips)
+    {
+        const bool sel = selectedMixerTracks.contains (&s->getTrack());
+        s->setSelected (sel);
+        if (sel) selectedBusFXStrips.add (s);
+    }
+
+    grabKeyboardFocus();
+}
+
+bool MixerView::keyPressed (const juce::KeyPress& key)
+{
+    // Cmd+A — select all strips regardless of other state
+    if (key.getModifiers().isCommandDown()
+        && (key.getKeyCode() == 'a' || key.getKeyCode() == 'A'))
+    {
+        selectedMixerTracks.clear();
+        selectedStrips.clear();
+        selectedBusFXStrips.clear();
+        for (auto* s : strips)
         {
-            if (result == 1)
-            {
-                PluginBrowserPopup::showForComponent (
-                    *this,
-                    pluginScanner.getKnownPlugins(),
-                    [this] (const juce::PluginDescription& desc)
-                    {
-                        auto* newPlugin = pluginManager.insertPlugin (track, desc);
-                        if (newPlugin != nullptr)
-                        {
-                            pluginWindowManager.openPluginWindow (*newPlugin);
-                            insertSlotPanel.refresh();
-                        }
-                    });
-            }
-            else if (result == 2)
-            {
-                // JUCE 8: showInputBoxAsync removed — build AlertWindow manually
-                // and use showAsync (JUCE_MODAL_LOOPS_PERMITTED not set).
-                auto* alert = new juce::AlertWindow ("Rename Bus",
-                                                     "New name:",
-                                                     juce::MessageBoxIconType::QuestionIcon);
-                alert->addTextEditor ("name", track.getName());
-                alert->addButton ("OK",     1, juce::KeyPress (juce::KeyPress::returnKey));
-                alert->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+            s->setSelected (true);
+            selectedMixerTracks.addIfNotAlreadyThere (&s->getTrack());
+            selectedStrips.add (s);
+        }
+        for (auto* s : busFXStrips)
+        {
+            s->setSelected (true);
+            selectedMixerTracks.addIfNotAlreadyThere (&s->getTrack());
+            selectedBusFXStrips.add (s);
+        }
+        return true;
+    }
 
-                alert->enterModalState (true,
-                    juce::ModalCallbackFunction::create (
-                        [alert, this] (int code)
+    // No-selection fallback: S/M with no modifier and nothing selected → apply to all regular strips
+    if (selectedMixerTracks.isEmpty() && ! key.getModifiers().isAnyModifierKeyDown() && ! strips.isEmpty())
+    {
+        if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
+        {
+            bool anySoloed = false;
+            for (auto* s : strips) if (s->getTrack().isSolo (false)) { anySoloed = true; break; }
+            for (auto* s : strips) mixerEngine.setSolo (s->getTrack(), ! anySoloed);
+            refreshAllStrips();
+            return true;
+        }
+        if (key.getKeyCode() == 'm' || key.getKeyCode() == 'M')
+        {
+            bool anyUnmuted = false;
+            for (auto* s : strips) if (! s->getTrack().isMuted (false)) { anyUnmuted = true; break; }
+            for (auto* s : strips) mixerEngine.setMute (s->getTrack(), anyUnmuted);
+            refreshAllStrips();
+            return true;
+        }
+    }
+
+    // S/M/R shortcuts — require at least one selected track and no modifier keys
+    if (selectedMixerTracks.isEmpty() || key.getModifiers().isAnyModifierKeyDown())
+        return false;
+
+    if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
+    {
+        for (auto* t : selectedMixerTracks)
+        {
+            const bool newSolo = ! t->isSolo (false);
+            mixerEngine.setSolo (*t, newSolo);
+
+            // Bus-group propagation: apply same solo to all tracks on the same bus
+            for (auto* sibling : getTracksInSameBusGroup (*t))
+                if (sibling != t)
+                    mixerEngine.setSolo (*sibling, newSolo);
+        }
+        refreshAllStrips();
+        return true;
+    }
+    if (key.getKeyCode() == 'm' || key.getKeyCode() == 'M')
+    {
+        for (auto* t : selectedMixerTracks)
+        {
+            const bool newMute = ! t->isMuted (false);
+            mixerEngine.setMute (*t, newMute);
+
+            // Bus-group propagation: apply same mute to all tracks on the same bus
+            for (auto* sibling : getTracksInSameBusGroup (*t))
+                if (sibling != t)
+                    mixerEngine.setMute (*sibling, newMute);
+        }
+        refreshAllStrips();
+        return true;
+    }
+    if (key.getKeyCode() == 'r' || key.getKeyCode() == 'R')
+    {
+        // Only arm/disarm regular audio tracks — BusFXStrips are not record tracks.
+        for (auto* strip : selectedStrips)
+        {
+            auto* t = &strip->getTrack();
+            auto& edit = t->edit;
+            const bool newArmed = ! (bool) t->state.getProperty ("armed", false);
+            t->state.setProperty ("armed", newArmed, nullptr);
+
+            if (newArmed)
+            {
+                // Assign first enabled wave input if none already assigned (Studio One style)
+                bool alreadyAssigned = false;
+                for (auto* instance : edit.getAllInputDevices())
+                {
+                    if (te::isOnTargetTrack (*instance, *t, 0))
+                    {
+                        alreadyAssigned = true;
+                        instance->setRecordingEnabled (t->itemID, true);
+                    }
+                }
+                if (! alreadyAssigned)
+                {
+                    auto& dm = edit.engine.getDeviceManager();
+                    for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+                    {
+                        auto* waveIn = dm.getWaveInDevice (i);
+                        if (waveIn == nullptr || ! waveIn->isEnabled()) continue;
+                        for (auto* instance : edit.getAllInputDevices())
                         {
-                            if (code == 1)
+                            if (&instance->getInputDevice() == waveIn)
                             {
-                                const auto name = alert->getTextEditorContents ("name");
-                                if (name.isNotEmpty())
-                                    track.setName (name);
+                                auto assignResult = instance->setTarget (t->itemID, true, nullptr);
+                                if (assignResult.has_value())
+                                    instance->setRecordingEnabled (t->itemID, true);
+                                break;
                             }
-                        }),
-                    true /* delete on dismiss */);
+                        }
+                        break;
+                    }
+                }
             }
-        });
+            else
+            {
+                // Disarm — disable recording on all instances targeting this track
+                for (auto* instance : edit.getAllInputDevices())
+                    if (te::isOnTargetTrack (*instance, *t, 0))
+                        instance->setRecordingEnabled (t->itemID, false);
+            }
+        }
+        refreshAllSelectedStrips();
+        return true;
+    }
+    return false;
 }
 
 //==============================================================================
-// juce::Timer — 24fps meter update (plan 01-17, EXP-03 gap closure)
+// juce::Timer — 24fps meter update
 
 void MixerView::timerCallback()
 {
-    // Get the master MeterProcessor from AudioEngine.
-    // This processor taps the post-render output buffer via an AudioIODeviceCallback,
-    // so it receives real audio data during playback.
+    // Flush master meter FIFO and push values to the Master strip.
     auto& masterMeter = appState.audioEngine.getMasterMeterProcessor();
-
-    // CRITICAL: flushFifo() pumps the lock-free FIFO into libebur128 on the message thread.
-    // This call must happen on the message thread (which it does — we are in timerCallback).
-    // The audio thread NEVER calls libebur128 — it only writes to the FIFO.
     masterMeter.flushFifo();
 
-    // Read-and-reset peak so each 24fps window shows only this interval's max,
-    // not an accumulated max since program start (fixes ratchet-upward bug).
-    const float peakDB = masterMeter.readAndResetPeakDB();
-    const float rmsDB  = masterMeter.getRMSDB();
-    const float lufsM  = masterMeter.getLUFSMomentary();
-    const float lufsI  = masterMeter.getLUFSIntegrated();
+    if (masterStrip != nullptr)
+    {
+        const float mPeakDB = masterMeter.readAndResetPeakDB();
+        const float mRmsDB  = masterMeter.getRMSDB();
+        const float mLufsM  = masterMeter.getLUFSMomentary();
+        const float mLufsI  = masterMeter.getLUFSIntegrated();
+        masterStrip->setMeterValues (mPeakDB, mRmsDB, mLufsM, mLufsI);
+    }
 
-    // Push master meter values to all channel strip MeterBars.
-    // Phase 1: all strips show the same program-level mix.
+    // ---- Per-track metering (audio + bus/fx strips) ----
+    static juce::AudioBuffer<float> synthBuf (2, 512);
+    juce::MidiBuffer midiDummy;
+
+    // Helper: update any strip that has a track with a level client
+    auto updateStrip = [&] (te::AudioTrack& audioTrack, auto* strip)
+    {
+        float peakDB = -100.0f;
+        {
+            auto it = levelClients.find (&audioTrack);
+            if (it != levelClients.end())
+            {
+                const auto levelL = it->second->getAndClearAudioLevel (0);
+                const auto levelR = it->second->getAndClearAudioLevel (1);
+                peakDB = juce::jmax (levelL.dB, levelR.dB);
+            }
+        }
+
+        auto it = meterProcessors.find (&audioTrack);
+        if (it != meterProcessors.end())
+        {
+            auto* meter = it->second.get();
+
+            const float linearAmp = (peakDB > -100.0f)
+                                    ? std::pow (10.0f, peakDB / 20.0f)
+                                    : 0.0f;
+            synthBuf.clear();
+            for (int ch = 0; ch < synthBuf.getNumChannels(); ++ch)
+                juce::FloatVectorOperations::fill (synthBuf.getWritePointer (ch),
+                                                   linearAmp,
+                                                   synthBuf.getNumSamples());
+
+            meter->processBlock (synthBuf, midiDummy);
+            meter->flushFifo();
+
+            strip->setMeterValues (peakDB,
+                                   meter->getRMSDB(),
+                                   meter->getLUFSMomentary(),
+                                   meter->getLUFSIntegrated());
+        }
+        else
+        {
+            strip->setMeterValues (peakDB, peakDB - 3.0f, peakDB - 12.0f, peakDB - 16.0f);
+        }
+    };
+
     for (auto* strip : strips)
-        strip->setMeterValues (peakDB, rmsDB, lufsM, lufsI);
+        updateStrip (strip->getTrack(), strip);
+
+    for (auto* strip : busFXStrips)
+        updateStrip (strip->getTrack(), strip);
+}
+
+//==============================================================================
+// Strip refresh helpers
+
+void MixerView::refreshAllSelectedStrips()
+{
+    for (auto* s : selectedStrips)     s->refresh();
+    for (auto* s : selectedBusFXStrips) s->refresh();
+}
+
+void MixerView::refreshAllStrips()
+{
+    for (auto* s : strips)      s->refresh();
+    for (auto* s : busFXStrips) s->refresh();
+}
+
+juce::Array<te::AudioTrack*> MixerView::getTracksInSameBusGroup (te::AudioTrack& t) const
+{
+    juce::Array<te::AudioTrack*> result;
+    auto* bus = mixerEngine.getBusChannelFor (t);
+    if (bus == nullptr)
+        return result;  // no bus → no group
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return result;
+
+    for (auto* audioTrack : te::getAudioTracks (*edit))
+        if (MixerEngine::isAudioChannel (*audioTrack)
+            && mixerEngine.getBusChannelFor (*audioTrack) == bus)
+            result.add (audioTrack);
+
+    return result;
 }
 
 //==============================================================================

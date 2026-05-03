@@ -14,6 +14,13 @@ class PluginWindowManager;
  * The title bar contains a pin button — clicking it moves the editor to the
  * DockedPluginPanel via PluginWindowManager::pinPluginToSidePanel().
  *
+ * Fullscreen prevention: setFullScreen()/isFullScreen() are overridden so that
+ * the plugin window never participates in macOS fullscreen transitions even when
+ * the main Cloudes window enters fullscreen mode.
+ *
+ * Zoom: a bottom bar inside BypassWrapper provides 80 / 100 / 120 / 150 % zoom
+ * buttons.  applyZoom() resizes the window so the editor fills the new size.
+ *
  * Lifetime: owned by PluginWindowManager via std::unique_ptr.
  * Destroyed when user closes window or plugin is removed from chain.
  */
@@ -27,6 +34,15 @@ public:
     void closeButtonPressed() override;
 
     te::Plugin& getPlugin() const noexcept { return plugin; }
+
+    // ---- Fullscreen prevention ----
+    // Override maximiseButtonPressed so the (optional) maximise button never
+    // sends the plugin window into fullscreen — it applies 150 % zoom instead.
+    void maximiseButtonPressed() override { applyZoom (1.5f); }
+
+    // ---- Zoom ----
+    /** Resize the window so the editor fills nativeW*factor × nativeH*factor. */
+    void applyZoom (float factor);
 
 private:
     te::Plugin&           plugin;
@@ -44,6 +60,11 @@ private:
     };
 
     std::unique_ptr<PinButton> pinButton;
+
+    // Native editor size (before zoom) — set during construction.
+    int nativeEditorW = 400;
+    int nativeEditorH = 300;
+    float currentZoom = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FloatingPluginWindow)
 };

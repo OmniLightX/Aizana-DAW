@@ -14,7 +14,15 @@ EQComponent::EQComponent (EQProcessor& eqProcessor_)
     addAndMakeVisible (spectrumAnalyzer);
     spectrumAnalyzer.setInterceptsMouseClicks (false, false);
 
-    setSize (600, 200);
+    // Drag readout label — dark pill shown near dragging handle
+    dragInfoLabel.setFont (juce::FontOptions (10.0f));
+    dragInfoLabel.setJustificationType (juce::Justification::centred);
+    dragInfoLabel.setColour (juce::Label::textColourId,       juce::Colours::white);
+    dragInfoLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0xdd111111));
+    dragInfoLabel.setVisible (false);
+    addChildComponent (dragInfoLabel);
+
+    setSize (700, 350);
 }
 
 //==============================================================================
@@ -113,6 +121,10 @@ float EQComponent::getMagnitudeAtFrequency (float hz) const
                 coeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass (
                     sampleRate, (double)f, (double)q);
                 break;
+            case EQBandType::Notch:
+                coeffs = juce::dsp::IIR::Coefficients<float>::makeNotch (
+                    sampleRate, (double)f, (double)q);
+                break;
         }
 
         if (coeffs != nullptr)
@@ -133,12 +145,22 @@ juce::Point<float> EQComponent::bandHandlePosition (int bandIndex) const
 
 int EQComponent::hitTestBandHandle (juce::Point<float> pos) const
 {
+    // Return the NEAREST enabled band handle within the hit radius.
+    // Previously returned the first match (by index), which meant clicking near
+    // a higher-index band always picked a lower-index band at the same y position.
+    int   nearestIndex = -1;
+    float nearestDist  = kHandleRadius + 2.0f;  // max hit distance
+
     for (int i = 0; i < EQProcessor::NumBands; ++i)
     {
-        if (bandHandlePosition (i).getDistanceFrom (pos) <= kHandleRadius + 2.0f)
-            return i;
+        const float d = bandHandlePosition (i).getDistanceFrom (pos);
+        if (d <= nearestDist)
+        {
+            nearestDist  = d;
+            nearestIndex = i;
+        }
     }
-    return -1;
+    return nearestIndex;
 }
 
 //==============================================================================
@@ -317,6 +339,56 @@ void EQComponent::paint (juce::Graphics& g)
 
 void EQComponent::mouseDown (const juce::MouseEvent& e)
 {
+    // Right-click on a band handle: show type/slope/enable menu
+    if (e.mods.isRightButtonDown())
+    {
+        const int bandIdx = hitTestBandHandle (e.position);
+        if (bandIdx >= 0)
+        {
+            EQBand b = eqProcessor.getBand (bandIdx);
+
+            juce::PopupMenu menu;
+            menu.addSectionHeader ("Band " + juce::String (bandIdx + 1) + " Type");
+            menu.addItem (1, "Bell (Peak)",         true, b.type == EQBandType::Peak);
+            menu.addItem (2, "Low Shelf",            true, b.type == EQBandType::LowShelf);
+            menu.addItem (3, "High Shelf",           true, b.type == EQBandType::HighShelf);
+            menu.addItem (4, "Low Cut  12 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 2);
+            menu.addItem (5, "Low Cut  24 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 4);
+            menu.addItem (6, "High Cut 12 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 2);
+            menu.addItem (7, "High Cut 24 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 4);
+            menu.addItem (8, "Notch",                true, b.type == EQBandType::Notch);
+            menu.addSeparator();
+            menu.addItem (9, b.enabled ? "Disable Band" : "Enable Band");
+
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                [this, bandIdx] (int result)
+                {
+                    if (result == 0)
+                        return;
+
+                    EQBand updated = eqProcessor.getBand (bandIdx);
+
+                    switch (result)
+                    {
+                        case 1: updated.type = EQBandType::Peak;      updated.slopeOrder = 2; break;
+                        case 2: updated.type = EQBandType::LowShelf;  updated.slopeOrder = 2; break;
+                        case 3: updated.type = EQBandType::HighShelf; updated.slopeOrder = 2; break;
+                        case 4: updated.type = EQBandType::LowPass;   updated.slopeOrder = 2; break;
+                        case 5: updated.type = EQBandType::LowPass;   updated.slopeOrder = 4; break;
+                        case 6: updated.type = EQBandType::HighPass;  updated.slopeOrder = 2; break;
+                        case 7: updated.type = EQBandType::HighPass;  updated.slopeOrder = 4; break;
+                        case 8: updated.type = EQBandType::Notch;     updated.slopeOrder = 2; break;
+                        case 9: updated.enabled = !updated.enabled;                            break;
+                        default: return;
+                    }
+
+                    eqProcessor.setBand (bandIdx, updated);
+                    repaint();
+                });
+        }
+        return;
+    }
+
     draggingBandIndex = hitTestBandHandle (e.position);
     if (draggingBandIndex >= 0)
     {
@@ -358,6 +430,32 @@ void EQComponent::mouseDrag (const juce::MouseEvent& e)
     }
 
     eqProcessor.setBand (draggingBandIndex, updatedBand);
+
+    // Update drag readout label
+    {
+        const EQBand& b = eqProcessor.getBand (draggingBandIndex);
+        const juce::String freqText = b.frequencyHz >= 1000.0f
+            ? juce::String (b.frequencyHz / 1000.0f, 2) + " kHz"
+            : juce::String ((int)b.frequencyHz) + " Hz";
+        juce::String info;
+        if (e.mods.isCtrlDown())
+            info = freqText + "  /  Q " + juce::String (b.Q, 2);
+        else
+            info = freqText + "  /  " + juce::String (b.gainDB, 1) + " dB"
+                 + "  /  Q " + juce::String (b.Q, 2);
+
+        dragInfoLabel.setText (info, juce::dontSendNotification);
+        const auto pos = bandHandlePosition (draggingBandIndex);
+        const int labelW = 190;
+        const int labelH = 18;
+        int labelX = (int)pos.x - labelW / 2;
+        int labelY = (int)pos.y - 28;
+        labelX = juce::jlimit (0, juce::jmax (0, getWidth() - labelW), labelX);
+        labelY = juce::jlimit (0, juce::jmax (0, getHeight() - labelH), labelY);
+        dragInfoLabel.setBounds (labelX, labelY, labelW, labelH);
+        dragInfoLabel.setVisible (true);
+    }
+
     repaint();
 }
 
@@ -367,6 +465,7 @@ void EQComponent::mouseUp (const juce::MouseEvent& /*e*/)
     {
         bandHandles[draggingBandIndex].isDragging = false;
         draggingBandIndex = -1;
+        dragInfoLabel.setVisible (false);
         repaint();
     }
 }
@@ -382,5 +481,20 @@ void EQComponent::mouseDoubleClick (const juce::MouseEvent& e)
     resetBand.gainDB = 0.0f;
     resetBand.Q = 0.707f;
     eqProcessor.setBand (bandIndex, resetBand);
+    repaint();
+}
+
+void EQComponent::mouseWheelMove (const juce::MouseEvent& e,
+                                   const juce::MouseWheelDetails& wheel)
+{
+    // Scroll over a band handle adjusts its Q (standard in Logic Pro / Studio One).
+    // Scroll up = higher Q (narrower), scroll down = lower Q (wider).
+    const int bandIndex = hitTestBandHandle (e.position);
+    if (bandIndex < 0)
+        return;
+
+    EQBand band = eqProcessor.getBand (bandIndex);
+    band.Q = juce::jlimit (0.1f, 10.0f, band.Q + wheel.deltaY * 0.5f);
+    eqProcessor.setBand (bandIndex, band);
     repaint();
 }

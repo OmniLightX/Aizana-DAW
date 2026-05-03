@@ -54,12 +54,19 @@ public:
     /**
      * Move a clip to start at newStartTimeSecs (preserving clip length).
      *
-     * Equivalent to EditManager::moveClip but provided here for symmetry with
-     * other ClipEditor operations.
+     * Does NOT begin an undo transaction — call beginMoveTransaction() before
+     * starting a drag so the entire drag resolves to a single undo step.
      *
      * Source audio file: NEVER modified.
      */
     void moveClip (te::Clip& clip, double newStartTimeSecs);
+
+    /**
+     * Begin an undo transaction for a drag-based clip move.
+     * Call once from ClipComponent::mouseDown (pointer tool) before the first
+     * moveClip() so all mid-drag position updates share one undo step.
+     */
+    void beginMoveTransaction();
 
     /**
      * Copy a clip to destTrack, starting at startTimeSecs.
@@ -121,6 +128,11 @@ public:
     // -------------------------------------------------------------------------
     // Audio file import — creates a WaveAudioClip from a file on disk
     // -------------------------------------------------------------------------
+
+    /**
+     * Delete a clip from its parent track (undoable).
+     */
+    void deleteClip (te::Clip& clip);
 
     /**
      * Import an audio file as a new WaveAudioClip on the given track.

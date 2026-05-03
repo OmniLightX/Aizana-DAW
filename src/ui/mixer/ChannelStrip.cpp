@@ -11,12 +11,18 @@
 MeterBar::MeterBar (MeterProcessor& meterProcessor_)
     : meterProcessor (meterProcessor_)
 {
-    // LUFS-I label — below the meter bar
-    // REQUIREMENTS.md + CONTEXT.md: informational only, no target enforcement
-    lufsLabel.setText ("LUFS-I", juce::dontSendNotification);
+    // Primary peak dB label — main numeric readout matching Logic Pro / Studio One
+    peakLabel.setText ("---", juce::dontSendNotification);
+    peakLabel.setJustificationType (juce::Justification::centred);
+    peakLabel.setColour (juce::Label::textColourId, juce::Colour (0xffdddddd));
+    peakLabel.setFont (juce::FontOptions (10.0f));
+    addAndMakeVisible (peakLabel);
+
+    // Secondary LUFS-I label — informational only, smaller font below peak readout
+    lufsLabel.setText ("---L", juce::dontSendNotification);
     lufsLabel.setJustificationType (juce::Justification::centred);
-    lufsLabel.setColour (juce::Label::textColourId, juce::Colour (0xffaaaaaa));
-    lufsLabel.setFont (juce::FontOptions (8.0f));
+    lufsLabel.setColour (juce::Label::textColourId, juce::Colour (0xff777777));
+    lufsLabel.setFont (juce::FontOptions (9.0f));
     addAndMakeVisible (lufsLabel);
 
     // No timer started here — MeterBar is purely push-driven.
@@ -52,10 +58,19 @@ void MeterBar::setMeterValues (float peakDB, float rmsDB, float lufsM, float luf
         displayLUFSI = lufsI;
 
         const juce::String lufsText = displayLUFSI <= -99.0f
-            ? "---"
-            : juce::String (displayLUFSI, 1);
+            ? "---L"
+            : juce::String (displayLUFSI, 1) + "L";
         lufsLabel.setText (lufsText, juce::dontSendNotification);
         needsRepaint = true;
+    }
+
+    // Update primary peak dB label on any peak change
+    if (needsRepaint)
+    {
+        const juce::String peakText = displayPeakDB <= -99.0f
+            ? "---"
+            : juce::String (displayPeakDB, 1);
+        peakLabel.setText (peakText, juce::dontSendNotification);
     }
 
     // Peak hold logic — driven by pushed values (not read from processor)
@@ -87,50 +102,45 @@ float MeterBar::dbToNorm (float dB)
 
 void MeterBar::resized()
 {
-    // LUFS label at the very bottom
-    lufsLabel.setBounds (getLocalBounds().removeFromBottom (14));
+    // Bottom 29px: LUFS-I secondary (13px) then peak dB primary (16px) above it
+    auto area = getLocalBounds();
+    lufsLabel.setBounds  (area.removeFromBottom (13));
+    peakLabel.setBounds  (area.removeFromBottom (16));
 }
 
 void MeterBar::paint (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat();
-    // Reserve bottom 14px for LUFS label
-    area.removeFromBottom (14.0f);
+    // Reserve bottom 29px for peak dB label (16px) + LUFS-I secondary label (13px)
+    area.removeFromBottom (29.0f);
 
-    // ---- Layout: dedicated dB scale column on the left, meter bars on the right ----
-    // kScaleW: reserved for dB text labels (right-justified in this column).
-    // Bars start at area.getX() + kScaleW so labels never overlap bar fill areas.
-    // Reference: Studio One draws dB scale in a narrow left column beside the bars.
-    const float kScaleW = 16.0f;
+    // Narrow mode: when the meter is placed alongside the fader it is ~22px wide.
+    // In that case skip the dB scale column and the dual-bar layout — draw a single
+    // peak bar at full width with tick marks only.
+    const bool narrowMode = (getWidth() < 40);
 
-    // Bar geometry — two equal-width bars (Peak + RMS) packed into the right region
-    const float barsLeft  = area.getX() + kScaleW;
-    const float barsWidth = area.getRight() - barsLeft;
-    const float barW      = (barsWidth - 2.0f) * 0.5f;
-    const float barX      = barsLeft;
-
-    // Background track (full area including scale column)
+    // Background
     g.setColour (juce::Colour (0xff111111));
     g.fillRect (area);
 
-    // ---- Peak bar (left of the two bars) ----
+    if (narrowMode)
     {
+        // ---- Single peak bar, full width ----
         const float norm = dbToNorm (displayPeakDB);
         const float barH = norm * area.getHeight();
         const float barY = area.getBottom() - barH;
 
-        // Colour gradient: green -> yellow -> red
         juce::ColourGradient grad;
         grad.isRadial = false;
-        grad.point1 = { barX, area.getBottom() };
-        grad.point2 = { barX, area.getY() };
+        grad.point1 = { area.getX(), area.getBottom() };
+        grad.point2 = { area.getX(), area.getY() };
         grad.addColour (0.0, juce::Colour (0xff00aa44));
         grad.addColour (0.7, juce::Colour (0xffddcc00));
         grad.addColour (0.9, juce::Colour (0xffff4400));
         grad.addColour (1.0, juce::Colour (0xffff0000));
 
         g.setGradientFill (grad);
-        g.fillRect (barX, barY, barW, barH);
+        g.fillRect (area.getX(), barY, area.getWidth(), barH);
 
         // Peak hold line
         if (peakHoldDB > -99.0f)
@@ -138,42 +148,82 @@ void MeterBar::paint (juce::Graphics& g)
             const float holdNorm = dbToNorm (peakHoldDB);
             const float holdY = area.getBottom() - holdNorm * area.getHeight();
             g.setColour (juce::Colours::white.withAlpha (0.7f));
-            g.drawHorizontalLine ((int)holdY, barX, barX + barW);
+            g.drawHorizontalLine ((int)holdY, area.getX(), area.getRight());
+        }
+
+        // Subtle tick marks at -6 and -18 dBFS (no labels — no room)
+        for (float dB : { -6.0f, -18.0f })
+        {
+            const float tickY = area.getBottom() - dbToNorm (dB) * area.getHeight();
+            g.setColour (juce::Colour (0xff444444));
+            g.drawHorizontalLine ((int)tickY, area.getX(), area.getRight());
         }
     }
-
-    // ---- RMS bar (right of the two bars) ----
+    else
     {
-        const float rmsNorm = dbToNorm (displayRMSDB);
-        const float rmsH    = rmsNorm * area.getHeight();
-        const float rmsY    = area.getBottom() - rmsH;
-        const float rmsX    = barX + barW + 2.0f;
+        // ---- Wide mode: dB scale column on left, Peak + RMS bars on right ----
+        const float kScaleW = 16.0f;
+        const float barsLeft  = area.getX() + kScaleW;
+        const float barsWidth = area.getRight() - barsLeft;
+        const float barW      = (barsWidth - 2.0f) * 0.5f;
+        const float barX      = barsLeft;
 
-        g.setColour (juce::Colour (0xff226688));
-        g.fillRect (rmsX, rmsY, barW, rmsH);
-    }
+        // Peak bar
+        {
+            const float norm = dbToNorm (displayPeakDB);
+            const float barH = norm * area.getHeight();
+            const float barY = area.getBottom() - barH;
 
-    // Tick marks at -6, -12, -18, -24 dBFS with dB scale labels in the left column
-    for (float dB : { -6.0f, -12.0f, -18.0f, -24.0f })
-    {
-        const float norm  = dbToNorm (dB);
-        const float tickY = area.getBottom() - norm * area.getHeight();
+            juce::ColourGradient grad;
+            grad.isRadial = false;
+            grad.point1 = { barX, area.getBottom() };
+            grad.point2 = { barX, area.getY() };
+            grad.addColour (0.0, juce::Colour (0xff00aa44));
+            grad.addColour (0.7, juce::Colour (0xffddcc00));
+            grad.addColour (0.9, juce::Colour (0xffff4400));
+            grad.addColour (1.0, juce::Colour (0xffff0000));
 
-        // Tick line — spans only the bar area (right of scale column) to avoid
-        // drawing through the text label
-        g.setColour (juce::Colour (0xff444444));
-        g.drawHorizontalLine ((int)tickY, barsLeft, area.getRight());
+            g.setGradientFill (grad);
+            g.fillRect (barX, barY, barW, barH);
 
-        // dB label — right-justified in the dedicated scale column on the left
-        g.setFont (juce::FontOptions (8.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.6f));
-        g.drawText (juce::String (static_cast<int> (dB)),
-                    (int)area.getX(),
-                    (int)(tickY - 7.0f),
-                    (int)kScaleW - 2,
-                    14,
-                    juce::Justification::centredRight,
-                    false);
+            if (peakHoldDB > -99.0f)
+            {
+                const float holdNorm = dbToNorm (peakHoldDB);
+                const float holdY = area.getBottom() - holdNorm * area.getHeight();
+                g.setColour (juce::Colours::white.withAlpha (0.7f));
+                g.drawHorizontalLine ((int)holdY, barX, barX + barW);
+            }
+        }
+
+        // RMS bar
+        {
+            const float rmsNorm = dbToNorm (displayRMSDB);
+            const float rmsH    = rmsNorm * area.getHeight();
+            const float rmsY    = area.getBottom() - rmsH;
+            const float rmsX    = barX + barW + 2.0f;
+            g.setColour (juce::Colour (0xff226688));
+            g.fillRect (rmsX, rmsY, barW, rmsH);
+        }
+
+        // Tick marks + dB scale labels
+        for (float dB : { -6.0f, -12.0f, -18.0f, -24.0f })
+        {
+            const float norm  = dbToNorm (dB);
+            const float tickY = area.getBottom() - norm * area.getHeight();
+
+            g.setColour (juce::Colour (0xff444444));
+            g.drawHorizontalLine ((int)tickY, barsLeft, area.getRight());
+
+            g.setFont (juce::FontOptions (8.0f));
+            g.setColour (juce::Colours::white.withAlpha (0.6f));
+            g.drawText (juce::String (static_cast<int> (dB)),
+                        (int)area.getX(),
+                        (int)(tickY - 7.0f),
+                        (int)kScaleW - 2,
+                        14,
+                        juce::Justification::centredRight,
+                        false);
+        }
     }
 }
 
@@ -184,29 +234,38 @@ void ChannelStrip::InsertSlotPanel::SlotButton::paint (juce::Graphics& g)
 {
     const bool occupied = (plugin != nullptr);
 
-    // Background
-    g.fillAll (occupied ? juce::Colour (0xff2a2a2a) : juce::Colour (0xff1a1a1a));
+    // Background — dim when bypassed
+    const bool bypassed = occupied && !plugin->isEnabled();
+    g.fillAll (occupied ? (bypassed ? juce::Colour (0xff1e1e1e) : juce::Colour (0xff2a2a2a))
+                        : juce::Colour (0xff1a1a1a));
 
     // Border
     if (occupied)
     {
-        g.setColour (juce::Colour (0xff666666));
+        g.setColour (bypassed ? juce::Colour (0xff444444) : juce::Colour (0xff666666));
         g.drawRect (getLocalBounds(), 1);
     }
     else
     {
-        // Dashed border for empty slot
         g.setColour (juce::Colour (0xff444444));
-        g.drawRect (getLocalBounds().reduced (0), 1);
+        g.drawRect (getLocalBounds(), 1);
     }
 
     g.setFont (juce::FontOptions (8.0f));
 
     if (occupied)
     {
-        // Plugin name truncated to fit, white text
-        g.setColour (juce::Colours::white);
-        g.drawText (plugin->getName(), getLocalBounds().reduced (2, 1),
+        // Bypass dot — 6×6 circle on the right edge: green=active, grey=bypassed
+        const int dotSize = 6;
+        const int dotX = getWidth() - dotSize - 3;
+        const int dotY = (getHeight() - dotSize) / 2;
+        g.setColour (bypassed ? juce::Colour (0xff555555) : juce::Colour (0xff44cc44));
+        g.fillEllipse ((float)dotX, (float)dotY, (float)dotSize, (float)dotSize);
+
+        // Plugin name in remaining area, greyed-out when bypassed
+        g.setColour (bypassed ? juce::Colour (0xff666666) : juce::Colours::white);
+        g.drawText (plugin->getName(),
+                    getLocalBounds().withTrimmedRight (dotSize + 6).reduced (2, 1),
                     juce::Justification::centredLeft, true);
     }
     else
@@ -223,12 +282,19 @@ void ChannelStrip::InsertSlotPanel::SlotButton::mouseDown (const juce::MouseEven
     {
         if (onRightClick)
             onRightClick();
+        return;
     }
-    else
+
+    // Click on bypass dot area (rightmost 12px) toggles bypass
+    if (plugin != nullptr && e.x >= getWidth() - 12)
     {
-        if (onClick)
-            onClick();
+        plugin->setEnabled (!plugin->isEnabled());
+        repaint();
+        return;
     }
+
+    if (onClick)
+        onClick();
 }
 
 void ChannelStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::MouseEvent& /*e*/)
@@ -249,43 +315,26 @@ ChannelStrip::InsertSlotPanel::InsertSlotPanel (te::Track& track_,
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner (pluginScanner_)
 {
-    for (int i = 0; i < kMaxSlots; ++i)
-    {
-        auto* slot = slots.add (new SlotButton());
-
-        const int slotIndex = i;
-
-        slot->onClick = [this, slotIndex]
-        {
-            auto* btn = slots[slotIndex];
-            if (btn->plugin == nullptr)
-                showAddPluginMenu (slotIndex);
-        };
-
-        slot->onDoubleClick = [this, slotIndex]
-        {
-            auto* btn = slots[slotIndex];
-            if (btn->plugin != nullptr)
-                pluginWindowManager.openPluginWindow (*btn->plugin);
-        };
-
-        slot->onRightClick = [this, slotIndex]
-        {
-            auto* btn = slots[slotIndex];
-            if (btn->plugin != nullptr)
-                showRemovePluginMenu (btn->plugin);
-        };
-
-        addAndMakeVisible (slot);
-    }
+    // Scrollable viewport — no hard slot limit.
+    // refresh() creates exactly (pluginCount + 1) slots; all are in slotsContent
+    // which can grow beyond the visible 6-slot window.
+    slotsViewport.setViewedComponent (&slotsContent, false);
+    slotsViewport.setScrollBarsShown (true, false);   // vertical scroll only
+    addAndMakeVisible (slotsViewport);
 
     refresh();
 }
 
 void ChannelStrip::InsertSlotPanel::resized()
 {
+    slotsViewport.setBounds (getLocalBounds());
+
+    // Keep content width in sync when the strip is resized
+    const int contentW = juce::jmax (1, getWidth());
+    const int contentH = juce::jmax (kSlotHeight, slots.size() * kSlotHeight);
+    slotsContent.setSize (contentW, contentH);
     for (int i = 0; i < slots.size(); ++i)
-        slots[i]->setBounds (0, i * kSlotHeight, getWidth(), kSlotHeight);
+        slots[i]->setBounds (0, i * kSlotHeight, contentW, kSlotHeight);
 }
 
 void ChannelStrip::InsertSlotPanel::paint (juce::Graphics& g)
@@ -296,36 +345,80 @@ void ChannelStrip::InsertSlotPanel::paint (juce::Graphics& g)
 
 void ChannelStrip::InsertSlotPanel::refresh()
 {
-    // Clear all slot plugin pointers
-    for (auto* slot : slots)
-        slot->plugin = nullptr;
+    // Destroy existing slots — Component destructor auto-removes from slotsContent.
+    slots.clear();
 
-    // Get the plugin chain and assign user-visible plugins to slots.
-    // Skip internal TE plugins: VolumeAndPanPlugin (type="volume") and
-    // LevelMeterPlugin (type="level") — these are internal housekeeping plugins
-    // not meaningful for the user insert panel.
+    // Collect user-visible plugins (skip internal TE volume/level plugins).
     const auto chain = pluginManager.getPluginChain (track);
-
-    int slotIdx = 0;
-    for (auto* plugin : chain)
+    juce::Array<te::Plugin*> userPlugins;
+    for (auto* p : chain)
     {
-        if (slotIdx >= kMaxSlots)
-            break;
-
-        // Skip internal TE plugins by checking their xmlTypeName
-        const juce::String pluginType = plugin->getPluginType();
-        if (pluginType == "volume" || pluginType == "level")
-            continue;
-
-        slots[slotIdx]->plugin = plugin;
-        ++slotIdx;
+        const juce::String t = p->getPluginType();
+        if (t != "volume" && t != "level" && t != "auxreturn" && t != "auxsend")
+            userPlugins.add (p);
     }
+
+    // No hard limit — create (pluginCount + 1) slots: last is always the empty "+" add slot.
+    const int numSlots = juce::jmax (1, userPlugins.size() + 1);
+
+    const int contentW = juce::jmax (1, getWidth());
+    for (int i = 0; i < numSlots; ++i)
+    {
+        auto* slot = slots.add (new SlotButton());
+
+        if (i < userPlugins.size())
+            slot->plugin = userPlugins[i];  // occupied
+        // else plugin == nullptr → empty "+" slot
+
+        const int slotIndex = i;
+
+        slot->onClick = [this, slotIndex]
+        {
+            if (slotIndex < slots.size() && slots[slotIndex]->plugin == nullptr)
+                showAddPluginMenu (slotIndex);
+        };
+
+        slot->onDoubleClick = [this, slotIndex]
+        {
+            if (slotIndex < slots.size() && slots[slotIndex]->plugin != nullptr)
+                pluginWindowManager.openPluginWindow (*slots[slotIndex]->plugin);
+        };
+
+        slot->onRightClick = [this, slotIndex]
+        {
+            if (slotIndex < slots.size() && slots[slotIndex]->plugin != nullptr)
+                showRemovePluginMenu (slots[slotIndex]->plugin);
+        };
+
+        slot->setBounds (0, i * kSlotHeight, contentW, kSlotHeight);
+        slotsContent.addAndMakeVisible (slot);
+    }
+
+    // Update scrollable content height to fit all slots
+    slotsContent.setSize (contentW, numSlots * kSlotHeight);
 
     repaint();
 }
 
 void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
 {
+    // Map user-visible slotIndex to actual plugin chain index.
+    // On FX channels, AuxReturnPlugin sits at chain index 0 (before user inserts).
+    // The user-visible slot list hides auxreturn/auxsend, so slot 0 must map to
+    // chain index 1 on FX channels, not 0.  Count how many prefix system plugins
+    // (auxreturn, auxsend) appear before the first user plugin in the actual chain.
+    const auto fullChain = pluginManager.getPluginChain (track);
+    int prefixCount = 0;
+    for (auto* p : fullChain)
+    {
+        const juce::String t = p->getPluginType();
+        if (t == "auxreturn" || t == "auxsend")
+            ++prefixCount;
+        else if (t != "volume" && t != "level")
+            break;  // reached first user plugin — stop counting prefix
+    }
+    const int actualIndex = prefixCount + slotIndex;
+
     juce::PopupMenu menu;
 
     // Built-in FX section
@@ -348,7 +441,7 @@ void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
     const int browseId = itemId;
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-        [this, slotIndex, descs, browseId] (int result)
+        [this, actualIndex, descs, browseId] (int result)
         {
             if (result <= 0)
                 return;
@@ -359,9 +452,9 @@ void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
                 PluginBrowserPopup::showForComponent (
                     *this,
                     pluginScanner.getKnownPlugins(),
-                    [this, slotIndex] (const juce::PluginDescription& desc)
+                    [this, actualIndex] (const juce::PluginDescription& desc)
                     {
-                        auto* newPlugin = pluginManager.insertPlugin (track, desc, slotIndex);
+                        auto* newPlugin = pluginManager.insertPlugin (track, desc, actualIndex);
                         if (newPlugin != nullptr)
                         {
                             pluginWindowManager.openPluginWindow (*newPlugin);
@@ -375,7 +468,7 @@ void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
                 const int descIdx = result - 1;
                 if (descIdx >= 0 && descIdx < descs.size())
                 {
-                    auto* newPlugin = pluginManager.insertPlugin (track, descs[descIdx], slotIndex);
+                    auto* newPlugin = pluginManager.insertPlugin (track, descs[descIdx], actualIndex);
                     if (newPlugin != nullptr)
                     {
                         pluginWindowManager.openPluginWindow (*newPlugin);
@@ -420,6 +513,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     , pluginScanner (pluginScanner_)
     , meterBar (meterProcessor_)
     , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
+    , sendSlotPanel (track_, mixerEngine_)
 {
     // ---- Volume fader ----
     volumeFader.setSliderStyle    (juce::Slider::LinearVertical);
@@ -440,21 +534,28 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     // panValueLabel initial text is set after panValueLabel is constructed (below)
 
     // ---- Solo / Mute buttons ----
-    soloButton.setClickingTogglesState (true);
-    muteButton.setClickingTogglesState (true);
+    // Auto-toggle disabled: we set the visual state ourselves from engine truth
+    // in the onClick handlers so it never diverges from what TE actually applied.
+    soloButton.setClickingTogglesState (false);
+    muteButton.setClickingTogglesState (false);
 
     soloButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
     soloButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbbbb00));
     muteButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    muteButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffbbbb00));
+    muteButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xFFCC2200));
+    muteButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
 
     soloButton.onClick = [this]
     {
-        mixerEngine.setSolo (track, soloButton.getToggleState());
+        mixerEngine.setSolo (track, ! track.isSolo (false));
+        soloButton.setToggleState (track.isSolo (false), juce::dontSendNotification);
+        if (onSoloClicked) onSoloClicked();
     };
     muteButton.onClick = [this]
     {
-        mixerEngine.setMute (track, muteButton.getToggleState());
+        mixerEngine.setMute (track, ! track.isMuted (false));
+        muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
+        if (onMuteClicked) onMuteClicked();
     };
 
     // ---- Pan value label (numeric readout: L33 / C / R48) ----
@@ -469,11 +570,25 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     panLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
     panLabel.setFont (juce::FontOptions (9.0f));
 
+    // ---- Output routing button ----
+    // Shows "▶ Master" when going directly to master, or "▶ <BusName>" when routed to a bus.
+    // Clicking opens a popup to re-route to any available Bus Channel or back to Master.
+    outputButton.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6 Master"));
+    outputButton.setClickingTogglesState (false);
+    outputButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff222222));
+    outputButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff336688));
+    outputButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff999999));
+    outputButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    outputButton.onClick = [this] { showOutputRoutingMenu(); };
+
     // ---- Track name label ----
     trackNameLabel.setText (track.getName(), juce::dontSendNotification);
     trackNameLabel.setJustificationType (juce::Justification::centred);
     trackNameLabel.setColour (juce::Label::textColourId, juce::Colours::white);
-    trackNameLabel.setFont (juce::FontOptions (10.0f));
+    trackNameLabel.setFont (juce::FontOptions (12.0f));
+    // Route trackNameLabel clicks to ChannelStrip::mouseDown() so clicking the name
+    // selects this strip even though child components cover all other strip surfaces.
+    trackNameLabel.addMouseListener (this, false);
 
     // Set initial pan value label from current knob state
     panValueLabel.setText (formatPanValue (panKnob.getValue()), juce::dontSendNotification);
@@ -485,12 +600,20 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     addAndMakeVisible (panLabel);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (muteButton);
+    addAndMakeVisible (outputButton);
     addAndMakeVisible (trackNameLabel);
     addAndMakeVisible (insertSlotPanel);
+    addAndMakeVisible (sendSlotPanel);
+    sendSlotPanel.setVisible (true);  // visible on all strips — send rows appear when sends exist
 
     // Listen to track's ValueTree so we can sync fader when state changes externally
     // (e.g., undo/redo, AI automation writes) and refresh insert slots on plugin changes
     track.state.addListener (this);
+
+    // Initialise output button to reflect actual routing state.
+    // rebuildStrips() creates new ChannelStrips after routing changes; the constructor
+    // defaults to "▶ Master" which is wrong if the track is already routed to a bus.
+    refreshOutputButton();
 }
 
 ChannelStrip::~ChannelStrip()
@@ -500,49 +623,68 @@ ChannelStrip::~ChannelStrip()
 
 void ChannelStrip::resized()
 {
+    // Professional DAW channel strip layout:
+    //
+    //  [top]  ─────────────────────────────────
+    //         Pan knob (36px) + value/label rows
+    //  ─────────────────────────────────────────
+    //         Fader  │  Meter  ← side by side, tall
+    //         (left) │ (22px right)
+    //  ─────────────────────────────────────────
+    //         [S] [M]  solo/mute (22px)
+    //  ─────────────────────────────────────────
+    //         Insert slots — scrollable, 6 visible
+    //  ─────────────────────────────────────────
+    //  [bot]  Track name (18px)
+    //
+    // The meter runs alongside the fader (tall, vertical), matching Logic Pro / Studio One.
+    // Meter labels (peak dB + LUFS) sit at the bottom of the meter area.
+
     auto area = getLocalBounds();
 
-    // Fixed heights for all bottom elements (allocated from bottom up):
-    //   pan row = knob(36) + value label(12) + PAN label(12) = 60px
-    //   fader = 80px
-    //   solo/mute buttons = 22px
-    //   insert slots = 6 * 16 = 96px
-    //   track name = 18px
-    // Total fixed = 276px; MeterBar gets whatever remains (guarded >=0).
-
-    const int kNameH   = 18;
-    const int kSlotH   = InsertSlotPanel::kMaxSlots * InsertSlotPanel::kSlotHeight; // 96
+    // ---- Fixed-height bottom elements (allocated from bottom up) ----
+    const int kNameH   = 24;
+    const int kOutputH = 16;  // output routing button row
+    const int kSlotH   = InsertSlotPanel::kVisibleSlots * InsertSlotPanel::kSlotHeight; // 96
+    const int kSendH   = sendSlotPanel.getNumRows() > 0
+                            ? SendSlotPanel::kVisibleRows * SendSlotPanel::kRowHeight
+                            : 0;
     const int kBtnH    = 22;
-    const int kFaderH  = 80;
+
+    auto nameArea    = area.removeFromBottom (kNameH);
+    auto outputArea  = area.removeFromBottom (kOutputH);
+    auto slotArea    = area.removeFromBottom (juce::jmax (0, kSlotH));
+    auto sendArea    = area.removeFromBottom (juce::jmax (0, kSendH));
+    auto btnArea     = area.removeFromBottom (juce::jmax (0, kBtnH));
+
+    // ---- Pan section — allocated from the top ----
     const int kPanH    = 36;
     const int kPanValH = 12;
     const int kPanLblH = 12;
 
-    auto nameArea   = area.removeFromBottom (kNameH);
-    auto slotArea   = area.removeFromBottom (juce::jmax (0, kSlotH));
-    auto btnArea    = area.removeFromBottom (juce::jmax (0, kBtnH));
-    auto faderArea  = area.removeFromBottom (juce::jmax (0, kFaderH));
-    auto panLblArea = area.removeFromBottom (juce::jmax (0, kPanLblH));
-    auto panValArea = area.removeFromBottom (juce::jmax (0, kPanValH));
-    auto panArea    = area.removeFromBottom (juce::jmax (0, kPanH));
+    auto panArea    = area.removeFromTop (juce::jmax (0, kPanH));
+    auto panValArea = area.removeFromTop (juce::jmax (0, kPanValH));
+    auto panLblArea = area.removeFromTop (juce::jmax (0, kPanLblH));
 
-    // Remaining area goes to the meter bar — guard against negative height
-    auto meterArea = area;
-    if (meterArea.getHeight() < 0)
-        meterArea.setHeight (0);
+    // ---- Remaining area: fader (left) + meter (right 28px) side by side ----
+    const int kMeterW = 28;
+    auto meterArea = area.removeFromRight (juce::jmax (0, kMeterW));
+    auto faderArea = area;  // everything remaining
 
-    meterBar.setBounds     (meterArea);
-    panKnob.setBounds      (panArea);
-    panValueLabel.setBounds(panValArea);
-    panLabel.setBounds     (panLblArea);
-    volumeFader.setBounds  (faderArea);
+    meterBar.setBounds      (meterArea);
+    volumeFader.setBounds   (faderArea);
+    panKnob.setBounds       (panArea);
+    panValueLabel.setBounds (panValArea);
+    panLabel.setBounds      (panLblArea);
 
     // Solo and Mute buttons side by side
     soloButton.setBounds (btnArea.removeFromLeft (btnArea.getWidth() / 2).reduced (1));
     muteButton.setBounds (btnArea.reduced (1));
 
-    insertSlotPanel.setBounds (slotArea);
-    trackNameLabel.setBounds  (nameArea);
+    insertSlotPanel.setBounds  (slotArea);
+    sendSlotPanel.setBounds    (sendArea);
+    outputButton.setBounds     (outputArea.reduced (1, 1));
+    trackNameLabel.setBounds   (nameArea);
 }
 
 void ChannelStrip::paint (juce::Graphics& g)
@@ -557,12 +699,40 @@ void ChannelStrip::paint (juce::Graphics& g)
     // Right border separator between strips
     g.setColour (juce::Colour (0xff111111));
     g.drawLine ((float)getWidth() - 1.0f, 0.0f, (float)getWidth() - 1.0f, (float)getHeight(), 1.0f);
+
+    // Selection highlight border
+    if (isSelected)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.4f));
+        g.drawRect (getLocalBounds(), 2);
+    }
+}
+
+void ChannelStrip::mouseDown (const juce::MouseEvent& e)
+{
+    if (! e.mods.isPopupMenu())
+        if (onTrackSelected)
+            onTrackSelected (&track);
+}
+
+void ChannelStrip::setSelected (bool s)
+{
+    if (isSelected != s)
+    {
+        isSelected = s;
+        repaint();
+    }
 }
 
 void ChannelStrip::setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI)
 {
     // Delegate to the MeterBar — all display logic lives there.
     meterBar.setMeterValues (peakDB, rmsDB, lufsM, lufsI);
+}
+
+void ChannelStrip::rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels)
+{
+    sendSlotPanel.rebuild (fxChannels);
 }
 
 void ChannelStrip::volumeChanged()
@@ -573,6 +743,25 @@ void ChannelStrip::volumeChanged()
     auto& um = track.edit.getUndoManager();
     um.beginNewTransaction ("Volume fader");
     mixerEngine.setVolume (track, (float)volumeFader.getValue());
+}
+
+void ChannelStrip::refresh()
+{
+    // Pull current engine state and update all controls without firing callbacks.
+    // Called from valueTreePropertyChanged (via callAsync) and from MixerView
+    // keyPressed() after S/M keyboard shortcuts so visuals never diverge from TE.
+    const float dB = mixerEngine.getVolume (track);
+    volumeFader.setValue (dB, juce::dontSendNotification);
+
+    const float pan = mixerEngine.getPan (track);
+    panKnob.setValue (pan, juce::dontSendNotification);
+    panValueLabel.setText (formatPanValue (pan), juce::dontSendNotification);
+
+    soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
+    muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
+
+    refreshOutputButton();
+    repaint();
 }
 
 juce::String ChannelStrip::formatPanValue (double pan)
@@ -590,22 +779,109 @@ void ChannelStrip::panChanged()
     panValueLabel.setText (formatPanValue (panKnob.getValue()), juce::dontSendNotification);
 }
 
+void ChannelStrip::refreshOutputButton()
+{
+    // Primary: TE routing API
+    auto* bus = mixerEngine.getBusChannelFor (track);
+    if (bus != nullptr)
+    {
+        outputButton.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6 ") + bus->getName());
+        outputButton.setToggleState (true, juce::dontSendNotification);
+        return;
+    }
+
+    // Fallback: kOutputBusNameProp cached by routeTrackToBus().
+    // getDestinationTrack() can transiently return nullptr during TE graph rebuilds
+    // even when routing is still active — this property is our stable display source.
+    const juce::String cachedBus =
+        track.state.getProperty (kOutputBusNameProp, juce::String()).toString();
+    if (cachedBus.isNotEmpty())
+    {
+        outputButton.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6 ") + cachedBus);
+        outputButton.setToggleState (true, juce::dontSendNotification);
+        return;
+    }
+
+    // Going to master
+    outputButton.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6 Master"));
+    outputButton.setToggleState (false, juce::dontSendNotification);
+}
+
+void ChannelStrip::showOutputRoutingMenu()
+{
+    const auto busChannels = mixerEngine.getBusChannels();
+    auto* currentBus = mixerEngine.getBusChannelFor (track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Output");
+
+    // "Master" option — always first
+    menu.addItem (1, "Master", true, currentBus == nullptr);
+
+    if (! busChannels.isEmpty())
+    {
+        menu.addSeparator();
+        menu.addSectionHeader ("Bus Channels");
+        for (int i = 0; i < busChannels.size(); ++i)
+        {
+            auto* bus = busChannels[i];
+            const bool isCurrent = (bus == currentBus);
+            menu.addItem (i + 2, bus->getName(), true, isCurrent);
+        }
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&outputButton),
+        [this, busChannels] (int result)
+        {
+            if (result <= 0)
+                return;
+
+            te::AudioTrack* selectedBus = nullptr;
+
+            if (result == 1)
+            {
+                // Route to master
+                mixerEngine.unrouteFromBus (track);
+                selectedBus = nullptr;
+            }
+            else
+            {
+                const int busIndex = result - 2;
+                if (busIndex >= 0 && busIndex < busChannels.size())
+                {
+                    selectedBus = busChannels[busIndex];
+                    mixerEngine.routeTrackToBus (track, *selectedBus);
+                }
+            }
+
+            refreshOutputButton();
+
+            // Notify MixerView to apply the same routing to all other selected strips.
+            if (onOutputRouted)
+                onOutputRouted (selectedBus);
+        });
+}
+
 void ChannelStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
                                               const juce::Identifier& property)
 {
-    // When volume or pan changes externally (undo/redo, AI), update fader/knob
-    // without re-triggering the onChange callback (dontSendNotification).
-    if (property == te::IDs::volume)
+    // ValueTree callbacks may arrive on any thread (including the audio thread).
+    // UI mutations must be deferred to the message thread via callAsync.
+    // refresh() re-reads all engine state atomically (volume, pan, solo, mute).
+    // Refresh on volume/pan/solo/mute changes AND on any other property that may
+    // represent output routing state (TE stores track output target in the track's
+    // child ValueTree nodes, so we refresh for all property changes).
+    juce::ignoreUnused (property);
     {
-        const float dB = mixerEngine.getVolume (track);
-        volumeFader.setValue (dB, juce::dontSendNotification);
-    }
-
-    if (property == te::IDs::pan)
-    {
-        const float pan = mixerEngine.getPan (track);
-        panKnob.setValue (pan, juce::dontSendNotification);
-        panValueLabel.setText (formatPanValue (pan), juce::dontSendNotification);
+        // SafePointer prevents the dangling-this crash: if rebuildStrips()
+        // destroys this ChannelStrip before callAsync fires (e.g. on file drop),
+        // the pointer becomes null and the lambda exits safely.
+        juce::Component::SafePointer<ChannelStrip> safeThis (this);
+        juce::MessageManager::callAsync ([safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->refresh();
+        });
     }
 }
 

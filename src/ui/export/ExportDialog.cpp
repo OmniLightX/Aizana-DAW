@@ -165,53 +165,43 @@ void ExportDialog::startExport()
 
     isExporting = true;
     exportButton.setEnabled (false);
+    exportProgress = -1.0;   // indeterminate spinner while TE renders
+    progressBar.repaint();
     statusLabel.setText ("Exporting...", juce::dontSendNotification);
 
     auto options = buildOptions();
 
-    // Wire progress callback — arrives on background thread, must post to message thread
-    exportPipeline.onProgress = [this] (float fraction)
+    // te::Renderer::renderToFile() MUST be called from the message thread.
+    // It delegates rendering to CloudesUIBehaviour::runTaskWithProgressBar(),
+    // which spawns a TaskRunner thread and pumps the message loop so the UI
+    // stays responsive. Calling from a background thread caused the default
+    // UIBehaviour jassertfalse stub to fire, silently producing no output.
+    juce::String errorMsg;
+    if (mode == Mode::Mixdown)
+        errorMsg = exportPipeline.exportMixdown (*edit, options);
+    else
+        errorMsg = exportPipeline.exportStems (*edit, options);
+
+    isExporting = false;
+    exportButton.setEnabled (true);
+    exportProgress = 1.0;
+
+    if (errorMsg.isEmpty())
     {
-        juce::MessageManager::callAsync ([this, fraction]
-        {
-            exportProgress = fraction;
-            progressBar.repaint();
-        });
-    };
-
-    // Run export on a background thread — exportMixdown() is blocking
-    juce::Thread::launch ([this, edit, options]
+        statusLabel.setText ("Export complete!", juce::dontSendNotification);
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon,
+            "Export Complete",
+            "File exported successfully.");
+    }
+    else
     {
-        juce::String errorMsg;
-        if (mode == Mode::Mixdown)
-            errorMsg = exportPipeline.exportMixdown (*edit, options);
-        else
-            errorMsg = exportPipeline.exportStems (*edit, options);
-
-        juce::MessageManager::callAsync ([this, errorMsg]
-        {
-            isExporting = false;
-            exportButton.setEnabled (true);
-            exportProgress = 1.0;
-
-            if (errorMsg.isEmpty())
-            {
-                statusLabel.setText ("Export complete!", juce::dontSendNotification);
-                juce::AlertWindow::showMessageBoxAsync (
-                    juce::MessageBoxIconType::InfoIcon,
-                    "Export Complete",
-                    "File exported successfully.");
-            }
-            else
-            {
-                statusLabel.setText ("Error: " + errorMsg, juce::dontSendNotification);
-                juce::AlertWindow::showMessageBoxAsync (
-                    juce::MessageBoxIconType::WarningIcon,
-                    "Export Failed",
-                    errorMsg);
-            }
-        });
-    });
+        statusLabel.setText ("Error: " + errorMsg, juce::dontSendNotification);
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon,
+            "Export Failed",
+            errorMsg);
+    }
 }
 
 void ExportDialog::paint (juce::Graphics& g)

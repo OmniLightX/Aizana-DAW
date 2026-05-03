@@ -91,6 +91,9 @@ target_sources(Cloudes PRIVATE
     src/ui/arrangement/ClipComponent.cpp
     src/ui/mixer/MixerView.cpp
     src/ui/mixer/ChannelStrip.cpp
+    src/ui/mixer/MasterStrip.cpp
+    src/ui/mixer/BusFXStrip.cpp
+    src/ui/mixer/SendSlotPanel.cpp
     # Piano Roll editor (plan 01-09)
     src/ui/pianoroll/PianoRollView.cpp
     src/ui/pianoroll/NoteComponent.cpp
@@ -109,6 +112,8 @@ target_sources(Cloudes PRIVATE
     src/ui/pluginbrowser/PluginBrowserPopup.cpp
     # Export dialog (plan 01-16: EXP-01, EXP-02, EXP-04)
     src/ui/export/ExportDialog.cpp
+    # Audio I/O Setup dialog (GAP-31: recording input assignment)
+    src/ui/audiosetup/AudioIOSetupDialog.cpp
     # Automation lane UI (plan 01-18: MIX-04)
     src/ui/automation/AutomationLane.cpp
     src/ui/arrangement/TrackRow.cpp
@@ -121,6 +126,7 @@ target_include_directories(Cloudes PRIVATE
 target_compile_definitions(Cloudes PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_VERSION>"
 )

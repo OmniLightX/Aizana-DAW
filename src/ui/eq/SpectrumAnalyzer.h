@@ -35,7 +35,11 @@ private:
     EQProcessor&        eqProcessor;
     std::vector<float>  spectrumMagnitudes;  // In dB, updated each timer tick
 
-    static constexpr int kFFTSize = 2048;
+    static constexpr int kFFTOrder = 11;     // 2^11 = 2048
+    static constexpr int kFFTSize  = 1 << kFFTOrder;
+
+    juce::dsp::FFT      fft { kFFTOrder };
+    std::vector<float>  fftBuffer;           // 2*kFFTSize for in-place FFT
 
     // Timer runs on message thread — reads lock-free FIFO from EQProcessor
     void timerCallback() override;  // Fires at ~24fps (40ms)

@@ -1,7 +1,69 @@
+# Build output
 build/
-.DS_Store
-*.o
-*.d
+builds/
+out/
+
+# CMake
+CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-CMakeCache.txt
+cmake_build_dir/
+CMakePresets.json.user
+_deps/
+*.cmake
+!CMakeLists.txt
+
+# Ninja / Make
+.ninja_deps
+.ninja_log
+Makefile
+
+# Compiled objects & libraries
+*.o
+*.d
+*.a
+*.dylib
+*.so
+*.dll
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcscheme
+DerivedData/
+*.ipa
+
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JUCE auto-generated
+JuceLibraryCode/
+*.jucer.bak
+
+# Tracktion Engine build artefacts
+modules/
+
+# Binaries & app bundles
+*.app
+*.dmg
+*.pkg
+*.dSYM/
+
+# Logs & caches
+*.log
+.cache/
+compile_commands.json

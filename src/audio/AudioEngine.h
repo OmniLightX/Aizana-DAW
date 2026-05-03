@@ -62,11 +62,12 @@ public:
      * non-empty error string. The caller should log the error and show it in
      * preferences — do NOT crash.
      *
-     * @param numInputChannels   Desired input channel count (default: 0)
+     * @param numInputChannels   Desired input channel count (default: 32 — covers professional
+     *                           multi-channel interfaces like UAD Apollo; JUCE/TE clamp to device max)
      * @param numOutputChannels  Desired output channel count (default: 2)
      * @return Empty string on success; human-readable error description on failure.
      */
-    juce::String initialise (int numInputChannels = 0, int numOutputChannels = 2);
+    juce::String initialise (int numInputChannels = 32, int numOutputChannels = 2);
 
     /**
      * Returns TE's underlying juce::AudioDeviceManager for device configuration.

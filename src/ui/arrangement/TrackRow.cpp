@@ -46,13 +46,35 @@ void TrackRow::buildDisclosureButton()
 //==============================================================================
 void TrackRow::mouseDown (const juce::MouseEvent& e)
 {
-    // Forward right-click to ArrangementView for tool context menu
-    if (e.mods.isPopupMenu())
+    // This fires only for clicks on EMPTY space (ClipComponents intercept clip clicks).
+    if (auto* av = findParentComponentOfClass<ArrangementView>())
     {
-        if (auto* av = findParentComponentOfClass<ArrangementView>())
-            av->mouseDown (e.getEventRelativeTo (av));
-        return;
+        // Left-click on empty space: deselect clips directly, bypassing any
+        // coordinate-check guard in ArrangementView::mouseDown.
+        if (e.mods.isLeftButtonDown() && !e.mods.isPopupMenu())
+            av->deselectAllClips();
+
+        // Also forward the full event for playhead seek, right-click menu, etc.
+        av->mouseDown (e.getEventRelativeTo (av));
     }
+}
+
+void TrackRow::mouseDrag (const juce::MouseEvent& e)
+{
+    // Forward drag to ArrangementView so rubber-band clip selection and Marquee
+    // range drags work when dragging from empty track space.
+    // TrackRow captures mouse after mouseDown, so without this forward AV::mouseDrag
+    // would never fire for empty-space drags.
+    if (auto* av = findParentComponentOfClass<ArrangementView>())
+        av->mouseDrag (e.getEventRelativeTo (av));
+}
+
+void TrackRow::mouseUp (const juce::MouseEvent& e)
+{
+    // Forward mouseUp so ArrangementView can finalise rubber-band selection and
+    // clear the band rect.
+    if (auto* av = findParentComponentOfClass<ArrangementView>())
+        av->mouseUp (e.getEventRelativeTo (av));
 }
 
 //==============================================================================
@@ -125,6 +147,12 @@ void TrackRow::resized()
 }
 
 //==============================================================================
+void TrackRow::updateScrollOffset()
+{
+    if (expanded && automationLane != nullptr)
+        automationLane->updateScrollOffset();
+}
+
 void TrackRow::layoutClips (double pps)
 {
     for (int i = 0; i < clipArea.getNumChildComponents(); ++i)

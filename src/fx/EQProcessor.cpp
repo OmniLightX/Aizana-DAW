@@ -3,22 +3,254 @@
 #include "ui/eq/EQComponent.h"
 
 // ---------------------------------------------------------------------------
-// EQEditor — thin AudioProcessorEditor wrapper for EQComponent
+// EQEditor — AudioProcessorEditor wrapper for EQComponent + preset bar
 // ---------------------------------------------------------------------------
+
+// Built-in preset table — defined here so EQEditor can reference it without
+// exposing it in the public header.
+struct EQPreset
+{
+    juce::String name;
+    std::array<EQBand, EQProcessor::NumBands> bands;
+};
+
+static const std::array<EQPreset, 3> kBuiltInPresets = {{
+    {
+        "Vocal Presence",
+        {{
+            { EQBandType::HighPass,    80.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::LowShelf,   200.0f, -2.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,       300.0f, -1.5f, 0.900f, true, 2 },
+            { EQBandType::Peak,       800.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,      2500.0f, +3.0f, 1.200f, true, 2 },
+            { EQBandType::Peak,      4000.0f, +2.5f, 1.000f, true, 2 },
+            { EQBandType::HighShelf,10000.0f, +2.0f, 0.707f, true, 2 },
+            { EQBandType::LowPass,  20000.0f,  0.0f, 0.707f, true, 2 },
+        }}
+    },
+    {
+        "Low End Boost",
+        {{
+            { EQBandType::HighPass,    30.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::LowShelf,   100.0f, +4.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,        80.0f, +3.0f, 1.000f, true, 2 },
+            { EQBandType::Peak,       250.0f, +1.5f, 0.707f, true, 2 },
+            { EQBandType::Peak,       500.0f, -1.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,      5000.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::HighShelf,10000.0f, -1.0f, 0.707f, true, 2 },
+            { EQBandType::LowPass,  20000.0f,  0.0f, 0.707f, true, 2 },
+        }}
+    },
+    {
+        "Air",
+        {{
+            { EQBandType::HighPass,    40.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::LowShelf,   100.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,       250.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,       800.0f,  0.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,      3000.0f, +1.0f, 0.707f, true, 2 },
+            { EQBandType::Peak,      7000.0f, +2.0f, 0.707f, true, 2 },
+            { EQBandType::HighShelf,12000.0f, +4.0f, 0.707f, true, 2 },
+            { EQBandType::LowPass,  20000.0f,  0.0f, 0.707f, true, 2 },
+        }}
+    }
+}};
+
 class EQEditor : public juce::AudioProcessorEditor
 {
 public:
-    EQEditor (EQProcessor& proc)
-        : juce::AudioProcessorEditor (proc), eqComponent (proc)
+    EQEditor (EQProcessor& proc_)
+        : juce::AudioProcessorEditor (proc_)
+        , proc (proc_)
+        , eqComponent (proc_)
     {
         addAndMakeVisible (eqComponent);
-        setSize (700, 350);
+
+        // ---- Preset bar ----
+        presetCombo.setTextWhenNothingSelected ("-- Presets --");
+        presetCombo.setTextWhenNoChoicesAvailable ("No presets");
+        presetCombo.setColour (juce::ComboBox::backgroundColourId,  juce::Colour (0xff1e1e1e));
+        presetCombo.setColour (juce::ComboBox::outlineColourId,      juce::Colour (0xff444444));
+        presetCombo.setColour (juce::ComboBox::textColourId,         juce::Colour (0xffcccccc));
+        presetCombo.setColour (juce::ComboBox::arrowColourId,        juce::Colour (0xff888888));
+        presetCombo.onChange = [this] { onPresetSelected(); };
+        addAndMakeVisible (presetCombo);
+
+        saveButton.setButtonText ("Save Preset");
+        saveButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a3a2a));
+        saveButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff88cc88));
+        saveButton.onClick = [this] { onSavePreset(); };
+        addAndMakeVisible (saveButton);
+
+        rebuildPresetCombo();
+
+        setSize (700, 350 + kPresetBarH);
     }
 
-    void resized() override { eqComponent.setBounds (getLocalBounds()); }
+    void resized() override
+    {
+        const int w = getWidth();
+        const int eqH = getHeight() - kPresetBarH;
+        eqComponent.setBounds (0, 0, w, eqH);
+
+        // Preset bar: combo takes the left 3/4, save button the rest
+        const int barY = eqH;
+        const int saveW = 100;
+        presetCombo.setBounds (4, barY + 4, w - saveW - 12, kPresetBarH - 8);
+        saveButton.setBounds  (w - saveW - 4, barY + 4, saveW, kPresetBarH - 8);
+    }
 
 private:
-    EQComponent eqComponent;
+    static constexpr int kPresetBarH = 28;
+
+    EQProcessor&    proc;
+    EQComponent     eqComponent;
+    juce::ComboBox  presetCombo;
+    juce::TextButton saveButton;
+
+    // User presets loaded from / saved to disk
+    std::vector<EQPreset> userPresets;
+
+    juce::File getPresetsFile() const
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                   .getChildFile ("Cloudes")
+                   .getChildFile ("eq_presets.xml");
+    }
+
+    void rebuildPresetCombo()
+    {
+        presetCombo.clear (juce::dontSendNotification);
+
+        // Built-in presets: IDs 1 … kBuiltInPresets.size()
+        for (int i = 0; i < (int)kBuiltInPresets.size(); ++i)
+            presetCombo.addItem (kBuiltInPresets[(size_t)i].name, i + 1);
+
+        // User presets: IDs starting at 1000
+        loadUserPresets();
+        if (!userPresets.empty())
+        {
+            presetCombo.addSeparator();
+            for (int i = 0; i < (int)userPresets.size(); ++i)
+                presetCombo.addItem (userPresets[(size_t)i].name, 1000 + i);
+        }
+    }
+
+    void loadUserPresets()
+    {
+        userPresets.clear();
+        const juce::File f = getPresetsFile();
+        if (!f.existsAsFile()) return;
+
+        auto xml = juce::XmlDocument::parse (f);
+        if (xml == nullptr || xml->getTagName() != "UserEQPresets") return;
+
+        for (auto* presetXml : xml->getChildIterator())
+        {
+            EQPreset p;
+            p.name = presetXml->getStringAttribute ("name");
+            int bi = 0;
+            for (auto* bandXml : presetXml->getChildIterator())
+            {
+                if (bi >= EQProcessor::NumBands) break;
+                EQBand& b = p.bands[(size_t)bi++];
+                b.type        = (EQBandType) bandXml->getIntAttribute    ("type",    (int) EQBandType::Peak);
+                b.frequencyHz = (float)      bandXml->getDoubleAttribute ("freq",    1000.0);
+                b.gainDB      = (float)      bandXml->getDoubleAttribute ("gain",    0.0);
+                b.Q           = (float)      bandXml->getDoubleAttribute ("q",       0.707);
+                b.enabled     =              bandXml->getIntAttribute    ("enabled", 1) != 0;
+                b.slopeOrder  =              bandXml->getIntAttribute    ("slope",   2);
+            }
+            if (!p.name.isEmpty())
+                userPresets.push_back (p);
+        }
+    }
+
+    void saveUserPresetsToFile()
+    {
+        const juce::File f = getPresetsFile();
+        f.getParentDirectory().createDirectory();
+
+        juce::XmlElement xml ("UserEQPresets");
+        for (auto& p : userPresets)
+        {
+            auto* presetXml = xml.createNewChildElement ("Preset");
+            presetXml->setAttribute ("name", p.name);
+            for (int i = 0; i < EQProcessor::NumBands; ++i)
+            {
+                const EQBand& b = p.bands[(size_t)i];
+                auto* bandXml = presetXml->createNewChildElement ("Band");
+                bandXml->setAttribute ("type",    (int)b.type);
+                bandXml->setAttribute ("freq",    (double)b.frequencyHz);
+                bandXml->setAttribute ("gain",    (double)b.gainDB);
+                bandXml->setAttribute ("q",       (double)b.Q);
+                bandXml->setAttribute ("enabled", b.enabled ? 1 : 0);
+                bandXml->setAttribute ("slope",   b.slopeOrder);
+            }
+        }
+        xml.writeTo (f);
+    }
+
+    void applyPreset (const EQPreset& preset)
+    {
+        for (int i = 0; i < EQProcessor::NumBands; ++i)
+            proc.setBand (i, preset.bands[(size_t)i]);
+        eqComponent.repaint();
+    }
+
+    void onPresetSelected()
+    {
+        const int id = presetCombo.getSelectedId();
+        if (id <= 0) return;
+
+        if (id < 1000)
+        {
+            // Built-in preset
+            const int idx = id - 1;
+            if (idx >= 0 && idx < (int)kBuiltInPresets.size())
+                applyPreset (kBuiltInPresets[(size_t)idx]);
+        }
+        else
+        {
+            // User preset
+            const int idx = id - 1000;
+            if (idx >= 0 && idx < (int)userPresets.size())
+                applyPreset (userPresets[(size_t)idx]);
+        }
+    }
+
+    void onSavePreset()
+    {
+        auto dialog = std::make_shared<juce::AlertWindow> (
+            "Save EQ Preset", "Enter a name for this preset:", juce::MessageBoxIconType::NoIcon);
+        dialog->addTextEditor ("name", "", "Preset name:");
+        dialog->addButton ("Save",   1, juce::KeyPress (juce::KeyPress::returnKey));
+        dialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+        dialog->enterModalState (true, juce::ModalCallbackFunction::create (
+            [this, dialog] (int result)
+            {
+                if (result != 1) return;
+                const juce::String name = dialog->getTextEditorContents ("name").trim();
+                if (name.isEmpty()) return;
+
+                EQPreset p;
+                p.name = name;
+                for (int i = 0; i < EQProcessor::NumBands; ++i)
+                    p.bands[(size_t)i] = proc.getBand (i);
+
+                // Replace if same name exists, otherwise append
+                bool replaced = false;
+                for (auto& existing : userPresets)
+                {
+                    if (existing.name == name) { existing = p; replaced = true; break; }
+                }
+                if (!replaced) userPresets.push_back (p);
+
+                saveUserPresetsToFile();
+                rebuildPresetCombo();
+            }));
+    }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EQEditor)
 };
@@ -54,6 +286,10 @@ void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPer
 
     eqChain.prepare(spec);
 
+    // Prepare cascade filters (used for HP/LP slopeOrder=4)
+    for (int i = 0; i < NumBands; ++i)
+        cascadeFilters[i].prepare(spec);
+
     // Apply all current band coefficients
     for (int i = 0; i < NumBands; ++i)
         updateBandCoefficients(i);
@@ -72,6 +308,17 @@ void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::ProcessContextReplacing<float> ctx(block);
     eqChain.process(ctx);
+
+    // Additional passes for HP/LP bands with slopeOrder=4 (24dB/oct = 2× 2nd-order)
+    for (int i = 0; i < NumBands; ++i)
+    {
+        if (cascadeActive[i])
+        {
+            juce::dsp::AudioBlock<float> cascadeBlock (buffer);
+            juce::dsp::ProcessContextReplacing<float> cascadeCtx (cascadeBlock);
+            cascadeFilters[i].process (cascadeCtx);
+        }
+    }
 
     // Push samples into spectrum FIFO (lock-free)
     // Message thread reads this in a timer callback to run the FFT.
@@ -131,47 +378,60 @@ void EQProcessor::updateBandCoefficients(int bandIndex)
 
     juce::dsp::IIR::Coefficients<float>::Ptr coeffs;
 
-    if (!b.enabled || std::abs(b.gainDB) < 1e-4f)
+    float freq = juce::jlimit(20.0f, (float)(currentSampleRate * 0.499), b.frequencyHz);
+    float Q    = juce::jmax(0.1f, b.Q);
+    float gain = std::pow(10.0f, b.gainDB / 20.0f);
+
+    if (!b.enabled)
     {
-        // Pass-through: unity gain allpass-equivalent (bypass via gain=0dB peak)
+        // Pass-through: unity peak at band frequency (0 dB, transparent)
         coeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-            currentSampleRate,
-            juce::jlimit(20.0f, (float)(currentSampleRate * 0.499), b.frequencyHz),
-            juce::jmax(0.1f, b.Q),
-            1.0f);  // gainFactor = 1.0 = 0dB
+            currentSampleRate, freq, Q, 1.0f);
+        cascadeActive[bandIndex] = false;
     }
     else
     {
-        float freq = juce::jlimit(20.0f, (float)(currentSampleRate * 0.499), b.frequencyHz);
-        float Q    = juce::jmax(0.1f, b.Q);
-        float gain = std::pow(10.0f, b.gainDB / 20.0f);  // Convert dB to linear factor
-
         switch (b.type)
         {
             case EQBandType::LowShelf:
                 coeffs = juce::dsp::IIR::Coefficients<float>::makeLowShelf(
                     currentSampleRate, freq, Q, gain);
+                cascadeActive[bandIndex] = false;
                 break;
 
             case EQBandType::HighShelf:
                 coeffs = juce::dsp::IIR::Coefficients<float>::makeHighShelf(
                     currentSampleRate, freq, Q, gain);
+                cascadeActive[bandIndex] = false;
                 break;
 
             case EQBandType::LowPass:
                 coeffs = juce::dsp::IIR::Coefficients<float>::makeLowPass(
                     currentSampleRate, freq, Q);
+                cascadeActive[bandIndex] = (b.slopeOrder >= 4);
                 break;
 
             case EQBandType::HighPass:
                 coeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(
                     currentSampleRate, freq, Q);
+                cascadeActive[bandIndex] = (b.slopeOrder >= 4);
+                break;
+
+            case EQBandType::Notch:
+                coeffs = juce::dsp::IIR::Coefficients<float>::makeNotch(
+                    currentSampleRate, freq, Q);
+                cascadeActive[bandIndex] = false;
                 break;
 
             case EQBandType::Peak:
             default:
-                coeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-                    currentSampleRate, freq, Q, gain);
+                if (std::abs(b.gainDB) < 1e-4f)
+                    coeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(
+                        currentSampleRate, freq, Q, 1.0f);
+                else
+                    coeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(
+                        currentSampleRate, freq, Q, gain);
+                cascadeActive[bandIndex] = false;
                 break;
         }
     }
@@ -182,21 +442,26 @@ void EQProcessor::updateBandCoefficients(int bandIndex)
 void EQProcessor::applyCoefficients(int bandIndex,
     juce::dsp::IIR::Coefficients<float>::Ptr coeffs)
 {
-    // JUCE IIR filter coefficients use ReferenceCountedObjectPtr.
-    // Assigning to the filter's coefficients member is safe to call from any thread
-    // because JUCE uses atomic ref-counting for the shared pointer handoff.
+    // ProcessorDuplicator exposes a shared `state` pointer (same object for L and R
+    // channels).  Copying INTO the existing state object via `*state = *coeffs` keeps
+    // the same Coefficients instance alive on the audio thread while updating values.
+    // This is the JUCE-recommended pattern for live coefficient updates with
+    // ProcessorDuplicator — see ProcessorDuplicator.h and JUCE DSP tutorials.
     switch (bandIndex)
     {
-        case 0: *eqChain.get<0>().coefficients = *coeffs; break;
-        case 1: *eqChain.get<1>().coefficients = *coeffs; break;
-        case 2: *eqChain.get<2>().coefficients = *coeffs; break;
-        case 3: *eqChain.get<3>().coefficients = *coeffs; break;
-        case 4: *eqChain.get<4>().coefficients = *coeffs; break;
-        case 5: *eqChain.get<5>().coefficients = *coeffs; break;
-        case 6: *eqChain.get<6>().coefficients = *coeffs; break;
-        case 7: *eqChain.get<7>().coefficients = *coeffs; break;
+        case 0: *eqChain.get<0>().state = *coeffs; break;
+        case 1: *eqChain.get<1>().state = *coeffs; break;
+        case 2: *eqChain.get<2>().state = *coeffs; break;
+        case 3: *eqChain.get<3>().state = *coeffs; break;
+        case 4: *eqChain.get<4>().state = *coeffs; break;
+        case 5: *eqChain.get<5>().state = *coeffs; break;
+        case 6: *eqChain.get<6>().state = *coeffs; break;
+        case 7: *eqChain.get<7>().state = *coeffs; break;
         default: jassertfalse; break;
     }
+
+    // Mirror coefficients to cascade filter (used when slopeOrder=4 for HP/LP)
+    *cascadeFilters[bandIndex].state = *coeffs;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +481,7 @@ void EQProcessor::getStateInformation (juce::MemoryBlock& destData)
         bandXml->setAttribute ("gain",    (double) b.gainDB);
         bandXml->setAttribute ("q",       (double) b.Q);
         bandXml->setAttribute ("enabled", b.enabled ? 1 : 0);
+        bandXml->setAttribute ("slope",   b.slopeOrder);
     }
 
     copyXmlToBinary (xml, destData);
@@ -239,6 +505,7 @@ void EQProcessor::setStateInformation (const void* data, int sizeInBytes)
         b.gainDB      = (float)      bandXml->getDoubleAttribute ("gain",   0.0);
         b.Q           = (float)      bandXml->getDoubleAttribute ("q",      0.707);
         b.enabled     =              bandXml->getIntAttribute    ("enabled", 0) != 0;
+        b.slopeOrder  =              bandXml->getIntAttribute    ("slope",   2);
         setBand (i, b);
     }
 }

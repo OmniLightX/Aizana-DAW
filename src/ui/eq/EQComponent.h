@@ -33,14 +33,19 @@ public:
     void resized() override;
     void paint (juce::Graphics& g) override;
 
-    void mouseDown  (const juce::MouseEvent& e) override;
-    void mouseDrag  (const juce::MouseEvent& e) override;
-    void mouseUp    (const juce::MouseEvent& e) override;
+    void mouseDown      (const juce::MouseEvent& e) override;
+    void mouseDrag      (const juce::MouseEvent& e) override;
+    void mouseUp        (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseWheelMove (const juce::MouseEvent& e,
+                         const juce::MouseWheelDetails& wheel) override;
 
 private:
-    EQProcessor&    eqProcessor;
+    EQProcessor&     eqProcessor;
     SpectrumAnalyzer spectrumAnalyzer;  // Child component, rendered behind curve
+
+    // Drag readout label — shows "250 Hz / +3.2 dB / Q 1.2" while dragging a handle
+    juce::Label dragInfoLabel;
 
     // Per-band drag state
     struct BandHandle

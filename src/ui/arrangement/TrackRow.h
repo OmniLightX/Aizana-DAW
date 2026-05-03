@@ -51,6 +51,10 @@ public:
      *  Call this from layoutTrackRows() on every zoom/resize cycle. */
     void layoutClips (double pixelsPerSecond);
 
+    /** Forwards scroll/zoom change to the open AutomationLane (if any)
+     *  so its controls stay anchored to the visible viewport left edge. */
+    void updateScrollOffset();
+
     /** Called after expand/collapse so ArrangementView can re-layout headers + timeline. */
     std::function<void()> onExpansionChanged;
 
@@ -59,6 +63,8 @@ public:
     AutomationLane*  getAutomationLane()     { return expanded ? automationLane.get() : nullptr; }
 
     void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp   (const juce::MouseEvent& e) override;
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
