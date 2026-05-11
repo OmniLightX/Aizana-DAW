@@ -103,8 +103,8 @@ private:
 
     /** Show popup menu listing all enabled WaveInputDevices + "No Input". */
     void showInputMenu();
-    /** Assign the WaveInputDevice at deviceIndex to this track (-1 = no input). */
-    void assignInput (int deviceIndex);
+    /** Assign waveIn to this track (nullptr = no input). */
+    void assignInput (te::WaveInputDevice* waveIn);
     /** Sync inputButton text from the currently assigned input device. */
     void refreshInputButton();
 

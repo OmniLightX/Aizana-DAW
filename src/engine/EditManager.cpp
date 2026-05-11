@@ -40,6 +40,13 @@ void EditManager::createNewEdit()
     // TE's click track defaults to false for fresh edits, but saved edit state or
     // future TE defaults could enable it, resulting in two simultaneous click generators.
     edit->clickTrackEnabled = false;
+
+    // Allocate the playback context immediately so getAllInputDevices() returns live
+    // InputDeviceInstance objects. Without this, getAllInputDevices() → getCurrentPlaybackContext()
+    // returns null → empty array → assignInput / armClicked / refreshInputButton all see
+    // "No Input" even when WaveInputDevices exist. TE's own examples always call this before
+    // doing anything with input devices (EngineInPluginDemo, RecordingDemo).
+    edit->getTransport().ensureContextAllocated();
 }
 
 //==============================================================================
@@ -51,7 +58,13 @@ void EditManager::loadEdit (const juce::File& file)
     edit = te::loadEditFromFile (engine, file, te::Edit::forEditing);
 
     if (edit == nullptr)
+    {
         jassertfalse; // File missing, invalid, or engine failed to construct Edit
+        return;
+    }
+
+    // Same as createNewEdit: allocate context so input devices are immediately accessible.
+    edit->getTransport().ensureContextAllocated();
 }
 
 //==============================================================================

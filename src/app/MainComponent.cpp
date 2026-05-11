@@ -100,11 +100,11 @@ void MainComponent::resized()
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
-    // Cmd+, (macOS) / Ctrl+, (Windows) opens Preferences (MIDI clock, audio settings)
+    // Cmd+, (macOS) / Ctrl+, (Windows) opens Audio Preferences
     if (key == juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0) ||
         key == juce::KeyPress (',', juce::ModifierKeys::ctrlModifier, 0))
     {
-        PreferencesDialog::show (appState);
+        AudioPreferencesDialog::show (appState.audioEngine);
         return true;
     }
 
@@ -250,7 +250,7 @@ void MainComponent::hidePianoRoll()
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Song", "Export" };
+    return { "Cloudes", "File", "Edit", "View", "Song", "Export" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /*name*/)
@@ -261,7 +261,11 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
 
     switch (index)
     {
-        case 0:  // File
+        case 0:  // Cloudes
+            menu.addItem (CloudesPreferences, "Preferences...", true);
+            break;
+
+        case 1:  // File
             menu.addItem (FileNewSession,  "New Session",     true);
             menu.addItem (FileOpen,        "Open Session...", true);
             menu.addSeparator();
@@ -271,7 +275,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (FileImportAudio, "Import Audio...", hasEdit);
             break;
 
-        case 1:  // Edit
+        case 2:  // Edit
             if (hasEdit)
             {
                 auto& undoManager = appState.editManager.getUndoManager();
@@ -289,7 +293,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             }
             break;
 
-        case 2:  // View
+        case 3:  // View
             menu.addItem (ViewToggleMixer,
                           mixerVisible ? "Hide Mixer" : "Show Mixer",
                           true,
@@ -298,11 +302,11 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (ScanPlugins, "Scan Plugins...", true);
             break;
 
-        case 3:  // Song Setup
+        case 4:  // Song Setup
             menu.addItem (SongSetupAudioIO, "Audio I/O Setup...", true);
             break;
 
-        case 4:  // Export
+        case 5:  // Export
             menu.addItem (ExportMixdown, "Export Mixdown...", hasEdit);
             menu.addItem (ExportStems,   "Export Stems...",   hasEdit);
             break;
@@ -317,6 +321,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 {
     switch (itemID)
     {
+        case CloudesPreferences:
+            AudioPreferencesDialog::show (appState.audioEngine);
+            break;
+
         case FileNewSession:    handleFileNew();          break;
         case FileOpen:         handleFileOpen();         break;
         case FileSave:         handleFileSave();         break;

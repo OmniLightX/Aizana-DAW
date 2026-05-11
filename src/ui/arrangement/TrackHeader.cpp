@@ -261,10 +261,11 @@ void TrackHeader::showInputMenu()
     menu.addItem (1, "No Input", true, false);
     menu.addSeparator();
 
+    // getWaveInputDevices() calls dispatchPendingUpdates() so the list is
+    // always current even if the async device scan hasn't run yet.
     int id = 2;
-    for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+    for (auto* dev : dm.getWaveInputDevices())
     {
-        auto* dev = dm.getWaveInDevice (i);
         if (dev == nullptr) continue;
 
         const juce::String name = dev->getName();
@@ -289,7 +290,7 @@ void TrackHeader::showInputMenu()
         {
             if (result == 1)
             {
-                assignInput (-1);  // No Input
+                assignInput (nullptr);  // No Input
                 return;
             }
             if (result < 2) return;
@@ -297,39 +298,31 @@ void TrackHeader::showInputMenu()
             auto& dm2 = track.edit.engine.getDeviceManager();
             int id2 = 2;
             bool found = false;
-            for (int i = 0; i < dm2.getNumWaveInDevices(); ++i)
+            for (auto* dev : dm2.getWaveInputDevices())
             {
-                if (dm2.getWaveInDevice (i) == nullptr) continue;
+                if (dev == nullptr) continue;
                 if (id2 == result)
                 {
-                    assignInput (i);
+                    assignInput (dev);
                     found = true;
                     break;
                 }
                 ++id2;
             }
             if (! found)
-                assignInput (-1);  // safety fallback
+                assignInput (nullptr);  // safety fallback = No Input
         });
 }
 
-void TrackHeader::assignInput (int deviceIndex)
+void TrackHeader::assignInput (te::WaveInputDevice* waveIn)
 {
     auto& edit = track.edit;
-    auto& dm   = edit.engine.getDeviceManager();
 
     // Detach any existing assignment for this track
     for (auto* instance : edit.getAllInputDevices())
         if (te::isOnTargetTrack (*instance, track, 0))
             instance->setRecordingEnabled (track.itemID, false);
 
-    if (deviceIndex < 0)
-    {
-        refreshInputButton();
-        return;
-    }
-
-    auto* waveIn = dm.getWaveInDevice (deviceIndex);
     if (waveIn == nullptr)
     {
         refreshInputButton();
@@ -348,6 +341,16 @@ void TrackHeader::assignInput (int deviceIndex)
     }
 
     refreshInputButton();
+
+    // If the track is already armed, re-enable recording on the new device.
+    // Without this, opening the input dropdown while armed calls setRecordingEnabled(false)
+    // at the top of this function but never restores it — recording silently stays disabled.
+    if ((bool) track.state.getProperty ("armed", false))
+    {
+        for (auto* instance : edit.getAllInputDevices())
+            if (&instance->getInputDevice() == waveIn)
+                instance->setRecordingEnabled (track.itemID, true);
+    }
 }
 
 void TrackHeader::refreshInputButton()
@@ -588,11 +591,12 @@ void TrackHeader::armClicked()
         // This mirrors Studio One: pressing REC on a track silently picks the default mic.
         if (! alreadyAssigned)
         {
+            // getWaveInputDevices() calls dispatchPendingUpdates() internally,
+            // guaranteeing the device list is populated even on first ARM click.
             auto& dm = edit.engine.getDeviceManager();
-            for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+            for (auto* waveIn : dm.getWaveInputDevices())
             {
-                auto* waveIn = dm.getWaveInDevice (i);
-                if (waveIn == nullptr || ! waveIn->isEnabled())
+                if (waveIn == nullptr)
                     continue;
 
                 for (auto* instance : edit.getAllInputDevices())
@@ -608,6 +612,20 @@ void TrackHeader::armClicked()
                 break;  // only first available device
             }
         }
+
+        refreshInputButton();
+
+        // setTarget() calls triggerAsyncUpdate() internally — the Destination may be
+        // recreated on the next message loop tick, wiping the recording-enabled flag we
+        // just set.  Re-apply setRecordingEnabled after the async update settles.
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<TrackHeader> (this)]()
+        {
+            if (safeThis == nullptr) return;
+            if (! (bool) safeThis->track.state.getProperty ("armed", false)) return;
+            for (auto* inst : safeThis->track.edit.getAllInputDevices())
+                if (te::isOnTargetTrack (*inst, safeThis->track, 0))
+                    inst->setRecordingEnabled (safeThis->track.itemID, true);
+        });
     }
     else
     {

@@ -40,6 +40,14 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
     // the sample rate, expose it through PreferencesDialog using setAudioDeviceSetup()
     // at user request — never automatically on initialise().
     engine.getDeviceManager().initialise (numInputChannels, numOutputChannels);
+
+    // initialise() always schedules an async update via rescanWaveDeviceList().
+    // Flush it synchronously now so WaveInputDevice objects exist before
+    // createNewEdit() → ensureContextAllocated() iterates waveInputs.
+    // Without this, ensureContextAllocated() sees an empty device list and the
+    // EditPlaybackContext is built with 0 wave input instances.
+    engine.getDeviceManager().dispatchPendingUpdates();
+
     juce::String errorString; // te::DeviceManager::initialise() returns void
 
     auto& adm = engine.getDeviceManager().deviceManager;
@@ -85,6 +93,12 @@ juce::String AudioEngine::initialise (int numInputChannels, int numOutputChannel
             auto setupErr = adm.setAudioDeviceSetup (setup, true);
             if (setupErr.isNotEmpty())
                 juce::Logger::writeToLog ("AudioEngine: channel routing fallback failed: " + setupErr);
+
+            // setAudioDeviceSetup() triggers TE's changeListenerCallback → rescanWaveDeviceList()
+            // → triggerAsyncUpdate(). Without this flush, handleAsyncUpdate() (which creates
+            // WaveInputDevice objects) fires AFTER editManager.createNewEdit(), leaving TrackHeaders
+            // with getNumWaveInDevices() == 0 and no selectable inputs.
+            engine.getDeviceManager().dispatchPendingUpdates();
         }
     }
 

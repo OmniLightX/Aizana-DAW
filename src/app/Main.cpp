@@ -1,5 +1,6 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "MainWindow.h"
+#include "MicrophonePermission.h"
 
 //==============================================================================
 /**
@@ -19,7 +20,15 @@ public:
 
     void initialise (const juce::String& /*commandLine*/) override
     {
-        mainWindow = std::make_unique<MainWindow> (getApplicationName());
+        // Defer permission request to the first run-loop tick so NSApplication
+        // is fully active before AVCaptureDevice shows the system dialog.
+        juce::MessageManager::callAsync ([this]
+        {
+            requestMicrophonePermission ([this] (bool /*granted*/)
+            {
+                mainWindow = std::make_unique<MainWindow> (getApplicationName());
+            });
+        });
     }
 
     void shutdown() override

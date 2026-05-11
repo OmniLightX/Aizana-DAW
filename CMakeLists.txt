@@ -52,13 +52,16 @@ FetchContent_MakeAvailable(clap_api)
 # ---------------------------------------------------------------------------
 
 juce_add_gui_app(Cloudes
-    PRODUCT_NAME    "Cloudes"
-    BUNDLE_ID       "com.cloudes.daw"
-    VERSION         "0.1.0"
+    PRODUCT_NAME                    "Cloudes"
+    BUNDLE_ID                       "com.cloudes.daw"
+    VERSION                         "0.1.0"
+    MICROPHONE_PERMISSION_ENABLED   TRUE
+    MICROPHONE_PERMISSION_TEXT      "Cloudes needs microphone access to record audio tracks."
 )
 
 target_sources(Cloudes PRIVATE
     src/app/Main.cpp
+    src/app/MicrophonePermission.mm
     src/app/MainWindow.cpp
     src/app/MainComponent.cpp
     src/app/ApplicationState.cpp
@@ -108,6 +111,8 @@ target_sources(Cloudes PRIVATE
     src/ui/eq/SpectrumAnalyzer.cpp
     # Preferences dialog (plan 01-11: MIDI clock UI)
     src/ui/preferences/PreferencesDialog.cpp
+    # Audio Preferences dialog (AudioDeviceSelectorComponent + latency display)
+    src/ui/prefs/AudioPreferencesDialog.cpp
     # Plugin browser popup (plan 01-15: PLUG-01/02/03/04 UI entry point)
     src/ui/pluginbrowser/PluginBrowserPopup.cpp
     # Export dialog (plan 01-16: EXP-01, EXP-02, EXP-04)
@@ -135,10 +140,12 @@ target_link_libraries(Cloudes PRIVATE
     juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_audio_formats
+    juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128
+    "$<$<PLATFORM_ID:Darwin>:-framework AVFoundation>"
 )
 
 # CLAP API is header-only; add include path so src/plugins can use clap/clap.h

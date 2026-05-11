@@ -61,4 +61,16 @@ public:
             if (! juce::MessageManager::getInstance()->runDispatchLoopUntil (10))
                 break;
     }
+
+    // TE calls this when recording is rejected (e.g. no armed inputs).
+    // Default UIBehaviour shows nothing — override to make the warning visible.
+    void showWarningMessage (const juce::String& msg) override
+    {
+        juce::MessageManager::callAsync ([msg]
+        {
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::WarningIcon,
+                "Cloudes", msg);
+        });
+    }
 };

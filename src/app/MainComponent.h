@@ -13,6 +13,7 @@
 #include "ui/mixer/MixerView.h"
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "ui/preferences/PreferencesDialog.h"
+#include "ui/prefs/AudioPreferencesDialog.h"
 #include "ui/export/ExportDialog.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
@@ -209,6 +210,9 @@ private:
 
         // Song Setup menu
         SongSetupAudioIO = 401,
+
+        // Cloudes menu
+        CloudesPreferences = 501,
     };
 
     // Double-tap Space = Rewind: tracks timestamp of the previous Space press.
