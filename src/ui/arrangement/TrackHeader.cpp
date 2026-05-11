@@ -342,14 +342,18 @@ void TrackHeader::assignInput (te::WaveInputDevice* waveIn)
 
     refreshInputButton();
 
-    // If the track is already armed, re-enable recording on the new device.
-    // Without this, opening the input dropdown while armed calls setRecordingEnabled(false)
-    // at the top of this function but never restores it — recording silently stays disabled.
+    // If the track is already armed, re-enable recording and monitoring on the new device.
     if ((bool) track.state.getProperty ("armed", false))
     {
         for (auto* instance : edit.getAllInputDevices())
+        {
             if (&instance->getInputDevice() == waveIn)
+            {
                 instance->setRecordingEnabled (track.itemID, true);
+                waveIn->setMonitorMode (te::InputDevice::MonitorMode::automatic);
+            }
+        }
+        monitorButton.setToggleState (true, juce::dontSendNotification);
     }
 }
 
@@ -584,6 +588,9 @@ void TrackHeader::armClicked()
             {
                 alreadyAssigned = true;
                 instance->setRecordingEnabled (track.itemID, true);
+                // Studio One behaviour: ARM automatically enables input monitoring —
+                // no separate I-button press needed.
+                instance->getInputDevice().setMonitorMode (te::InputDevice::MonitorMode::automatic);
             }
         }
 
@@ -605,7 +612,10 @@ void TrackHeader::armClicked()
                     {
                         auto assignResult = instance->setTarget (track.itemID, true, nullptr);
                         if (assignResult.has_value())
+                        {
                             instance->setRecordingEnabled (track.itemID, true);
+                            waveIn->setMonitorMode (te::InputDevice::MonitorMode::automatic);
+                        }
                         break;
                     }
                 }
@@ -613,26 +623,39 @@ void TrackHeader::armClicked()
             }
         }
 
+        // Sync I-button visual — ARM drives monitoring, I-button just reflects state.
+        monitorButton.setToggleState (true, juce::dontSendNotification);
         refreshInputButton();
 
         // setTarget() calls triggerAsyncUpdate() internally — the Destination may be
-        // recreated on the next message loop tick, wiping the recording-enabled flag we
-        // just set.  Re-apply setRecordingEnabled after the async update settles.
+        // recreated on the next message loop tick, wiping both the recording-enabled flag
+        // and the monitor mode.  Re-apply both after the async update settles.
         juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<TrackHeader> (this)]()
         {
             if (safeThis == nullptr) return;
             if (! (bool) safeThis->track.state.getProperty ("armed", false)) return;
             for (auto* inst : safeThis->track.edit.getAllInputDevices())
+            {
                 if (te::isOnTargetTrack (*inst, safeThis->track, 0))
+                {
                     inst->setRecordingEnabled (safeThis->track.itemID, true);
+                    inst->getInputDevice().setMonitorMode (te::InputDevice::MonitorMode::automatic);
+                }
+            }
         });
     }
     else
     {
-        // Disarm — disable recording on all instances targeting this track.
+        // Disarm — disable recording AND monitoring (mirrors Studio One: disarm = no monitoring).
         for (auto* instance : edit.getAllInputDevices())
+        {
             if (te::isOnTargetTrack (*instance, track, 0))
+            {
                 instance->setRecordingEnabled (track.itemID, false);
+                instance->getInputDevice().setMonitorMode (te::InputDevice::MonitorMode::off);
+            }
+        }
+        monitorButton.setToggleState (false, juce::dontSendNotification);
     }
 }
 
