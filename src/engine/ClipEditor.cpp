@@ -248,9 +248,11 @@ te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
     if (newClip == nullptr)
         return nullptr;
 
-    // Point the clip at the source file non-destructively (STATE.md plan 01-03 decision:
-    // use setToDirectFileReference(), not setCurrentSourceFile() which is protected)
-    newClip->getSourceFileReference().setToDirectFileReference (audioFile, true);
+    // Store absolute path — TE's relative-path mode requires both editFileRetriever AND
+    // filePathResolver to be set; without filePathResolver, findFileFromString() falls back
+    // to getEditFileFromProjectManager() which returns an empty File in unsaved sessions,
+    // making getFile() return an invalid path → no waveform, no audio.
+    newClip->getSourceFileReference().setToDirectFileReference (audioFile, false);
 
     return newClip;
 }

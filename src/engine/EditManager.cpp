@@ -52,6 +52,20 @@ void EditManager::createNewEdit()
     {
         const auto editFile = currentSessionFile;
         edit->editFileRetriever = [editFile] { return editFile; };
+
+        // filePathResolver is required alongside editFileRetriever.
+        // TE's SourceFileReference::findFileFromString() uses filePathResolver to resolve
+        // stored path strings back to juce::File objects. Without it, TE falls back to
+        // getEditFileFromProjectManager() which returns an empty File in sessions without
+        // a proper ProjectManager — causing getFile() to return an invalid path for ALL
+        // clips (initial import AND split clips), breaking both waveform display and audio
+        // playback. Handles both absolute paths (passthrough) and relative paths (resolve
+        // from Edit's parent directory).
+        edit->filePathResolver = [editFile] (const juce::String& desc) -> juce::File
+        {
+            if (juce::File::isAbsolutePath (desc)) return juce::File (desc);
+            return editFile.getParentDirectory().getChildFile (desc);
+        };
     }
 
     // Ensure transport is stopped (it is by default, but be explicit)
