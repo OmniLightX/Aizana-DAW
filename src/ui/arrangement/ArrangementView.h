@@ -332,6 +332,8 @@ private:
 
     // ---- Playhead ----
     double playheadPositionSecs = 0.0;  // updated by 30ms timer, read by paint()
+    bool   wasRecordingLastTick = false;
+    double recordingOverlayStartSecs = 0.0;
 
     // ---- Left panel: track headers ----
     NonScrollingViewport headerViewport;

@@ -32,6 +32,28 @@ void EditManager::createNewEdit()
     // through edit->getUndoManager() (the SINGLE shared undo manager per CONTEXT.md).
     edit = te::Edit::createSingleTrackEdit (engine);
 
+    // Tracktion's WaveInputDevice records to "%projectdir%" and falls back to
+    // juce::File::getCurrentWorkingDirectory() if an Edit has no file/project.
+    // A macOS app launched from Finder can have an unwritable working directory,
+    // causing recording contexts to fail before any WaveAudioClip is created.
+    // Give unsaved sessions a stable writable media root immediately.
+    auto unsavedDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                          .getChildFile ("Cloudes")
+                          .getChildFile ("Unsaved Recordings");
+    if (! unsavedDir.createDirectory())
+        unsavedDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                         .getChildFile ("Cloudes Unsaved Recordings");
+    unsavedDir.createDirectory();
+
+    currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
+    unsavedDir.setAsCurrentWorkingDirectory();
+
+    if (edit != nullptr)
+    {
+        const auto editFile = currentSessionFile;
+        edit->editFileRetriever = [editFile] { return editFile; };
+    }
+
     // Ensure transport is stopped (it is by default, but be explicit)
     edit->getTransport().stop (false, false);
 

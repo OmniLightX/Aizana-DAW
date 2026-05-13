@@ -2,6 +2,7 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_audio_devices/juce_audio_devices.h>
+#include <array>
 #include "metering/MeterProcessor.h"
 #include "metering/MasterMeterAudioProcessor.h"
 #include "MetronomeGenerator.h"
@@ -90,6 +91,9 @@ public:
      */
     MeterProcessor& getMasterMeterProcessor() noexcept { return masterMeterProcessor; }
 
+    /** Returns and clears the raw JUCE input peak for a hardware input channel (dBFS). */
+    float getAndClearInputPeakDB (int channelIndex) noexcept;
+
     /**
      * Returns the MetronomeGenerator for enabling/disabling the click track
      * and syncing BPM. Called from TransportBar (message thread, via atomics).
@@ -155,6 +159,9 @@ private:
     // prepare() fires on the message thread (mirrors masterMeterPrepared pattern).
     MetronomeGenerator metronome;
     std::atomic<bool> metronomePrepared { false };
+
+    static constexpr int kMaxMeteredInputChannels = 64;
+    std::array<std::atomic<float>, kMaxMeteredInputChannels> rawInputPeaks {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

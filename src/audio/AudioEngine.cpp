@@ -4,6 +4,8 @@
 AudioEngine::AudioEngine (te::Engine& engine_)
     : engine (engine_)
 {
+    for (auto& peak : rawInputPeaks)
+        peak.store (0.0f, std::memory_order_relaxed);
 }
 
 AudioEngine::~AudioEngine()
@@ -166,13 +168,30 @@ void AudioEngine::audioDeviceStopped()
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext (
-    const float* const* /*inputChannelData*/,
-    int /*numInputChannels*/,
+    const float* const* inputChannelData,
+    int numInputChannels,
     float* const* outputChannelData,
     int numOutputChannels,
     int numSamples,
     const juce::AudioIODeviceCallbackContext& /*context*/)
 {
+    // Capture raw input peaks lock-free for armed-track metering in MixerView.
+    if (inputChannelData != nullptr && numSamples > 0)
+    {
+        const int ch_count = juce::jmin (numInputChannels, kMaxMeteredInputChannels);
+        for (int ch = 0; ch < ch_count; ++ch)
+        {
+            const auto* data = inputChannelData[ch];
+            if (data == nullptr) continue;
+            float peak = 0.0f;
+            for (int i = 0; i < numSamples; ++i)
+                peak = juce::jmax (peak, std::abs (data[i]));
+            auto cur = rawInputPeaks[(size_t) ch].load (std::memory_order_relaxed);
+            while (peak > cur &&
+                   ! rawInputPeaks[(size_t) ch].compare_exchange_weak (
+                       cur, peak, std::memory_order_release, std::memory_order_relaxed)) {}
+        }
+    }
     // ARCHITECTURE NOTE — JUCE multi-callback temp buffer:
     // JUCE's AudioDeviceManager calls the FIRST registered callback (TE's render) with the
     // REAL hardware output buffer. Every subsequent callback — including this one — receives
@@ -207,6 +226,14 @@ void AudioEngine::audioDeviceIOCallbackWithContext (
         // TE's render pipeline — it sees the true mixed output including all audio tracks,
         // not just the metronome-only secondary temp buffer.
     }
+}
+
+float AudioEngine::getAndClearInputPeakDB (int channelIndex) noexcept
+{
+    if (! juce::isPositiveAndBelow (channelIndex, kMaxMeteredInputChannels))
+        return -100.0f;
+    const auto peak = rawInputPeaks[(size_t) channelIndex].exchange (0.0f, std::memory_order_acq_rel);
+    return peak > 0.0f ? juce::Decibels::gainToDecibels (peak, -100.0f) : -100.0f;
 }
 
 //==============================================================================

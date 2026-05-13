@@ -33,10 +33,16 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
         const juce::File audioFile = waveClip->getSourceFileReference().getFile();
         if (audioFile.existsAsFile())
         {
+            thumbnail.addChangeListener (this);
             thumbnail.setSource (new juce::FileInputSource (audioFile));
             thumbnailLoaded = true;
         }
     }
+}
+
+ClipComponent::~ClipComponent()
+{
+    thumbnail.removeChangeListener (this);
 }
 
 void ClipComponent::setSelected (bool shouldBeSelected)

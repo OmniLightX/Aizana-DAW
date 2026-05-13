@@ -20,13 +20,16 @@ class ClipEditor;
  * Left-drag repositions the clip along the timeline (undoable via ClipEditor::moveClip).
  * Positioned by ArrangementView based on clip start time and pixelsPerSecond zoom.
  */
-class ClipComponent : public juce::Component
+class ClipComponent : public juce::Component,
+                      public juce::ChangeListener
 {
 public:
     ClipComponent (te::Clip& clip, EditManager& editManager, ClipEditor& clipEditor,
                    double& pixelsPerSecond, const EditTool& activeTool);
+    ~ClipComponent() override;
 
     void paint            (juce::Graphics& g) override;
+    void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
     void mouseDown        (const juce::MouseEvent& e) override;
     void mouseDrag        (const juce::MouseEvent& e) override;
     void mouseUp          (const juce::MouseEvent& e) override;

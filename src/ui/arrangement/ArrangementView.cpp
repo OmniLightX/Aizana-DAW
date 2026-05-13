@@ -784,6 +784,51 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
         g.drawVerticalLine (x2, (float)trackTopPx, (float)trackBotPx);
     }
 
+    // ---- Live recording placeholder ----
+    // Tracktion Engine commits the real WaveAudioClip when recording stops. During
+    // capture we draw a non-persistent recording region so the arrangement behaves
+    // like a professional DAW without mutating clip state on every audio block.
+    if (auto* edit = appState.editManager.getEdit())
+    {
+        if (edit->getTransport().isRecording()
+            && playheadPositionSecs > recordingOverlayStartSecs
+            && ! trackRows.isEmpty())
+        {
+            const int x1 = kHeaderWidth + (int)(recordingOverlayStartSecs * pixelsPerSecond)
+                           - timelineViewport.getViewPositionX();
+            const int x2 = kHeaderWidth + (int)(playheadPositionSecs * pixelsPerSecond)
+                           - timelineViewport.getViewPositionX();
+            const int viewScrollY    = timelineViewport.getViewPositionY();
+            const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+
+            int cumY = 0;
+            for (auto* row : trackRows)
+            {
+                const int rowH = (int)(row->getPreferredHeight() * trackHeightScale);
+                const bool armed = (bool) row->getTrack().state.getProperty ("armed", false);
+
+                if (armed)
+                {
+                    const int top = timelineOriginY + cumY - viewScrollY + 4;
+                    const int bottom = timelineOriginY + cumY + rowH - viewScrollY - 4;
+                    const auto rect = juce::Rectangle<int> (x1, top,
+                                                            juce::jmax (2, x2 - x1),
+                                                            juce::jmax (8, bottom - top));
+
+                    if (rect.getRight() >= kHeaderWidth && rect.getX() <= getWidth())
+                    {
+                        g.setColour (juce::Colour (0x883a9bdc));
+                        g.fillRoundedRectangle (rect.toFloat(), 3.0f);
+                        g.setColour (juce::Colour (0xff56c6f0));
+                        g.drawRoundedRectangle (rect.toFloat().reduced (0.5f), 3.0f, 1.0f);
+                    }
+                }
+
+                cumY += rowH;
+            }
+        }
+    }
+
     // ---- Marquee selection rectangle (RangeSelect tool) ----
     if (isMarqueeActive && ! marqueeRect.isEmpty())
     {
@@ -879,7 +924,16 @@ void ArrangementView::timerCallback()
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr) return;
 
+    const bool isRecording = edit->getTransport().isRecording();
     const double newPos = edit->getTransport().getPosition().inSeconds();
+
+    if (isRecording && ! wasRecordingLastTick)
+        recordingOverlayStartSecs = newPos;
+    else if (! isRecording && wasRecordingLastTick)
+        juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+
+    wasRecordingLastTick = isRecording;
+
     if (std::abs (newPos - playheadPositionSecs) > 0.001)
     {
         playheadPositionSecs = newPos;

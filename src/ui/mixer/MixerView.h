@@ -92,6 +92,17 @@ private:
     // data on every render block. Read and cleared in timerCallback().
     std::map<te::AudioTrack*, std::unique_ptr<te::LevelMeasurer::Client>> levelClients;
 
+    struct TrackInputLevelClient
+    {
+        te::InputDevice* device = nullptr;
+        std::unique_ptr<te::LevelMeasurer::Client> client;
+    };
+
+    // Armed tracks should show their hardware input level even when software
+    // monitoring is not explicitly enabled. This mirrors professional DAW
+    // input meters and avoids coupling metering to the track output graph.
+    std::map<te::AudioTrack*, TrackInputLevelClient> inputLevelClients;
+
     static constexpr int kStripWidth       = 120;  // Audio track and Bus/FX channel strips
     static constexpr int kMasterStripWidth = 140;  // Master strip wider to avoid label truncation
     int cachedStripHeight = 200;  // Never go below 200px; updated on valid resized() calls
@@ -125,6 +136,9 @@ private:
 
     /** Call refresh() on ALL strips (all ChannelStrips + BusFXStrips). */
     void refreshAllStrips();
+
+    void detachInputLevelClients();
+    float getArmedInputPeakDB (te::AudioTrack& track);
 
     /**
      * Returns all regular audio tracks that route their main output to the same Bus Channel

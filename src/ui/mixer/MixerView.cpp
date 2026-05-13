@@ -35,6 +35,8 @@ MixerView::~MixerView()
     if (auto* edit = appState.editManager.getEdit())
         edit->state.removeListener (this);
 
+    detachInputLevelClients();
+
     // Unregister level clients from TE's LevelMeterPlugin before destruction.
     for (auto& [track, client] : levelClients)
         if (auto* lp = track->getLevelMeterPlugin())
@@ -153,6 +155,7 @@ void MixerView::rebuildStrips()
         if (auto* lp = track->getLevelMeterPlugin())
             lp->measurer.removeClient (*client);
     levelClients.clear();
+    detachInputLevelClients();
 
     channelStripContainer.removeAllChildren();
     strips.clear();
@@ -486,7 +489,9 @@ void MixerView::timerCallback()
     // Helper: update any strip that has a track with a level client
     auto updateStrip = [&] (te::AudioTrack& audioTrack, auto* strip)
     {
-        float peakDB = -100.0f;
+        float peakDB = getArmedInputPeakDB (audioTrack);
+
+        if (peakDB <= -100.0f)
         {
             auto it = levelClients.find (&audioTrack);
             if (it != levelClients.end())
@@ -530,6 +535,72 @@ void MixerView::timerCallback()
 
     for (auto* strip : busFXStrips)
         updateStrip (strip->getTrack(), strip);
+}
+
+void MixerView::detachInputLevelClients()
+{
+    for (auto& [track, entry] : inputLevelClients)
+    {
+        juce::ignoreUnused (track);
+
+        if (entry.device != nullptr && entry.client != nullptr)
+            entry.device->levelMeasurer.removeClient (*entry.client);
+    }
+
+    inputLevelClients.clear();
+}
+
+float MixerView::getArmedInputPeakDB (te::AudioTrack& track)
+{
+    if (! (bool) track.state.getProperty ("armed", false))
+        return -100.0f;
+
+    te::WaveInputDevice* assignedDevice = nullptr;
+
+    for (auto* instance : track.edit.getAllInputDevices())
+    {
+        if (instance == nullptr || ! te::isOnTargetTrack (*instance, track, 0))
+            continue;
+
+        if (auto* waveIn = dynamic_cast<te::WaveInputDevice*> (&instance->getInputDevice()))
+        {
+            assignedDevice = waveIn;
+            break;
+        }
+    }
+
+    if (assignedDevice == nullptr)
+        return -100.0f;
+
+    auto& entry = inputLevelClients[&track];
+
+    if (entry.device != assignedDevice)
+    {
+        if (entry.device != nullptr && entry.client != nullptr)
+            entry.device->levelMeasurer.removeClient (*entry.client);
+
+        entry.device = assignedDevice;
+        entry.client = std::make_unique<te::LevelMeasurer::Client>();
+        entry.device->levelMeasurer.addClient (*entry.client);
+    }
+
+    if (entry.client == nullptr)
+        return -100.0f;
+
+    float peakDB = -100.0f;
+    const int numChannels = juce::jlimit (1, (int) te::LevelMeasurer::Client::maxNumChannels,
+                                          entry.client->getNumChannelsUsed());
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        peakDB = juce::jmax (peakDB, entry.client->getAndClearAudioLevel (ch).dB);
+
+    if (peakDB <= -100.0f)
+    {
+        for (const auto& channel : assignedDevice->getChannels())
+            peakDB = juce::jmax (peakDB, appState.audioEngine.getAndClearInputPeakDB (channel.indexInDevice));
+    }
+
+    return peakDB;
 }
 
 //==============================================================================
