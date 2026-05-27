@@ -148,12 +148,19 @@ TransportBar::TransportBar (ApplicationState& appState_)
         loopButton.setToggleState (newLooping, juce::dontSendNotification);
     };
 
+    // Tap Tempo button — same visual style as loopButton
+    tapTempoButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
+    tapTempoButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff888888));
+    tapTempoButton.setTooltip ("Tap Tempo — click to the beat (resets after 2 s gap)");
+    tapTempoButton.onClick = [this] { tapTempoClicked(); };
+
     addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
     addAndMakeVisible (recordButton);
     addAndMakeVisible (metronomeButton);
     addAndMakeVisible (loopButton);
+    addAndMakeVisible (tapTempoButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
     addAndMakeVisible (timeSigNumerator);
@@ -189,6 +196,8 @@ void TransportBar::resized()
     metronomeButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
     area.removeFromLeft (4);
     loopButton.setBounds      (area.removeFromLeft (44).withHeight (buttonH));
+    area.removeFromLeft (4);
+    tapTempoButton.setBounds  (area.removeFromLeft (44).withHeight (buttonH));
 
     // Right side: sample rate → BPM → time sig combos (rightmost to leftmost)
     sampleRateLabel.setBounds    (area.removeFromRight (70));
@@ -264,6 +273,7 @@ void TransportBar::timerCallback()
     }
 
     // Sample rate update — every ~2 seconds (60 ticks at 30ms = 1.8s)
+
     if (++sampleRateUpdateCounter >= 60)
     {
         sampleRateUpdateCounter = 0;
@@ -277,6 +287,45 @@ void TransportBar::timerCallback()
             sampleRateLabel.setText (srText, juce::dontSendNotification);
         }
     }
+}
+
+void TransportBar::tapTempoClicked()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+
+    // Reset sequence if >2000ms since last tap
+    if (! tapTimes.isEmpty() && (now - tapTimes.getLast()) > 2000.0)
+        tapTimes.clear();
+
+    tapTimes.add (now);
+
+    // Keep only the last 4 taps
+    while (tapTimes.size() > 4)
+        tapTimes.remove (0);
+
+    // Need at least 2 taps to compute a tempo
+    if (tapTimes.size() < 2)
+        return;
+
+    // Average interval between consecutive taps (ms)
+    double totalMs = 0.0;
+    for (int i = 1; i < tapTimes.size(); ++i)
+        totalMs += tapTimes[i] - tapTimes[i - 1];
+    const double avgIntervalMs = totalMs / (tapTimes.size() - 1);
+
+    if (avgIntervalMs <= 0.0)
+        return;
+
+    const double newBpm = juce::jlimit (30.0, 250.0, 60000.0 / avgIntervalMs);
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
+
+    auto& undoManager = appState.editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Tap Tempo");
+    auto& seq = edit->tempoSequence;
+    if (seq.getNumTempos() > 0)
+        seq.getTempo (0)->setBpm (newBpm);
 }
 
 void TransportBar::updateBpmLabel()

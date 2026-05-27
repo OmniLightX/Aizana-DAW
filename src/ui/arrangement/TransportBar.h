@@ -39,6 +39,14 @@ private:
     /** Enables/disables loop playback; lit when transport.looping is true. */
     juce::TextButton loopButton { "Loop" };
 
+    /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
+    juce::TextButton tapTempoButton { "Tap" };
+
+    // Tap tempo state — last 4 tap timestamps (juce::Time::getMillisecondCounterHiRes)
+    juce::Array<double> tapTimes;
+
+    void tapTempoClicked();
+
     /** Shows current playback position — e.g. "0:00:00.000". Updated every 30ms. */
     juce::Label positionLabel;
 
