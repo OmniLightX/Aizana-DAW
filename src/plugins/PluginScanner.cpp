@@ -127,6 +127,12 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
     thread->startThread (juce::Thread::Priority::background);
 }
 
+void PluginScanner::waitForScanComplete (int timeoutMs)
+{
+    if (scanThread != nullptr)
+        scanThread->waitForThreadToExit (timeoutMs);
+}
+
 void PluginScanner::cancelScan()
 {
     if (scanThread != nullptr)

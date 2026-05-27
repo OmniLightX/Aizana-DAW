@@ -31,9 +31,8 @@ TEST_CASE ("VST3Scan: scanner finds at least one VST3 plugin in standard search 
         [](float) {},           // onProgress — ignore
         [&]() { scanComplete = true; }
     );
+    scanner.waitForScanComplete (30000);
 
-    // scanForPlugins is synchronous in tests (no background thread barrier needed
-    // because PluginScanner::scanForPlugins blocks until complete when called from tests)
     REQUIRE (scanComplete);
 
     const auto& known = scanner.getKnownPlugins();
@@ -68,6 +67,7 @@ TEST_CASE ("VST3Scan: KnownPluginList persists scan results across application r
         [](float) {},
         [&]() { scanComplete = true; }
     );
+    scanner.waitForScanComplete (30000);
     REQUIRE (scanComplete);
 
     const int originalCount = scanner.getKnownPlugins().getNumTypes();

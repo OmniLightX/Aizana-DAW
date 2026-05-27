@@ -102,17 +102,18 @@ TEST_CASE ("Sidechain: removeSend removes send from source track", "[sidechain][
     auto* sourceTrack = getFirstAudioTrack (*edit);
     REQUIRE (sourceTrack != nullptr);
 
-    auto* bus = mixer.createBus ("Test Bus");
-    REQUIRE (bus != nullptr);
+    // AuxSend/Return requires an FX channel (has AuxReturnPlugin), not a plain Bus channel.
+    auto* fxChannel = mixer.createFXChannel ("Test FX Bus");
+    REQUIRE (fxChannel != nullptr);
 
     // Add send, then remove it
-    auto* sendPlugin = mixer.createSend (*sourceTrack, *bus, -6.0f);
+    auto* sendPlugin = mixer.createSend (*sourceTrack, *fxChannel, -6.0f);
     REQUIRE (sendPlugin != nullptr);
 
     // Verify send was added
     auto countBefore = sourceTrack->pluginList.getPlugins().size();
 
-    mixer.removeSend (*sourceTrack, *bus);
+    mixer.removeSend (*sourceTrack, *fxChannel);
 
     // After removal, plugin count should decrease
     auto countAfter = sourceTrack->pluginList.getPlugins().size();

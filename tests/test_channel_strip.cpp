@@ -209,9 +209,10 @@ TEST_CASE ("ChannelStrip: solo and mute persist through ValueTree XML round-trip
 }
 
 // ---------------------------------------------------------------------------
-// MIX-02: createBus creates an AudioTrack with AuxReturnPlugin in the edit
+// MIX-02: createBus creates a plain AudioTrack (direct output routing — no AuxReturn)
+// FX channels (createFXChannel) carry AuxReturnPlugin; Bus channels do not.
 // ---------------------------------------------------------------------------
-TEST_CASE ("Bus routing: createBus returns a valid AudioTrack with AuxReturnPlugin", "[mixer][MIX-02]")
+TEST_CASE ("Bus routing: createBus returns a valid AudioTrack tagged as bus channel", "[mixer][MIX-02]")
 {
     EditManager em;
     em.createNewEdit();
@@ -224,16 +225,19 @@ TEST_CASE ("Bus routing: createBus returns a valid AudioTrack with AuxReturnPlug
     // Bus should have the given name
     CHECK (bus->getName().containsIgnoreCase ("Drums"));
 
-    // Bus should have an AuxReturnPlugin in its plugin chain
+    // Bus channel: direct routing — VolumeAndPan exists, no AuxReturnPlugin
+    CHECK (bus->getVolumePlugin() != nullptr);
     bool hasReturn = false;
     for (auto* p : bus->pluginList.getPlugins())
         if (dynamic_cast<te::AuxReturnPlugin*> (p) != nullptr)
             hasReturn = true;
-    CHECK (hasReturn);
+    CHECK_FALSE (hasReturn);
 }
 
 // ---------------------------------------------------------------------------
 // MIX-02: createSend inserts AuxSendPlugin on the source track
+// AuxSend/Return routing requires a FX channel (carries AuxReturnPlugin),
+// not a plain Bus channel (which does direct output routing without AuxReturn).
 // ---------------------------------------------------------------------------
 TEST_CASE ("Bus routing: createSend inserts AuxSendPlugin on source track", "[mixer][MIX-02]")
 {
@@ -245,10 +249,10 @@ TEST_CASE ("Bus routing: createSend inserts AuxSendPlugin on source track", "[mi
     auto* sourceTrack = getFirstAudioTrack (*edit);
     REQUIRE (sourceTrack != nullptr);
 
-    auto* bus = mixer.createBus ("Test Bus");
-    REQUIRE (bus != nullptr);
+    auto* fxChannel = mixer.createFXChannel ("Test FX Bus");
+    REQUIRE (fxChannel != nullptr);
 
-    auto* sendPlugin = mixer.createSend (*sourceTrack, *bus, -3.0f);
+    auto* sendPlugin = mixer.createSend (*sourceTrack, *fxChannel, -3.0f);
     REQUIRE (sendPlugin != nullptr);
 
     // The send plugin should be on the source track's plugin list

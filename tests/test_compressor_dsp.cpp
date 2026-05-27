@@ -136,8 +136,10 @@ TEST_CASE("Compressor: soft knee behavior — compression begins gradually below
     const int blockSize = 4096;
     comp.prepareToPlay(sampleRate, blockSize);
 
-    // Test at threshold-3dB (center of knee): some compression should occur
-    float ampAtKneeCenter = std::pow(10.0f, (-20.0f - 3.0f) / 20.0f);
+    // Test at threshold-1.5dB (mid-point of lower knee half): soft-knee GR > 0.
+    // The 6dB knee spans [threshold-3, threshold+3]. At the lower edge (-3dB) GR=0 by
+    // definition; at threshold-1.5dB (delta=1.5) the quadratic formula yields ~0.14dB GR.
+    float ampAtKneeCenter = std::pow(10.0f, (-20.0f - 1.5f) / 20.0f);
     auto buf = makeConstantBuffer(ampAtKneeCenter, blockSize);
     juce::MidiBuffer midi;
     comp.processBlock(buf, midi);

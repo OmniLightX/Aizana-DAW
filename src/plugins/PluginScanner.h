@@ -48,6 +48,9 @@ public:
     /** Cancel an in-progress scan. Blocks until the background thread stops. */
     void cancelScan();
 
+    /** Block until the current scan finishes (or timeoutMs elapses). Useful in tests. */
+    void waitForScanComplete (int timeoutMs = 30000);
+
     // ---------------------------------------------------------------------------
     // Results
     // ---------------------------------------------------------------------------

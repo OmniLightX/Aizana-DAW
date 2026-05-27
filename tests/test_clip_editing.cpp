@@ -139,6 +139,7 @@ TEST_CASE ("ClipEditor: moveClip moves clip and undo reverts to original positio
     double originalStart = clip->getPosition().getStart().inSeconds();  // 0.0
 
     ClipEditor editor (em);
+    editor.beginMoveTransaction();  // isolate move from clip-insertion in the undo stack
     editor.moveClip (*clip, 8.0);
 
     REQUIRE_THAT (clip->getPosition().getStart().inSeconds(),

@@ -23,6 +23,7 @@ TEST_CASE ("AUScan: scanner finds a built-in macOS AudioUnit plugin",
         [](float) {},
         [&]() { scanComplete = true; }
     );
+    scanner.waitForScanComplete (30000);
     REQUIRE (scanComplete);
 
     const auto& known = scanner.getKnownPlugins();
@@ -61,6 +62,7 @@ TEST_CASE ("AUScan: AU plugin instantiates without error on macOS",
         [](float) {},
         [&]() { scanComplete = true; }
     );
+    scanner.waitForScanComplete (30000);
     REQUIRE (scanComplete);
 
     const auto& known = scanner.getKnownPlugins();
