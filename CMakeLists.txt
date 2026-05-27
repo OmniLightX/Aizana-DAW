@@ -37,6 +37,7 @@ FetchContent_Declare(ebur128
     GIT_REPOSITORY https://github.com/jiixyj/libebur128.git
     GIT_TAG        v1.2.6)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)  # force static — prevents missing-dylib crash at launch
 FetchContent_MakeAvailable(ebur128)
 
 # CLAP C API v1.2.0 — Header-only C API for CLAP plugin hosting (MIT license)
