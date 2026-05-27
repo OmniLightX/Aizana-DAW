@@ -101,11 +101,16 @@ private:
     void armClicked();
     void monitorClicked();
 
-    /** Show popup menu listing all enabled WaveInputDevices + "No Input". */
+    /** Returns true if this track is a MIDI track (has at least one MidiClip). */
+    bool isMidiTrack() const;
+
+    /** Show popup menu: WaveInputDevices for audio tracks, MidiInputDevices for MIDI tracks. */
     void showInputMenu();
-    /** Assign waveIn to this track (nullptr = no input). */
+    /** Assign waveIn to this track (nullptr = no input). Audio tracks only. */
     void assignInput (te::WaveInputDevice* waveIn);
-    /** Sync inputButton text from the currently assigned input device. */
+    /** Assign midiIn to this track (nullptr = no input). MIDI tracks only. */
+    void assignMidiInput (te::MidiInputDevice* midiIn);
+    /** Sync inputButton text from the currently assigned input device (audio or MIDI). */
     void refreshInputButton();
 
     void updatePanLabel();

@@ -248,15 +248,71 @@ void TrackHeader::toggleArm()
 
 //==============================================================================
 
+bool TrackHeader::isMidiTrack() const
+{
+    for (auto* clip : track.getClips())
+        if (dynamic_cast<te::MidiClip*> (clip) != nullptr)
+            return true;
+    return false;
+}
+
 void TrackHeader::populateInputSelector()
 {
-    refreshInputButton();  // text is built dynamically in showInputMenu / refreshInputButton
+    // Update tooltip to reflect the track type
+    inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
+                                          : "Audio Input — click to change");
+    refreshInputButton();
 }
 
 void TrackHeader::showInputMenu()
 {
     auto& dm = track.edit.engine.getDeviceManager();
 
+    if (isMidiTrack())
+    {
+        // ---- MIDI track: show MidiInputDevices ----
+        juce::PopupMenu menu;
+        menu.addItem (1, "No Input", true, false);
+        menu.addSeparator();
+
+        int id = 2;
+        for (auto& dev : dm.getMidiInDevices())
+        {
+            if (dev == nullptr) continue;
+            bool isCurrent = false;
+            for (auto* instance : track.edit.getAllInputDevices())
+            {
+                if (te::isOnTargetTrack (*instance, track, 0)
+                    && &instance->getInputDevice() == dev.get())
+                {
+                    isCurrent = true;
+                    break;
+                }
+            }
+            menu.addItem (id++, dev->getName(), true, isCurrent);
+        }
+
+        menu.showMenuAsync (
+            juce::PopupMenu::Options().withTargetComponent (&inputButton),
+            [this] (int result)
+            {
+                if (result == 1) { assignMidiInput (nullptr); return; }
+                if (result < 2)  return;
+
+                auto& dm2 = track.edit.engine.getDeviceManager();
+                int id2 = 2;
+                for (auto& dev2 : dm2.getMidiInDevices())
+                {
+                    if (dev2 == nullptr) continue;
+                    if (id2 == result) { assignMidiInput (dev2.get()); return; }
+                    ++id2;
+                }
+                assignMidiInput (nullptr);
+            });
+        return;
+    }
+
+    // ---- Audio track: show WaveInputDevices (original logic) ----
     juce::PopupMenu menu;
     menu.addItem (1, "No Input", true, false);
     menu.addSeparator();
@@ -282,15 +338,13 @@ void TrackHeader::showInputMenu()
         menu.addItem (id++, name, true, isCurrent);
     }
 
-    // Capture `this` only — re-acquire DeviceManager inside the callback so we
-    // never hold a dangling reference to a stack-frame variable across the async gap.
     menu.showMenuAsync (
         juce::PopupMenu::Options().withTargetComponent (&inputButton),
         [this] (int result)
         {
             if (result == 1)
             {
-                assignInput (nullptr);  // No Input
+                assignInput (nullptr);
                 return;
             }
             if (result < 2) return;
@@ -310,8 +364,56 @@ void TrackHeader::showInputMenu()
                 ++id2;
             }
             if (! found)
-                assignInput (nullptr);  // safety fallback = No Input
+                assignInput (nullptr);
         });
+}
+
+void TrackHeader::assignMidiInput (te::MidiInputDevice* midiIn)
+{
+    auto& edit = track.edit;
+
+    // Detach any existing assignment for this track
+    for (auto* instance : edit.getAllInputDevices())
+        if (te::isOnTargetTrack (*instance, track, 0))
+            instance->setRecordingEnabled (track.itemID, false);
+
+    if (midiIn == nullptr)
+    {
+        refreshInputButton();
+        return;
+    }
+
+    for (auto* instance : edit.getAllInputDevices())
+    {
+        if (&instance->getInputDevice() == midiIn)
+        {
+            auto result = instance->setTarget (track.itemID, true, nullptr);
+            if (! result.has_value())
+            {
+                refreshInputButton();
+                return;
+            }
+            break;
+        }
+    }
+
+    refreshInputButton();
+
+    if ((bool) track.state.getProperty ("armed", false))
+    {
+        for (auto* instance : edit.getAllInputDevices())
+            if (&instance->getInputDevice() == midiIn)
+                instance->setRecordingEnabled (track.itemID, true);
+
+        juce::MessageManager::callAsync ([safeThis = juce::Component::SafePointer<TrackHeader> (this), midiIn]()
+        {
+            if (safeThis == nullptr) return;
+            if (! (bool) safeThis->track.state.getProperty ("armed", false)) return;
+            for (auto* inst : safeThis->track.edit.getAllInputDevices())
+                if (&inst->getInputDevice() == midiIn && te::isOnTargetTrack (*inst, safeThis->track, 0))
+                    inst->setRecordingEnabled (safeThis->track.itemID, true);
+        });
+    }
 }
 
 void TrackHeader::assignInput (te::WaveInputDevice* waveIn)
@@ -385,9 +487,11 @@ void TrackHeader::refreshInputButton()
 
     // Truncate long device names to fit the narrow header
     if (inputName.length() > 18)
-        inputName = inputName.substring (0, 17) + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6")); // "…"
+        inputName = inputName.substring (0, 17) + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6"));
 
     inputButton.setButtonText (inputName);
+    inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
+                                          : "Audio Input — click to change");
 }
 
 //==============================================================================
