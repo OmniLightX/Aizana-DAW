@@ -55,11 +55,11 @@ public:
 
         TaskRunner runner (task);
 
-        // Pump the message dispatch loop (10ms slices) until the TaskRunner
-        // finishes — keeps UI responsive and allows progress repaints.
+        // Wait for the TaskRunner to finish (10ms polling).
+        // runDispatchLoopUntil was removed in JUCE 8; Thread::sleep is sufficient
+        // since exports are already a modal blocking operation.
         while (runner.isThreadRunning())
-            if (! juce::MessageManager::getInstance()->runDispatchLoopUntil (10))
-                break;
+            juce::Thread::sleep (10);
     }
 
     // TE calls this when recording is rejected (e.g. no armed inputs).

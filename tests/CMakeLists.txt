@@ -49,8 +49,13 @@ target_sources(engine_tests PRIVATE
     ../src/audio/AudioEngine.cpp
     ../src/audio/MetronomeGenerator.cpp
     ../src/plugins/ClapPluginFormat.cpp
+    ../src/plugins/BuiltInPluginFormat.cpp
     ../src/plugins/PluginScanner.cpp
     ../src/plugins/PluginManager.cpp
+    # UI components required by FX processors in test context
+    ../src/ui/eq/EQComponent.cpp
+    ../src/ui/eq/SpectrumAnalyzer.cpp
+    ../src/metering/MasterMeterAudioProcessor.cpp
     # DSP effects implementations (FX-01 through FX-04)
     ../src/fx/EQProcessor.cpp
     ../src/fx/CompressorProcessor.cpp

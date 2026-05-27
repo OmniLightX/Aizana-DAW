@@ -1221,6 +1221,43 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Cmd+E — split selected clips at playhead (or all clips on all tracks if nothing selected)
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'e' || key.getKeyCode() == 'E'))
+    {
+        const double playheadSecs = edit->getTransport().getPosition().inSeconds();
+        bool didSplit = false;
+
+        auto splitWave = [&] (te::Clip* clip)
+        {
+            auto* wc = dynamic_cast<te::WaveAudioClip*> (clip);
+            if (wc == nullptr) return;
+            const double start = clip->getPosition().getStart().inSeconds();
+            const double end   = clip->getPosition().getEnd().inSeconds();
+            if (playheadSecs > start + 0.05 && playheadSecs < end - 0.05)
+            {
+                clipEditor.cutClip (*wc, playheadSecs);
+                didSplit = true;
+            }
+        };
+
+        if (! selectedClips.isEmpty())
+        {
+            for (auto* cc : selectedClips)
+                splitWave (&cc->getClip());
+        }
+        else
+        {
+            // Nothing selected: split every clip on every track at playhead
+            for (auto* t : te::getAudioTracks (*edit))
+                for (auto* c : t->getClips())
+                    splitWave (c);
+        }
+
+        if (didSplit)
+            rebuildTrackRows();
+        return true;
+    }
+
     return false;
 }
 

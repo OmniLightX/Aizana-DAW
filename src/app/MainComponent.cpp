@@ -167,6 +167,11 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Cmd+E: split selected clip(s) at playhead
+    if (key == juce::KeyPress ('e', juce::ModifierKeys::commandModifier, 0) ||
+        key == juce::KeyPress ('E', juce::ModifierKeys::commandModifier, 0))
+        return arrangementView.keyPressed (key);
+
     // Cmd+C / Cmd+D / Cmd+V — forward to ArrangementView so they work regardless
     // of which component currently holds keyboard focus.
     if (key.getModifiers().isCommandDown())
