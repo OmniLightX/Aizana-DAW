@@ -525,7 +525,7 @@ void MainComponent::handleFileImportAudio()
                                                audioFile.getFileNameWithoutExtension(),
                                                pos, nullptr);
             if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (clip))
-                waveClip->getSourceFileReference().setToDirectFileReference (audioFile, true);
+                waveClip->getSourceFileReference().setToDirectFileReference (audioFile, false);
 
             fileChooser.reset();
         });

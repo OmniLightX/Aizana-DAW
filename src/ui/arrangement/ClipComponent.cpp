@@ -27,9 +27,16 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
     // Register standard audio formats so the thumbnail knows how to read WAV/AIFF/etc.
     formatManager.registerBasicFormats();
 
-    // Load thumbnail from source file for WaveAudioClip
+    // Load thumbnail from source file for WaveAudioClip.
+    // Also register as ValueTree::Listener so we catch the case where TE's recording
+    // pipeline sets IDs::source AFTER the clip is inserted into the track's ValueTree
+    // (valueTreeChildAdded fires → rebuildTrackRows → ClipComponent constructed before
+    // source is propagated to the CachedValue). Without this listener, recorded clips
+    // always show solid-colour blocks with no waveform.
     if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
     {
+        clip.state.addListener (this);
+
         const juce::File audioFile = waveClip->getSourceFileReference().getFile();
         if (audioFile.existsAsFile())
         {
@@ -42,7 +49,24 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
 
 ClipComponent::~ClipComponent()
 {
+    clip.state.removeListener (this);
     thumbnail.removeChangeListener (this);
+}
+
+void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+{
+    if (thumbnailLoaded || tree != clip.state) return;
+
+    if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
+    {
+        const juce::File audioFile = waveClip->getSourceFileReference().getFile();
+        if (audioFile.existsAsFile())
+        {
+            thumbnail.addChangeListener (this);
+            thumbnail.setSource (new juce::FileInputSource (audioFile));
+            thumbnailLoaded = true;
+        }
+    }
 }
 
 void ClipComponent::setSelected (bool shouldBeSelected)

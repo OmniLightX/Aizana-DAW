@@ -21,7 +21,8 @@ class ClipEditor;
  * Positioned by ArrangementView based on clip start time and pixelsPerSecond zoom.
  */
 class ClipComponent : public juce::Component,
-                      public juce::ChangeListener
+                      public juce::ChangeListener,
+                      public juce::ValueTree::Listener
 {
 public:
     ClipComponent (te::Clip& clip, EditManager& editManager, ClipEditor& clipEditor,
@@ -30,6 +31,14 @@ public:
 
     void paint            (juce::Graphics& g) override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
+
+    // ValueTree::Listener — reloads thumbnail if source property is set after construction
+    // (TE's recording pipeline sets IDs::source on the newly-added clip's ValueTree state)
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
+    void valueTreeChildAdded      (juce::ValueTree&, juce::ValueTree&) override {}
+    void valueTreeChildRemoved    (juce::ValueTree&, juce::ValueTree&, int) override {}
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+    void valueTreeParentChanged   (juce::ValueTree&) override {}
     void mouseDown        (const juce::MouseEvent& e) override;
     void mouseDrag        (const juce::MouseEvent& e) override;
     void mouseUp          (const juce::MouseEvent& e) override;

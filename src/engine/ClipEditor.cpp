@@ -76,7 +76,9 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
 
     // Wire the new clip to the same source file as the original.
     // setToDirectFileReference does not affect timeline position or offset.
-    newClip->getSourceFileReference().setToDirectFileReference (clip.getCurrentSourceFile(), true);
+    // Use absolute path (false) — relative-path mode requires both filePathResolver AND a
+    // resolvable relative path between the edit dir and audio file; absolute is always safe.
+    newClip->getSourceFileReference().setToDirectFileReference (clip.getCurrentSourceFile(), false);
 
     // Reaffirm position in case insertNewClip did not persist the offset from ClipPosition.
     // This is a no-op when TE respects ClipPosition.offset; it is the authoritative
@@ -206,7 +208,7 @@ te::Clip* ClipEditor::copyClip (te::Clip& sourceClip,
         if (auto* newWave = dynamic_cast<te::WaveAudioClip*> (newClipBase))
         {
             newWave->getSourceFileReference().setToDirectFileReference (
-                srcWave->getCurrentSourceFile(), true);
+                srcWave->getCurrentSourceFile(), false);
             // Preserve the source offset
             newWave->setPosition ({ TimeRng (newStart, newEnd),
                                     TimeDur::fromSeconds (offsetSecs) });
