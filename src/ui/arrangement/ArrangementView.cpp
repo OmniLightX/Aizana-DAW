@@ -847,6 +847,49 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
         g.setColour (juce::Colour (0xff4488ff));
         g.drawRect (pointerBandRect, 1);
     }
+
+    // ---- Ghost drag rect (inter-track drag visualization) ----
+    // Drawn last so it renders on top of all other overlays.
+    // X is derived from ghostStartSecs * pixelsPerSecond (scroll-invariant — no phantom delta
+    // from autoscroll because time coords are independent of viewport scroll position).
+    if (ghostDragActive && ghostTargetTrackIndex >= 0 && ghostTargetTrackIndex < trackRows.size())
+    {
+        const int viewScrollX     = timelineViewport.getViewPositionX();
+        const int viewScrollY     = timelineViewport.getViewPositionY();
+        const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+
+        // Ghost X: time-based, scroll-corrected (same formula as playhead)
+        const int ghostX = kHeaderWidth + (int)(ghostStartSecs * pixelsPerSecond) - viewScrollX;
+        const int ghostW = juce::jmax (4, (int)(ghostDurationSecs * pixelsPerSecond));
+
+        // Target track Y: cumulative row heights up to target index
+        int cumY = 0;
+        for (int i = 0; i < ghostTargetTrackIndex; ++i)
+            cumY += (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
+        const int targetH = (int)(trackRows[ghostTargetTrackIndex]->getPreferredHeight() * trackHeightScale);
+        const int ghostY  = timelineOriginY + cumY - viewScrollY;
+
+        // Clip ghost rect to the timeline panel (don't bleed into header column)
+        if (ghostX + ghostW >= kHeaderWidth)
+        {
+            const int clippedX = juce::jmax (kHeaderWidth, ghostX);
+            const int clippedW = ghostX + ghostW - clippedX;
+            if (clippedW > 0)
+            {
+                const auto ghostRect = juce::Rectangle<float> (
+                    (float)clippedX, (float)(ghostY + 2),
+                    (float)clippedW, (float)(targetH - 4));
+
+                // Semi-transparent fill in clip colour
+                g.setColour (ghostClipColour.withAlpha (0.50f));
+                g.fillRoundedRectangle (ghostRect, 4.0f);
+
+                // Bright border so the landing zone is unambiguous
+                g.setColour (juce::Colours::white.withAlpha (0.85f));
+                g.drawRoundedRectangle (ghostRect.reduced (0.5f), 4.0f, 1.5f);
+            }
+        }
+    }
 }
 
 void ArrangementView::setPixelsPerSecond (double pps)
@@ -1024,12 +1067,22 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
     }
 
     // ---- Tool shortcuts ----
-    // Escape always returns to Pointer and deselects all clips
+    // Escape always returns to Pointer, deselects all clips, and cancels any ghost drag
     if (key.getKeyCode() == juce::KeyPress::escapeKey)
     {
         setActiveTool (EditTool::Pointer);
         deselectAllClips();
         rangeActive = false;
+        if (ghostDragActive)
+        {
+            ghostDragActive = false;
+            if (ghostSourceComp != nullptr)
+            {
+                ghostSourceComp->isGhostDimmed = false;
+                ghostSourceComp->repaint();
+            }
+            ghostSourceComp = nullptr;
+        }
         repaint();
         return true;
     }
@@ -1826,6 +1879,10 @@ void ArrangementView::rebuildTrackRows()
     // Clear the inter-track drag guard so future ValueTree changes trigger rebuilds normally.
     isInterTrackDragActive = false;
 
+    // Safety: clear ghost state so no stale paint occurs after rebuild
+    ghostDragActive = false;
+    ghostSourceComp = nullptr;
+
     // Capture expansion state before destroying TrackRows so open automation
     // lanes survive structural rebuilds (e.g. clip split, track reorder).
     std::set<tracktion::engine::EditItemID> expandedTrackIDs;
@@ -1937,6 +1994,13 @@ void ArrangementView::rebuildTrackRows()
                 // Deferred rebuild — runs after mouseUp returns so the component
                 // remains alive for the rest of the current event delivery.
                 juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+            };
+
+            // Ghost commit: called from ClipComponent::mouseUp when isGhostDimmed was true.
+            // Performs the one-shot TE move at the final ghost position, then sets pendingRebuild.
+            cc->onInterTrackDragCommit = [this]
+            {
+                commitInterTrackDrag();
             };
 
             // Snapshot initial positions of ALL selected clips when a drag begins.
@@ -2415,6 +2479,11 @@ void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs
                                              int absoluteYInContainer,
                                              ClipComponent* draggedComp)
 {
+    // Ghost/Proxy approach (Studio One 7 reference):
+    // No TE data movement and no reparenting mid-drag.
+    // This function only updates the ghost state for paintOverChildren to draw.
+    // The actual TE move happens once on mouseUp via commitInterTrackDrag().
+
     // Find which track the clip currently lives on
     int sourceTrackIndex = -1;
     for (int i = 0; i < trackRows.size(); ++i)
@@ -2432,45 +2501,95 @@ void ArrangementView::moveClipByTrackDelta (te::Clip& clip, double startTimeSecs
     const int targetTrackIndex = yContainerToTrackIndex (absoluteYInContainer);
 
     if (targetTrackIndex == sourceTrackIndex)
+    {
+        // Mouse returned to source track — cancel ghost if it was active
+        if (ghostDragActive)
+        {
+            ghostDragActive = false;
+            if (draggedComp != nullptr)
+            {
+                draggedComp->isGhostDimmed = false;
+                draggedComp->repaint();
+            }
+            ghostSourceComp = nullptr;
+            repaint();
+        }
         return;
+    }
 
-    auto* destTrack = dynamic_cast<te::AudioTrack*> (&trackRows[targetTrackIndex]->getTrack());
-    if (destTrack == nullptr)
-        return;
+    // Clip colour (same derivation as ClipComponent::paint)
+    juce::Colour clipColour = juce::Colour (0xff2a6aaa);
+    if (auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack()))
+    {
+        const juce::Colour tc = track->getColour();
+        if (tc.getBrightness() > 0.05f)
+            clipColour = tc.withSaturation (juce::jmax (0.55f, tc.getSaturation()))
+                           .withBrightness  (juce::jmax (0.65f, tc.getBrightness()));
+    }
 
-    // Suppress ValueTree-triggered rebuildTrackRows() while the drag is live.
-    // clip.moveTo() fires valueTreeChildRemoved + valueTreeChildAdded which would
-    // otherwise queue callAsync(rebuildTrackRows) and destroy this component mid-drag.
-    isInterTrackDragActive = true;
+    // Update ghost state — paintOverChildren draws the translucent rect on next repaint
+    ghostDragActive       = true;
+    ghostStartSecs        = startTimeSecs;
+    ghostDurationSecs     = clip.getPosition().getLength().inSeconds();
+    ghostSourceTrackIndex = sourceTrackIndex;
+    ghostTargetTrackIndex = targetTrackIndex;
+    ghostClipColour       = clipColour;
+    ghostSourceComp       = draggedComp;
 
-    // Move the TE clip data to the target track at the given position.
-    // moveClipToTrack begins its own undo transaction; moveClip appends to it.
-    clipEditor.moveClipToTrack (clip, *destTrack);
-    clipEditor.moveClip (clip, startTimeSecs);
-
-    // Physically reparent the ClipComponent to the destination track's clip area so
-    // the drag continues uninterrupted.  All clip areas share the same screen X origin
-    // (each clipArea is at x=0 in its TrackRow; each TrackRow is at x=0 in
-    // timelineContainer), so the component's X coordinates remain valid after reparent.
-    // rebuildTrackRows() is deferred to mouseUp via ClipComponent::onDragEnded.
+    // Dim the source clip so the user sees it will move
     if (draggedComp != nullptr)
     {
-        auto& destClipArea = trackRows[targetTrackIndex]->getClipArea();
-        // Derive X from startTimeSecs (the clean original position), NOT from
-        // draggedComp->getX().  The component's current X was set by setBounds()
-        // in mouseDrag using newStartSecs (which included snappedDelta drift),
-        // so reading it back would place the clip at the wrong visual position.
-        const int savedX = (int)(startTimeSecs * pixelsPerSecond);
-        const int savedW = draggedComp->getWidth();
-        const int destH  = destClipArea.getHeight();
-
-        draggedComp->getParentComponent()->removeChildComponent (draggedComp);
-        destClipArea.addAndMakeVisible (draggedComp);
-        draggedComp->setBounds (savedX, 0, savedW, destH);
-
-        // Signal the component to rebuild on mouseUp
-        draggedComp->pendingRebuild = true;
+        draggedComp->isGhostDimmed = true;
+        draggedComp->repaint();
     }
+
+    repaint();
+}
+
+void ArrangementView::commitInterTrackDrag()
+{
+    if (! ghostDragActive)
+        return;
+
+    auto* sourceComp = ghostSourceComp;
+    if (sourceComp == nullptr)
+    {
+        ghostDragActive = false;
+        repaint();
+        return;
+    }
+
+    auto& clip = sourceComp->getClip();
+
+    if (ghostTargetTrackIndex < 0 || ghostTargetTrackIndex >= trackRows.size())
+    {
+        ghostDragActive = false;
+        repaint();
+        return;
+    }
+
+    auto* destTrack = dynamic_cast<te::AudioTrack*> (&trackRows[ghostTargetTrackIndex]->getTrack());
+    if (destTrack == nullptr)
+    {
+        ghostDragActive = false;
+        repaint();
+        return;
+    }
+
+    // Suppress ValueTree-triggered rebuilds during the single-shot TE move
+    isInterTrackDragActive = true;
+
+    // Perform the actual TE data move once (the ghost has been tracking position live)
+    clipEditor.moveClipToTrack (clip, *destTrack);
+    clipEditor.moveClip (clip, ghostStartSecs);
+
+    // Signal rebuild on mouseUp completion (same flow as before — deferred via callAsync)
+    sourceComp->pendingRebuild = true;
+
+    // Clear ghost
+    ghostDragActive = false;
+    ghostSourceComp = nullptr;
+    repaint();
 }
 
 //==============================================================================

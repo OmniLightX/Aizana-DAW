@@ -226,6 +226,16 @@ void ClipComponent::paint (juce::Graphics& g)
         g.drawRoundedRectangle (bounds.reduced (1.0f), kCornerRadius, 2.0f);
     }
 
+    // ---- Ghost dim overlay ----
+    // Drawn before gain handle and trim handles so they remain visible through the tint.
+    // Applied when this clip is being ghost-dragged to another track — it will land
+    // on the destination track on mouseUp. Alpha matches typical DAW "ghost source" style.
+    if (isGhostDimmed)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (bounds.reduced (1.0f), kCornerRadius);
+    }
+
     // ---- Clip Gain handle (WaveAudioClip only, min width guard) ----
     if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr && getWidth() >= 60)
     {
@@ -891,8 +901,8 @@ void ClipComponent::mouseDrag (const juce::MouseEvent& e)
         onMultiClipDrag (clip, snappedDelta);
 
     // Inter-track drag: pass absolute Y in timelineContainer to ArrangementView.
-    // ArrangementView compares the mouse's track to the clip's current track and
-    // moves only when they differ — no threshold accumulation needed.
+    // Ghost/Proxy approach: ArrangementView only updates the ghost state here — no TE
+    // data movement and no reparenting during drag. Actual move happens once on mouseUp.
     if (onInterTrackDrag)
     {
         // Hierarchy: ClipComponent → clipArea → TrackRow → timelineContainer
@@ -903,22 +913,10 @@ void ClipComponent::mouseDrag (const juce::MouseEvent& e)
         {
             const int absY = e.getEventRelativeTo (timelineContComp).y;
 
-            // Pass newStartSecs — the correctly snapped absolute position.
-            // This is the position the clip should land at on the destination track:
-            // it reflects the user's actual horizontal cursor position (snapped to grid),
-            // not the raw pre-drag original position.
-            auto* trackBefore = clip.getClipTrack();
+            // Pass newStartSecs — the snapped absolute position the ghost should show.
+            // Since no track crossing happens during drag, dragStartMouseX and
+            // dragStartClipTimeSecs remain valid for the entire drag without reset.
             onInterTrackDrag (clip, newStartSecs, absY, this);
-
-            // After a successful track crossing, reset the drag baseline so that
-            // subsequent mouseDrag events compute delta from the new landed position,
-            // not from the original Track 1 mouseDown.  Without this reset, the
-            // snappedDelta would be re-applied every mouseDrag, drifting the clip further.
-            if (clip.getClipTrack() != nullptr && clip.getClipTrack() != trackBefore)
-            {
-                dragStartMouseX       = currentX;
-                dragStartClipTimeSecs = clip.getPosition().getStart().inSeconds();
-            }
         }
     }
 }
@@ -979,9 +977,20 @@ void ClipComponent::mouseUp (const juce::MouseEvent& e)
     setMouseCursor (juce::MouseCursor::NormalCursor);
     isDragging = false;
 
-    // If a cross-track move happened during this drag, trigger a full rebuild now
-    // that the drag is complete.  The rebuild is deferred via callAsync (set in
-    // onDragEnded) so it runs after this mouseUp returns — the component remains
+    // If a ghost inter-track drag was active, commit the TE move now (mouseUp = single
+    // data operation).  commitInterTrackDrag sets pendingRebuild = true on this component
+    // so the deferred rebuild fires via the existing pendingRebuild → onDragEnded path.
+    if (isGhostDimmed)
+    {
+        isGhostDimmed = false;
+        repaint();  // un-dim immediately so there is no visual flash on rebuild
+        if (onInterTrackDragCommit)
+            onInterTrackDragCommit();
+    }
+
+    // If a cross-track move happened (either via ghost commit above or other path),
+    // trigger a full rebuild now that the drag is complete.  The rebuild is deferred
+    // via callAsync so it runs after this mouseUp returns — the component remains
     // valid for the rest of this call.
     if (pendingRebuild)
     {

@@ -75,6 +75,14 @@ public:
      *  Cleared after onDragEnded fires in mouseUp. */
     bool pendingRebuild = false;
 
+    /** Set to true by ArrangementView when this clip is being ghost-dragged to another track.
+     *  The clip dims itself to indicate it will move on mouseUp. */
+    bool isGhostDimmed = false;
+
+    /** Fired on mouseUp when an inter-track ghost drag completed (isGhostDimmed was true).
+     *  ArrangementView responds by committing the actual TE move and setting pendingRebuild. */
+    std::function<void()> onInterTrackDragCommit;
+
     /** Fired once in mouseDown when drag initialisation begins.
      *  ArrangementView uses this to snapshot initial positions of all selected clips. */
     std::function<void(ClipComponent*)> onDragWillStart;

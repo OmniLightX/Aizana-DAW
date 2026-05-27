@@ -284,6 +284,22 @@ private:
     // Reset to false at the start of rebuildTrackRows() (fired from onDragEnded on mouseUp).
     bool isInterTrackDragActive = false;
 
+    // ---- Ghost drag state (inter-track drag visualization — Ghost/Proxy approach) ----
+    // During an inter-track drag the clip stays on its source track (no reparenting).
+    // A translucent ghost rect is painted in paintOverChildren on the target track.
+    // The actual TE move happens once on mouseUp via commitInterTrackDrag().
+    bool           ghostDragActive       = false;
+    double         ghostStartSecs        = 0.0;    // snapped clip start on target track
+    double         ghostDurationSecs     = 0.0;    // clip duration in seconds
+    int            ghostSourceTrackIndex = -1;
+    int            ghostTargetTrackIndex = -1;
+    juce::Colour   ghostClipColour;
+    ClipComponent* ghostSourceComp       = nullptr;
+
+    /** Commits the pending inter-track move (called via onInterTrackDragCommit from ClipComponent::mouseUp).
+     *  Performs moveClipToTrack + moveClip once with the final ghost position, then sets pendingRebuild. */
+    void commitInterTrackDrag();
+
     // ---- Multi-clip drag: initial positions snapshot ----
     // Populated by onDragWillStart when a drag starts on a selected clip.
     // Indexed in parallel: multiDragClips[i] started at multiDragInitialTimes[i].
