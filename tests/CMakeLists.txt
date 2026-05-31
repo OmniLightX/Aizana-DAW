@@ -44,6 +44,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/ClipEditor.cpp
     ../src/engine/MidiRecorder.cpp
     ../src/engine/MixerEngine.cpp
+    ../src/engine/InputBusManager.cpp
     ../src/engine/AutomationEngine.cpp
     ../src/audio/AudioRecorder.cpp
     ../src/audio/AudioEngine.cpp
