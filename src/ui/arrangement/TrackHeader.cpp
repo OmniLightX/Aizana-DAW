@@ -44,16 +44,17 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     monitorButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2255aa));  // blue = monitoring active
     monitorButton.setTooltip ("Input Monitoring (I)");
 
-    muteButton.setClickingTogglesState    (true);
-    soloButton.setClickingTogglesState    (true);
-    armButton.setClickingTogglesState     (true);
-    monitorButton.setClickingTogglesState (true);
+    // I-04: setClickingTogglesState(false) — JUCE must never auto-toggle; we drive state explicitly
+    muteButton.setClickingTogglesState    (false);
+    soloButton.setClickingTogglesState    (false);
+    armButton.setClickingTogglesState     (false);
+    monitorButton.setClickingTogglesState (false);
 
-    // Wire button callbacks
-    muteButton.onClick    = [this] { muteClicked();    };
-    soloButton.onClick    = [this] { soloClicked();    };
-    armButton.onClick     = [this] { armClicked();     };
-    monitorButton.onClick = [this] { monitorClicked(); };
+    // Wire button callbacks — explicit toggle before handler so getToggleState() reads new value
+    muteButton.onClick    = [this] { muteButton.setToggleState    (!muteButton.getToggleState(),    juce::dontSendNotification); muteClicked();    };
+    soloButton.onClick    = [this] { soloButton.setToggleState    (!soloButton.getToggleState(),    juce::dontSendNotification); soloClicked();    };
+    armButton.onClick     = [this] { armButton.setToggleState     (!armButton.getToggleState(),     juce::dontSendNotification); armClicked();     };
+    monitorButton.onClick = [this] { monitorButton.setToggleState (!monitorButton.getToggleState(), juce::dontSendNotification); monitorClicked(); };
 
     // Input selector — Studio One style: small button below M/S/REC/I, click = popup
     inputButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff252525));
@@ -734,10 +735,9 @@ void TrackHeader::armClicked()
             }
         }
 
-        // ARM automatically enables monitoring (Studio One / Logic behaviour).
-        // Set the I button now; the callAsync below applies the mode after setTarget()'s
-        // async update has settled (it resets MonitorMode to off on !alreadyAssigned path).
-        monitorButton.setToggleState (true, juce::dontSendNotification);
+        // ARM does NOT auto-enable monitoring (Studio One 7 / Logic Pro X standard).
+        // Monitoring is controlled exclusively by the I button — decoupled from REC.
+        // This prevents the feedback loop when built-in mic + speakers are the same device.
         refreshInputButton();
 
         // setTarget() calls triggerAsyncUpdate() internally — the Destination may be
