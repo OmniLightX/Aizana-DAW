@@ -316,7 +316,8 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   PluginManager&       pluginManager_,
                                   PluginWindowManager& pluginWindowManager_,
                                   PluginScanner&       pluginScanner_,
-                                  AutomationEngine&    automationEngine_)
+                                  AutomationEngine&    automationEngine_,
+                                  InputBusManager&     inputBusManager_)
     : appState            (appState_)
     , clipEditor          (clipEditor_)
     , mixerEngine         (mixerEngine_)
@@ -324,6 +325,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner       (pluginScanner_)
     , automationEngine    (automationEngine_)
+    , inputBusManager     (inputBusManager_)
     , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs, gridResolution, snapEnabled)
     , toolSelector        (activeTool, [this] (EditTool t) { setActiveTool (t); })
 {
@@ -1917,7 +1919,8 @@ void ArrangementView::rebuildTrackRows()
                                                           automationEngine,
                                                           pluginManager,
                                                           pluginWindowManager,
-                                                          pluginScanner));
+                                                          pluginScanner,
+                                                          inputBusManager));
         headerContainer.addAndMakeVisible (header);
 
         // Wire selection callback — left-click on header notifies ArrangementView

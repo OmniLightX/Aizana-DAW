@@ -7,6 +7,22 @@ namespace te = tracktion::engine;
 MainComponent::MainComponent (ApplicationState& appState_)
     : appState (appState_)
 {
+    // ── Named Input Buses (Phase 2) ──────────────────────────────────────────
+    // Re-seed / re-bind Named Buses whenever the Edit is swapped (File>New /
+    // File>Open). A fresh or loaded Edit does not inherit the previous Edit's
+    // <INPUTBUSES> tree, so seed defaults when none exist and push every bus
+    // name onto its WaveInputDevice alias (the hybrid binding step).
+    appState.editManager.onEditChanged = [this]
+    {
+        inputBusManager.initialiseDefaultBuses();
+        inputBusManager.applyToEngine();
+    };
+
+    // The startup Edit was created by ApplicationState before this component (and
+    // its InputBusManager) existed, so onEditChanged could not fire for it — seed now.
+    inputBusManager.initialiseDefaultBuses();
+    inputBusManager.applyToEngine();
+
     addAndMakeVisible (transportBar);
     addAndMakeVisible (arrangementView);
     addAndMakeVisible (mixerView);

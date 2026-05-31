@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "ApplicationState.h"
 #include "engine/MixerEngine.h"
+#include "engine/InputBusManager.h"
 #include "engine/AutomationEngine.h"
 #include "engine/ClipEditor.h"
 #include "engine/ExportPipeline.h"
@@ -77,6 +78,7 @@ private:
     // PluginScanner has no dependencies on other members.
     // PluginManager depends on PluginScanner + EditManager (via appState).
     MixerEngine      mixerEngine      { appState.editManager };
+    InputBusManager  inputBusManager  { appState.editManager };
     AutomationEngine automationEngine { appState.editManager };
     ClipEditor       clipEditor       { appState.editManager };
 
@@ -96,7 +98,7 @@ private:
     TransportBar    transportBar    { appState };
     ArrangementView arrangementView { appState, clipEditor, mixerEngine,
                                       pluginManager, pluginWindowManager, pluginScanner,
-                                      automationEngine };
+                                      automationEngine, inputBusManager };
     MixerView       mixerView       { appState, mixerEngine,
                                       pluginManager, pluginWindowManager, pluginScanner };
     // dockedPanel is inside pluginWindowManager — added to our layout via getDockedPanel()

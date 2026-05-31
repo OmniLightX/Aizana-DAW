@@ -55,6 +55,15 @@ public:
     /** Perform an autosave immediately (called by the timer and on clean exit). */
     void performAutosave();
 
+    /**
+     * Fired at the end of createNewEdit() and loadEdit(), after the new Edit is
+     * fully constructed and its playback context is allocated. Lets owners react
+     * to an Edit swap — e.g. InputBusManager seeds/applies Named Buses, since the
+     * previous Edit's <INPUTBUSES> tree does not carry over to a fresh/loaded Edit.
+     * Not fired by the startup createNewEdit() in ApplicationState (set after).
+     */
+    std::function<void()> onEditChanged;
+
     // --- AI-aware undo (AUDIO-05) ---
 
     /**

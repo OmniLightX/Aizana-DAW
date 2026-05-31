@@ -5,6 +5,7 @@
 #include "app/ApplicationState.h"
 #include "engine/ClipEditor.h"
 #include "engine/MixerEngine.h"
+#include "engine/InputBusManager.h"
 #include "engine/AutomationEngine.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
@@ -76,7 +77,8 @@ public:
                      PluginManager&       pluginManager,
                      PluginWindowManager& pluginWindowManager,
                      PluginScanner&       pluginScanner,
-                     AutomationEngine&    automationEngine);
+                     AutomationEngine&    automationEngine,
+                     InputBusManager&     inputBusManager);
     ~ArrangementView() override;
 
     void resized() override;
@@ -244,6 +246,7 @@ private:
     PluginWindowManager& pluginWindowManager;
     PluginScanner&       pluginScanner;
     AutomationEngine&    automationEngine;
+    InputBusManager&     inputBusManager;
 
     // ---- Header strip ----
     juce::TextButton addTrackButton  { "+ Track" };

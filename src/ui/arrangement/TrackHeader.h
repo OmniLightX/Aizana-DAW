@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
+#include "engine/InputBusManager.h"
 #include "engine/AutomationEngine.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
@@ -36,7 +37,8 @@ public:
                  AutomationEngine&     automationEngine,
                  PluginManager&        pluginManager,
                  PluginWindowManager&  pluginWindowManager,
-                 PluginScanner&        pluginScanner);
+                 PluginScanner&        pluginScanner,
+                 InputBusManager&      inputBusManager);
 
     void resized()  override;
     void paint     (juce::Graphics& g) override;
@@ -79,6 +81,7 @@ private:
     PluginManager&       pluginManager;
     PluginWindowManager& pluginWindowManager;
     PluginScanner&       pluginScanner;
+    InputBusManager&     inputBusManager;
 
     juce::Label      trackNameLabel;
     juce::TextButton muteButton    { "M"   };
@@ -112,6 +115,8 @@ private:
     void assignMidiInput (te::MidiInputDevice* midiIn);
     /** Sync inputButton text from the currently assigned input device (audio or MIDI). */
     void refreshInputButton();
+    /** Open the Named Input Bus manager (from the "Manage Buses…" dropdown entry). */
+    void handleManageBuses();
 
     void updatePanLabel();
 

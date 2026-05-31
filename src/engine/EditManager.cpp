@@ -83,6 +83,9 @@ void EditManager::createNewEdit()
     // "No Input" even when WaveInputDevices exist. TE's own examples always call this before
     // doing anything with input devices (EngineInPluginDemo, RecordingDemo).
     edit->getTransport().ensureContextAllocated();
+
+    if (onEditChanged)
+        onEditChanged();
 }
 
 //==============================================================================
@@ -101,6 +104,9 @@ void EditManager::loadEdit (const juce::File& file)
 
     // Same as createNewEdit: allocate context so input devices are immediately accessible.
     edit->getTransport().ensureContextAllocated();
+
+    if (onEditChanged)
+        onEditChanged();
 }
 
 //==============================================================================

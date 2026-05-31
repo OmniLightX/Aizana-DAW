@@ -1,5 +1,6 @@
 #include "TrackHeader.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
+#include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "plugins/BuiltInPluginFormat.h"
 
 //==============================================================================
@@ -9,13 +10,15 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
                           AutomationEngine&     automationEngine_,
                           PluginManager&        pluginManager_,
                           PluginWindowManager&  pluginWindowManager_,
-                          PluginScanner&        pluginScanner_)
+                          PluginScanner&        pluginScanner_,
+                          InputBusManager&      inputBusManager_)
     : track             (track_)
     , mixerEngine       (mixerEngine_)
     , automationEngine  (automationEngine_)
     , pluginManager     (pluginManager_)
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner     (pluginScanner_)
+    , inputBusManager   (inputBusManager_)
 {
     // Track name label
     trackNameLabel.setText (track.getName(), juce::dontSendNotification);
@@ -313,59 +316,62 @@ void TrackHeader::showInputMenu()
         return;
     }
 
-    // ---- Audio track: show WaveInputDevices (original logic) ----
+    // ---- Audio track: show Named Input Buses (Phase 2, Studio One model) ----
+    // Tracks bind to named software buses, never to raw hardware. Each bus
+    // resolves to a WaveInputDevice via its hardware channel; the assignment then
+    // flows through the unchanged Phase 1 setTarget() path in assignInput().
+    juce::ignoreUnused (dm);
+
+    // Which WaveInputDevice currently targets this track? (drives the tick mark)
+    te::WaveInputDevice* currentDev = nullptr;
+    for (auto* instance : track.edit.getAllInputDevices())
+    {
+        if (te::isOnTargetTrack (*instance, track, 0))
+        {
+            currentDev = dynamic_cast<te::WaveInputDevice*> (&instance->getInputDevice());
+            break;
+        }
+    }
+
+    const auto buses = inputBusManager.getBuses();
+
     juce::PopupMenu menu;
-    menu.addItem (1, "No Input", true, false);
+    menu.addItem (1, "No Input", true, currentDev == nullptr);
     menu.addSeparator();
 
-    // getWaveInputDevices() calls dispatchPendingUpdates() so the list is
-    // always current even if the async device scan hasn't run yet.
-    int id = 2;
-    for (auto* dev : dm.getWaveInputDevices())
+    // Bus item IDs are 2..(2+N-1); "Manage Buses…" uses a fixed high ID.
+    static constexpr int kManageBusesId = 9000;
+    for (int i = 0; i < buses.size(); ++i)
     {
-        if (dev == nullptr) continue;
-
-        const juce::String name = dev->getName();
-        bool isCurrent = false;
-        for (auto* instance : track.edit.getAllInputDevices())
-        {
-            if (te::isOnTargetTrack (*instance, track, 0)
-                && &instance->getInputDevice() == dev)
-            {
-                isCurrent = true;
-                break;
-            }
-        }
-        menu.addItem (id++, name, true, isCurrent);
+        auto* dev = inputBusManager.resolveBusToDevice (buses[i]);
+        const bool offline   = (dev == nullptr);
+        const bool isCurrent = (dev != nullptr && dev == currentDev);
+        const juce::String label = buses[i].name + (offline ? juce::String ("  (offline)")
+                                                            : juce::String());
+        // Offline = the bus's hardware channel is not present on the current
+        // interface. Shown but disabled; its name stays defined in the session.
+        menu.addItem (2 + i, label, ! offline, isCurrent);
     }
+
+    menu.addSeparator();
+    menu.addItem (kManageBusesId, "Manage Buses\xe2\x80\xa6");
 
     menu.showMenuAsync (
         juce::PopupMenu::Options().withTargetComponent (&inputButton),
-        [this] (int result)
+        [this, buses] (int result)
         {
-            if (result == 1)
-            {
-                assignInput (nullptr);
-                return;
-            }
-            if (result < 2) return;
+            if (result == 1)            { assignInput (nullptr); return; }
+            if (result == kManageBusesId) { handleManageBuses();   return; }
+            if (result < 2)             return;
 
-            auto& dm2 = track.edit.engine.getDeviceManager();
-            int id2 = 2;
-            bool found = false;
-            for (auto* dev : dm2.getWaveInputDevices())
-            {
-                if (dev == nullptr) continue;
-                if (id2 == result)
-                {
-                    assignInput (dev);
-                    found = true;
-                    break;
-                }
-                ++id2;
-            }
-            if (! found)
-                assignInput (nullptr);
+            const int idx = result - 2;
+            if (idx < 0 || idx >= buses.size())
+                return;
+
+            // Re-resolve at selection time — the device list may have changed since
+            // the menu opened. Captured bus structs are stable; device pointers are not.
+            if (auto* dev = inputBusManager.resolveBusToDevice (buses[idx]))
+                assignInput (dev);
         });
 }
 
@@ -481,7 +487,10 @@ void TrackHeader::refreshInputButton()
     {
         if (te::isOnTargetTrack (*instance, track, 0))
         {
-            inputName = instance->getInputDevice().getName();
+            // Prefer the alias — applyToEngine() sets it to the Named Bus name, so the
+            // header shows "Vocal Mic" rather than the raw device name ("Input 1+2").
+            auto& dev = instance->getInputDevice();
+            inputName = dev.getAlias().isNotEmpty() ? dev.getAlias() : dev.getName();
             break;
         }
     }
@@ -493,6 +502,13 @@ void TrackHeader::refreshInputButton()
     inputButton.setButtonText (inputName);
     inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
                                           : "Audio Input — click to change");
+}
+
+void TrackHeader::handleManageBuses()
+{
+    // Slice 3: opens the existing Audio I/O dialog (read-only input list). Slice 4
+    // extends this dialog into a full Named Bus editor (create / rename / map / delete).
+    AudioIOSetupDialog::show (track.edit.engine);
 }
 
 //==============================================================================
