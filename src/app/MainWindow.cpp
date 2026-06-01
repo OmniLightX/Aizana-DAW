@@ -49,6 +49,17 @@ MainWindow::~MainWindow()
     // dangling pointer to the already-destroyed MainComponent.
     juce::MenuBarModel::setMacMainMenu (nullptr);
 #endif
+
+    // Tear down the content component (MainComponent → MixerView → MasterStrip,
+    // ChannelStrips, TrackHeaders — every UI element that listens to the Edit)
+    // BEFORE appState is destroyed. appState owns the Edit; member destruction
+    // runs in this destructor's BODY-then-members order, but the content component
+    // is owned by the base ResizableWindow and would otherwise be destroyed AFTER
+    // appState (in ~ResizableWindow). That order frees the Edit first, then the UI
+    // destructors call edit.getMaster…().state.removeListener() on a dangling Edit
+    // → EXC_BAD_ACCESS (e.g. MasterStrip::~MasterStrip). Clearing content here, while
+    // the destructor body runs (members still alive), keeps the Edit valid during UI teardown.
+    clearContentComponent();
 }
 
 void MainWindow::resized()
