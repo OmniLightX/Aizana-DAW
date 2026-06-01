@@ -66,12 +66,23 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     inputButton.onClick = [this] { showInputMenu(); };
     populateInputSelector();
 
+    // Mono/Stereo toggle — Studio One one-click input channel-format switch.
+    stereoButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff252525));
+    stereoButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d6a4f));  // green when stereo
+    stereoButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
+    stereoButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    stereoButton.setClickingTogglesState (false);  // I-04: drive state explicitly
+    stereoButton.setTooltip ("Mono / Stereo input — click to toggle");
+    stereoButton.onClick = [this] { toggleInputStereo(); };
+
     addAndMakeVisible (trackNameLabel);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (soloButton);
     addAndMakeVisible (armButton);
     addAndMakeVisible (monitorButton);
     addAndMakeVisible (inputButton);
+    addAndMakeVisible (stereoButton);
+    refreshStereoButton();
 
     // Compact volume slider — horizontal, no text box, wired to MixerEngine
     volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -124,16 +135,31 @@ void TrackHeader::resized()
     msrRow.removeFromLeft (2);
     monitorButton.setBounds (msrRow.removeFromLeft (18));
 
-    // Input selector: full width, 14px tall (Studio One style small input label)
+    // Input selector + Mono/Stereo toggle share one 14px row (Studio One style).
     if (controlArea.getHeight() >= 14)
     {
         controlArea.removeFromTop (2);
-        inputButton.setBounds (controlArea.removeFromTop (14));
+        auto inputRow = controlArea.removeFromTop (14);
+
+        // Mono/Stereo toggle on the right — audio tracks only.
+        if (! isMidiTrack())
+        {
+            stereoButton.setBounds (inputRow.removeFromRight (28));
+            inputRow.removeFromRight (2);
+            stereoButton.setVisible (true);
+        }
+        else
+        {
+            stereoButton.setVisible (false);
+        }
+
+        inputButton.setBounds (inputRow);
         inputButton.setVisible (true);
     }
     else
     {
         inputButton.setVisible (false);
+        stereoButton.setVisible (false);
     }
 
 }
@@ -502,12 +528,81 @@ void TrackHeader::refreshInputButton()
     inputButton.setButtonText (inputName);
     inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
                                           : "Audio Input — click to change");
+
+    // Keep the Mono/Stereo button in sync with whatever input is now assigned.
+    refreshStereoButton();
 }
 
 void TrackHeader::handleManageBuses()
 {
     // Opens the Named Bus manager (create / rename / map hardware channel / delete).
     AudioIOSetupDialog::show (track.edit.engine, inputBusManager);
+}
+
+//==============================================================================
+
+int TrackHeader::currentInputBusIndex() const
+{
+    auto& edit = track.edit;
+    for (auto* inst : edit.getAllInputDevices())
+    {
+        if (te::isOnTargetTrack (*inst, track, 0))
+        {
+            if (auto* w = dynamic_cast<te::WaveInputDevice*> (&inst->getInputDevice()))
+            {
+                const auto& chans = w->getChannels();
+                if (! chans.empty())
+                    return inputBusManager.indexOfBusForChannel (chans.front().indexInDevice);
+            }
+            break;
+        }
+    }
+    return -1;
+}
+
+void TrackHeader::refreshStereoButton()
+{
+    if (isMidiTrack())
+        return;
+
+    bool stereo = false;
+    const int busIdx = currentInputBusIndex();
+    if (busIdx >= 0)
+        stereo = inputBusManager.getBus (busIdx).stereo;
+
+    stereoButton.setButtonText (stereo ? "St" : "M");
+    stereoButton.setToggleState (stereo, juce::dontSendNotification);
+}
+
+void TrackHeader::toggleInputStereo()
+{
+    // Clicking selects the track (Studio One behaviour) so S/M/R shortcuts target it.
+    if (onSelectionRequest) onSelectionRequest (this);
+
+    const int busIdx = currentInputBusIndex();
+    if (busIdx < 0)
+    {
+        // No audio input bus assigned yet — there is nothing to switch. Nudge the
+        // user to the bus manager so they can map an input first.
+        handleManageBuses();
+        return;
+    }
+
+    const auto bus = inputBusManager.getBus (busIdx);
+    const bool newStereo = ! bus.stereo;
+    int channel = bus.hwChannel;
+    if (newStereo)
+        channel &= ~1;  // stereo pairs start on an even channel base (0-1, 2-3, …)
+
+    inputBusManager.remapBus (busIdx, channel, newStereo);
+    inputBusManager.applyToEngine();   // reconfigures the hardware channel pairing (mono<->stereo)
+
+    // applyToEngine() rebuilt the wave-device list — re-target the track to the
+    // now mono/stereo device (the old device pointer may no longer exist).
+    if (auto* dev = inputBusManager.resolveBusToDevice (busIdx))
+        assignInput (dev);
+
+    refreshStereoButton();
 }
 
 //==============================================================================

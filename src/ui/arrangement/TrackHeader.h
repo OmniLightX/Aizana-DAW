@@ -94,6 +94,11 @@ private:
      *  Text = device name (truncated) or "No Input". */
     juce::TextButton inputButton;
 
+    /** Mono/Stereo toggle (Studio One style) — sits at the right of the input row.
+     *  One click flips the track's input bus between mono (1 ch) and stereo (N+N+1).
+     *  Shows "M" or "St"; hidden for MIDI tracks. */
+    juce::TextButton stereoButton;
+
     juce::Slider volumeSlider;
     juce::Label  panLabel;
 
@@ -117,6 +122,13 @@ private:
     void refreshInputButton();
     /** Open the Named Input Bus manager (from the "Manage Buses…" dropdown entry). */
     void handleManageBuses();
+
+    /** Index of the Named Bus this track's current audio input maps to, or -1. */
+    int  currentInputBusIndex() const;
+    /** Flip the track's input bus between mono and stereo (Studio One one-click). */
+    void toggleInputStereo();
+    /** Sync the mono/stereo button text + state from the current input bus. */
+    void refreshStereoButton();
 
     void updatePanLabel();
 
