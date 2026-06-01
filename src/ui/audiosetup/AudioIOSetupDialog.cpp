@@ -54,7 +54,7 @@ AudioIOSetupDialog::AudioIOSetupDialog (te::Engine& engine_, InputBusManager& bu
     buildHwInputList();
     rebuildBuses();
 
-    setSize (520, 440);
+    setSize (560, 440);
 }
 
 //==============================================================================
@@ -63,13 +63,16 @@ void AudioIOSetupDialog::buildHwInputList()
 {
     hwInputs.clear();
 
+    // Build the channel list from the RAW hardware input channels (0..N-1), not the
+    // WaveInputDevice list. The device list collapses when channels are stereo-paired
+    // (two channels → one device), but raw channel indices are stable — so the picker
+    // and a bus's hwChannel stay consistent regardless of mono/stereo grouping.
     auto& dm = engine.getDeviceManager();
-    for (auto* dev : dm.getWaveInputDevices())
+    if (auto* ad = dm.deviceManager.getCurrentAudioDevice())
     {
-        if (dev == nullptr) continue;
-        const auto& channels = dev->getChannels();
-        if (channels.empty()) continue;
-        hwInputs.add ({ dev->getName(), channels.front().indexInDevice });
+        const auto names = ad->getInputChannelNames();
+        for (int i = 0; i < names.size(); ++i)
+            hwInputs.add ({ names[i], i });
     }
 }
 
@@ -102,9 +105,11 @@ void AudioIOSetupDialog::rebuildBuses()
         if (sel >= 0)
             row->channelCombo.setSelectedItemIndex (sel, juce::dontSendNotification);
 
-        // Capture the row index. Every structural change (add/delete) calls
-        // rebuildBuses(), which recreates all rows with fresh, correct indices,
-        // so a captured index is valid for the lifetime of this row.
+        row->stereoToggle.setToggleState (buses[i].stereo, juce::dontSendNotification);
+
+        // Capture the row index. Every structural change (add/delete/remap) rebuilds
+        // all rows with fresh, correct indices, so a captured index is valid for the
+        // lifetime of this row.
         const int index = i;
 
         row->onRename = [this, index] (const juce::String& newName)
@@ -117,15 +122,29 @@ void AudioIOSetupDialog::rebuildBuses()
         {
             if (comboItemIndex < 0 || comboItemIndex >= hwInputs.size())
                 return;
-            busManager.remapBus (index, hwInputs[comboItemIndex].channelIndex, false);
+            const auto b = busManager.getBus (index);
+            int channel = hwInputs[comboItemIndex].channelIndex;
+            if (b.stereo) channel &= ~1;        // stereo pairs start on an even channel
+            busManager.remapBus (index, channel, b.stereo);
             busManager.applyToEngine();
+            scheduleRebuild();                  // refresh combos / offline state
+        };
+
+        row->onSetStereo = [this, index] (bool stereo)
+        {
+            const auto b = busManager.getBus (index);
+            int channel = b.hwChannel;
+            if (stereo) channel &= ~1;          // snap to the even pair base (0-1, 2-3, …)
+            busManager.remapBus (index, channel, stereo);
+            busManager.applyToEngine();         // reconfigures the hardware channel pairing
+            scheduleRebuild();
         };
 
         row->onDelete = [this, index]
         {
             busManager.deleteBus (index);
             busManager.applyToEngine();
-            rebuildBuses();
+            scheduleRebuild();
         };
 
         busListContainer.addAndMakeVisible (row);
@@ -141,6 +160,17 @@ void AudioIOSetupDialog::rebuildBuses()
         row->setBounds (0, y, w, kRowHeight - 4);
         y += kRowHeight;
     }
+}
+
+void AudioIOSetupDialog::scheduleRebuild()
+{
+    juce::MessageManager::callAsync (
+        [safe = juce::Component::SafePointer<AudioIOSetupDialog> (this)]()
+        {
+            if (safe == nullptr) return;   // dialog closed before the tick fired
+            safe->rebuildBuses();
+            safe->resized();
+        });
 }
 
 //==============================================================================
@@ -223,6 +253,16 @@ AudioIOSetupDialog::BusRow::BusRow()
     };
     addAndMakeVisible (channelCombo);
 
+    stereoToggle.setButtonText ("Stereo");
+    stereoToggle.setColour (juce::ToggleButton::textColourId, juce::Colour (0xffaaaaaa));
+    stereoToggle.setTooltip ("Pair this channel with the next (even-channel base) into one stereo input");
+    stereoToggle.onClick = [this]
+    {
+        if (onSetStereo)
+            onSetStereo (stereoToggle.getToggleState());
+    };
+    addAndMakeVisible (stereoToggle);
+
     deleteButton.setButtonText (juce::String (juce::CharPointer_UTF8 ("\xe2\x9c\x95")));  // ✕
     deleteButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
     deleteButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffcc5555));
@@ -240,7 +280,9 @@ void AudioIOSetupDialog::BusRow::resized()
     auto area = getLocalBounds();
     deleteButton.setBounds (area.removeFromRight (26));
     area.removeFromRight (6);
-    channelCombo.setBounds (area.removeFromRight (200));
+    stereoToggle.setBounds (area.removeFromRight (68));
+    area.removeFromRight (6);
+    channelCombo.setBounds (area.removeFromRight (168));
     area.removeFromRight (6);
     nameEditor.setBounds   (area);
 }

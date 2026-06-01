@@ -1,4 +1,5 @@
 #include "InputBusManager.h"
+#include <vector>
 
 //==============================================================================
 InputBusManager::InputBusManager (EditManager& em)
@@ -200,10 +201,47 @@ void InputBusManager::applyToEngine()
     if (edit == nullptr)
         return;
 
-    // Push each bus name onto its matching device alias. setAlias() is a cheap
-    // persisted rename (no audio-stream restart) and is the entire binding step
-    // for this slice. Buses whose hardware channel is absent on the current
-    // interface resolve to nullptr and are skipped — the name stays in the session.
+    auto& dm = editManager.getEngine().getDeviceManager();
+
+    // 1. Sync hardware channel pairing to the buses' stereo flags. Channels are
+    //    paired (0-1, 2-3, …); a pair becomes a single stereo WaveInputDevice if
+    //    ANY bus mapped to it is stereo. We only call setDeviceInChannelStereo()
+    //    when a pair's state actually changes, so the common no-op apply (a rename,
+    //    or startup with mono buses) never reconfigures the device list — avoiding
+    //    a needless wave-device-list rebuild.
+    if (auto* ad = dm.deviceManager.getCurrentAudioDevice())
+    {
+        const int numChans = ad->getInputChannelNames().size();
+        const int numPairs = numChans / 2;
+
+        std::vector<bool> wantStereo ((size_t) numPairs, false);
+        for (const auto& bus : getBuses())
+            if (bus.stereo && bus.hwChannel >= 0)
+            {
+                const int pair = bus.hwChannel / 2;
+                if (pair < numPairs)
+                    wantStereo[(size_t) pair] = true;
+            }
+
+        bool changed = false;
+        for (int pair = 0; pair < numPairs; ++pair)
+        {
+            const int baseChan = pair * 2;
+            if (dm.isDeviceInChannelStereo (baseChan) != wantStereo[(size_t) pair])
+            {
+                dm.setDeviceInChannelStereo (baseChan, wantStereo[(size_t) pair]);
+                changed = true;
+            }
+        }
+
+        if (changed)
+            dm.dispatchPendingUpdates();  // flush the wave-device-list rebuild now
+    }
+
+    // 2. Push each bus name onto its matching WaveInputDevice alias — a cheap,
+    //    persisted rename. Buses whose channel is absent (e.g. absorbed into a
+    //    neighbouring stereo pair) resolve to nullptr and are skipped; the name
+    //    stays in the session and the bus shows as offline in the picker.
     for (const auto& bus : getBuses())
         if (auto* dev = resolveBusToDevice (bus))
             dev->setAlias (bus.name);

@@ -52,12 +52,14 @@ private:
     // One editable row per Named Bus.
     struct BusRow : public juce::Component
     {
-        juce::Label      nameEditor;
-        juce::ComboBox   channelCombo;
-        juce::TextButton deleteButton;
+        juce::Label        nameEditor;
+        juce::ComboBox     channelCombo;
+        juce::ToggleButton stereoToggle;
+        juce::TextButton   deleteButton;
 
         std::function<void (const juce::String&)> onRename;
         std::function<void (int /*comboItemIndex*/)> onRemap;
+        std::function<void (bool /*stereo*/)>     onSetStereo;
         std::function<void ()>                    onDelete;
 
         BusRow();
@@ -69,6 +71,10 @@ private:
     juce::OwnedArray<BusRow>  rows;
 
     void rebuildBuses();
+    /** Rebuild the bus rows on the next message tick. Structural changes (delete /
+     *  remap / stereo) are triggered from a row's own callback, so destroying the
+     *  rows synchronously would free the component mid-callback — defer instead. */
+    void scheduleRebuild();
 
     static constexpr int kRowHeight = 30;
 
