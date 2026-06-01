@@ -71,6 +71,15 @@ MainComponent::MainComponent (ApplicationState& appState_)
     setSize (1280, 800);
 }
 
+MainComponent::~MainComponent()
+{
+    // Detach the Named-Bus edit-change callback before this component (and its
+    // InputBusManager member) is destroyed. editManager lives in ApplicationState,
+    // which outlives MainComponent — without this, a later createNewEdit()/loadEdit()
+    // (e.g. during shutdown) would invoke a lambda capturing a dangling `this`.
+    appState.editManager.onEditChanged = nullptr;
+}
+
 void MainComponent::resized()
 {
     auto area = getLocalBounds();

@@ -50,6 +50,7 @@ class MainComponent : public juce::Component,
 {
 public:
     explicit MainComponent (ApplicationState& appState);
+    ~MainComponent() override;
 
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
