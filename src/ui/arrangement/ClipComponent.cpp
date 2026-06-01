@@ -13,7 +13,7 @@ using TimeDur = tracktion::core::TimeDuration;
 ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
                                ClipEditor& clipEditor_, double& pixelsPerSecond_,
                                const EditTool& activeTool)
-    : clip (clip_), editManager (editManager_), clipEditor (clipEditor_),
+    : clip (clip_), clipRef (&clip_), editManager (editManager_), clipEditor (clipEditor_),
       pixelsPerSecond (pixelsPerSecond_), activeTool_ (activeTool)
 {
     setRepaintsOnMouseActivity (true);

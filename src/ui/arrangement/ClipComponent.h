@@ -105,6 +105,13 @@ public:
 
 private:
     te::Clip&          clip;
+    // Keeps the clip object alive for this component's lifetime. ClipComponents are
+    // rebuilt asynchronously (callAsync rebuildTrackRows), but a deferred resized()
+    // → TrackRow::layoutClips can run FIRST and call clip.getPosition() after the clip
+    // was removed from the edit. A reference-counted Ptr keeps the (now detached) Clip
+    // valid until this component is destroyed on rebuild — preventing a dangling-clip
+    // pointer-auth crash. Declared right after `clip` so both bind the same object.
+    te::Clip::Ptr      clipRef;
     EditManager&       editManager;
     ClipEditor&        clipEditor;
     double&            pixelsPerSecond;
