@@ -71,10 +71,6 @@ public:
     /** Index of the first bus with the given name, or -1 if none. */
     int indexOfBusNamed (const juce::String& name) const;
 
-    /** Index of the first bus mapped to the given hardware channel, or -1 if none.
-     *  Used to find a track's bus from its assigned WaveInputDevice's first channel. */
-    int indexOfBusForChannel (int hwChannel) const;
-
     //==============================================================================
     // CRUD — each begins its own undo transaction
     //==============================================================================

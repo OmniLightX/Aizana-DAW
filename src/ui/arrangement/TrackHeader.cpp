@@ -3,6 +3,10 @@
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "plugins/BuiltInPluginFormat.h"
 
+// Track channel-format flag (mono/stereo). Persisted on the track ValueTree and
+// fully decoupled from hardware input pairing — see TrackHeader::toggleTrackStereo().
+static const juce::Identifier kTrackStereoProp { "cloudesTrackStereo" };
+
 //==============================================================================
 
 TrackHeader::TrackHeader (te::AudioTrack&       track_,
@@ -72,8 +76,8 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     stereoButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
     stereoButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
     stereoButton.setClickingTogglesState (false);  // I-04: drive state explicitly
-    stereoButton.setTooltip ("Mono / Stereo input — click to toggle");
-    stereoButton.onClick = [this] { toggleInputStereo(); };
+    stereoButton.setTooltip ("Mono / Stereo track — click to toggle (does not change hardware input)");
+    stereoButton.onClick = [this] { toggleTrackStereo(); };
 
     addAndMakeVisible (trackNameLabel);
     addAndMakeVisible (muteButton);
@@ -541,66 +545,30 @@ void TrackHeader::handleManageBuses()
 
 //==============================================================================
 
-int TrackHeader::currentInputBusIndex() const
-{
-    auto& edit = track.edit;
-    for (auto* inst : edit.getAllInputDevices())
-    {
-        if (te::isOnTargetTrack (*inst, track, 0))
-        {
-            if (auto* w = dynamic_cast<te::WaveInputDevice*> (&inst->getInputDevice()))
-            {
-                const auto& chans = w->getChannels();
-                if (! chans.empty())
-                    return inputBusManager.indexOfBusForChannel (chans.front().indexInDevice);
-            }
-            break;
-        }
-    }
-    return -1;
-}
-
 void TrackHeader::refreshStereoButton()
 {
     if (isMidiTrack())
         return;
 
-    bool stereo = false;
-    const int busIdx = currentInputBusIndex();
-    if (busIdx >= 0)
-        stereo = inputBusManager.getBus (busIdx).stereo;
-
+    const bool stereo = (bool) track.state.getProperty (kTrackStereoProp, false);
     stereoButton.setButtonText (stereo ? "St" : "M");
     stereoButton.setToggleState (stereo, juce::dontSendNotification);
 }
 
-void TrackHeader::toggleInputStereo()
+void TrackHeader::toggleTrackStereo()
 {
     // Clicking selects the track (Studio One behaviour) so S/M/R shortcuts target it.
     if (onSelectionRequest) onSelectionRequest (this);
 
-    const int busIdx = currentInputBusIndex();
-    if (busIdx < 0)
-    {
-        // No audio input bus assigned yet — there is nothing to switch. Nudge the
-        // user to the bus manager so they can map an input first.
-        handleManageBuses();
-        return;
-    }
+    // Pure track channel-format flip — stored on the track state, undoable. It does
+    // NOT reconfigure the hardware input (no setDeviceInChannelStereo), so it never
+    // consumes a neighbouring channel or takes another track's input offline. Real
+    // 2-channel stereo INPUT is a deliberate Bus-manager setting, decoupled from this.
+    const bool newStereo = ! (bool) track.state.getProperty (kTrackStereoProp, false);
 
-    const auto bus = inputBusManager.getBus (busIdx);
-    const bool newStereo = ! bus.stereo;
-    int channel = bus.hwChannel;
-    if (newStereo)
-        channel &= ~1;  // stereo pairs start on an even channel base (0-1, 2-3, …)
-
-    inputBusManager.remapBus (busIdx, channel, newStereo);
-    inputBusManager.applyToEngine();   // reconfigures the hardware channel pairing (mono<->stereo)
-
-    // applyToEngine() rebuilt the wave-device list — re-target the track to the
-    // now mono/stereo device (the old device pointer may no longer exist).
-    if (auto* dev = inputBusManager.resolveBusToDevice (busIdx))
-        assignInput (dev);
+    auto& um = track.edit.getUndoManager();
+    um.beginNewTransaction (newStereo ? "Set Track Stereo" : "Set Track Mono");
+    track.state.setProperty (kTrackStereoProp, newStereo, &um);
 
     refreshStereoButton();
 }

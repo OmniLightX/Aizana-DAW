@@ -77,15 +77,6 @@ int InputBusManager::indexOfBusNamed (const juce::String& name) const
     return -1;
 }
 
-int InputBusManager::indexOfBusForChannel (int hwChannel) const
-{
-    const auto tree = readBusesTree();
-    for (int i = 0; i < tree.getNumChildren(); ++i)
-        if ((int) tree.getChild (i).getProperty (kInputBusHwChannel, -1) == hwChannel)
-            return i;
-    return -1;
-}
-
 //==============================================================================
 // CRUD — each begins its own undo transaction (I-02)
 //==============================================================================

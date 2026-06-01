@@ -125,22 +125,6 @@ TEST_CASE ("InputBusManager: indexOfBusNamed finds buses and returns -1 when abs
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE ("InputBusManager: indexOfBusForChannel finds the bus mapped to a channel",
-           "[buses][phase2]")
-{
-    EditManager em;
-    em.createNewEdit();
-    InputBusManager buses (em);
-
-    buses.createBus ("A", 0, false);
-    buses.createBus ("B", 4, false);
-
-    CHECK (buses.indexOfBusForChannel (4) == 1);   // "B"
-    CHECK (buses.indexOfBusForChannel (0) == 0);   // "A"
-    CHECK (buses.indexOfBusForChannel (9) == -1);  // unmapped channel
-}
-
-// ---------------------------------------------------------------------------
 TEST_CASE ("InputBusManager: createBus is undoable", "[buses][phase2]")
 {
     EditManager em;
