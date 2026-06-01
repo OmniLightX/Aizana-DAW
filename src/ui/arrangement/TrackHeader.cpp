@@ -570,6 +570,13 @@ void TrackHeader::toggleTrackStereo()
     um.beginNewTransaction (newStereo ? "Set Track Stereo" : "Set Track Mono");
     track.state.setProperty (kTrackStereoProp, newStereo, &um);
 
+    // Functional effect (DAW-standard pan law): a MONO track uses a centre-compensated
+    // pan law so a panned mono source keeps perceived loudness across the stereo field;
+    // a STEREO track uses linear balance (pan just trims one side, no centre boost).
+    // Applied to the track's VolumeAndPanPlugin in the same undo transaction.
+    if (auto* vp = track.getVolumePlugin())
+        vp->panLaw.setValue ((int) (newStereo ? te::PanLawLinear : te::PanLaw3dBCenter), &um);
+
     refreshStereoButton();
 }
 
