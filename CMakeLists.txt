@@ -71,6 +71,7 @@ target_sources(Cloudes PRIVATE
     src/engine/MidiRecorder.cpp
     src/engine/MixerEngine.cpp
     src/engine/InputBusManager.cpp
+    src/engine/AICommandBridge.cpp
     src/engine/AutomationEngine.cpp
     src/audio/AudioEngine.cpp
     src/audio/AudioRecorder.cpp

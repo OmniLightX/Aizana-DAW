@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/EditManager.h"
+#include "engine/AICommandBridge.h"
 #include "audio/AudioEngine.h"
 
 /**
@@ -21,6 +22,11 @@ struct ApplicationState
 {
     EditManager editManager;
     AudioEngine audioEngine { editManager.getEngine() };
+
+    // AI→TE command queue bridge — the ONLY path for AI-driven Edit mutations
+    // (background AI thread enqueues, message thread applies; see AICommandBridge).
+    // Phase 2 core: instantiated and ready for the Phase 3 AI worker.
+    AICommandBridge aiCommandBridge { editManager };
 
     ApplicationState()
     {
