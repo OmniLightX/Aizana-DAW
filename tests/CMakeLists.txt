@@ -23,6 +23,7 @@ target_sources(engine_tests PRIVATE
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
+    test_input_buses.cpp
     test_sidechain_routing.cpp
     test_automation_curve.cpp
     # Plugin hosting tests (PLUG-01 through PLUG-04) — require JUCE + Tracktion + CLAP API

@@ -506,9 +506,8 @@ void TrackHeader::refreshInputButton()
 
 void TrackHeader::handleManageBuses()
 {
-    // Slice 3: opens the existing Audio I/O dialog (read-only input list). Slice 4
-    // extends this dialog into a full Named Bus editor (create / rename / map / delete).
-    AudioIOSetupDialog::show (track.edit.engine);
+    // Opens the Named Bus manager (create / rename / map hardware channel / delete).
+    AudioIOSetupDialog::show (track.edit.engine, inputBusManager);
 }
 
 //==============================================================================

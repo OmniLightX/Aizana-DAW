@@ -2,57 +2,75 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
+#include "engine/InputBusManager.h"
 
 namespace te = tracktion::engine;
 
 /**
- * AudioIOSetupDialog — Studio One-style Audio I/O configuration dialog.
+ * AudioIOSetupDialog — Named Input Bus manager (Phase 2, Studio One I/O Setup).
  *
- * Shows all hardware input devices available from the active audio driver.
- * Users can see the canonical name of each input so they know what to
- * select in the per-track input dropdown (TrackHeader::inputButton).
+ * Edits the session's Named Input Buses: the semantic layer between hardware
+ * channels and track inputs. Each bus maps a stable name ("Vocal Mic") to a
+ * hardware input channel; tracks then select buses, never raw hardware.
  *
- * Accessible via: Song Setup > Audio I/O...
+ * Per bus row: editable name · hardware-channel picker · delete.
+ * Plus "+ Add Bus" to create one, mapped to a hardware input.
  *
- * Layout:
- *   - "Inputs" section header
- *   - One row per WaveInputDevice: index, name, channel count, enabled indicator
- *   - "Close" button at bottom
+ * All mutations route through InputBusManager (undoable) and re-apply the
+ * names onto the WaveInputDevice aliases (applyToEngine).
  *
- * Future: support renaming inputs and creating named stereo pairs (v2).
+ * Accessible via: Song Setup ▸ Audio I/O…  and the track input dropdown's
+ * "Manage Buses…" entry.
  */
 class AudioIOSetupDialog : public juce::Component
 {
 public:
-    explicit AudioIOSetupDialog (te::Engine& engine);
+    AudioIOSetupDialog (te::Engine& engine, InputBusManager& busManager);
 
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
-    /** Open the dialog as a modal window. */
-    static void show (te::Engine& engine);
+    /** Open the dialog as an async window. */
+    static void show (te::Engine& engine, InputBusManager& busManager);
 
 private:
-    te::Engine& engine;
+    te::Engine&      engine;
+    InputBusManager& busManager;
 
-    juce::Label       titleLabel;
-    juce::TextButton  closeButton { "Close" };
+    juce::Label      titleLabel;
+    juce::Label      hintLabel;
+    juce::TextButton addBusButton { "+ Add Bus" };
+    juce::TextButton closeButton  { "Close" };
 
-    // One row per hardware input device
-    struct InputRow : public juce::Component
+    // Hardware input options (display name + first hardware channel index),
+    // built once from the device manager and shared by every row's channel combo.
+    struct HwInput { juce::String name; int channelIndex = -1; };
+    juce::Array<HwInput> hwInputs;
+    void buildHwInputList();
+    int  comboIndexForChannel (int channelIndex) const;
+
+    // One editable row per Named Bus.
+    struct BusRow : public juce::Component
     {
-        juce::Label indexLabel;
-        juce::Label nameLabel;
-        juce::Label channelLabel;
-        juce::Label statusLabel;
+        juce::Label      nameEditor;
+        juce::ComboBox   channelCombo;
+        juce::TextButton deleteButton;
 
-        void init (int idx, const juce::String& name, int numChannels, bool enabled);
+        std::function<void (const juce::String&)> onRename;
+        std::function<void (int /*comboItemIndex*/)> onRemap;
+        std::function<void ()>                    onDelete;
+
+        BusRow();
         void resized() override;
     };
 
-    juce::OwnedArray<InputRow> rows;
+    juce::Viewport            busViewport;
+    juce::Component           busListContainer;
+    juce::OwnedArray<BusRow>  rows;
 
-    void populate();
+    void rebuildBuses();
+
+    static constexpr int kRowHeight = 30;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioIOSetupDialog)
 };

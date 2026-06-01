@@ -381,7 +381,7 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
             break;
 
         case SongSetupAudioIO:
-            AudioIOSetupDialog::show (appState.editManager.getEngine());
+            AudioIOSetupDialog::show (appState.editManager.getEngine(), inputBusManager);
             break;
 
         case ExportMixdown:
