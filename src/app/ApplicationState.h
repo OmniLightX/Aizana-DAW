@@ -3,6 +3,7 @@
 #include "engine/EditManager.h"
 #include "engine/AICommandBridge.h"
 #include "audio/AudioEngine.h"
+#include "UIStateManager.h"
 
 /**
  * ApplicationState — Top-level owner of the two foundational singletons.
@@ -27,6 +28,10 @@ struct ApplicationState
     // (background AI thread enqueues, message thread applies; see AICommandBridge).
     // Phase 2 core: instantiated and ready for the Phase 3 AI worker.
     AICommandBridge aiCommandBridge { editManager };
+
+    // "Das Dial" — the single source of truth for UIMode + assist prominence + work
+    // context (Phase 2, Block A). Reads any persisted mode/assist on construction.
+    UIStateManager uiState { editManager.getEngine() };
 
     ApplicationState()
     {
