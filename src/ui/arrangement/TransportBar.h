@@ -42,6 +42,11 @@ private:
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
     juce::TextButton tapTempoButton { "Tap" };
 
+    /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
+     *  Only visible in the Pro view, so the mode button always means "go to Beginner". */
+    juce::TextButton modeButton   { "\xe2\x97\x97 Einsteiger" };  // ◗ Einsteiger
+    juce::TextButton assistButton { "Assist" };
+
     // Tap tempo state — last 4 tap timestamps (juce::Time::getMillisecondCounterHiRes)
     juce::Array<double> tapTimes;
 

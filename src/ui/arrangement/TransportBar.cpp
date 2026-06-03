@@ -154,6 +154,20 @@ TransportBar::TransportBar (ApplicationState& appState_)
     tapTempoButton.setTooltip ("Tap Tempo — click to the beat (resets after 2 s gap)");
     tapTempoButton.onClick = [this] { tapTempoClicked(); };
 
+    // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----
+    modeButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
+    modeButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffcccccc));
+    modeButton.setTooltip ("Zur Einsteiger-Welt wechseln (gleiche Session)");
+    modeButton.onClick = [this] { appState.uiState.setMode (UIStateManager::UIMode::Beginner); };
+
+    assistButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
+    assistButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    assistButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff1fa882));  // teal when on
+    assistButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
+    assistButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    assistButton.setTooltip ("KI-Assist ein-/ausblenden (auch im Pro-Modus)");
+    assistButton.onClick = [this] { appState.uiState.toggleAssist(); };
+
     addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
@@ -161,6 +175,8 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (metronomeButton);
     addAndMakeVisible (loopButton);
     addAndMakeVisible (tapTempoButton);
+    addAndMakeVisible (modeButton);
+    addAndMakeVisible (assistButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
     addAndMakeVisible (timeSigNumerator);
@@ -199,7 +215,11 @@ void TransportBar::resized()
     area.removeFromLeft (4);
     tapTempoButton.setBounds  (area.removeFromLeft (44).withHeight (buttonH));
 
-    // Right side: sample rate → BPM → time sig combos (rightmost to leftmost)
+    // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
+    modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
+    area.removeFromRight (4);
+    assistButton.setBounds (area.removeFromRight (62).withHeight (buttonH));
+    area.removeFromRight (10);
     sampleRateLabel.setBounds    (area.removeFromRight (70));
     area.removeFromRight (4);
     bpmLabel.setBounds           (area.removeFromRight (100));
@@ -248,6 +268,9 @@ void TransportBar::timerCallback()
     playButton.setToggleState (transport.isPlaying(), juce::dontSendNotification);
     recordButton.setToggleState (transport.isRecording(), juce::dontSendNotification);
     loopButton.setToggleState (transport.looping.get(), juce::dontSendNotification);
+
+    // Keep the Dial's assist toggle in sync (assist can change from the Beginner view too)
+    assistButton.setToggleState (appState.uiState.isAssistEnabled(), juce::dontSendNotification);
 
     // Keep BPM label and time signature combos in sync (handles undo/redo changes)
     if (! bpmLabel.isBeingEdited())
