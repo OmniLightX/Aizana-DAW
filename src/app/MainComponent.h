@@ -18,6 +18,7 @@
 #include "ui/export/ExportDialog.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
+#include "ui/beginner/BeginnerView.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -46,7 +47,8 @@
  * insert workflow.
  */
 class MainComponent : public juce::Component,
-                      public juce::MenuBarModel
+                      public juce::MenuBarModel,
+                      private juce::ChangeListener
 {
 public:
     explicit MainComponent (ApplicationState& appState);
@@ -103,6 +105,10 @@ private:
     MixerView       mixerView       { appState, mixerEngine,
                                       pluginManager, pluginWindowManager, pluginScanner };
     // dockedPanel is inside pluginWindowManager — added to our layout via getDockedPanel()
+
+    // Beginner world (Phase 2, Block A) — a second view over the SAME te::Edit.
+    // Visibility is driven by the Dial (appState.uiState); see applyUIMode().
+    BeginnerView    beginnerView    { appState };
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
 
@@ -187,6 +193,11 @@ private:
 
     void toggleMixer();
 
+    // Beginner world (Phase 2, Block A): the Dial swaps which view is visible.
+    // applyUIMode() shows/hides the Pro composition vs the BeginnerView and re-lays out.
+    void applyUIMode();
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+
     // -------------------------------------------------------------------------
     // Menu item IDs — enum avoids magic numbers and ensures uniqueness
     // -------------------------------------------------------------------------
@@ -204,8 +215,9 @@ private:
         EditRedo = 102,
 
         // View menu
-        ViewToggleMixer = 201,
-        ScanPlugins     = 202,
+        ViewToggleMixer    = 201,
+        ScanPlugins        = 202,
+        ViewToggleBeginner = 203,
 
         // Export menu
         ExportMixdown = 301,

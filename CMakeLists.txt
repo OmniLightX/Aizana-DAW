@@ -126,6 +126,7 @@ target_sources(Cloudes PRIVATE
     # Automation lane UI (plan 01-18: MIX-04)
     src/ui/automation/AutomationLane.cpp
     src/ui/arrangement/TrackRow.cpp
+    src/ui/beginner/BeginnerView.cpp
 )
 
 target_include_directories(Cloudes PRIVATE

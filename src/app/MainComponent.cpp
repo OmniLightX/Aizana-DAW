@@ -57,6 +57,12 @@ MainComponent::MainComponent (ApplicationState& appState_)
     updateMixerDivider();
     addAndMakeVisible (mixerDivider);
 
+    // Beginner world (Phase 2, Block A) — a second view over the SAME te::Edit.
+    // Added hidden; the Dial (UIStateManager) decides which view is shown, and
+    // switching is lossless because both views share one Edit (UI-04).
+    addChildComponent (beginnerView);
+    appState.uiState.addChangeListener (this);
+
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
 
@@ -69,10 +75,16 @@ MainComponent::MainComponent (ApplicationState& appState_)
     transportBar.toFront (false);
 
     setSize (1280, 800);
+
+    // Reflect the persisted Dial mode into the initial view visibility + layout.
+    applyUIMode();
 }
 
 MainComponent::~MainComponent()
 {
+    // Stop listening to the Dial before teardown (uiState outlives this component).
+    appState.uiState.removeChangeListener (this);
+
     // Detach the Named-Bus edit-change callback before this component (and its
     // InputBusManager member) is destroyed. editManager lives in ApplicationState,
     // which outlives MainComponent — without this, a later createNewEdit()/loadEdit()
@@ -82,6 +94,13 @@ MainComponent::~MainComponent()
 
 void MainComponent::resized()
 {
+    // Beginner world owns the whole window when the Dial is in Beginner mode.
+    if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
+    {
+        beginnerView.setBounds (getLocalBounds());
+        return;
+    }
+
     auto area = getLocalBounds();
 
     // Fixed transport bar at top (CONTEXT.md: "Fixed transport bar at top")
@@ -250,6 +269,42 @@ void MainComponent::updateMixerDivider()
     mixerDivider.repaint();
 }
 
+//==============================================================================
+// Beginner world (Phase 2, Block A) — the Dial swaps which view is visible.
+// Both views render over the SAME te::Edit, so switching loses no session state.
+//==============================================================================
+
+void MainComponent::applyUIMode()
+{
+    const bool beginner = appState.uiState.getMode() == UIStateManager::UIMode::Beginner;
+
+    beginnerView.setVisible (beginner);
+
+    // Pro composition — hidden in Beginner mode, restored (respecting sub-state) in Pro.
+    transportBar.setVisible    (! beginner);
+    arrangementView.setVisible (! beginner);
+    mixerDivider.setVisible    (! beginner);
+    mixerView.setVisible       (! beginner && mixerVisible);
+    pluginWindowManager.getDockedPanel().setVisible (! beginner);
+    if (pianoRollView != nullptr)
+        pianoRollView->setVisible (! beginner && pianoRollVisible);
+    pianoRollCloseButton.setVisible (! beginner && pianoRollVisible);
+
+    if (beginner) beginnerView.toFront (false);
+    else          transportBar.toFront (false);
+
+    resized();
+}
+
+void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    if (source == &appState.uiState)
+    {
+        applyUIMode();
+        menuItemsChanged();   // refresh the View-menu "Einsteiger-Welt" tick
+    }
+}
+
 void MainComponent::showPianoRoll (te::MidiClip& midiClip)
 {
     // Destroy any existing piano roll, then create new one for this clip
@@ -324,6 +379,10 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             break;
 
         case 3:  // View
+            menu.addItem (ViewToggleBeginner, "Einsteiger-Welt",
+                          true,
+                          appState.uiState.getMode() == UIStateManager::UIMode::Beginner);
+            menu.addSeparator();
             menu.addItem (ViewToggleMixer,
                           mixerVisible ? "Hide Mixer" : "Show Mixer",
                           true,
@@ -378,6 +437,11 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case ScanPlugins:
             handleScanPlugins();
+            break;
+
+        case ViewToggleBeginner:
+            // Broadcasts → changeListenerCallback applies the mode + refreshes the menu.
+            appState.uiState.toggleMode();
             break;
 
         case SongSetupAudioIO:
