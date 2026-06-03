@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <vector>
+#include "ai/HeuristicFeedbackEngine.h"   // Feedback + IntentEngine::Intent
 
 struct ApplicationState;
 class MixerEngine;
@@ -48,6 +49,11 @@ private:
     juce::Rectangle<int> railCardRect (int i) const;
     void showReveal (const juce::String& title, const juce::String& body);
 
+    // Block B wiring: live feedback + executing intents through the bridge.
+    void refreshFeedback();                              // poll HeuristicFeedbackEngine
+    void runIntent (IntentEngine::Intent intent);        // plan -> bridge -> Reveal
+    static bool matchKeyword (const juce::String& text, IntentEngine::Intent& out);
+
     // "The Reveal" overlay — its own child Component so it paints above the rail
     // chrome (z-order) and captures clicks. ok closes; showPro bridges to the Pro view.
     struct Reveal : public juce::Component
@@ -77,6 +83,10 @@ private:
     MixerEngine&         mixerEngine;
     std::vector<LaneVM>  lanes;
     juce::String         lastSignature;
+
+    // Live Coach feedback (from HeuristicFeedbackEngine), refreshed while visible.
+    std::vector<HeuristicFeedbackEngine::Feedback> feedback;
+    juce::String lastFeedbackSig;   // change-detect to avoid needless rebinds/repaints
 
     // The Dial — mirrors the real UIStateManager (UIMode + assist prominence).
     juce::TextButton beginnerSeg { "\xe2\x97\x97 Einfach" };  // ◗ Einfach

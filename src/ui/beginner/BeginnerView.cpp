@@ -56,12 +56,6 @@ namespace
         }
     }
 
-    // Static preview feedback (Block B replaces with the live HeuristicFeedbackEngine).
-    const char* kFeedback[3] = {
-        "Der Gesang sitzt etwas hinter den Drums.",
-        "Die Drums vertragen mehr Punch.",
-        "Dein Mix ist leiser als typische Pop-Songs."
-    };
 }
 
 //==============================================================================
@@ -168,12 +162,7 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
         addChildComponent (b);
     };
     styleAct (act1); styleAct (act2); styleAct (act3);
-    act1.onClick = [this] { showReveal ("Gesang nach vorne geholt",
-        "EQ: +2.5 dB @ 3 kHz (Praesenz)\nKompressor: 3:1, -4 dB Gain-Reduction\nPegel: +1.5 dB  -  De-Esser: 6-8 kHz"); };
-    act2.onClick = [this] { showReveal ("Drums punchiger gemacht",
-        "Drum-Bus-Kompressor: 4:1, schneller Attack\nEQ: +3 dB @ 80 Hz, +2 dB @ 5 kHz\nTransienten: Attack +20%"); };
-    act3.onClick = [this] { showReveal ("Lauter & wettbewerbsfaehig",
-        "Master-Limiter: Ceiling -1 dBTP\nZiel: -10 LUFS (Pop-Referenz)\nGlue-Kompressor: 2:1 auf dem Master-Bus"); };
+    // act button labels + onClick handlers are (re)bound per feedback item in refreshFeedback().
 
     cmdInput.setTextToShowWhenEmpty ("...oder sag's mir selbst", kTextMuted);
     cmdInput.setColour (juce::TextEditor::backgroundColourId, kBgDeep);
@@ -181,8 +170,12 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
     cmdInput.setColour (juce::TextEditor::textColourId, kText);
     cmdInput.onReturnKey = [this]
     {
-        showReveal ("Absicht ausgefuehrt",
-            "Cloudes hat deine Absicht in echte, editierbare Plugin-Ketten uebersetzt - genau 1 Undo-Schritt.");
+        IntentEngine::Intent matched;
+        if (matchKeyword (cmdInput.getText(), matched))
+            runIntent (matched);   // heuristic keyword-lite; real NLP is Phase 3
+        else
+            showReveal ("Noch nicht verstanden",
+                        "Probier einen der Vorschlaege oben - freie Texteingabe kommt mit Phase 3.");
         cmdInput.clear();
     };
     addChildComponent (cmdInput);
@@ -225,6 +218,66 @@ void BeginnerView::showReveal (const juce::String& title, const juce::String& bo
     reveal.show (title, body);
 }
 
+void BeginnerView::refreshFeedback()
+{
+    if (! assistOn())
+        return;
+
+    auto fresh = appState.heuristicFeedbackEngine.current();
+
+    juce::String sig;
+    for (auto& f : fresh)
+        sig << f.message << (f.hasIntent ? "*" : "") << '|';
+    if (sig == lastFeedbackSig)
+        return;                       // no change -> avoid needless rebind/repaint
+    lastFeedbackSig = sig;
+    feedback = std::move (fresh);
+
+    juce::TextButton* acts[3] { &act1, &act2, &act3 };
+    for (int i = 0; i < 3; ++i)
+        if (i < (int) feedback.size() && feedback[i].hasIntent)
+        {
+            const auto intent = feedback[i].suggestedIntent;
+            acts[i]->setButtonText (IntentEngine::label (intent));
+            acts[i]->onClick = [this, intent] { runIntent (intent); };
+        }
+
+    resized();
+    repaint();
+}
+
+void BeginnerView::runIntent (IntentEngine::Intent intent)
+{
+    // Target: none for now -> IntentEngine resolves to the first audio track;
+    // loudness/glue intents ignore the target (they act on the master).
+    auto plan = appState.intentEngine.plan (intent, nullptr);
+    if (! plan.valid)
+        return;
+
+    // Real, editable mechanic — applied on the message thread as ONE undo step.
+    appState.aiCommandBridge.enqueueBatch (plan.description, plan.commands);
+    showReveal (plan.description, plan.mechanic);
+}
+
+bool BeginnerView::matchKeyword (const juce::String& text, IntentEngine::Intent& out)
+{
+    const auto s = text.toLowerCase();
+    using I = IntentEngine::Intent;
+    if (s.contains ("vorne") || s.contains ("gesang"))   { out = I::VocalForward;      return true; }
+    if (s.contains ("leis"))                              { out = I::QuieterInMix;      return true; }
+    if (s.contains ("mittig") || s.contains ("zentr"))    { out = I::CenterInMix;       return true; }
+    if (s.contains ("warm"))                              { out = I::Warmer;            return true; }
+    if (s.contains ("klar") || s.contains ("praesen"))    { out = I::Clearer;           return true; }
+    if (s.contains ("punch") || s.contains ("druck"))     { out = I::MorePunch;         return true; }
+    if (s.contains ("hall") || s.contains ("raum"))       { out = I::MoreReverb;        return true; }
+    if (s.contains ("breit"))                             { out = I::Wider;             return true; }
+    if (s.contains ("naeh") || s.contains ("nah"))        { out = I::Closer;            return true; }
+    if (s.contains ("laut"))                              { out = I::Louder;            return true; }
+    if (s.contains ("verkleb") || s.contains ("glue"))    { out = I::GlueMix;           return true; }
+    if (s.contains ("pop") || s.contains ("referenz"))    { out = I::MatchPopReference; return true; }
+    return false;
+}
+
 //==============================================================================
 void BeginnerView::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
@@ -241,9 +294,11 @@ void BeginnerView::visibilityChanged()
     if (isVisible())
     {
         rebuildModel();
+        lastFeedbackSig = {};        // force a feedback refresh on show
+        refreshFeedback();
         resized();
         repaint();
-        startTimer (1000);   // safety poll while visible — heavy edits happen in Pro
+        startTimer (1000);   // poll lanes + Coach feedback while visible
     }
     else
     {
@@ -259,6 +314,7 @@ void BeginnerView::timerCallback()
         resized();
         repaint();
     }
+    refreshFeedback();   // live Coach feedback (no-op when assist off or unchanged)
 }
 
 void BeginnerView::syncFromState()
@@ -365,17 +421,23 @@ void BeginnerView::resized()
     rx -= gap + 64; proSeg.setBounds       (rx, top, 64, h);
     rx -= gap + 96; beginnerSeg.setBounds   (rx, top, 96, h);
 
-    // Coach rail children — visible only when assist is on.
+    // Coach rail children — visible only when assist is on; one action button per
+    // feedback item that carries a 1-click intent.
     const bool a = assistOn();
-    act1.setVisible (a); act2.setVisible (a); act3.setVisible (a); cmdInput.setVisible (a);
-    if (a)
+    cmdInput.setVisible (a);
+    juce::TextButton* acts[3] { &act1, &act2, &act3 };
+    for (int i = 0; i < 3; ++i)
     {
-        juce::TextButton* acts[3] { &act1, &act2, &act3 };
-        for (int i = 0; i < 3; ++i)
+        const bool show = a && i < (int) feedback.size() && feedback[i].hasIntent;
+        acts[i]->setVisible (show);
+        if (show)
         {
             auto c = railCardRect (i);
-            acts[i]->setBounds (c.getX() + 12, c.getBottom() - 34, 168, 26);
+            acts[i]->setBounds (c.getX() + 12, c.getBottom() - 34, 180, 26);
         }
+    }
+    if (a)
+    {
         auto rail = railArea().reduced (16);
         cmdInput.setBounds (rail.getX(), rail.getBottom() - 34, rail.getWidth(), 30);
     }
@@ -506,17 +568,19 @@ void BeginnerView::paint (juce::Graphics& g)
         g.setFont (juce::FontOptions (12.0f));
         g.drawText ("achtet auf deinen Mix", inner.getX() + 40, inner.getY() + 17, 220, 16, juce::Justification::centredLeft);
 
-        for (int i = 0; i < 3; ++i)
+        const int n = juce::jmin (3, (int) feedback.size());
+        for (int i = 0; i < n; ++i)
         {
             auto c = railCardRect (i);
             g.setColour (kSurfaceRaised);
             g.fillRoundedRectangle (c.toFloat(), 8.0f);
-            g.setColour (kTeal);
+            g.setColour (feedback[i].hasIntent ? kTeal : kTextFaint);
             g.fillRect (c.getX(), c.getY() + 8, 3, c.getHeight() - 16);   // left accent
             g.setColour (kTextSecondary);
             g.setFont (juce::FontOptions (13.0f));
-            g.drawFittedText (kFeedback[i], c.getX() + 14, c.getY() + 10, c.getWidth() - 24, 40,
-                              juce::Justification::topLeft, 2);
+            const int textH = feedback[i].hasIntent ? 40 : (c.getHeight() - 20);
+            g.drawFittedText (feedback[i].message, c.getX() + 14, c.getY() + 10, c.getWidth() - 24, textH,
+                              juce::Justification::topLeft, 3);
         }
     }
 
