@@ -6,6 +6,7 @@
 #include "UIStateManager.h"
 #include "ai/IntentEngine.h"
 #include "ai/HeuristicFeedbackEngine.h"
+#include "ai/AIEngine.h"
 
 /**
  * ApplicationState — Top-level owner of the two foundational singletons.
@@ -42,6 +43,11 @@ struct ApplicationState
     // The conversation (Phase 2, Block B) — master meter -> jargon-free feedback +
     // 1-click intents for the Beginner Coach rail. Passive; the UI polls current().
     HeuristicFeedbackEngine heuristicFeedbackEngine { audioEngine };
+
+    // The background worker pool (Phase 2, Block B) — runs AI work off the audio/message
+    // threads and routes any Edit mutation back through aiCommandBridge. Stub backend
+    // (OnnxModelRunner) for now; Phase 3's real worker slots in unchanged.
+    AIEngine aiEngine { aiCommandBridge };
 
     ApplicationState()
     {

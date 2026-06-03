@@ -28,6 +28,7 @@ target_sources(engine_tests PRIVATE
     test_ui_state_manager.cpp
     test_intent_engine.cpp
     test_heuristic_feedback.cpp
+    test_ai_engine.cpp
     test_sidechain_routing.cpp
     test_automation_curve.cpp
     # Plugin hosting tests (PLUG-01 through PLUG-04) — require JUCE + Tracktion + CLAP API
@@ -48,6 +49,8 @@ target_sources(engine_tests PRIVATE
     ../src/app/UIStateManager.cpp
     ../src/ai/IntentEngine.cpp
     ../src/ai/HeuristicFeedbackEngine.cpp
+    ../src/ai/AIEngine.cpp
+    ../src/ai/OnnxModelRunner.cpp
     ../src/engine/EditManager.cpp
     ../src/engine/ClipEditor.cpp
     ../src/engine/MidiRecorder.cpp
