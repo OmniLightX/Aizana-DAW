@@ -1,39 +1,64 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <vector>
 
 struct ApplicationState;
+class MixerEngine;
 
 /**
- * BeginnerView — the Einsteiger-Welt (Phase 2, Block A, Slice 1: the shell).
+ * BeginnerView — the Einsteiger-Welt (Phase 2, Block A).
  *
- * A second, calm UI surface that renders over the *same* te::Edit as the Pro view
- * (no logic duplication — same engines, same session). The Dial (UIStateManager)
- * decides which view is visible; MainComponent swaps them. Switching is lossless
- * because both are just render layers over one Edit (UI-04 by construction).
+ * A second, calm UI surface rendering over the *same* te::Edit as the Pro view
+ * (no logic duplication). The Dial (UIStateManager) decides which view is visible;
+ * MainComponent swaps them losslessly (UI-04 by construction).
  *
- * Slice 1 = the shell + a working Dial (mode segmented + assist toggle) so the two
- * views can be switched both ways. Grouped lanes (Slice 2), the dockable Coach rail
- * (Slice 3), and intent + "The Reveal" (Slice 4) land on top of this.
+ * Slice 1 = shell + working Dial.
+ * Slice 2 = grouped lanes: the song shown as friendly named lanes built live from
+ *           the real Edit. Named Bus Channels (MixerEngine) become groups that
+ *           expand inline to their routed tracks (e.g. Drums -> Kick/Snare/HiHat);
+ *           plain tracks are atomic lanes. This is the same grouping that Phase 3's
+ *           stem-import will populate automatically.
  *
- * Listens to UIStateManager so its Dial controls stay in sync when the mode/assist
- * is changed elsewhere (e.g. the View menu or — later — the TransportBar dial).
+ * Live sync: rebuilt when shown (visibilityChanged) and via a slow Timer that
+ * detects track/bus changes by signature — the heavy DAW editing happens in Pro,
+ * so a 1 Hz safety poll while visible is ample.
  */
 class BeginnerView : public juce::Component,
-                     private juce::ChangeListener
+                     private juce::ChangeListener,
+                     private juce::Timer
 {
 public:
-    explicit BeginnerView (ApplicationState& appState);
+    BeginnerView (ApplicationState& appState, MixerEngine& mixerEngine);
     ~BeginnerView() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void visibilityChanged() override;
 
 private:
     void changeListenerCallback (juce::ChangeBroadcaster* source) override;
-    void syncFromState();   // reflect UIStateManager into the Dial controls
+    void timerCallback() override;
+    void syncFromState();          // reflect UIStateManager into the Dial controls
+    void rebuildModel();           // build the lane model from the live Edit
+    juce::String modelSignature() const;
+    void layoutLanes();            // compute per-lane rects (shared by paint + mouseDown)
 
-    ApplicationState& appState;
+    struct LaneVM
+    {
+        juce::String              name;
+        juce::Colour              tint;
+        bool                      isGroup  = false;
+        bool                      expanded = false;
+        std::vector<juce::String> children;
+        juce::Rectangle<int>      rowBounds;   // header row (for hit-testing)
+    };
+
+    ApplicationState&    appState;
+    MixerEngine&         mixerEngine;
+    std::vector<LaneVM>  lanes;
+    juce::String         lastSignature;
 
     // The Dial — mirrors the real UIStateManager (UIMode + assist prominence).
     juce::TextButton beginnerSeg { "\xe2\x97\x97 Einfach" };  // ◗ Einfach

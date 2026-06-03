@@ -108,7 +108,8 @@ private:
 
     // Beginner world (Phase 2, Block A) — a second view over the SAME te::Edit.
     // Visibility is driven by the Dial (appState.uiState); see applyUIMode().
-    BeginnerView    beginnerView    { appState };
+    // Needs MixerEngine to read Named-Bus grouping (declared earlier — init order OK).
+    BeginnerView    beginnerView    { appState, mixerEngine };
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
 
