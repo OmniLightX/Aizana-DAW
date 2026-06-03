@@ -67,6 +67,7 @@ target_sources(Cloudes PRIVATE
     src/app/MainComponent.cpp
     src/app/ApplicationState.cpp
     src/app/UIStateManager.cpp
+    src/ai/IntentEngine.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/MidiRecorder.cpp

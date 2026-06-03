@@ -4,6 +4,7 @@
 #include "engine/AICommandBridge.h"
 #include "audio/AudioEngine.h"
 #include "UIStateManager.h"
+#include "ai/IntentEngine.h"
 
 /**
  * ApplicationState — Top-level owner of the two foundational singletons.
@@ -32,6 +33,10 @@ struct ApplicationState
     // "Das Dial" — the single source of truth for UIMode + assist prominence + work
     // context (Phase 2, Block A). Reads any persisted mode/assist on construction.
     UIStateManager uiState { editManager.getEngine() };
+
+    // The translator (Phase 2, Block B) — intent -> editable TE command batches,
+    // applied via aiCommandBridge as one undo step. Heuristic for now; ML in Phase 3.
+    IntentEngine intentEngine { editManager };
 
     ApplicationState()
     {
