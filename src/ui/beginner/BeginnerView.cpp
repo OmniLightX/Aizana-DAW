@@ -18,14 +18,16 @@ namespace
     const juce::Colour kPrimary       { 0xff4488ff };  // selection / primary
     const juce::Colour kGold          { 0xffddcc00 };  // Pro accent
     const juce::Colour kTeal          { 0xff1fa882 };  // assist / Cloudes voice
+    const juce::Colour kTealInk       { 0xff06241c };
+    const juce::Colour kGreen         { 0xff00cc44 };
 
-    // Layout
-    constexpr int kTopBar   = 56;
-    constexpr int kLaneH    = 54;
-    constexpr int kChildH   = 30;
-    constexpr int kChildGap = 4;
-    constexpr int kLaneGap  = 8;
-    constexpr int kColMaxW  = 760;
+    constexpr int kTopBar  = 56;
+    constexpr int kLaneH   = 54;
+    constexpr int kChildH  = 30;
+    constexpr int kChildGap= 4;
+    constexpr int kLaneGap = 8;
+    constexpr int kColMaxW = 720;
+    constexpr int kRailW   = 340;
 
     juce::Colour tintForName (const juce::String& n, int idx)
     {
@@ -53,8 +55,91 @@ namespace
             g.fillRoundedRectangle (area.getX() + i * w, midY - h * 0.5f, juce::jmax (1.0f, w - 2.0f), h, 1.0f);
         }
     }
+
+    // Static preview feedback (Block B replaces with the live HeuristicFeedbackEngine).
+    const char* kFeedback[3] = {
+        "Der Gesang sitzt etwas hinter den Drums.",
+        "Die Drums vertragen mehr Punch.",
+        "Dein Mix ist leiser als typische Pop-Songs."
+    };
 }
 
+//==============================================================================
+// The Reveal overlay
+//==============================================================================
+BeginnerView::Reveal::Reveal()
+{
+    auto style = [this] (juce::TextButton& b, juce::Colour col, juce::Colour txt)
+    {
+        b.setColour (juce::TextButton::buttonColourId, col);
+        b.setColour (juce::TextButton::textColourOffId, txt);
+        addAndMakeVisible (b);
+    };
+    style (ok,      kSurfaceRaised, juce::Colours::white);
+    style (showPro, kPrimary,       juce::Colours::white);
+    ok.onClick      = [this] { setVisible (false); };
+    showPro.onClick = [this] { setVisible (false); if (onShowPro) onShowPro(); };
+}
+
+void BeginnerView::Reveal::show (const juce::String& t, const juce::String& b)
+{
+    title = t; body = b;
+    setVisible (true);
+    toFront (false);
+    resized();
+    repaint();
+}
+
+void BeginnerView::Reveal::mouseDown (const juce::MouseEvent&)
+{
+    setVisible (false);   // click the dim backdrop to dismiss
+}
+
+void BeginnerView::Reveal::resized()
+{
+    auto card = juce::Rectangle<int> (0, 0, 560, 232).withCentre (getLocalBounds().getCentre());
+    auto in   = card.reduced (22);
+    showPro.setBounds (in.getRight() - 130, in.getBottom() - 30, 130, 30);
+    ok.setBounds      (in.getRight() - 130 - 96, in.getBottom() - 30, 88, 30);
+}
+
+void BeginnerView::Reveal::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black.withAlpha (0.55f));
+
+    auto card = juce::Rectangle<int> (0, 0, 560, 232).withCentre (getLocalBounds().getCentre());
+    g.setColour (kSurfaceRaised);
+    g.fillRoundedRectangle (card.toFloat(), 13.0f);
+    g.setColour (kPrimary);
+    g.drawRoundedRectangle (card.toFloat().reduced (0.75f), 13.0f, 1.5f);
+
+    auto in = card.reduced (22);
+
+    // OK badge + title
+    g.setColour (kGreen);
+    g.fillEllipse ((float) in.getX(), (float) in.getY(), 24.0f, 24.0f);
+    g.setColour (kTealInk);
+    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+    g.drawText (juce::String::charToString ((juce::juce_wchar) 0x2713), in.getX(), in.getY(), 24, 24, juce::Justification::centred);
+    g.setColour (kText);
+    g.setFont (juce::FontOptions (18.0f, juce::Font::bold));
+    g.drawText (title, in.getX() + 34, in.getY(), in.getWidth() - 34, 26, juce::Justification::centredLeft, true);
+
+    // "what I did" block
+    auto bodyRect = juce::Rectangle<int> (in.getX(), in.getY() + 38, in.getWidth(), 96);
+    g.setColour (kBgDeep);
+    g.fillRoundedRectangle (bodyRect.toFloat(), 8.0f);
+    g.setColour (kTextSecondary);
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawFittedText (body, bodyRect.reduced (12), juce::Justification::topLeft, 5);
+
+    g.setColour (kTextFaint);
+    g.setFont (juce::FontOptions (11.0f));
+    g.drawText ("Vorschau - die Engine kommt in Block B. Alles wird echte, editierbare Mechanik.",
+                in.getX(), in.getBottom() - 26, in.getWidth() - 230, 16, juce::Justification::centredLeft, true);
+}
+
+//==============================================================================
 BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngine_)
     : appState (appState_), mixerEngine (mixerEngine_)
 {
@@ -75,6 +160,36 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
     proSeg.onClick       = [this] { appState.uiState.setMode (UIStateManager::UIMode::Pro); };
     assistToggle.onClick = [this] { appState.uiState.toggleAssist(); };
 
+    // Coach rail action buttons (static previews -> Block B wires the real IntentEngine).
+    auto styleAct = [this] (juce::TextButton& b)
+    {
+        b.setColour (juce::TextButton::buttonColourId, kTeal);
+        b.setColour (juce::TextButton::textColourOffId, kTealInk);
+        addChildComponent (b);
+    };
+    styleAct (act1); styleAct (act2); styleAct (act3);
+    act1.onClick = [this] { showReveal ("Gesang nach vorne geholt",
+        "EQ: +2.5 dB @ 3 kHz (Praesenz)\nKompressor: 3:1, -4 dB Gain-Reduction\nPegel: +1.5 dB  -  De-Esser: 6-8 kHz"); };
+    act2.onClick = [this] { showReveal ("Drums punchiger gemacht",
+        "Drum-Bus-Kompressor: 4:1, schneller Attack\nEQ: +3 dB @ 80 Hz, +2 dB @ 5 kHz\nTransienten: Attack +20%"); };
+    act3.onClick = [this] { showReveal ("Lauter & wettbewerbsfaehig",
+        "Master-Limiter: Ceiling -1 dBTP\nZiel: -10 LUFS (Pop-Referenz)\nGlue-Kompressor: 2:1 auf dem Master-Bus"); };
+
+    cmdInput.setTextToShowWhenEmpty ("...oder sag's mir selbst", kTextMuted);
+    cmdInput.setColour (juce::TextEditor::backgroundColourId, kBgDeep);
+    cmdInput.setColour (juce::TextEditor::outlineColourId, kBorder);
+    cmdInput.setColour (juce::TextEditor::textColourId, kText);
+    cmdInput.onReturnKey = [this]
+    {
+        showReveal ("Absicht ausgefuehrt",
+            "Cloudes hat deine Absicht in echte, editierbare Plugin-Ketten uebersetzt - genau 1 Undo-Schritt.");
+        cmdInput.clear();
+    };
+    addChildComponent (cmdInput);
+
+    addChildComponent (reveal);
+    reveal.onShowPro = [this] { appState.uiState.setMode (UIStateManager::UIMode::Pro); };
+
     appState.uiState.addChangeListener (this);
     syncFromState();
     rebuildModel();
@@ -86,11 +201,37 @@ BeginnerView::~BeginnerView()
 }
 
 //==============================================================================
+bool BeginnerView::assistOn() const
+{
+    return appState.uiState.isAssistEnabled();
+}
+
+juce::Rectangle<int> BeginnerView::railArea() const
+{
+    if (! assistOn())
+        return {};
+    return { getWidth() - kRailW, kTopBar, kRailW, getHeight() - kTopBar };
+}
+
+juce::Rectangle<int> BeginnerView::railCardRect (int i) const
+{
+    auto rail = railArea().reduced (16);
+    constexpr int headerH = 52, cardH = 96, gap = 10;
+    return { rail.getX(), rail.getY() + headerH + i * (cardH + gap), rail.getWidth(), cardH };
+}
+
+void BeginnerView::showReveal (const juce::String& title, const juce::String& body)
+{
+    reveal.show (title, body);
+}
+
+//==============================================================================
 void BeginnerView::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
     if (source == &appState.uiState)
     {
         syncFromState();
+        resized();      // assist toggle changes the rail -> lane column reflows
         repaint();
     }
 }
@@ -200,9 +341,10 @@ void BeginnerView::rebuildModel()
 //==============================================================================
 void BeginnerView::layoutLanes()
 {
-    const int colW = juce::jmin (getWidth() - 48, kColMaxW);
-    const int x    = (getWidth() - colW) / 2;
-    int y          = kTopBar + 28;   // below top bar + a little breathing room
+    const int avail = assistOn() ? getWidth() - kRailW : getWidth();
+    const int colW  = juce::jmin (avail - 48, kColMaxW);
+    const int x     = (avail - colW) / 2;
+    int y           = kTopBar + 28;
 
     for (auto& l : lanes)
     {
@@ -216,11 +358,29 @@ void BeginnerView::layoutLanes()
 
 void BeginnerView::resized()
 {
+    // Dial (top-right) — always present.
     constexpr int pad = 16, gap = 8, h = 30, top = 13;
     int rx = getWidth() - pad;
     rx -= 90;       assistToggle.setBounds (rx, top, 90, h);
     rx -= gap + 64; proSeg.setBounds       (rx, top, 64, h);
     rx -= gap + 96; beginnerSeg.setBounds   (rx, top, 96, h);
+
+    // Coach rail children — visible only when assist is on.
+    const bool a = assistOn();
+    act1.setVisible (a); act2.setVisible (a); act3.setVisible (a); cmdInput.setVisible (a);
+    if (a)
+    {
+        juce::TextButton* acts[3] { &act1, &act2, &act3 };
+        for (int i = 0; i < 3; ++i)
+        {
+            auto c = railCardRect (i);
+            acts[i]->setBounds (c.getX() + 12, c.getBottom() - 34, 168, 26);
+        }
+        auto rail = railArea().reduced (16);
+        cmdInput.setBounds (rail.getX(), rail.getBottom() - 34, rail.getWidth(), 30);
+    }
+
+    reveal.setBounds (getLocalBounds());
 
     layoutLanes();
 }
@@ -253,92 +413,121 @@ void BeginnerView::paint (juce::Graphics& g)
 
     g.setColour (kText);
     g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    g.drawText ("Cloudes", bar.withTrimmedLeft (16).withWidth (110),
-                juce::Justification::centredLeft, false);
+    g.drawText ("Cloudes", bar.withTrimmedLeft (16).withWidth (110), juce::Justification::centredLeft, false);
     g.setColour (kTextMuted);
     g.setFont (juce::FontOptions (13.0f));
-    g.drawText ("Mein Song", bar.withTrimmedLeft (96).withWidth (200),
-                juce::Justification::centredLeft, false);
-
-    // ── empty state ─────────────────────────────────────────────────────────--
-    if (lanes.empty())
-    {
-        g.setColour (kTextMuted);
-        g.setFont (juce::FontOptions (15.0f));
-        g.drawText ("Noch keine Spuren \xe2\x80\x94 oben rechts zu Pro wechseln und welche anlegen.",
-                    getLocalBounds().withTrimmedTop (kTopBar),
-                    juce::Justification::centred, false);
-        return;
-    }
+    g.drawText ("Mein Song", bar.withTrimmedLeft (96).withWidth (200), juce::Justification::centredLeft, false);
 
     layoutLanes();
 
-    for (auto& l : lanes)
+    // ── lanes (or empty state) ─────────────────────────────────────────────────
+    if (lanes.empty())
     {
-        const auto r = l.rowBounds;
-        g.setColour (kSurfaceRaised);
-        g.fillRoundedRectangle (r.toFloat(), 9.0f);
-        g.setColour (kBorder);
-        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 9.0f, 1.0f);
-
-        const bool expandable = l.isGroup && ! l.children.empty();
-
-        // caret (groups only)
-        if (expandable)
+        const int avail = assistOn() ? getWidth() - kRailW : getWidth();
+        g.setColour (kTextMuted);
+        g.setFont (juce::FontOptions (15.0f));
+        g.drawText ("Noch keine Spuren - oben rechts zu Pro wechseln und welche anlegen.",
+                    juce::Rectangle<int> (0, kTopBar, avail, getHeight() - kTopBar),
+                    juce::Justification::centred, false);
+    }
+    else
+    {
+        for (auto& l : lanes)
         {
-            g.setColour (kTextMuted);
-            g.setFont (juce::FontOptions (12.0f));
-            const auto caret = juce::String::charToString (l.expanded ? (juce::juce_wchar) 0x25BE
-                                                                       : (juce::juce_wchar) 0x25B8);
-            g.drawText (caret, r.getX() + 12, r.getY() + 17, 20, 20, juce::Justification::centred);
-        }
+            const auto r = l.rowBounds;
+            g.setColour (kSurfaceRaised);
+            g.fillRoundedRectangle (r.toFloat(), 9.0f);
+            g.setColour (kBorder);
+            g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 9.0f, 1.0f);
 
-        // colour swatch
-        const int swatchX = r.getX() + (expandable ? 38 : 16);
-        g.setColour (l.tint);
-        g.fillRoundedRectangle ((float) swatchX, (float) (r.getY() + 10), 10.0f, 34.0f, 3.0f);
-
-        // name (+ child count for groups)
-        const int nameX = swatchX + 22;
-        g.setColour (kText);
-        g.setFont (juce::FontOptions (15.0f, l.isGroup ? juce::Font::bold : juce::Font::plain));
-        juce::String label = l.name;
-        if (expandable) label << "   (" << (int) l.children.size() << ")";
-        g.drawText (label, nameX, r.getY(), 220, r.getHeight(), juce::Justification::centredLeft, true);
-
-        // simplified waveform on the right
-        auto wave = juce::Rectangle<int> (nameX + 230, r.getY() + 12, r.getRight() - (nameX + 230) - 16, r.getHeight() - 24);
-        if (wave.getWidth() > 40)
-            drawWave (g, wave, l.tint, 48, 26.0f);
-
-        // expanded children
-        if (l.isGroup && l.expanded)
-        {
-            int cy = r.getBottom() + kChildGap;
-            for (auto& child : l.children)
+            const bool expandable = l.isGroup && ! l.children.empty();
+            if (expandable)
             {
-                juce::Rectangle<int> cr (r.getX() + 28, cy, r.getWidth() - 28, kChildH);
-                g.setColour (kBgDeep);
-                g.fillRoundedRectangle (cr.toFloat(), 5.0f);
-                g.setColour (l.tint.withAlpha (0.7f));
-                g.fillRoundedRectangle ((float) (cr.getX() + 10), (float) (cr.getY() + 8), 7.0f, 14.0f, 3.0f);
-                g.setColour (kTextSecondary);
-                g.setFont (juce::FontOptions (13.0f));
-                g.drawText (child, cr.getX() + 28, cr.getY(), 200, cr.getHeight(), juce::Justification::centredLeft, true);
+                g.setColour (kTextMuted);
+                g.setFont (juce::FontOptions (12.0f));
+                const auto caret = juce::String::charToString (l.expanded ? (juce::juce_wchar) 0x25BE
+                                                                           : (juce::juce_wchar) 0x25B8);
+                g.drawText (caret, r.getX() + 12, r.getY() + 17, 20, 20, juce::Justification::centred);
+            }
 
-                auto cwave = juce::Rectangle<int> (cr.getX() + 230, cr.getY() + 8, cr.getRight() - (cr.getX() + 230) - 12, cr.getHeight() - 16);
-                if (cwave.getWidth() > 30)
-                    drawWave (g, cwave, l.tint, 40, 14.0f);
+            const int swatchX = r.getX() + (expandable ? 38 : 16);
+            g.setColour (l.tint);
+            g.fillRoundedRectangle ((float) swatchX, (float) (r.getY() + 10), 10.0f, 34.0f, 3.0f);
 
-                cy += kChildH + kChildGap;
+            const int nameX = swatchX + 22;
+            g.setColour (kText);
+            g.setFont (juce::FontOptions (15.0f, l.isGroup ? juce::Font::bold : juce::Font::plain));
+            juce::String label = l.name;
+            if (expandable) label << "   (" << (int) l.children.size() << ")";
+            g.drawText (label, nameX, r.getY(), 200, r.getHeight(), juce::Justification::centredLeft, true);
+
+            auto wave = juce::Rectangle<int> (nameX + 210, r.getY() + 12, r.getRight() - (nameX + 210) - 16, r.getHeight() - 24);
+            if (wave.getWidth() > 40)
+                drawWave (g, wave, l.tint, 44, 26.0f);
+
+            if (l.isGroup && l.expanded)
+            {
+                int cy = r.getBottom() + kChildGap;
+                for (auto& child : l.children)
+                {
+                    juce::Rectangle<int> cr (r.getX() + 28, cy, r.getWidth() - 28, kChildH);
+                    g.setColour (kBgDeep);
+                    g.fillRoundedRectangle (cr.toFloat(), 5.0f);
+                    g.setColour (l.tint.withAlpha (0.7f));
+                    g.fillRoundedRectangle ((float) (cr.getX() + 10), (float) (cr.getY() + 8), 7.0f, 14.0f, 3.0f);
+                    g.setColour (kTextSecondary);
+                    g.setFont (juce::FontOptions (13.0f));
+                    g.drawText (child, cr.getX() + 28, cr.getY(), 200, cr.getHeight(), juce::Justification::centredLeft, true);
+                    cy += kChildH + kChildGap;
+                }
             }
         }
     }
 
-    // gentle footer hint
-    g.setColour (kTextFaint);
-    g.setFont (juce::FontOptions (13.0f));
-    g.drawText ("Gruppen antippen zum Auf- und Zuklappen.",
-                getLocalBounds().removeFromBottom (34),
-                juce::Justification::centred, false);
+    // ── Coach rail (assist on) ─────────────────────────────────────────────────
+    if (assistOn())
+    {
+        auto rail = railArea();
+        g.setColour (kBarBg);
+        g.fillRect (rail);
+        g.setColour (kBorder);
+        g.drawVerticalLine (rail.getX(), (float) rail.getY(), (float) rail.getBottom());
+
+        auto inner = rail.reduced (16);
+        g.setColour (kTeal);
+        g.fillEllipse ((float) inner.getX(), (float) inner.getY() + 2.0f, 30.0f, 30.0f);
+        g.setColour (kTealInk);
+        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        g.drawText ("C", inner.getX(), inner.getY() + 2, 30, 30, juce::Justification::centred);
+        g.setColour (kText);
+        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        g.drawText ("Cloudes", inner.getX() + 40, inner.getY(), 200, 18, juce::Justification::centredLeft);
+        g.setColour (kTextMuted);
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawText ("achtet auf deinen Mix", inner.getX() + 40, inner.getY() + 17, 220, 16, juce::Justification::centredLeft);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            auto c = railCardRect (i);
+            g.setColour (kSurfaceRaised);
+            g.fillRoundedRectangle (c.toFloat(), 8.0f);
+            g.setColour (kTeal);
+            g.fillRect (c.getX(), c.getY() + 8, 3, c.getHeight() - 16);   // left accent
+            g.setColour (kTextSecondary);
+            g.setFont (juce::FontOptions (13.0f));
+            g.drawFittedText (kFeedback[i], c.getX() + 14, c.getY() + 10, c.getWidth() - 24, 40,
+                              juce::Justification::topLeft, 2);
+        }
+    }
+
+    // gentle footer hint (only when there are lanes and no rail to crowd it)
+    if (! lanes.empty())
+    {
+        g.setColour (kTextFaint);
+        g.setFont (juce::FontOptions (13.0f));
+        const int avail = assistOn() ? getWidth() - kRailW : getWidth();
+        g.drawText ("Gruppen antippen zum Auf- und Zuklappen.",
+                    juce::Rectangle<int> (0, getHeight() - 34, avail, 28),
+                    juce::Justification::centred, false);
+    }
 }
