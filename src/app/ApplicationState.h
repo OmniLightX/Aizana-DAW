@@ -5,6 +5,7 @@
 #include "audio/AudioEngine.h"
 #include "UIStateManager.h"
 #include "ai/IntentEngine.h"
+#include "ai/HeuristicFeedbackEngine.h"
 
 /**
  * ApplicationState — Top-level owner of the two foundational singletons.
@@ -37,6 +38,10 @@ struct ApplicationState
     // The translator (Phase 2, Block B) — intent -> editable TE command batches,
     // applied via aiCommandBridge as one undo step. Heuristic for now; ML in Phase 3.
     IntentEngine intentEngine { editManager };
+
+    // The conversation (Phase 2, Block B) — master meter -> jargon-free feedback +
+    // 1-click intents for the Beginner Coach rail. Passive; the UI polls current().
+    HeuristicFeedbackEngine heuristicFeedbackEngine { audioEngine };
 
     ApplicationState()
     {
