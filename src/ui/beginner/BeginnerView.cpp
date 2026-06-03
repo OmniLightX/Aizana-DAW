@@ -154,6 +154,18 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
     proSeg.onClick       = [this] { appState.uiState.setMode (UIStateManager::UIMode::Pro); };
     assistToggle.onClick = [this] { appState.uiState.toggleAssist(); };
 
+    // Sandbox safety net — undo/redo so beginners can experiment freely without ⌘Z.
+    for (auto* b : { &undoButton, &redoButton })
+    {
+        b->setColour (juce::TextButton::buttonColourId,  kSeg);
+        b->setColour (juce::TextButton::textColourOffId, kTextSecondary);
+        addAndMakeVisible (*b);
+    }
+    undoButton.setTooltip ("Rueckgaengig");
+    redoButton.setTooltip ("Wiederholen");
+    undoButton.onClick = [this] { appState.editManager.undoLastAction(); };
+    redoButton.onClick = [this] { appState.editManager.redoLastAction(); };
+
     // Coach rail action buttons (static previews -> Block B wires the real IntentEngine).
     auto styleAct = [this] (juce::TextButton& b)
     {
@@ -315,6 +327,9 @@ void BeginnerView::timerCallback()
         repaint();
     }
     refreshFeedback();   // live Coach feedback (no-op when assist off or unchanged)
+
+    undoButton.setEnabled (appState.editManager.canUndo());
+    redoButton.setEnabled (appState.editManager.canRedo());
 }
 
 void BeginnerView::syncFromState()
@@ -420,6 +435,8 @@ void BeginnerView::resized()
     rx -= 90;       assistToggle.setBounds (rx, top, 90, h);
     rx -= gap + 64; proSeg.setBounds       (rx, top, 64, h);
     rx -= gap + 96; beginnerSeg.setBounds   (rx, top, 96, h);
+    rx -= 18 + 34;  redoButton.setBounds    (rx, top, 34, h);
+    rx -= gap + 34; undoButton.setBounds    (rx, top, 34, h);
 
     // Coach rail children — visible only when assist is on; one action button per
     // feedback item that carries a 1-click intent.
@@ -590,7 +607,7 @@ void BeginnerView::paint (juce::Graphics& g)
         g.setColour (kTextFaint);
         g.setFont (juce::FontOptions (13.0f));
         const int avail = assistOn() ? getWidth() - kRailW : getWidth();
-        g.drawText ("Gruppen antippen zum Auf- und Zuklappen.",
+        g.drawText ("Sandbox: Probier alles aus - oben links ist Rueckgaengig. Gruppen antippen zum Auf-/Zuklappen.",
                     juce::Rectangle<int> (0, getHeight() - 34, avail, 28),
                     juce::Justification::centred, false);
     }

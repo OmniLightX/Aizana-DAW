@@ -93,6 +93,10 @@ private:
     juce::TextButton proSeg      { "Pro \xe2\x97\x96" };       // Pro ◖
     juce::TextButton assistToggle { "Assist" };
 
+    // Sandbox safety net (Phase 2, Block C) — beginners undo/redo without keyboard.
+    juce::TextButton undoButton { "\xe2\x86\xb6" };   // ↶
+    juce::TextButton redoButton { "\xe2\x86\xb7" };   // ↷
+
     // Coach rail (Slice 3) — proactive feedback + 1-click intents + command bar.
     juce::TextButton act1 { "Nach vorne holen" };
     juce::TextButton act2 { "Punchiger machen" };
