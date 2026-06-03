@@ -131,6 +131,7 @@ target_sources(Cloudes PRIVATE
     src/ui/automation/AutomationLane.cpp
     src/ui/arrangement/TrackRow.cpp
     src/ui/beginner/BeginnerView.cpp
+    src/ui/onboarding/OnboardingWizard.cpp
 )
 
 target_include_directories(Cloudes PRIVATE

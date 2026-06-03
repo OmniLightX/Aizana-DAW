@@ -19,6 +19,7 @@
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
 #include "ui/beginner/BeginnerView.h"
+#include "ui/onboarding/OnboardingWizard.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -198,6 +199,10 @@ private:
     // applyUIMode() shows/hides the Pro composition vs the BeginnerView and re-lays out.
     void applyUIMode();
     void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+
+    // First-run onboarding (Phase 2, Block C) — shown once, gated by UIStateManager.
+    void showOnboardingIfNeeded();
+    std::unique_ptr<OnboardingWizard> onboardingWizard;
 
     // -------------------------------------------------------------------------
     // Menu item IDs — enum avoids magic numbers and ensures uniqueness

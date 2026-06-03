@@ -48,6 +48,17 @@ void UIStateManager::setFocusedTrackIndex (int trackIndex)
     sendChangeMessage();                           // runtime context — intentionally not persisted
 }
 
+void UIStateManager::setOnboardingCompleted (bool completed)
+{
+    if (onboardingCompleted == completed)
+        return;
+    onboardingCompleted = completed;
+    auto& props = engine.getPropertyStorage().getPropertiesFile();
+    props.setValue (kOnboardingKey, completed);
+    props.saveIfNeeded();
+    sendChangeMessage();
+}
+
 void UIStateManager::persist()
 {
     auto& props = engine.getPropertyStorage().getPropertiesFile();
@@ -65,4 +76,6 @@ void UIStateManager::loadFromStorage()
 
     // If assist was never persisted, fall back to the current mode's default.
     assistEnabled = props.getBoolValue (kAssistKey, defaultAssistFor (mode));
+
+    onboardingCompleted = props.getBoolValue (kOnboardingKey, false);
 }

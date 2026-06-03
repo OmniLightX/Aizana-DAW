@@ -71,6 +71,12 @@ public:
     /** The default assist prominence for a mode: Beginner = on, Pro = off. */
     static bool defaultAssistFor (UIMode m) noexcept { return m == UIMode::Beginner; }
 
+    // --- First-run onboarding gate (Phase 2, Block C) ---
+    bool isOnboardingCompleted() const noexcept { return onboardingCompleted; }
+
+    /** Mark the first-run wizard as done. Persists so it never shows again. */
+    void setOnboardingCompleted (bool completed);
+
 private:
     void persist();
     void loadFromStorage();
@@ -78,11 +84,13 @@ private:
     te::Engine& engine;
     UIMode      mode          { UIMode::Beginner };
     bool        assistEnabled { true };            // = defaultAssistFor(Beginner)
+    bool        onboardingCompleted { false };
     WorkContext workContext;
 
     // PropertiesFile keys (app-specific; isolated from TE's SettingID namespace).
-    static constexpr const char* kModeKey   = "cloudes_ui_mode";        // "beginner" | "pro"
-    static constexpr const char* kAssistKey = "cloudes_assist_enabled"; // bool
+    static constexpr const char* kModeKey       = "cloudes_ui_mode";        // "beginner" | "pro"
+    static constexpr const char* kAssistKey     = "cloudes_assist_enabled"; // bool
+    static constexpr const char* kOnboardingKey = "cloudes_onboarding_done";// bool
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UIStateManager)
 };

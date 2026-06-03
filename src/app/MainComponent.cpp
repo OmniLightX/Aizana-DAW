@@ -78,6 +78,28 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     // Reflect the persisted Dial mode into the initial view visibility + layout.
     applyUIMode();
+
+    // First launch: run the onboarding wizard (never an empty session).
+    showOnboardingIfNeeded();
+}
+
+void MainComponent::showOnboardingIfNeeded()
+{
+    if (appState.uiState.isOnboardingCompleted())
+        return;
+
+    onboardingWizard = std::make_unique<OnboardingWizard> (appState, [this]
+    {
+        // Defer teardown out of the wizard's own button callback (avoid self-delete).
+        juce::MessageManager::callAsync ([this]
+        {
+            onboardingWizard.reset();
+            applyUIMode();   // land in the (now Beginner) world
+        });
+    });
+    addAndMakeVisible (*onboardingWizard);
+    onboardingWizard->setBounds (getLocalBounds());
+    onboardingWizard->toFront (true);
 }
 
 MainComponent::~MainComponent()
@@ -94,6 +116,10 @@ MainComponent::~MainComponent()
 
 void MainComponent::resized()
 {
+    // Onboarding overlay (first run) covers the whole window above everything.
+    if (onboardingWizard != nullptr)
+        onboardingWizard->setBounds (getLocalBounds());
+
     // Beginner world owns the whole window when the Dial is in Beginner mode.
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
     {
