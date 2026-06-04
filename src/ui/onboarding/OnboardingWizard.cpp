@@ -47,9 +47,26 @@ OnboardingWizard::OnboardingWizard (ApplicationState& appState_, std::function<v
             genreIndex = i;
             for (int j = 0; j < genreButtons.size(); ++j)
                 genreButtons[j]->setToggleState (j == genreIndex, juce::dontSendNotification);
+
+            // Genre only *suggests* a tempo — seed the slider, the user still decides.
+            bpmSlider.setValue (genres()[(size_t) i].bpm, juce::dontSendNotification);
         };
         addChildComponent (b);
     }
+
+    // Starter tempo — freely chosen on the Confirm step (seeded by the genre suggestion).
+    bpmSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    bpmSlider.setRange (40.0, 220.0, 1.0);
+    bpmSlider.setValue (genres()[0].bpm, juce::dontSendNotification);
+    bpmSlider.setTextValueSuffix (" BPM");
+    bpmSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 72, 26);
+    bpmSlider.setColour (juce::Slider::trackColourId,         kPrimary);
+    bpmSlider.setColour (juce::Slider::backgroundColourId,    kSeg);
+    bpmSlider.setColour (juce::Slider::thumbColourId,         juce::Colours::white);
+    bpmSlider.setColour (juce::Slider::textBoxTextColourId,   kText);
+    bpmSlider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    bpmSlider.onValueChange = [this] { repaint(); };
+    addChildComponent (bpmSlider);
 
     auto styleNav = [this] (juce::TextButton& b, juce::Colour col)
     {
@@ -78,6 +95,8 @@ void OnboardingWizard::gotoStep (int newStep)
     for (int j = 0; j < genreButtons.size(); ++j)
         genreButtons[j]->setToggleState (j == genreIndex, juce::dontSendNotification);
 
+    bpmSlider.setVisible (step == 2);
+
     resized();
     repaint();
 }
@@ -97,6 +116,10 @@ void OnboardingWizard::resized()
         for (int i = 0; i < n; ++i)
             genreButtons[i]->setBounds (card.getX() + i * (bw + gap), by, bw, 40);
     }
+
+    // tempo slider (step 2) — sits on the "Tempo" row, right of the label.
+    // `card` here equals paint()'s `in` rect, so the label and slider align.
+    bpmSlider.setBounds (card.getX() + 78, card.getY() + 124, card.getWidth() - 78, 30);
 
     // nav buttons (bottom of card)
     const int bh = 34, bw = 120;
@@ -163,13 +186,18 @@ void OnboardingWizard::paint (juce::Graphics& g)
                     juce::Rectangle<int> (in.getX(), in.getY() + 96, in.getWidth(), 24),
                     juce::Justification::topLeft, false);
 
+        // "Tempo" label — the slider beside it (positioned in resized) carries the value.
         g.setColour (kTextMuted); g.setFont (subFont);
-        g.drawText (juce::String ("Tempo ") + juce::String ((int) gd.bpm) + " BPM   -   Lautheits-Ziel "
-                    + gd.loudness,
-                    juce::Rectangle<int> (in.getX(), in.getY() + 128, in.getWidth(), 24),
+        g.drawText ("Tempo",
+                    juce::Rectangle<int> (in.getX(), in.getY() + 128, 74, 24),
+                    juce::Justification::centredLeft, false);
+
+        g.setColour (kTextMuted); g.setFont (subFont);
+        g.drawText (juce::String ("Lautheits-Ziel ") + gd.loudness,
+                    juce::Rectangle<int> (in.getX(), in.getY() + 166, in.getWidth(), 24),
                     juce::Justification::topLeft, false);
         g.drawFittedText ("Du landest in der Einsteiger-Welt - Cloudes hoert mit und schlaegt Schritte vor.",
-                          juce::Rectangle<int> (in.getX(), in.getY() + 160, in.getWidth(), 48),
+                          juce::Rectangle<int> (in.getX(), in.getY() + 198, in.getWidth(), 48),
                           juce::Justification::topLeft, 2);
     }
 }
@@ -200,9 +228,11 @@ void OnboardingWizard::buildStarterProject()
         }
     }
 
+    // Tempo: the user's chosen BPM (slider), seeded by — but not locked to — the genre.
+    const double chosenBpm = juce::jlimit (40.0, 220.0, bpmSlider.getValue());
     auto& seq = edit->tempoSequence;
     if (seq.getNumTempos() > 0)
-        seq.getTempo (0)->setBpm (gd.bpm);
+        seq.getTempo (0)->setBpm (chosenBpm);
 }
 
 void OnboardingWizard::finish()

@@ -16,6 +16,9 @@ struct ApplicationState;
  *
  * The genre also seeds a small Phase-2 payoff (a loudness target shown on Confirm);
  * Phase 3 uses it for real reference matching.
+ *
+ * Tempo: the genre only *suggests* a BPM — on the Confirm step the user freely sets
+ * the starter tempo with a slider (seeded by the chosen genre, overridable).
  */
 class OnboardingWizard : public juce::Component
 {
@@ -38,6 +41,7 @@ private:
     int genreIndex = 0;
 
     juce::OwnedArray<juce::TextButton> genreButtons;
+    juce::Slider     bpmSlider;   // free starter tempo (Confirm step); genre only seeds it
     juce::TextButton backButton { "Zurueck" };
     juce::TextButton nextButton { "Los geht's" };
 
