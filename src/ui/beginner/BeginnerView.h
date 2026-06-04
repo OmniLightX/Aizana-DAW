@@ -66,7 +66,18 @@ private:
         std::function<void()> onShowPro;
         juce::String title, body;
         juce::TextButton ok      { "Gut so" };
-        juce::TextButton showPro { "Zeig's mir \xe2\x86\x92" };  // Zeig's mir →
+        juce::TextButton showPro { "Zeig's mir" };
+    };
+
+    // A small vector-icon button. Undo/redo are drawn as a juce::Path so they never
+    // depend on font glyph coverage or source encoding — the ↶/↷ characters rendered
+    // as garbage in the shipped UI font. (Fix 2, 2026-06-05.)
+    struct IconButton : public juce::Button
+    {
+        enum class Icon { Undo, Redo };
+        explicit IconButton (Icon i) : juce::Button ({}), icon (i) {}
+        void paintButton (juce::Graphics&, bool, bool) override;
+        Icon icon;
     };
 
     struct LaneVM
@@ -89,13 +100,14 @@ private:
     juce::String lastFeedbackSig;   // change-detect to avoid needless rebinds/repaints
 
     // The Dial — mirrors the real UIStateManager (UIMode + assist prominence).
-    juce::TextButton beginnerSeg { "\xe2\x97\x97 Einfach" };  // ◗ Einfach
-    juce::TextButton proSeg      { "Pro \xe2\x97\x96" };       // Pro ◖
+    juce::TextButton beginnerSeg  { "Einfach" };
+    juce::TextButton proSeg       { "Pro" };
     juce::TextButton assistToggle { "Assist" };
 
     // Sandbox safety net (Phase 2, Block C) — beginners undo/redo without keyboard.
-    juce::TextButton undoButton { "\xe2\x86\xb6" };   // ↶
-    juce::TextButton redoButton { "\xe2\x86\xb7" };   // ↷
+    // Drawn as juce::Path icons (see IconButton) — no font glyph dependency.
+    IconButton undoButton { IconButton::Icon::Undo };
+    IconButton redoButton { IconButton::Icon::Redo };
 
     // Coach rail (Slice 3) — proactive feedback + 1-click intents + command bar.
     juce::TextButton act1 { "Nach vorne holen" };

@@ -109,12 +109,19 @@ void BeginnerView::Reveal::paint (juce::Graphics& g)
 
     auto in = card.reduced (22);
 
-    // OK badge + title
+    // OK badge + title — checkmark drawn as a Path (no font glyph dependency).
     g.setColour (kGreen);
     g.fillEllipse ((float) in.getX(), (float) in.getY(), 24.0f, 24.0f);
-    g.setColour (kTealInk);
-    g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    g.drawText (juce::String::charToString ((juce::juce_wchar) 0x2713), in.getX(), in.getY(), 24, 24, juce::Justification::centred);
+    {
+        const float bx = (float) in.getX(), by = (float) in.getY();
+        juce::Path tick;
+        tick.startNewSubPath (bx + 6.5f,  by + 12.5f);
+        tick.lineTo          (bx + 10.5f, by + 16.5f);
+        tick.lineTo          (bx + 17.5f, by + 8.0f);
+        g.setColour (kTealInk);
+        g.strokePath (tick, juce::PathStrokeType (2.2f, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+    }
     g.setColour (kText);
     g.setFont (juce::FontOptions (18.0f, juce::Font::bold));
     g.drawText (title, in.getX() + 34, in.getY(), in.getWidth() - 34, 26, juce::Justification::centredLeft, true);
@@ -131,6 +138,58 @@ void BeginnerView::Reveal::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (11.0f));
     g.drawText ("Vorschau - die Engine kommt in Block B. Alles wird echte, editierbare Mechanik.",
                 in.getX(), in.getBottom() - 26, in.getWidth() - 230, 16, juce::Justification::centredLeft, true);
+}
+
+//==============================================================================
+// Undo/redo glyph rendered as a circular arrow Path (font-independent). The arc curls
+// over the top and opens at the bottom, with a filled arrowhead at the tip; Redo is the
+// horizontal mirror of Undo.
+void BeginnerView::IconButton::paintButton (juce::Graphics& g, bool over, bool down)
+{
+    auto b  = getLocalBounds().toFloat();
+    auto bg = findColour (juce::TextButton::buttonColourId);
+    g.setColour (down ? bg.darker (0.15f) : (over ? bg.brighter (0.12f) : bg));
+    g.fillRoundedRectangle (b, 5.0f);
+
+    const float alpha = isEnabled() ? 0.95f : 0.30f;
+    g.setColour (findColour (juce::TextButton::textColourOffId).withMultipliedAlpha (alpha));
+
+    auto a = b.reduced (b.getWidth() * 0.30f, b.getHeight() * 0.30f);
+    const float cx  = a.getCentreX();
+    const float cy  = a.getCentreY();
+    const float rad = juce::jmin (a.getWidth(), a.getHeight()) * 0.5f;
+    const bool  redo = (icon == Icon::Redo);
+
+    // Math angle (y up) -> screen point (y down); mirror horizontally for redo.
+    auto pt = [&] (float deg) -> juce::Point<float>
+    {
+        const float d = redo ? (180.0f - deg) : deg;
+        const float r = juce::degreesToRadians (d);
+        return { cx + rad * std::cos (r), cy - rad * std::sin (r) };
+    };
+
+    juce::Path arc;
+    const int   steps = 40;
+    const float d0 = -20.0f, d1 = 210.0f;   // open at the bottom, arc over the top
+    for (int i = 0; i <= steps; ++i)
+    {
+        const auto p = pt (d0 + (d1 - d0) * (float) i / (float) steps);
+        if (i == 0) arc.startNewSubPath (p);
+        else        arc.lineTo (p);
+    }
+    g.strokePath (arc, juce::PathStrokeType (1.9f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+
+    // Arrowhead at the tip, pointing along the direction of travel.
+    const auto tip = pt (d1);
+    auto dir = tip - pt (d1 - 16.0f);
+    if (auto len = dir.getDistanceFromOrigin(); len > 1.0e-4f)
+        dir /= len;
+    const juce::Point<float> nrm (-dir.y, dir.x);
+    const float hl = rad * 0.62f, hw = rad * 0.42f;
+    juce::Path head;
+    head.addTriangle (tip, tip - dir * hl + nrm * hw, tip - dir * hl - nrm * hw);
+    g.fillPath (head);
 }
 
 //==============================================================================
@@ -522,11 +581,18 @@ void BeginnerView::paint (juce::Graphics& g)
             const bool expandable = l.isGroup && ! l.children.empty();
             if (expandable)
             {
+                // Disclosure caret as a filled Path triangle (no font glyph dependency):
+                // down-pointing when expanded, right-pointing when collapsed.
+                const float tx = (float) r.getX() + 18.0f;
+                const float ty = (float) r.getCentreY();
+                const float s  = 4.5f;
+                juce::Path tri;
+                if (l.expanded)
+                    tri.addTriangle (tx - s, ty - s * 0.55f, tx + s, ty - s * 0.55f, tx, ty + s * 0.85f);
+                else
+                    tri.addTriangle (tx - s * 0.55f, ty - s, tx - s * 0.55f, ty + s, tx + s * 0.85f, ty);
                 g.setColour (kTextMuted);
-                g.setFont (juce::FontOptions (12.0f));
-                const auto caret = juce::String::charToString (l.expanded ? (juce::juce_wchar) 0x25BE
-                                                                           : (juce::juce_wchar) 0x25B8);
-                g.drawText (caret, r.getX() + 12, r.getY() + 17, 20, 20, juce::Justification::centred);
+                g.fillPath (tri);
             }
 
             const int swatchX = r.getX() + (expandable ? 38 : 16);
