@@ -22,9 +22,12 @@
  *   - level/pan: AudioTrack::getVolumePlugin() volume/pan CachedValues (dB<->fader
  *     conversion), set with the bridge's UndoManager — NO beginNewTransaction
  *     (the bridge owns the per-batch transaction).
- *   - character/space/glue: native EqualiserPlugin / ReverbPlugin / CompressorPlugin
- *     created via PluginCache and inserted into the track (or master) plugin list,
- *     then CachedValues set with the same UndoManager.
+ *   - character/space/glue: *Cloudes'* own EQProcessor / ReverbProcessor /
+ *     CompressorProcessor, inserted through TE's ExternalPlugin via BuiltInPluginFormat
+ *     (the same path the mixer insert slots use) and configured on the live instance,
+ *     then flushed to the ValueTree. Cloudes ships editors ONLY for its own processors,
+ *     so the inserted mechanic is editable — the native te::*Plugin would be uneditable
+ *     ("No editor available"), breaking the Reveal.
  */
 class IntentEngine
 {

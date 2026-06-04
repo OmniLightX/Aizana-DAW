@@ -3,9 +3,13 @@
 // Verifies that intents produce REAL, editable Tracktion-Engine mechanic applied as
 // ONE undo transaction via the AICommandBridge:
 //   - a level intent changes the target track's volume; one undo reverts it
-//   - a character intent inserts an EqualiserPlugin; one undo removes it
-//   - a loudness intent inserts a glue CompressorPlugin on the master; one undo reverts
+//   - a character intent inserts Cloudes' OWN EQ (editable — Fix 3); one undo removes it
+//   - a loudness intent inserts Cloudes' OWN glue compressor on the master; one undo reverts
 //   - category / label / intentsFor mapping is consistent
+//
+// Fix 3 (2026-06-05): intents now insert Cloudes' built-in FX (EQProcessor /
+// CompressorProcessor / ReverbProcessor) wrapped as ExternalPlugin via
+// BuiltInPluginFormat — NOT native te::*Plugin — so the inserted mechanic is editable.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,12 +19,21 @@
 
 namespace
 {
-    int countPlugins (te::PluginList& list, const juce::String& xmlType)
+    // Count Cloudes built-in FX in a plugin list, identified by the wrapped processor's
+    // name ("EQProcessor", "CompressorProcessor", "ReverbProcessor"). They are inserted
+    // as TE ExternalPlugins (getPluginType() == ExternalPlugin::xmlTypeName), so we look
+    // through the wrapper at the live AudioPluginInstance.
+    int countBuiltIn (te::PluginList& list, const juce::String& procName)
     {
         int n = 0;
         for (auto* p : list)
-            if (p != nullptr && p->getPluginType() == xmlType)
-                ++n;
+            if (auto* ext = dynamic_cast<te::ExternalPlugin*> (p))
+            {
+                ext->initialiseFully();
+                if (auto* inst = ext->getAudioPluginInstance())
+                    if (inst->getName() == procName)
+                        ++n;
+            }
         return n;
     }
 
@@ -57,7 +70,7 @@ TEST_CASE ("IntentEngine: VocalForward raises target volume, one undo reverts", 
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE ("IntentEngine: Warmer inserts one EQ, one undo removes it", "[ai][phase2][intent]")
+TEST_CASE ("IntentEngine: Warmer inserts one Cloudes EQ, one undo removes it", "[ai][phase2][intent]")
 {
     EditManager em; em.createNewEdit();
     auto* edit = em.getEdit(); REQUIRE (edit != nullptr);
@@ -65,30 +78,30 @@ TEST_CASE ("IntentEngine: Warmer inserts one EQ, one undo removes it", "[ai][pha
     IntentEngine engine (em);
 
     auto* track = te::getAudioTracks (*edit)[0];
-    const int before = countPlugins (track->pluginList, te::EqualiserPlugin::xmlTypeName);
+    const int before = countBuiltIn (track->pluginList, "EQProcessor");
 
     applyPlan (bridge, engine.plan (IntentEngine::Intent::Warmer, track));
-    CHECK (countPlugins (track->pluginList, te::EqualiserPlugin::xmlTypeName) == before + 1);
+    CHECK (countBuiltIn (track->pluginList, "EQProcessor") == before + 1);
 
     edit->getUndoManager().undo();
-    CHECK (countPlugins (track->pluginList, te::EqualiserPlugin::xmlTypeName) == before);
+    CHECK (countBuiltIn (track->pluginList, "EQProcessor") == before);
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE ("IntentEngine: GlueMix inserts a master compressor, one undo reverts", "[ai][phase2][intent]")
+TEST_CASE ("IntentEngine: GlueMix inserts a Cloudes compressor on the master, one undo reverts", "[ai][phase2][intent]")
 {
     EditManager em; em.createNewEdit();
     auto* edit = em.getEdit(); REQUIRE (edit != nullptr);
     AICommandBridge bridge (em);
     IntentEngine engine (em);
 
-    const int before = countPlugins (edit->getMasterPluginList(), te::CompressorPlugin::xmlTypeName);
+    const int before = countBuiltIn (edit->getMasterPluginList(), "CompressorProcessor");
 
     applyPlan (bridge, engine.plan (IntentEngine::Intent::GlueMix, nullptr));
-    CHECK (countPlugins (edit->getMasterPluginList(), te::CompressorPlugin::xmlTypeName) == before + 1);
+    CHECK (countBuiltIn (edit->getMasterPluginList(), "CompressorProcessor") == before + 1);
 
     edit->getUndoManager().undo();
-    CHECK (countPlugins (edit->getMasterPluginList(), te::CompressorPlugin::xmlTypeName) == before);
+    CHECK (countBuiltIn (edit->getMasterPluginList(), "CompressorProcessor") == before);
 }
 
 // ---------------------------------------------------------------------------

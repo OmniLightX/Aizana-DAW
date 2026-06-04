@@ -1,13 +1,64 @@
 #include "IntentEngine.h"
 #include "engine/MixerEngine.h"
+#include "plugins/BuiltInPluginFormat.h"
+#include "fx/EQProcessor.h"
 
 // Heuristic rule values (Phase 2). Sensible pro defaults — intended to be refined by
 // the mix engineer. The interface is stable so Phase 3 can swap ML in behind it.
+//
+// IMPORTANT (Fix 3, 2026-06-05): character/space/glue intents insert *Cloudes'* own
+// built-in FX (EQProcessor / CompressorProcessor / ReverbProcessor) — NOT the native
+// te::EqualiserPlugin/CompressorPlugin/ReverbPlugin. Cloudes only ships editors for its
+// own processors (see FloatingPluginWindow.cpp Stage 2); the native TE plugins render
+// "No editor available", which breaks the Nordstern ("editable mechanic"). The Cloudes
+// processors are inserted through TE's ExternalPlugin via BuiltInPluginFormat — the
+// exact path the mixer's insert slots use.
 namespace
 {
     using Cmd = AICommandBridge::Command;
 
-    // ---- level / pan (no nested transaction — the bridge owns it) ----
+    // ---- helpers -----------------------------------------------------------
+
+    // Set an APVTS-backed host parameter (by paramID) to a real (un-normalised) value.
+    // setValueNotifyingHost drives the AudioProcessorValueTreeState listener, so BOTH
+    // the audio-thread atomics AND the APVTS state tree (what the generic editor shows)
+    // stay in sync — set the atomic alone (setThreshold/…) would leave the editor stale.
+    void setHostParam (juce::AudioPluginInstance& inst, const juce::String& id, float realValue)
+    {
+        for (auto* p : inst.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                if (rp->paramID == id)
+                {
+                    rp->setValueNotifyingHost (rp->convertTo0to1 (realValue));
+                    return;
+                }
+    }
+
+    // Create a Cloudes built-in FX (wrapped as an ExternalPlugin so it carries the
+    // Cloudes editor), insert it at the end of `list`, fully initialise it, run
+    // `configure` on the live instance, then flush state into the ValueTree so the
+    // configuration survives undo/redo and session save. Insertion is recorded in the
+    // edit's UndoManager (the bridge's active transaction) — one undo removes it whole.
+    template <typename ConfigFn>
+    void insertBuiltIn (te::Edit& edit, te::PluginList& list,
+                        const juce::String& fxName, ConfigFn&& configure)
+    {
+        const auto desc = BuiltInPluginFormat::getDescriptionFor (fxName);
+        auto ptr = edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, desc);
+
+        if (auto* ext = dynamic_cast<te::ExternalPlugin*> (ptr.get()))
+        {
+            list.insertPlugin (ptr, -1, nullptr);
+            ext->initialiseFully();
+
+            if (auto* inst = ext->getAudioPluginInstance())
+                configure (*inst);
+
+            ext->flushPluginStateToValueTree();
+        }
+    }
+
+    // ---- level / pan (no plugin — the track's volume plugin) ----
     Cmd volumeDeltaCmd (te::AudioTrack* t, float deltaDb)
     {
         return [t, deltaDb] (juce::UndoManager& um)
@@ -36,72 +87,85 @@ namespace
         };
     }
 
-    // ---- native plugin insertion + param config ----
+    // ---- character: Cloudes EQ / Compressor ----
     Cmd eqWarmCmd (te::AudioTrack* t)
     {
-        return [t] (juce::UndoManager& um)
+        return [t] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            auto ptr = t->edit.getPluginCache().createNewPlugin (te::EqualiserPlugin::xmlTypeName, {});
-            if (auto* eq = dynamic_cast<te::EqualiserPlugin*> (ptr.get()))
+            insertBuiltIn (t->edit, t->pluginList, "Cloudes EQ", [] (juce::AudioPluginInstance& inst)
             {
-                t->pluginList.insertPlugin (ptr, -1, nullptr);
-                eq->loFreqValue.setValue (200.0f, &um);
-                eq->loGainValue.setValue (2.0f,   &um);   // +2 dB low shelf — warmth
-                eq->loQValue.setValue   (0.7f,    &um);
-            }
+                if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
+                {
+                    EQBand low;
+                    low.type        = EQBandType::LowShelf;
+                    low.frequencyHz = 200.0f;
+                    low.gainDB      = 2.0f;   // +2 dB low shelf — warmth
+                    low.Q           = 0.7f;
+                    low.enabled     = true;
+                    eq->setBand (0, low);
+                }
+            });
         };
     }
 
     Cmd eqClearCmd (te::AudioTrack* t)
     {
-        return [t] (juce::UndoManager& um)
+        return [t] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            auto ptr = t->edit.getPluginCache().createNewPlugin (te::EqualiserPlugin::xmlTypeName, {});
-            if (auto* eq = dynamic_cast<te::EqualiserPlugin*> (ptr.get()))
+            insertBuiltIn (t->edit, t->pluginList, "Cloudes EQ", [] (juce::AudioPluginInstance& inst)
             {
-                t->pluginList.insertPlugin (ptr, -1, nullptr);
-                eq->midFreqValue1.setValue (3000.0f, &um);
-                eq->midGainValue1.setValue (2.5f,    &um);   // presence
-                eq->midQValue1.setValue    (1.0f,    &um);
-                eq->hiFreqValue.setValue   (8000.0f, &um);
-                eq->hiGainValue.setValue   (1.5f,    &um);   // air
-            }
+                if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
+                {
+                    EQBand presence;
+                    presence.type        = EQBandType::Peak;
+                    presence.frequencyHz = 3000.0f;
+                    presence.gainDB      = 2.5f;   // presence
+                    presence.Q           = 1.0f;
+                    presence.enabled     = true;
+                    eq->setBand (0, presence);
+
+                    EQBand air;
+                    air.type        = EQBandType::HighShelf;
+                    air.frequencyHz = 8000.0f;
+                    air.gainDB      = 1.5f;        // air
+                    air.Q           = 0.7f;
+                    air.enabled     = true;
+                    eq->setBand (1, air);
+                }
+            });
         };
     }
 
-    Cmd compCmd (te::AudioTrack* t, float ratio, float thresholdGain, float attackMs, float releaseMs)
+    Cmd compCmd (te::AudioTrack* t, float ratio, float thresholdDb, float attackMs, float releaseMs)
     {
-        return [t, ratio, thresholdGain, attackMs, releaseMs] (juce::UndoManager& um)
+        return [t, ratio, thresholdDb, attackMs, releaseMs] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            auto ptr = t->edit.getPluginCache().createNewPlugin (te::CompressorPlugin::xmlTypeName, {});
-            if (auto* c = dynamic_cast<te::CompressorPlugin*> (ptr.get()))
+            insertBuiltIn (t->edit, t->pluginList, "Cloudes Compressor",
+                           [ratio, thresholdDb, attackMs, releaseMs] (juce::AudioPluginInstance& inst)
             {
-                t->pluginList.insertPlugin (ptr, -1, nullptr);
-                c->ratio.getCachedValue().setValue          (ratio,         &um);
-                c->thresholdGain.getCachedValue().setValue  (thresholdGain, &um);
-                c->attackMs.getCachedValue().setValue       (attackMs,      &um);
-                c->releaseMs.getCachedValue().setValue      (releaseMs,     &um);
-            }
+                setHostParam (inst, "ratio",     ratio);
+                setHostParam (inst, "threshold", thresholdDb);
+                setHostParam (inst, "attack",    attackMs);
+                setHostParam (inst, "release",   releaseMs);
+            });
         };
     }
 
-    Cmd reverbCmd (te::AudioTrack* t, float wet, float room, float width)
+    // ---- space: Cloudes Reverb ----
+    Cmd reverbCmd (te::AudioTrack* t, float wet, float room)
     {
-        return [t, wet, room, width] (juce::UndoManager& um)
+        return [t, wet, room] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            auto ptr = t->edit.getPluginCache().createNewPlugin (te::ReverbPlugin::xmlTypeName, {});
-            if (auto* r = dynamic_cast<te::ReverbPlugin*> (ptr.get()))
+            insertBuiltIn (t->edit, t->pluginList, "Cloudes Reverb",
+                           [wet, room] (juce::AudioPluginInstance& inst)
             {
-                t->pluginList.insertPlugin (ptr, -1, nullptr);
-                r->wetValue.setValue      (wet,   &um);
-                r->roomSizeValue.setValue (room,  &um);
-                r->widthValue.setValue    (width, &um);
-                r->dryValue.setValue      (0.9f,  &um);
-            }
+                setHostParam (inst, "wet",      wet);
+                setHostParam (inst, "roomSize", room);
+            });
         };
     }
 
@@ -124,19 +188,18 @@ namespace
 
     Cmd masterGlueCmd (EditManager* em)
     {
-        return [em] (juce::UndoManager& um)
+        return [em] (juce::UndoManager&)
         {
             auto* edit = em->getEdit();
             if (edit == nullptr) return;
-            auto ptr = edit->getPluginCache().createNewPlugin (te::CompressorPlugin::xmlTypeName, {});
-            if (auto* c = dynamic_cast<te::CompressorPlugin*> (ptr.get()))
+            insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
+                           [] (juce::AudioPluginInstance& inst)
             {
-                edit->getMasterPluginList().insertPlugin (ptr, -1, nullptr);
-                c->ratio.getCachedValue().setValue         (2.0f,  &um);   // gentle 2:1 glue
-                c->thresholdGain.getCachedValue().setValue (0.5f,  &um);
-                c->attackMs.getCachedValue().setValue      (30.0f, &um);
-                c->releaseMs.getCachedValue().setValue     (150.0f,&um);
-            }
+                setHostParam (inst, "ratio",     2.0f);    // gentle 2:1 glue
+                setHostParam (inst, "threshold", -6.0f);
+                setHostParam (inst, "attack",    30.0f);
+                setHostParam (inst, "release",   150.0f);
+            });
         };
     }
 }
@@ -200,20 +263,20 @@ IntentEngine::Plan IntentEngine::plan (Intent intent, te::AudioTrack* requested)
             p.mechanic    = "EQ: +2.5 dB @ 3 kHz (Praesenz), +1.5 dB @ 8 kHz (Air) auf " + tn + ".";
             break;
         case Intent::MorePunch:
-            p.commands.push_back (compCmd (t, 3.0f, 0.3f, 5.0f, 80.0f));
+            p.commands.push_back (compCmd (t, 3.0f, -12.0f, 5.0f, 80.0f));
             p.description = "Mehr Punch: " + tn;
-            p.mechanic    = "Kompressor 3:1, schneller Attack (5 ms) auf " + tn + ".";
+            p.mechanic    = "Kompressor 3:1, Schwelle -12 dB, schneller Attack (5 ms) auf " + tn + ".";
             break;
 
         case Intent::MoreReverb:
-            p.commands.push_back (reverbCmd (t, 0.20f, 0.6f, 1.0f));
+            p.commands.push_back (reverbCmd (t, 0.20f, 0.6f));
             p.description = "Mehr Raum: " + tn;
             p.mechanic    = "Reverb: 20% wet, Room 0.6 auf " + tn + ".";
             break;
         case Intent::Wider:
-            p.commands.push_back (reverbCmd (t, 0.12f, 0.5f, 1.0f));
+            p.commands.push_back (reverbCmd (t, 0.12f, 0.5f));
             p.description = "Breiter: " + tn;
-            p.mechanic    = "Reverb: volle Breite, 12% wet auf " + tn + ".";
+            p.mechanic    = "Reverb: 12% wet, Room 0.5 auf " + tn + ".";
             break;
         case Intent::Closer:
             p.commands.push_back (volumeDeltaCmd (t, 1.5f));
