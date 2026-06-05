@@ -16,12 +16,18 @@
 // then sees a dropped connection and blacklists that plugin. This is what prevents hung
 // workers from becoming un-killable zombies (a graceful kill never reaches a blocked
 // message thread).
-static constexpr int kWorkerScanTimeoutMs = 25000;
+//
+// Tuned generously (60s) for large libraries: heavyweight-but-VALID plugins (Kontakt,
+// Omnisphere, big Komplete instruments) can legitimately take >25s to return their
+// descriptor, and we must NOT falsely blacklist them. The cost is that a genuinely hung
+// plugin stalls for up to 60s before the scan moves on — acceptable for a one-time,
+// cached scan.
+static constexpr int kWorkerScanTimeoutMs = 60000;
 
 // Coordinator-side backstop, slightly longer so the worker watchdog fires first and we
 // get a clean connection-lost. If even that fails, the coordinator gives up on the
 // plugin after this and respawns a fresh worker.
-static constexpr int kPerPluginTimeoutMs = 30000;
+static constexpr int kPerPluginTimeoutMs = 70000;
 
 // ---------------------------------------------------------------------------
 // Shared format registration — identical on both sides so format names match.
