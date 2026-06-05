@@ -232,3 +232,43 @@ TEST_CASE ("PluginChain: dead plugin file is skipped gracefully without crash or
 
     SUCCEED ("Dead plugin handled gracefully — no crash, no hang");
 }
+
+// ---------------------------------------------------------------------------
+// Regression: a third-party plugin must be registered with the ENGINE's knownPluginList
+// when inserted. TE's ExternalPlugin::findMatchingPlugin() resolves the real instance
+// from engine.getPluginManager().knownPluginList — NOT from Cloudes' scanner list. Before
+// this fix, inserted VST3/AU plugins loaded as shells: getAudioPluginInstance() was null,
+// so the editor showed "No editor available" and no audio was processed.
+TEST_CASE ("PluginManager: insertPlugin registers the description with the engine", "[plugins][PLUG-04]")
+{
+    EditManager editManager;
+    editManager.createNewEdit();
+    auto* edit = editManager.getEdit();
+    REQUIRE (edit != nullptr);
+
+    auto tracks = te::getAudioTracks (*edit);
+    REQUIRE (! tracks.isEmpty());
+    auto* track = tracks[0];
+
+    PluginScanner scanner;
+    PluginManager pluginManager (scanner, editManager);
+
+    juce::PluginDescription desc;
+    desc.pluginFormatName  = "VST3";
+    desc.name              = "Third-Party Test EQ";
+    desc.manufacturerName  = "ACME";
+    desc.fileOrIdentifier  = "/some/path/ThirdPartyTestEQ.vst3";
+    desc.uniqueId          = 0x5EED1234;
+    desc.numInputChannels  = 2;
+    desc.numOutputChannels = 2;
+
+    auto& engineList = editManager.getEngine().getPluginManager().knownPluginList;
+    const auto idString = desc.createIdentifierString();
+    REQUIRE (engineList.getTypeForIdentifierString (idString) == nullptr);   // not known yet
+
+    // The file doesn't exist, so the actual instance won't load — that's fine; we are
+    // asserting the engine now KNOWS the plugin (so it COULD instantiate a real one).
+    pluginManager.insertPlugin (*track, desc);
+
+    CHECK (engineList.getTypeForIdentifierString (idString) != nullptr);
+}

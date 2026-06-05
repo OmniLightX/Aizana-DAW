@@ -257,6 +257,11 @@ private:
     // -------------------------------------------------------------------------
     void handleScanPlugins();
 
+    // Copy every scanned plugin description into the Tracktion Engine's knownPluginList,
+    // so TE can instantiate third-party plugins (editor + audio). Cloudes scans into its
+    // own list; TE resolves instances from the engine's list. Call after load and scan.
+    void syncScannedPluginsToEngine();
+
     // Returns the path to the cached plugin list XML file
     // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)
     static juce::File getPluginListCacheFile();

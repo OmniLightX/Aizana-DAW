@@ -41,6 +41,11 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // If no cache exists (first launch), auto-scan immediately so the browser populates.
     pluginScanner.loadPluginList (getPluginListCacheFile());
 
+    // Make the cached plugins instantiable by Tracktion Engine (editor + audio), and
+    // crucially BEFORE any saved session is reloaded — TE recreates its plugins from the
+    // engine's knownPluginList on load.
+    syncScannedPluginsToEngine();
+
     // Auto-scan on first launch when no cached plugins are found
     if (pluginScanner.getKnownPlugins().getNumTypes() == 0)
     {
@@ -684,6 +689,10 @@ void MainComponent::handleScanPlugins()
             // Post UI notification back to the message thread
             juce::MessageManager::callAsync ([this]
             {
+                // Register the freshly-scanned plugins with the engine so they are
+                // instantiable (editor + audio) without a restart. On the message thread.
+                syncScannedPluginsToEngine();
+
                 juce::AlertWindow::showMessageBoxAsync (
                     juce::MessageBoxIconType::InfoIcon,
                     "Scan Complete",
@@ -691,6 +700,18 @@ void MainComponent::handleScanPlugins()
                     "OK");
             });
         });
+}
+
+void MainComponent::syncScannedPluginsToEngine()
+{
+    // Cloudes scans into its own PluginScanner::knownPlugins (drives the browser), but
+    // Tracktion Engine instantiates plugins from engine.getPluginManager().knownPluginList
+    // (ExternalPlugin::findMatchingPlugin). Mirror the scanned descriptions across so TE
+    // can create real instances — otherwise third-party plugins are inert shells with no
+    // editor and no audio. addType() de-dupes by identifier, so repeat calls are safe.
+    auto& engineList = appState.editManager.getEngine().getPluginManager().knownPluginList;
+    for (const auto& type : pluginScanner.getKnownPlugins().getTypes())
+        engineList.addType (type);
 }
 
 juce::File MainComponent::getPluginListCacheFile()
