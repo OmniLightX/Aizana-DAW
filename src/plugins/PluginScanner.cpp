@@ -1,5 +1,6 @@
 #include "PluginScanner.h"
 #include "BuiltInPluginFormat.h"
+#include "OutOfProcessPluginScanner.h"
 
 // ---------------------------------------------------------------------------
 // Background scan thread (multi-format, self-contained)
@@ -21,16 +22,11 @@ public:
 
 PluginScanner::PluginScanner()
 {
-    // Register standard JUCE formats (VST3 on all platforms; AU on macOS only)
-    formatManager.addDefaultFormats();
-
-    // Register CLAP format using the direct C API (RESEARCH.md Pitfall 1:
-    // the alpha juce_clap_hosting module is NOT used)
-    formatManager.addFormat (new ClapPluginFormat());
-
-    // Register BuiltInPluginFormat so TE's ExternalPlugin/AudioPluginFormatManager
-    // can instantiate our custom src/fx/ processors via the normal createPluginInstance path.
-    formatManager.addFormat (new BuiltInPluginFormat());
+    // VST3 (+ AU on macOS) + CLAP (direct C API; the alpha juce_clap_hosting module is
+    // NOT used) + BuiltInPluginFormat (so TE's ExternalPlugin can instantiate our own FX
+    // via the normal createPluginInstance path). Shared with the scanner subprocess so
+    // format names match across the process boundary.
+    registerScannableFormats (formatManager);
 
     // Pre-populate KnownPluginList with the 4 built-in FX descriptions.
     // This makes them appear in PluginBrowserPopup immediately without scanning.
@@ -38,6 +34,16 @@ PluginScanner::PluginScanner()
     BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
     for (auto* desc : builtIns)
         knownPlugins.addType (*desc);
+}
+
+void PluginScanner::enableCrashIsolatedScanning()
+{
+    // Fix 4: probe every third-party plugin in a child process, so a broken plugin can't
+    // kill the scan or the app. The existing scanNextFile() loop routes through this
+    // automatically; a crash blacklists the one plugin and the scan continues. Opt-in
+    // (called by the app, not by tests) because the worker entry point lives in the app's
+    // JUCEApplication::initialise — the test binary has no worker to relaunch into.
+    installOutOfProcessScanner (knownPlugins);
 }
 
 PluginScanner::~PluginScanner()

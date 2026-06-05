@@ -85,6 +85,7 @@ target_sources(Cloudes PRIVATE
     src/plugins/ClapPluginFormat.cpp
     src/plugins/BuiltInPluginFormat.cpp
     src/plugins/PluginScanner.cpp
+    src/plugins/OutOfProcessPluginScanner.cpp
     src/plugins/PluginManager.cpp
     # DSP effects (FX-01 through FX-04)
     src/fx/EQProcessor.cpp
@@ -142,6 +143,16 @@ target_compile_definitions(Cloudes PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_MODAL_LOOPS_PERMITTED=1
+    # Enable VST3 hosting in Cloudes' OWN juce_audio_processors compilation so the
+    # plugin-browser scanner (PluginScanner) can actually register and find VST3
+    # plugins. Without this, addDefaultFormats() adds nothing for VST3 and the user's
+    # library never appears — independent of the in-process crash issue (Fix 4).
+    # NOTE: JUCE_PLUGINHOST_AU is intentionally NOT enabled yet. AU validation is slow
+    # and several AUs stall the out-of-process worker (each hitting the per-plugin
+    # timeout), making a first AU scan very slow. AU was never registered in this scanner
+    # before, so leaving it off is status-quo (no regression). The out-of-process infra
+    # is in place; enabling AU later only needs scan-performance tuning.
+    JUCE_PLUGINHOST_VST3=1
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_VERSION>"
 )

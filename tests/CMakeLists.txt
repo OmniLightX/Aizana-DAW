@@ -64,6 +64,7 @@ target_sources(engine_tests PRIVATE
     ../src/plugins/ClapPluginFormat.cpp
     ../src/plugins/BuiltInPluginFormat.cpp
     ../src/plugins/PluginScanner.cpp
+    ../src/plugins/OutOfProcessPluginScanner.cpp
     ../src/plugins/PluginManager.cpp
     # UI components required by FX processors in test context
     ../src/ui/eq/EQComponent.cpp

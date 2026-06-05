@@ -33,6 +33,10 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Mixer visible by default (CONTEXT.md: mixing-first design)
     mixerView.setVisible (mixerVisible);
 
+    // Crash-isolate plugin scanning: a broken plugin blacklists only itself instead of
+    // taking down the whole scan/app (Fix 4). Must precede any scanForPlugins() call.
+    pluginScanner.enableCrashIsolatedScanning();
+
     // Load previously-scanned plugin list so the browser is populated on startup.
     // If no cache exists (first launch), auto-scan immediately so the browser populates.
     pluginScanner.loadPluginList (getPluginListCacheFile());

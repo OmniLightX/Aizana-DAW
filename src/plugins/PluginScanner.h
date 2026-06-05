@@ -45,6 +45,14 @@ public:
     void scanForPlugins (std::function<void(float)> onProgress,
                          std::function<void()>       onComplete);
 
+    /**
+     * Enable out-of-process (crash-isolated) scanning. Each plugin is then probed in a
+     * child process, so a crashing/incompatible plugin blacklists only itself instead of
+     * killing the scan or the app. Call once before scanForPlugins(). App-only: relies on
+     * the scanner-worker entry point in the app's JUCEApplication::initialise().
+     */
+    void enableCrashIsolatedScanning();
+
     /** Cancel an in-progress scan. Blocks until the background thread stops. */
     void cancelScan();
 
