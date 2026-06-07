@@ -29,6 +29,11 @@ static constexpr int kWorkerScanTimeoutMs = 60000;
 // plugin after this and respawns a fresh worker.
 static constexpr int kPerPluginTimeoutMs = 70000;
 
+// Host-side cap for the IN-PROCESS fallback (used only when the worker process can't be
+// launched/reached at all). Here there is no child to kill — a hung plugin can only be
+// escaped by abandoning the probe thread — so keep this shorter than the worker watchdog.
+static constexpr int kInProcessFallbackTimeoutMs = 20000;
+
 // ---------------------------------------------------------------------------
 // Shared format registration — identical on both sides so format names match.
 // ---------------------------------------------------------------------------
@@ -262,13 +267,19 @@ public:
                              juce::OwnedArray<juce::PluginDescription>& result,
                              const juce::String& fileOrIdentifier) override
     {
-        // Built-in Cloudes FX are synthetic descriptions (no binary to crash) — and once
-        // the subprocess infrastructure is known-bad, stop paying to relaunch it.
-        if (format.getName() == "Built-in" || infraGivenUp.load())
+        // Built-in Cloudes FX are synthetic descriptions (no binary to load, can't hang).
+        if (format.getName() == "Built-in")
         {
             format.findAllTypesForFile (result, fileOrIdentifier);
             return true;
         }
+
+        // Worker infra already declared bad — don't keep paying to relaunch it. Probe
+        // in-process, but ALWAYS under a watchdog: with no child process to kill, a
+        // synchronous in-process probe of a hanging plugin (AUs are the worst offenders)
+        // would otherwise freeze the whole scan thread permanently.
+        if (infraGivenUp.load())
+            return scanInProcessWithWatchdog (format, fileOrIdentifier, result);
 
         switch (scanOutOfProcess (format.getName(), fileOrIdentifier, result))
         {
@@ -282,11 +293,11 @@ public:
             case Outcome::infraUnavailable:
             default:
                 // Could not even launch/reach a worker — degrade to in-process scanning
-                // (no worse than the legacy behaviour) instead of blacklisting good plugins.
+                // (no worse than the legacy behaviour) instead of blacklisting good plugins,
+                // but bounded by the watchdog so one hang can't stall the scan forever.
                 infraGivenUp = true;
                 superprocess = nullptr;
-                format.findAllTypesForFile (result, fileOrIdentifier);
-                return true;
+                return scanInProcessWithWatchdog (format, fileOrIdentifier, result);
         }
     }
 
@@ -294,6 +305,45 @@ public:
 
 private:
     enum class Outcome { ok, pluginCrashed, infraUnavailable };
+
+    // In-process probe bounded by a watchdog. findAllTypesForFile loads the plugin on a
+    // throwaway thread; if it doesn't finish before the deadline we abandon that thread
+    // and skip the plugin — the scan must never freeze. The descriptors are collected in
+    // a shared heap buffer so an abandoned (hung) thread can never write into the caller's
+    // stack-owned `result`. The probe captures the format by POINTER (the formatManager
+    // owns it and outlives the scan); a detached thread is reclaimed at process exit.
+    bool scanInProcessWithWatchdog (juce::AudioPluginFormat& format,
+                                    const juce::String& fileOrIdentifier,
+                                    juce::OwnedArray<juce::PluginDescription>& result)
+    {
+        auto buffer = std::make_shared<juce::OwnedArray<juce::PluginDescription>>();
+        auto done   = std::make_shared<std::atomic<bool>> (false);
+
+        std::thread probe ([fmt = &format, id = fileOrIdentifier, buffer, done]
+        {
+            // Guard: an exception escaping a std::thread body calls std::terminate. The
+            // synchronous path was covered by PluginScanner's try/catch; preserve that.
+            try { fmt->findAllTypesForFile (*buffer, id); }
+            catch (...) {}
+            done->store (true, std::memory_order_release);
+        });
+
+        const auto deadline = std::chrono::steady_clock::now()
+                                  + std::chrono::milliseconds (kInProcessFallbackTimeoutMs);
+        while (! done->load (std::memory_order_acquire)
+               && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for (std::chrono::milliseconds (25));
+
+        if (done->load (std::memory_order_acquire))
+        {
+            probe.join();
+            result.swapWith (*buffer);
+            return true;
+        }
+
+        probe.detach();   // hung past the deadline — abandon and move on
+        return false;
+    }
 
     Outcome scanOutOfProcess (const juce::String& formatName,
                               const juce::String& fileOrIdentifier,

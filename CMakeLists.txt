@@ -143,16 +143,19 @@ target_compile_definitions(Cloudes PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_MODAL_LOOPS_PERMITTED=1
-    # Enable VST3 hosting in Cloudes' OWN juce_audio_processors compilation so the
-    # plugin-browser scanner (PluginScanner) can actually register and find VST3
-    # plugins. Without this, addDefaultFormats() adds nothing for VST3 and the user's
-    # library never appears — independent of the in-process crash issue (Fix 4).
-    # NOTE: JUCE_PLUGINHOST_AU is intentionally NOT enabled yet. AU validation is slow
-    # and several AUs stall the out-of-process worker (each hitting the per-plugin
-    # timeout), making a first AU scan very slow. AU was never registered in this scanner
-    # before, so leaving it off is status-quo (no regression). The out-of-process infra
-    # is in place; enabling AU later only needs scan-performance tuning.
+    # Enable VST3 + AU hosting in Cloudes' OWN juce_audio_processors compilation so the
+    # plugin-browser scanner (PluginScanner) can actually register and find them. Without
+    # these, addDefaultFormats() adds nothing for the format and the user's library never
+    # appears — independent of the in-process crash issue (Fix 4).
+    #
+    # AU (enabled 2026-06-07): the user's 1141-plugin library is largely AudioUnits, so
+    # they stay invisible without this. Safe to enable now because (a) AUs are probed in
+    # the crash/hang-isolated worker (60s watchdog → a stalling AU blacklists itself and
+    # the scan continues), (b) incremental persistence means a slow first AU scan is
+    # cached/resumable, and (c) the in-process fallback is now watchdog-bounded too. The
+    # first AU scan is still slow (Apple validates each component) but completes + caches.
     JUCE_PLUGINHOST_VST3=1
+    JUCE_PLUGINHOST_AU=1
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_VERSION>"
 )
