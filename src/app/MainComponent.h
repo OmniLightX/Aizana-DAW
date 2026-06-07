@@ -20,6 +20,7 @@
 #include "ui/pianoroll/PianoRollView.h"
 #include "ui/beginner/BeginnerView.h"
 #include "ui/onboarding/OnboardingWizard.h"
+#include "ui/pluginbrowser/ScanProgressPanel.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -255,7 +256,13 @@ private:
     // -------------------------------------------------------------------------
     // View menu handlers
     // -------------------------------------------------------------------------
-    void handleScanPlugins();
+    // userInitiated=true shows a "Scan Complete" alert at the end (menu action);
+    // auto-scans/resumes at startup pass false and finish silently.
+    void handleScanPlugins (bool userInitiated = true);
+
+    // Modeless scan-progress overlay (created on demand; nullptr when idle).
+    void showScanProgress();
+    void hideScanProgress();
 
     // Copy every scanned plugin description into the Tracktion Engine's knownPluginList,
     // so TE can instantiate third-party plugins (editor + audio). Cloudes scans into its
@@ -265,6 +272,9 @@ private:
     // Returns the path to the cached plugin list XML file
     // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)
     static juce::File getPluginListCacheFile();
+
+    // Modeless scan-progress overlay — owned here, present only while scanning.
+    std::unique_ptr<ScanProgressPanel> scanProgressPanel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

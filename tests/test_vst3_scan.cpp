@@ -28,7 +28,7 @@ TEST_CASE ("VST3Scan: scanner finds at least one VST3 plugin in standard search 
 
     bool scanComplete = false;
     scanner.scanForPlugins (
-        [](float) {},           // onProgress — ignore
+        [](const PluginScanner::ScanProgress&) {},   // onProgress — ignore
         [&]() { scanComplete = true; }
     );
     scanner.waitForScanComplete (30000);
@@ -64,7 +64,7 @@ TEST_CASE ("VST3Scan: KnownPluginList persists scan results across application r
 
     bool scanComplete = false;
     scanner.scanForPlugins (
-        [](float) {},
+        [](const PluginScanner::ScanProgress&) {},
         [&]() { scanComplete = true; }
     );
     scanner.waitForScanComplete (30000);
@@ -87,5 +87,49 @@ TEST_CASE ("VST3Scan: KnownPluginList persists scan results across application r
     REQUIRE (scanner2.getKnownPlugins().getNumTypes() == originalCount);
 
     // Clean up
+    listFile.deleteFile();
+}
+
+// ---------------------------------------------------------------------------
+// VST3 Test 3: the "scan complete" resume marker round-trips through the cache.
+// A partial cache (markComplete=false) must report lastScanWasComplete()==false
+// so the app knows to RESUME scanning on the next launch; a complete cache must
+// report true. Uses the 4 pre-loaded built-in FX — no real scan required, so
+// this is fully deterministic and fast.
+// ---------------------------------------------------------------------------
+TEST_CASE ("VST3Scan: scan-complete marker round-trips (drives auto-resume)",
+           "[plugins][PLUG-01]")
+{
+    const auto listFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("cloudes_test_scan_marker.xml");
+    listFile.deleteFile();
+
+    // A fresh scanner defaults to "complete" (an empty/manual list needs no resume).
+    PluginScanner fresh;
+    REQUIRE (fresh.lastScanWasComplete());
+
+    // Partial save → load → must be flagged incomplete (resume needed).
+    {
+        PluginScanner writer;
+        writer.savePluginList (listFile, /*markComplete=*/false);
+        REQUIRE (listFile.existsAsFile());
+
+        PluginScanner reader;
+        reader.loadPluginList (listFile);
+        REQUIRE_FALSE (reader.lastScanWasComplete());
+        // Built-ins survive the round-trip.
+        REQUIRE (reader.getKnownPlugins().getNumTypes() >= 1);
+    }
+
+    // Complete save → load → must be flagged complete (no resume).
+    {
+        PluginScanner writer;
+        writer.savePluginList (listFile, /*markComplete=*/true);
+
+        PluginScanner reader;
+        reader.loadPluginList (listFile);
+        REQUIRE (reader.lastScanWasComplete());
+    }
+
     listFile.deleteFile();
 }

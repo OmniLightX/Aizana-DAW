@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ClapPluginFormat.h"
 
@@ -29,21 +30,38 @@ public:
     // Scanning
     // ---------------------------------------------------------------------------
 
+    /** Live progress snapshot delivered to the onProgress callback during a scan.
+        Carries enough to drive a counter + current-item display, not just a bar. */
+    struct ScanProgress
+    {
+        float        fraction        = 0.0f;  // overall [0..1] across all scannable formats
+        int          numPluginsFound = 0;     // entries in KnownPluginList so far
+        juce::String currentPlugin;           // name of the plugin just probed (may be empty)
+        juce::String formatName;              // format currently being scanned (e.g. "VST3")
+        int          formatIndex     = 0;     // 0-based index into the scannable formats
+        int          numFormats      = 0;     // count of scannable formats
+    };
+
     /**
      * Scan for plugins in the standard platform search paths.
      *
      * Runs on a background thread via out-of-process child process scanning
      * (RESEARCH.md Pattern 4 — prevents crashes from killing the host).
      *
-     * Callbacks:
-     *   - onProgress(fraction): called periodically with [0.0, 1.0] progress
-     *   - onComplete(): called once scanning is finished (on the background thread)
+     * If a cache file is set (setPluginListCacheFile), the partial list is
+     * persisted periodically and at every format boundary, so an interrupted
+     * scan is never lost and the next launch resumes (already-known plugins
+     * are skipped by PluginDirectoryScanner).
      *
-     * IMPORTANT: onComplete is called from the background thread.
-     * If you need to update UI, use juce::MessageManager::callAsync().
+     * Callbacks:
+     *   - onProgress(ScanProgress): called after each probed plugin
+     *   - onComplete(): called once scanning finishes NORMALLY (not on cancel)
+     *
+     * IMPORTANT: both callbacks fire on the background scan thread.
+     * If you need to update UI, use juce::MessageManager::callAsync() with a SafePointer.
      */
-    void scanForPlugins (std::function<void(float)> onProgress,
-                         std::function<void()>       onComplete);
+    void scanForPlugins (std::function<void(const ScanProgress&)> onProgress,
+                         std::function<void()>                    onComplete);
 
     /**
      * Enable out-of-process (crash-isolated) scanning. Each plugin is then probed in a
@@ -72,15 +90,35 @@ public:
 
     /**
      * Save the current KnownPluginList to an XML file.
-     * Call this after a scan completes to cache results across restarts.
+     *
+     * markComplete records whether this snapshot represents a fully finished
+     * scan (true) or a partial/interrupted one (false). The flag is read back
+     * by loadPluginList() so the app can decide whether to resume scanning.
      */
-    void savePluginList (const juce::File& file);
+    void savePluginList (const juce::File& file, bool markComplete = true);
 
     /**
      * Load a previously saved KnownPluginList from an XML file.
      * Does not trigger a scan — it restores previously scanned results.
+     * Also restores the "scan was complete" flag (see lastScanWasComplete()).
      */
     void loadPluginList (const juce::File& file);
+
+    /**
+     * Set the cache file used for incremental, crash-safe persistence DURING a
+     * scan. When set, scanForPlugins() writes the partial list periodically and
+     * at every format boundary — so an interrupted scan is never lost. Set this
+     * once before scanning (e.g. at app startup).
+     */
+    void setPluginListCacheFile (const juce::File& file) { pluginListCacheFile = file; }
+
+    /**
+     * True if the most recently loaded or completed list represents a FULLY
+     * finished scan. False means the cache is partial (the previous scan was
+     * interrupted) and should be resumed. Defaults to true for a fresh/empty
+     * list and for legacy caches without the marker.
+     */
+    bool lastScanWasComplete() const noexcept { return scanWasComplete.load(); }
 
     // ---------------------------------------------------------------------------
     // Format manager access
@@ -97,6 +135,14 @@ private:
     juce::KnownPluginList                                knownPlugins;
     std::unique_ptr<juce::PluginDirectoryScanner>        activeScanner;
     std::unique_ptr<juce::Thread>                        scanThread;
+
+    // Incremental persistence (crash-safe / resumable scans).
+    juce::File                                           pluginListCacheFile;
+    std::atomic<bool>                                    scanWasComplete { true };
+
+    // Throttle for incremental saves during a scan.
+    static constexpr int    kSaveEveryNPlugins = 20;     // save after this many new entries
+    static constexpr double kSaveIntervalMs    = 4000.0; // ...or at least this often
 
     /** Returns the standard VST3/AU/CLAP search paths for the current platform. */
     static juce::FileSearchPath getDefaultSearchPaths();

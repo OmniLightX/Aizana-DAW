@@ -37,21 +37,33 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // taking down the whole scan/app (Fix 4). Must precede any scanForPlugins() call.
     pluginScanner.enableCrashIsolatedScanning();
 
+    // Cache file for incremental, crash-safe persistence DURING a scan. With this set,
+    // the scanner writes the partial list periodically + at every format boundary, so a
+    // large library (1000+ plugins) survives an interrupted scan and resumes next launch.
+    const auto pluginCache = getPluginListCacheFile();
+    pluginScanner.setPluginListCacheFile (pluginCache);
+
     // Load previously-scanned plugin list so the browser is populated on startup.
-    // If no cache exists (first launch), auto-scan immediately so the browser populates.
-    pluginScanner.loadPluginList (getPluginListCacheFile());
+    pluginScanner.loadPluginList (pluginCache);
 
     // Make the cached plugins instantiable by Tracktion Engine (editor + audio), and
     // crucially BEFORE any saved session is reloaded — TE recreates its plugins from the
     // engine's knownPluginList on load.
     syncScannedPluginsToEngine();
 
-    // Auto-scan on first launch when no cached plugins are found
-    if (pluginScanner.getKnownPlugins().getNumTypes() == 0)
+    // First launch (no cache file yet) → scan. Previous scan interrupted (partial cache)
+    // → resume; PluginDirectoryScanner skips already-known files, so each launch picks up
+    // where the last left off until the list is complete. Both run silently in the
+    // background — only a manual menu scan shows a completion alert.
+    // NOTE: getNumTypes() is never 0 here (the ctor pre-loads the 4 built-in FX), so the
+    // cache FILE's existence — not the type count — is the correct "never scanned" signal.
+    const bool neverScanned = ! pluginCache.existsAsFile();
+    const bool scanPartial  = ! pluginScanner.lastScanWasComplete();
+    if (neverScanned || scanPartial)
     {
         juce::MessageManager::callAsync ([this]
         {
-            handleScanPlugins();
+            handleScanPlugins (false);   // auto: silent completion
         });
     }
 
@@ -128,6 +140,16 @@ void MainComponent::resized()
     // Onboarding overlay (first run) covers the whole window above everything.
     if (onboardingWizard != nullptr)
         onboardingWizard->setBounds (getLocalBounds());
+
+    // Modeless scan-progress overlay — bottom-right corner, above all content.
+    // Positioned before the Beginner-mode early-return so it shows in both views.
+    if (scanProgressPanel != nullptr)
+    {
+        constexpr int w = 320, h = 72, margin = 16;
+        scanProgressPanel->setBounds (getWidth()  - w - margin,
+                                      getHeight() - h - margin, w, h);
+        scanProgressPanel->toFront (false);
+    }
 
     // Beginner world owns the whole window when the Dial is in Beginner mode.
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
@@ -664,42 +686,62 @@ void MainComponent::handleFileImportAudio()
 // View menu handlers
 //==============================================================================
 
-void MainComponent::handleScanPlugins()
+void MainComponent::handleScanPlugins (bool userInitiated)
 {
-    // Show a non-blocking notification while scanning.
-    // Apple approach: minimal feedback — transient informational alert,
-    // not a modal dialog with a progress bar.
-    juce::AlertWindow::showMessageBoxAsync (
-        juce::MessageBoxIconType::InfoIcon,
-        "Scanning Plugins",
-        "Scanning plugin directories in the background.\n"
-        "The plugin browser will update when the scan completes.",
-        "OK");
+    // Modeless, live progress overlay (Apple-minimal — no blocking dialog).
+    showScanProgress();
 
-    // scanForPlugins now launches its own background thread and returns immediately.
-    // onComplete is called from the background thread — UI updates use callAsync.
+    // scanForPlugins launches its own background thread and returns immediately.
+    // Both callbacks fire on the background thread → marshal to the message thread
+    // with a SafePointer (this Component may be gone by the time they arrive).
+    // Persistence (incl. the final save) is handled inside the scanner via the
+    // cache file set in the constructor — no explicit savePluginList here.
     pluginScanner.scanForPlugins (
-        [] (float /*progress*/) {},   // progress callback (no progress bar in Phase 1)
-        [this] ()
+        [safe = juce::Component::SafePointer<MainComponent> (this)]
+        (const PluginScanner::ScanProgress& progress)
         {
-            // Save results to cache so the next launch loads immediately.
-            // Called on background thread — savePluginList is file I/O, safe here.
-            pluginScanner.savePluginList (getPluginListCacheFile());
-
-            // Post UI notification back to the message thread
-            juce::MessageManager::callAsync ([this]
+            juce::MessageManager::callAsync ([safe, progress]
             {
-                // Register the freshly-scanned plugins with the engine so they are
-                // instantiable (editor + audio) without a restart. On the message thread.
-                syncScannedPluginsToEngine();
+                if (safe == nullptr) return;
+                if (safe->scanProgressPanel != nullptr)
+                    safe->scanProgressPanel->update (progress);
+            });
+        },
+        [safe = juce::Component::SafePointer<MainComponent> (this), userInitiated] ()
+        {
+            juce::MessageManager::callAsync ([safe, userInitiated]
+            {
+                if (safe == nullptr) return;
 
-                juce::AlertWindow::showMessageBoxAsync (
-                    juce::MessageBoxIconType::InfoIcon,
-                    "Scan Complete",
-                    "Plugin scan finished. The browser now shows all found plugins.",
-                    "OK");
+                // Register the freshly-scanned plugins with the engine so they are
+                // instantiable (editor + audio) without a restart.
+                safe->syncScannedPluginsToEngine();
+                safe->hideScanProgress();
+
+                if (userInitiated)
+                    juce::AlertWindow::showMessageBoxAsync (
+                        juce::MessageBoxIconType::InfoIcon,
+                        "Scan Complete",
+                        "Plugin scan finished. The browser now shows all found plugins.",
+                        "OK");
             });
         });
+}
+
+void MainComponent::showScanProgress()
+{
+    if (scanProgressPanel == nullptr)
+    {
+        scanProgressPanel = std::make_unique<ScanProgressPanel>();
+        addAndMakeVisible (*scanProgressPanel);
+    }
+    scanProgressPanel->toFront (false);
+    resized();   // position it
+}
+
+void MainComponent::hideScanProgress()
+{
+    scanProgressPanel.reset();
 }
 
 void MainComponent::syncScannedPluginsToEngine()

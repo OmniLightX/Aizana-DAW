@@ -55,8 +55,8 @@ PluginScanner::~PluginScanner()
 // Scanning
 // ---------------------------------------------------------------------------
 
-void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
-                                    std::function<void()>       onComplete)
+void PluginScanner::scanForPlugins (std::function<void(const ScanProgress&)> onProgress,
+                                    std::function<void()>                    onComplete)
 {
     // Cancel any in-progress scan first
     cancelScan();
@@ -72,18 +72,23 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
                      onProgress = std::move (onProgress),
                      onComplete = std::move (onComplete)]()
     {
-        DBG ("PluginScanner: scanning " + juce::String (formatManager.getNumFormats()) + " formats");
+        // Collect the formats that can actually be scanned (VST3, AU, CLAP, ...).
+        // Iterating these directly gives a stable 0-based index for progress reporting.
+        juce::Array<juce::AudioPluginFormat*> scannable;
         for (int i = 0; i < formatManager.getNumFormats(); ++i)
+            if (auto* f = formatManager.getFormat (i); f != nullptr && f->canScanForPlugins())
+                scannable.add (f);
+
+        const int numFormats = scannable.size();
+        scanWasComplete.store (false);   // in progress until proven complete
+
+        DBG ("PluginScanner: scanning " + juce::String (numFormats) + " scannable formats");
+
+        for (int fi = 0; fi < numFormats; ++fi)
         {
-            auto* format = formatManager.getFormat (i);
-            if (format == nullptr || ! format->canScanForPlugins())
-                continue;
-
-            DBG ("  Format: " + format->getName()
-                 + " canScan=" + juce::String (format->canScanForPlugins() ? "yes" : "no"));
-
+            auto* format = scannable.getUnchecked (fi);
             const auto paths = getDefaultSearchPaths();
-            DBG ("  Search paths: " + paths.toString());
+            DBG ("  Format: " + format->getName() + " — paths: " + paths.toString());
 
             juce::PluginDirectoryScanner scanner (
                 knownPlugins,
@@ -95,14 +100,44 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
             );
 
             juce::String pluginName;
+            double lastSaveMs     = juce::Time::getMillisecondCounterHiRes();
+            int    lastSavedCount = knownPlugins.getNumTypes();
+
             try
             {
                 while (! (scanThread != nullptr && scanThread->threadShouldExit()))
                 {
-                    const bool more = scanner.scanNextFile (true, pluginName);
+                    const bool more  = scanner.scanNextFile (true, pluginName);
+                    const int  found = knownPlugins.getNumTypes();
                     DBG ("  Scanned: " + pluginName);
+
                     if (onProgress)
-                        onProgress (scanner.getProgress());
+                    {
+                        ScanProgress p;
+                        p.fraction        = numFormats > 0
+                                              ? (float) ((fi + scanner.getProgress()) / numFormats)
+                                              : 0.0f;
+                        p.numPluginsFound = found;
+                        p.currentPlugin   = pluginName;
+                        p.formatName      = format->getName();
+                        p.formatIndex     = fi;
+                        p.numFormats      = numFormats;
+                        onProgress (p);
+                    }
+
+                    // Throttled incremental save — keeps the scan crash-safe AND
+                    // resumable: PluginDirectoryScanner skips already-known files on
+                    // the next launch, so a partial cache means "continue from here".
+                    const double now = juce::Time::getMillisecondCounterHiRes();
+                    if (pluginListCacheFile != juce::File()
+                        && (found - lastSavedCount >= kSaveEveryNPlugins
+                            || now - lastSaveMs >= kSaveIntervalMs))
+                    {
+                        savePluginList (pluginListCacheFile, false);
+                        lastSaveMs     = now;
+                        lastSavedCount = found;
+                    }
+
                     if (! more)
                         break;
                 }
@@ -116,12 +151,26 @@ void PluginScanner::scanForPlugins (std::function<void(float)> onProgress,
             {
                 DBG ("PluginScanner: unknown exception during scan of " + format->getName());
             }
+
+            // Persist at every format boundary so a whole format's results survive
+            // even if the next format hangs and triggers a watchdog kill.
+            if (pluginListCacheFile != juce::File())
+                savePluginList (pluginListCacheFile, false);
         }
 
-        DBG ("PluginScanner: scan complete — "
-             + juce::String (knownPlugins.getNumTypes()) + " plugins found");
+        const bool cancelled = (scanThread != nullptr && scanThread->threadShouldExit());
+        scanWasComplete.store (! cancelled);
 
-        if (onComplete)
+        DBG ("PluginScanner: scan " + juce::String (cancelled ? "cancelled" : "complete")
+             + " — " + juce::String (knownPlugins.getNumTypes()) + " plugins found");
+
+        // Final authoritative save carrying the correct complete/partial marker.
+        if (pluginListCacheFile != juce::File())
+            savePluginList (pluginListCacheFile, ! cancelled);
+
+        // onComplete fires only for a NORMAL finish — a cancelled scan must not
+        // trigger "scan complete" UI (alerts, sync, etc.).
+        if (! cancelled && onComplete)
             onComplete();
     };
 
@@ -154,10 +203,14 @@ void PluginScanner::cancelScan()
 // Persistence
 // ---------------------------------------------------------------------------
 
-void PluginScanner::savePluginList (const juce::File& file)
+void PluginScanner::savePluginList (const juce::File& file, bool markComplete)
 {
     if (const auto xml = knownPlugins.createXml())
     {
+        // Stamp the resume marker on the root element. KnownPluginList::recreateFromXml()
+        // only reads PLUGIN child elements, so JUCE ignores this attribute on load; we
+        // read it back explicitly in loadPluginList() to decide whether to resume.
+        xml->setAttribute ("cloudesScanComplete", markComplete ? 1 : 0);
         file.getParentDirectory().createDirectory();
         xml->writeTo (file);
     }
@@ -169,7 +222,12 @@ void PluginScanner::loadPluginList (const juce::File& file)
         return;
 
     if (const auto xml = juce::XmlDocument::parse (file))
+    {
         knownPlugins.recreateFromXml (*xml);
+        // Legacy caches without the marker are treated as complete to avoid a
+        // surprise full re-scan for existing users.
+        scanWasComplete.store (xml->getBoolAttribute ("cloudesScanComplete", true));
+    }
 }
 
 // ---------------------------------------------------------------------------
