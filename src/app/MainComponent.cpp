@@ -109,6 +109,18 @@ void MainComponent::showOnboardingIfNeeded()
     if (appState.uiState.isOnboardingCompleted())
         return;
 
+    showOnboardingWizard();
+}
+
+void MainComponent::showOnboardingWizard()
+{
+    // Guard against opening a second overlay if one is already up.
+    if (onboardingWizard != nullptr)
+    {
+        onboardingWizard->toFront (true);
+        return;
+    }
+
     onboardingWizard = std::make_unique<OnboardingWizard> (appState, [this]
     {
         // Defer teardown out of the wizard's own button callback (avoid self-delete).
@@ -121,6 +133,15 @@ void MainComponent::showOnboardingIfNeeded()
     addAndMakeVisible (*onboardingWizard);
     onboardingWizard->setBounds (getLocalBounds());
     onboardingWizard->toFront (true);
+}
+
+void MainComponent::handleReopenOnboarding()
+{
+    // Re-run the first-run wizard on demand. It rebuilds the starter project on the
+    // CURRENT edit (renames the first tracks to the genre's names + sets the chosen
+    // tempo) in a single undo transaction, so re-running on existing work is reversible.
+    // This makes the genre presets + starter-tempo slider reachable after first run.
+    showOnboardingWizard();
 }
 
 MainComponent::~MainComponent()
@@ -446,6 +467,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           mixerVisible);
             menu.addSeparator();
             menu.addItem (ScanPlugins, "Scan Plugins...", true);
+            menu.addItem (ViewReopenOnboarding, "Onboarding wiederholen...", true);
             break;
 
         case 4:  // Song Setup
@@ -494,6 +516,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case ScanPlugins:
             handleScanPlugins();
+            break;
+
+        case ViewReopenOnboarding:
+            handleReopenOnboarding();
             break;
 
         case ViewToggleBeginner:

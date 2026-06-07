@@ -203,6 +203,11 @@ private:
 
     // First-run onboarding (Phase 2, Block C) — shown once, gated by UIStateManager.
     void showOnboardingIfNeeded();
+    // Build + show the wizard unconditionally (the actual overlay creation).
+    void showOnboardingWizard();
+    // Menu action: re-run onboarding on demand ("Onboarding wiederholen") so the genre
+    // presets + starter-tempo slider are reachable again after first run.
+    void handleReopenOnboarding();
     std::unique_ptr<OnboardingWizard> onboardingWizard;
 
     // -------------------------------------------------------------------------
@@ -222,9 +227,10 @@ private:
         EditRedo = 102,
 
         // View menu
-        ViewToggleMixer    = 201,
-        ScanPlugins        = 202,
-        ViewToggleBeginner = 203,
+        ViewToggleMixer     = 201,
+        ScanPlugins         = 202,
+        ViewToggleBeginner  = 203,
+        ViewReopenOnboarding = 204,
 
         // Export menu
         ExportMixdown = 301,
