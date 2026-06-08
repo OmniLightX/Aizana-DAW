@@ -230,8 +230,9 @@ namespace
         { EditTool::Pointer,     CloudesIcon::Pointer  },
         { EditTool::RangeSelect, CloudesIcon::Range    },
         { EditTool::Scissors,    CloudesIcon::Scissors },
+        { EditTool::Eraser,      CloudesIcon::Erase    },
     };
-    constexpr int kNumToolCells = 3;
+    constexpr int kNumToolCells = 4;
     constexpr int kToolCellMaxW = 34;
 }
 
@@ -1507,6 +1508,11 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
     switch (activeTool)
     {
+        case EditTool::Eraser:
+            // Eraser on empty timeline: nothing to delete (clip clicks are handled in
+            // ClipComponent). No-op here.
+            break;
+
         case EditTool::Pointer:
         {
             // Store the rubber-band origin FIRST — before any call that may trigger
@@ -1836,6 +1842,9 @@ juce::MouseCursor ArrangementView::getMouseCursor()
             return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
         case EditTool::Marquee:
             return juce::MouseCursor (juce::MouseCursor::IBeamCursor);
+        case EditTool::Eraser:
+            // No eraser cursor in JUCE — crosshair signals a precise clip-acting tool.
+            return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
     }
     return juce::MouseCursor (juce::MouseCursor::NormalCursor);
 }

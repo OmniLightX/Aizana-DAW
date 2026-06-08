@@ -548,6 +548,15 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         activeFadeDrag = FadeDragType::None;
     }
 
+    // ---- Eraser tool (Studio One parity): a left-click anywhere on the clip deletes it.
+    // Checked before handle/drag logic so it wins regardless of where you click. deleteClip
+    // triggers a rebuild that deletes THIS component, so return immediately and touch nothing. ----
+    if (activeTool_ == EditTool::Eraser && e.mods.isLeftButtonDown())
+    {
+        clipEditor.deleteClip (clip);
+        return;
+    }
+
     // ---- Fade handle hit test (audio clips only, all tools) ----
     // Must be checked BEFORE any existing drag logic so fade drags don't
     // accidentally start a clip move.  Fade handles have highest priority —
