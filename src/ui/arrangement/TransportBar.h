@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "app/ApplicationState.h"
+#include "ui/common/IconButton.h"
 
 /**
  * TransportBar — Fixed transport control bar at the top of the DAW window.
@@ -28,19 +29,20 @@ private:
     void showSampleRateMenu();
     ApplicationState& appState;
 
-    juce::TextButton rewindButton    { "|<" };  // Return to start
-    juce::TextButton playButton      { "Play" };
-    juce::TextButton stopButton      { "Stop" };
-    juce::TextButton recordButton    { "Rec"  };
+    // Transport controls — vector-icon buttons (Sketch 005 Pro-UI polish; no text labels).
+    IconButton rewindButton    { CloudesIcon::Rewind };     // Return to start (|◀)
+    IconButton playButton      { CloudesIcon::Play };
+    IconButton stopButton      { CloudesIcon::Stop };
+    IconButton recordButton    { CloudesIcon::Record };
 
     /** Enables/disables the metronome click track. */
-    juce::TextButton metronomeButton { "Click" };
+    IconButton metronomeButton { CloudesIcon::Metronome };
 
     /** Enables/disables loop playback; lit when transport.looping is true. */
-    juce::TextButton loopButton { "Loop" };
+    IconButton loopButton { CloudesIcon::Loop };
 
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
-    juce::TextButton tapTempoButton { "Tap" };
+    IconButton tapTempoButton { CloudesIcon::Tap };
 
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */

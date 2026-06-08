@@ -104,40 +104,53 @@ TransportBar::TransportBar (ApplicationState& appState_)
     sampleRateLabel.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     sampleRateLabel.setText ("-- kHz", juce::dontSendNotification);
 
-    // Style transport buttons
-    rewindButton.setColour (juce::TextButton::buttonColourId,     juce::Colour (0xff3a3a3a));
-    rewindButton.setColour (juce::TextButton::textColourOffId,    juce::Colour (0xffaaaaaa));
-    rewindButton.setTooltip ("Return to Start");
-    playButton.setColour   (juce::TextButton::buttonColourId,     juce::Colour (0xff2d6a2d));
-    playButton.setColour   (juce::TextButton::buttonOnColourId,   juce::Colour (0xff3a8f3a));
-    stopButton.setColour   (juce::TextButton::buttonColourId,     juce::Colour (0xff3a3a3a));
-    recordButton.setColour (juce::TextButton::buttonColourId,     juce::Colour (0xff8f2d2d));
-    recordButton.setColour (juce::TextButton::buttonOnColourId,   juce::Colour (0xffcc3333));
+    // ---- Transport icon buttons (Sketch 005) — colours per CloudesIcon semantics ----
+    auto neutral = [] (IconButton& b)
+    {
+        b.bgColour     = juce::Colour (0xff3a3a3a);
+        b.iconColour   = juce::Colour (0xff9aa0a6);
+        b.iconColourOn = juce::Colours::white;
+    };
 
-    // Wire buttons
+    neutral (rewindButton);  rewindButton.setTooltip ("Zum Start");
+    neutral (stopButton);    stopButton.setTooltip ("Stopp");
+
+    // Play — green
+    playButton.bgColour     = juce::Colour (0xff2d6a2d);
+    playButton.bgColourOn   = juce::Colour (0xff3a8f3a);   // brighter while playing
+    playButton.iconColour   = juce::Colour (0xffe6ffe6);
+    playButton.iconColourOn = juce::Colours::white;
+    playButton.setTooltip ("Wiedergabe");
+
+    // Record — red icon; fills red while recording
+    recordButton.bgColour     = juce::Colour (0xff3a3a3a);
+    recordButton.bgColourOn   = juce::Colour (0xffcc3333);
+    recordButton.iconColour   = juce::Colour (0xffe0584d);
+    recordButton.iconColourOn = juce::Colours::white;
+    recordButton.setTooltip ("Aufnahme");
+
+    // Wire transport
     rewindButton.onClick = [this] { rewindClicked(); };
     playButton.onClick   = [this] { playClicked(); };
     stopButton.onClick   = [this] { stopClicked(); };
     recordButton.onClick = [this] { recordClicked(); };
 
-    // Metronome button — toggle, wired to MetronomeGenerator
+    // Metronome button — toggle, wired to MetronomeGenerator (blue when on)
+    neutral (metronomeButton);
+    metronomeButton.bgColourOn = juce::Colour (0xff2d4a6a);
     metronomeButton.setClickingTogglesState (true);
-    metronomeButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    metronomeButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // dark blue active state
-    metronomeButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
-    metronomeButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    metronomeButton.setTooltip ("Metronom");
     metronomeButton.onClick = [this]
     {
         const bool enabled = metronomeButton.getToggleState();
         appState.audioEngine.getMetronome().setEnabled (enabled);
     };
 
-    // Loop button — toggles transport looping; highlight synced by timerCallback
+    // Loop button — toggles transport looping (primary-blue when on); synced by timerCallback
+    neutral (loopButton);
+    loopButton.bgColourOn = juce::Colour (0xff4488ff);
     loopButton.setClickingTogglesState (false);   // manual toggle via onClick
-    loopButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    loopButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4488ff));
-    loopButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
-    loopButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    loopButton.setTooltip ("Loop");
     loopButton.onClick = [this]
     {
         auto* edit = appState.editManager.getEdit();
@@ -148,10 +161,9 @@ TransportBar::TransportBar (ApplicationState& appState_)
         loopButton.setToggleState (newLooping, juce::dontSendNotification);
     };
 
-    // Tap Tempo button — same visual style as loopButton
-    tapTempoButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
-    tapTempoButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff888888));
-    tapTempoButton.setTooltip ("Tap Tempo — click to the beat (resets after 2 s gap)");
+    // Tap Tempo button
+    neutral (tapTempoButton);
+    tapTempoButton.setTooltip ("Tap Tempo — im Takt klicken (Reset nach 2 s)");
     tapTempoButton.onClick = [this] { tapTempoClicked(); };
 
     // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----
@@ -197,23 +209,22 @@ void TransportBar::resized()
 {
     auto area = getLocalBounds().reduced (4);
 
-    // Left side: transport buttons
-    const int buttonW = 60;
+    // Left side: transport icon buttons — square, grouped (Sketch 005).
+    const int bw      = 34;
     const int buttonH = area.getHeight();
+    auto place = [&] (juce::Component& b, int gap)
+    {
+        b.setBounds (area.removeFromLeft (bw).withHeight (buttonH));
+        area.removeFromLeft (gap);
+    };
 
-    rewindButton.setBounds    (area.removeFromLeft (36).withHeight (buttonH));
-    area.removeFromLeft (2);
-    playButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
-    area.removeFromLeft (4);
-    stopButton.setBounds      (area.removeFromLeft (buttonW).withHeight (buttonH));
-    area.removeFromLeft (4);
-    recordButton.setBounds    (area.removeFromLeft (buttonW).withHeight (buttonH));
-    area.removeFromLeft (4);
-    metronomeButton.setBounds (area.removeFromLeft (buttonW).withHeight (buttonH));
-    area.removeFromLeft (4);
-    loopButton.setBounds      (area.removeFromLeft (44).withHeight (buttonH));
-    area.removeFromLeft (4);
-    tapTempoButton.setBounds  (area.removeFromLeft (44).withHeight (buttonH));
+    place (rewindButton, 3);
+    place (playButton,   3);
+    place (stopButton,   3);
+    place (recordButton, 10);   // gap before the secondary cluster
+    place (metronomeButton, 3);
+    place (loopButton,   3);
+    place (tapTempoButton, 0);
 
     // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
