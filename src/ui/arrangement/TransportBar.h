@@ -44,6 +44,12 @@ private:
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
     IconButton tapTempoButton { CloudesIcon::Tap };
 
+    /** Pre-Count / Vorzähler — N bars of metronome before recording drops in
+     *  (Studio One parity). Cycles Off → 1 bar → 2 bars; backed by te::Edit::CountIn. */
+    juce::TextButton precountButton { "Vorz: Aus" };
+    void cyclePreCount();
+    void updatePreCountButton();
+
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */
     juce::TextButton modeButton   { "Einsteiger" };

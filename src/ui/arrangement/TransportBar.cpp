@@ -166,6 +166,16 @@ TransportBar::TransportBar (ApplicationState& appState_)
     tapTempoButton.setTooltip ("Tap Tempo — im Takt klicken (Reset nach 2 s)");
     tapTempoButton.onClick = [this] { tapTempoClicked(); };
 
+    // Pre-Count / Vorzähler — N bars of metronome before recording drops in.
+    precountButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
+    precountButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    precountButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // blue when active
+    precountButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
+    precountButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    precountButton.setTooltip ("Vorzähler vor der Aufnahme (Aus / 1 Takt / 2 Takte) — Metronom muss an sein");
+    precountButton.onClick = [this] { cyclePreCount(); };
+    updatePreCountButton();
+
     // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----
     modeButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
     modeButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffcccccc));
@@ -187,6 +197,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (metronomeButton);
     addAndMakeVisible (loopButton);
     addAndMakeVisible (tapTempoButton);
+    addAndMakeVisible (precountButton);
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
     addAndMakeVisible (positionLabel);
@@ -224,7 +235,8 @@ void TransportBar::resized()
     place (recordButton, 10);   // gap before the secondary cluster
     place (metronomeButton, 3);
     place (loopButton,   3);
-    place (tapTempoButton, 0);
+    place (tapTempoButton, 6);
+    precountButton.setBounds (area.removeFromLeft (66).withHeight (buttonH));
 
     // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
@@ -288,6 +300,7 @@ void TransportBar::timerCallback()
     {
         updateBpmLabel();
         updateTimeSigDisplay();
+        updatePreCountButton();
 
         // Keep metronome BPM in sync with the edit's current tempo
         if (auto* editForBpm = appState.editManager.getEdit())
@@ -403,6 +416,35 @@ void TransportBar::updateTimeSigDisplay()
             timeSigDenominator.setSelectedId (i + 1, juce::dontSendNotification);
             break;
         }
+}
+
+void TransportBar::cyclePreCount()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    using CI = tracktion::engine::Edit::CountIn;
+    const auto cur  = edit->getCountInMode();
+    const auto next = (cur == CI::none)   ? CI::oneBar
+                    : (cur == CI::oneBar) ? CI::twoBar
+                                          : CI::none;
+    edit->setCountInMode (next);
+    updatePreCountButton();
+}
+
+void TransportBar::updatePreCountButton()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    using CI = tracktion::engine::Edit::CountIn;
+    const auto m = edit->getCountInMode();
+    precountButton.setButtonText (m == CI::oneBar ? "Vorz: 1T"
+                                 : m == CI::twoBar ? "Vorz: 2T"
+                                                   : "Vorz: Aus");
+    precountButton.setToggleState (m != CI::none, juce::dontSendNotification);
 }
 
 void TransportBar::rewindClicked()
