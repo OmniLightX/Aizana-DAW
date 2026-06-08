@@ -85,6 +85,13 @@ public:
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;
 
+    /** The currently selected track (or nullptr if none) — used as the target for the
+        Pro-Assist palette/rail. TrackHeader is fully included above, so this is inline. */
+    te::AudioTrack* getSelectedTrack() const noexcept
+    {
+        return selectedTrackHeader != nullptr ? &selectedTrackHeader->getTrack() : nullptr;
+    }
+
     // Zoom control (pinch/scroll — also called by MainComponent)
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
     void   setPixelsPerSecond (double pps);

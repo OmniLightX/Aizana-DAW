@@ -21,6 +21,7 @@
 #include "ui/beginner/BeginnerView.h"
 #include "ui/onboarding/OnboardingWizard.h"
 #include "ui/pluginbrowser/ScanProgressPanel.h"
+#include "ui/assist/ProAssistPalette.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -281,6 +282,11 @@ private:
 
     // Modeless scan-progress overlay — owned here, present only while scanning.
     std::unique_ptr<ScanProgressPanel> scanProgressPanel;
+
+    // Pro-Assist command palette (⌘K, Sketch 004) — summoned in Pro mode, dismisses itself.
+    std::unique_ptr<ProAssistPalette> proAssistPalette;
+    void showProAssistPalette();
+    void applyAssistIntent (IntentEngine::Intent);   // shared by palette + (later) rail
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

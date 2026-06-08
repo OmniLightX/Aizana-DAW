@@ -162,6 +162,10 @@ void MainComponent::resized()
     if (onboardingWizard != nullptr)
         onboardingWizard->setBounds (getLocalBounds());
 
+    // Pro-Assist command palette (⌘K) — full-window overlay (dim + centered card).
+    if (proAssistPalette != nullptr)
+        proAssistPalette->setBounds (getLocalBounds());
+
     // Modeless scan-progress overlay — bottom-right corner, above all content.
     // Positioned before the Beginner-mode early-return so it shows in both views.
     if (scanProgressPanel != nullptr)
@@ -222,6 +226,16 @@ void MainComponent::resized()
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    // Cmd+K / Ctrl+K: Pro-Assist command palette (Sketch 004). Pro mode only — the
+    // Beginner world already has its own always-on command bar.
+    if ((key == juce::KeyPress ('k', juce::ModifierKeys::commandModifier, 0) ||
+         key == juce::KeyPress ('k', juce::ModifierKeys::ctrlModifier, 0))
+        && appState.uiState.getMode() == UIStateManager::UIMode::Pro)
+    {
+        showProAssistPalette();
+        return true;
+    }
+
     // Cmd+, (macOS) / Ctrl+, (Windows) opens Audio Preferences
     if (key == juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0) ||
         key == juce::KeyPress (',', juce::ModifierKeys::ctrlModifier, 0))
@@ -768,6 +782,52 @@ void MainComponent::showScanProgress()
 void MainComponent::hideScanProgress()
 {
     scanProgressPanel.reset();
+}
+
+void MainComponent::showProAssistPalette()
+{
+    if (proAssistPalette != nullptr)   // ⌘K again (or re-entry) closes it
+    {
+        proAssistPalette.reset();
+        return;
+    }
+
+    proAssistPalette = std::make_unique<ProAssistPalette>();
+
+    proAssistPalette->targetName = [this]() -> juce::String
+    {
+        if (auto* t = arrangementView.getSelectedTrack())
+            return t->getName();
+        return "Erster Track";
+    };
+    proAssistPalette->onApply = [this] (IntentEngine::Intent intent) { applyAssistIntent (intent); };
+    proAssistPalette->onDismiss = [this]
+    {
+        // Defer teardown out of the palette's own callback (avoid self-delete).
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            if (safe == nullptr) return;
+            safe->proAssistPalette.reset();
+        });
+    };
+
+    addAndMakeVisible (*proAssistPalette);
+    proAssistPalette->setBounds (getLocalBounds());
+    proAssistPalette->toFront (true);
+    proAssistPalette->reset();   // clear text, select first, grab focus
+}
+
+void MainComponent::applyAssistIntent (IntentEngine::Intent intent)
+{
+    // Mirror BeginnerView::runIntent: target the selected track (null → first audio track;
+    // loudness/glue intents ignore the target and act on the master). The plan is real,
+    // editable TE mechanic applied as ONE undo transaction via the bridge.
+    auto* target = arrangementView.getSelectedTrack();
+    const auto plan = appState.intentEngine.plan (intent, target);
+    if (! plan.valid)
+        return;
+
+    appState.aiCommandBridge.enqueueBatch (plan.description, plan.commands);
 }
 
 void MainComponent::syncScannedPluginsToEngine()
