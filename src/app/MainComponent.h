@@ -22,6 +22,7 @@
 #include "ui/onboarding/OnboardingWizard.h"
 #include "ui/pluginbrowser/ScanProgressPanel.h"
 #include "ui/assist/ProAssistPalette.h"
+#include "ui/assist/ProAssistRail.h"
 
 /**
  * MainComponent — Root JUCE Component for the Cloudes DAW window.
@@ -114,6 +115,10 @@ private:
     // Needs MixerEngine to read Named-Bus grouping (declared earlier — init order OK).
     BeginnerView    beginnerView    { appState, mixerEngine };
 
+    // Pro-Assist dockable rail (Sketch 004, A of B+A) — opt-in right panel, shown in
+    // Pro mode when assist is toggled on (TransportBar "Assist" → uiState.assistEnabled).
+    ProAssistRail   proAssistRail   { appState };
+
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
 
     // ---- Mixer divider — click to toggle, drag to resize (Studio One style) ----
@@ -194,6 +199,7 @@ private:
     static constexpr int kPianoRollHeight = 250;  // default docked height
 
     static constexpr int kDockedPanelWidth = 350;  // px when plugins are docked
+    static constexpr int kAssistRailWidth  = 330;  // px for the Pro-Assist rail (Sketch 004)
 
     void toggleMixer();
 

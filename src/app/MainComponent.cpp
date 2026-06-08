@@ -82,6 +82,14 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Added hidden; the Dial (UIStateManager) decides which view is shown, and
     // switching is lossless because both views share one Edit (UI-04).
     addChildComponent (beginnerView);
+
+    // Pro-Assist rail (Sketch 004, A of B+A) — opt-in dockable surface. Target = the
+    // arrangement's selected track (null → first); × toggles assist back off. Added
+    // hidden; applyUIMode() shows it in Pro mode when assist is on.
+    proAssistRail.targetProvider = [this] { return arrangementView.getSelectedTrack(); };
+    proAssistRail.onClose        = [this] { appState.uiState.toggleAssist(); };
+    addChildComponent (proAssistRail);
+
     appState.uiState.addChangeListener (this);
 
     // Allow this component to receive key events
@@ -192,6 +200,10 @@ void MainComponent::resized()
     auto& dockedPanel = pluginWindowManager.getDockedPanel();
     const int dockedWidth = dockedPanel.isEmpty() ? 0 : kDockedPanelWidth;
     dockedPanel.setBounds (area.removeFromRight (dockedWidth));
+
+    // Pro-Assist rail — opt-in, docked to the right (left of any plugin panel).
+    if (proAssistRail.isVisible())
+        proAssistRail.setBounds (area.removeFromRight (kAssistRailWidth));
 
     if (pianoRollVisible && pianoRollView != nullptr)
     {
@@ -378,6 +390,10 @@ void MainComponent::applyUIMode()
     mixerDivider.setVisible    (! beginner);
     mixerView.setVisible       (! beginner && mixerVisible);
     pluginWindowManager.getDockedPanel().setVisible (! beginner);
+    // Pro-Assist rail: only in Pro mode, and only when assist is toggled on (the Dial's
+    // assist flag — Pro default is off). Its own visibilityChanged() starts/stops the
+    // observations timer.
+    proAssistRail.setVisible (! beginner && appState.uiState.isAssistEnabled());
     if (pianoRollView != nullptr)
         pianoRollView->setVisible (! beginner && pianoRollVisible);
     pianoRollCloseButton.setVisible (! beginner && pianoRollVisible);
