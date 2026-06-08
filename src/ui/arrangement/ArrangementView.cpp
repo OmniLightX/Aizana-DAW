@@ -1,4 +1,5 @@
 #include "ArrangementView.h"
+#include "ui/common/CloudesIcons.h"
 #include <set>
 
 namespace te = tracktion::engine;
@@ -220,37 +221,61 @@ ArrangementView::ToolSelectorStrip::ToolSelectorStrip (EditTool& activeTool_,
 {
 }
 
+namespace
+{
+    // Visible tool palette = the real EditTools (logic unchanged). Marquee stays
+    // Cmd-drag-only (invariant), so it is not a palette cell.
+    struct ToolCell { EditTool tool; CloudesIcon icon; };
+    const ToolCell kToolCells[] {
+        { EditTool::Pointer,     CloudesIcon::Pointer  },
+        { EditTool::RangeSelect, CloudesIcon::Range    },
+        { EditTool::Scissors,    CloudesIcon::Scissors },
+    };
+    constexpr int kNumToolCells = 3;
+    constexpr int kToolCellMaxW = 34;
+}
+
 void ArrangementView::ToolSelectorStrip::paint (juce::Graphics& g)
 {
-    // Dark background matching header strip
     g.fillAll (juce::Colour (0xff1a1a1a));
 
-    // Single Scissors button — tools are keyboard-only; this button is a visual
-    // indicator and toggle for the Scissors tool.  Pointer (default) shows it unlit.
-    constexpr int kButtonW = 36;
-    constexpr int kButtonH = 20;
-    const int     stripH   = getHeight();
-    const int     yOff     = (stripH - kButtonH) / 2;
+    const int cellW = juce::jmin (kToolCellMaxW, getWidth() / kNumToolCells);
+    const int cellH = juce::jmin (cellW, getHeight());
+    const int yOff  = (getHeight() - cellH) / 2;
 
-    const juce::Rectangle<int> r (0, yOff, kButtonW, kButtonH);
-    const bool scissorsActive = (activeTool == EditTool::Scissors);
-
-    if (scissorsActive)
+    for (int i = 0; i < kNumToolCells; ++i)
     {
-        g.setColour (juce::Colour (0xff4488ff).withAlpha (0.40f));
-        g.fillRoundedRectangle (r.toFloat().reduced (1.0f), 3.0f);
-    }
+        const auto cell   = juce::Rectangle<int> (i * cellW, yOff, cellW, cellH).toFloat();
+        const bool active = (activeTool == kToolCells[i].tool);
 
-    g.setColour (scissorsActive ? juce::Colour (0xffffffff) : juce::Colour (0xff888888));
-    g.setFont (juce::FontOptions (12.0f));
-    g.drawText ("C", r, juce::Justification::centred, false);
+        if (active)
+        {
+            g.setColour (juce::Colour (0xff4488ff));
+            g.fillRoundedRectangle (cell.reduced (2.0f), 4.0f);
+        }
+
+        g.setColour (active ? juce::Colours::white : juce::Colour (0xff9aa0a6));
+        auto p = CloudesIcons::path (kToolCells[i].icon);
+        const float side = (float) cellW * 0.52f;
+        auto target = juce::Rectangle<float> (side, side).withCentre (cell.getCentre());
+        p.applyTransform (p.getTransformToScaleToFit (target, true));
+
+        if (CloudesIcons::stroked (kToolCells[i].icon))
+            g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+        else
+            g.fillPath (p);
+    }
 }
 
 void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
 {
-    // Single Scissors button: clicking toggles Scissors ↔ Pointer.
-    juce::ignoreUnused (e);
-    onToolSelected (activeTool == EditTool::Scissors ? EditTool::Pointer : EditTool::Scissors);
+    const int cellW = juce::jmin (kToolCellMaxW, getWidth() / kNumToolCells);
+    if (cellW <= 0)
+        return;
+    const int idx = e.getPosition().x / cellW;
+    if (idx >= 0 && idx < kNumToolCells)
+        onToolSelected (kToolCells[idx].tool);
 }
 
 //==============================================================================
