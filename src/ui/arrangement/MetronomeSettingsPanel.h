@@ -32,20 +32,25 @@ public:
         styleKeyLabel (preRollLabel, "Pre-Roll");
         styleKeyLabel (accentLabel,  "Downbeat betonen");
         styleKeyLabel (levelLabel,   "Klick-Lautst\xc3\xa4rke");
+        for (auto* l : { &countInLabel, &preRollLabel, &accentLabel, &levelLabel })
+            addAndMakeVisible (l);
 
         const char* segText[3] = { "Aus", "1", "2" };
         for (int i = 0; i < 3; ++i)
         {
             styleSeg (countInSeg[i], segText[i]);
+            countInSeg[i].setTooltip ("Vorz\xc3\xa4hler \xe2\x80\x93 Anzahl Klick-Takte vor dem Aufnahmestart (Aus / 1 / 2 Takte)");
             countInSeg[i].onClick = [this, i] { if (setCountIn) setCountIn (i); refresh(); };
             addAndMakeVisible (countInSeg[i]);
 
             styleSeg (preRollSeg[i], segText[i]);
+            preRollSeg[i].setTooltip ("Pre-Roll \xe2\x80\x93 h\xc3\xb6rbarer Anlauf (Takte) vor dem Aufnahmestart");
             preRollSeg[i].onClick = [this, i] { if (setPreRoll) setPreRoll (i); refresh(); };
             addAndMakeVisible (preRollSeg[i]);
         }
 
         styleSeg (accentToggle, "Ein");
+        accentToggle.setTooltip ("Downbeat (Takt 1) lauter + h\xc3\xb6her betonen");
         accentToggle.onClick = [this] { if (setAccent) setAccent (! (getAccent && getAccent())); refresh(); };
         addAndMakeVisible (accentToggle);
 
@@ -55,6 +60,7 @@ public:
         levelSlider.setColour (juce::Slider::trackColourId,      juce::Colour (0xff4a90d9));
         levelSlider.setColour (juce::Slider::backgroundColourId, juce::Colour (0xff2a2a2a));
         levelSlider.setColour (juce::Slider::thumbColourId,      juce::Colours::white);
+        levelSlider.setTooltip ("Klick-Lautst\xc3\xa4rke des Metronoms");
         levelSlider.onValueChange = [this] { if (setLevel) setLevel ((float) levelSlider.getValue()); };
         addAndMakeVisible (levelSlider);
 
