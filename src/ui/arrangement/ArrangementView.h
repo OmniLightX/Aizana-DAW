@@ -390,6 +390,10 @@ private:
     bool             autoScrollEnabled = true;
     juce::TextButton autoScrollButton  { "F" };
 
+    /** Create `count` tracks at the end (Studio One Add Tracks dialog). midi → MIDI
+     *  tracks (each seeded with a 4-bar clip); stereo → audio tracks in stereo format. */
+    void createTracks (int count, bool midi, bool stereo, juce::String namePrefix);
+
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();
     // Lays out all TrackRows vertically (called by resized() and after row expansion)

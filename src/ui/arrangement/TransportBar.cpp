@@ -40,61 +40,13 @@ TransportBar::TransportBar (ApplicationState& appState_)
     // Update BPM display from edit tempo
     updateBpmLabel();
 
-    // ---- Time signature controls ----
-    timeSigNumerator.addItem ("2",  1);
-    timeSigNumerator.addItem ("3",  2);
-    timeSigNumerator.addItem ("4",  3);
-    timeSigNumerator.addItem ("5",  4);
-    timeSigNumerator.addItem ("6",  5);
-    timeSigNumerator.addItem ("7",  6);
-    timeSigNumerator.addItem ("8",  7);
-    timeSigNumerator.addItem ("9",  8);
-    timeSigNumerator.addItem ("12", 9);
-    timeSigNumerator.setSelectedId (3, juce::dontSendNotification);  // default 4/4
-
-    timeSigDenominator.addItem ("2",  1);
-    timeSigDenominator.addItem ("4",  2);
-    timeSigDenominator.addItem ("8",  3);
-    timeSigDenominator.addItem ("16", 4);
-    timeSigDenominator.setSelectedId (2, juce::dontSendNotification);  // default 4/4
-
-    // Shared handler: build "num/denom" string and call setStringTimeSig
-    auto applyTimeSig = [this]
-    {
-        auto* edit = appState.editManager.getEdit();
-        if (edit == nullptr) return;
-
-        const int numItems[] = { 2, 3, 4, 5, 6, 7, 8, 9, 12 };
-        const int denItems[] = { 2, 4, 8, 16 };
-
-        const int numIdx = timeSigNumerator.getSelectedId() - 1;
-        const int denIdx = timeSigDenominator.getSelectedId() - 1;
-        if (numIdx < 0 || numIdx >= 9 || denIdx < 0 || denIdx >= 4)
-            return;
-
-        const int newNum = numItems[numIdx];
-        const int newDen = denItems[denIdx];
-
-        auto& seq = edit->tempoSequence;
-        if (seq.getNumTimeSigs() > 0)
-        {
-            auto& undoManager = appState.editManager.getUndoManager();
-            undoManager.beginNewTransaction ("Set time signature");
-            seq.getTimeSig (0)->setStringTimeSig (
-                juce::String (newNum) + "/" + juce::String (newDen));
-        }
-
-        // Keep metronome beats per bar in sync
-        appState.audioEngine.getMetronome().setBeatsPerBar (newNum);
-    };
-
-    timeSigNumerator.onChange   = applyTimeSig;
-    timeSigDenominator.onChange = applyTimeSig;
-
-    timeSigSlash.setText ("/", juce::dontSendNotification);
-    timeSigSlash.setJustificationType (juce::Justification::centred);
-    timeSigSlash.setFont (juce::FontOptions (14.0f));
-    timeSigSlash.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
+    // ---- Time signature — single clean "4/4" button, click → common signatures ----
+    timeSigButton.setColour (juce::TextButton::buttonColourId,   juce::Colours::transparentBlack);
+    timeSigButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    timeSigButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffcccccc));
+    timeSigButton.setColour (juce::ComboBox::outlineColourId,    juce::Colours::transparentBlack);
+    timeSigButton.setTooltip (juce::String::fromUTF8 ("Taktart \xe2\x80\x94 klicken zum \xc3\x84ndern"));
+    timeSigButton.onClick = [this] { showTimeSigMenu(); };
 
     updateTimeSigDisplay();
 
@@ -210,9 +162,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (assistButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
-    addAndMakeVisible (timeSigNumerator);
-    addAndMakeVisible (timeSigSlash);
-    addAndMakeVisible (timeSigDenominator);
+    addAndMakeVisible (timeSigButton);
     addAndMakeVisible (sampleRateLabel);
 
     // Start 30ms timer to update position display during playback
@@ -259,12 +209,8 @@ void TransportBar::resized()
     area.removeFromRight (4);
     bpmLabel.setBounds           (area.removeFromRight (100));
     area.removeFromRight (4);
-    // Time signature: den / slash / num (right to left) — visually "4 / 4" left of BPM
-    timeSigDenominator.setBounds (area.removeFromRight (36).withHeight (buttonH));
-    area.removeFromRight (2);
-    timeSigSlash.setBounds       (area.removeFromRight (10).withHeight (buttonH));
-    area.removeFromRight (2);
-    timeSigNumerator.setBounds   (area.removeFromRight (36).withHeight (buttonH));
+    // Time signature: a single clean "4/4" button left of BPM.
+    timeSigButton.setBounds (area.removeFromRight (52).withHeight (buttonH));
     area.removeFromRight (4);
 
     // Centre: position display
@@ -410,24 +356,51 @@ void TransportBar::updateTimeSigDisplay()
 
     const int num = seq.getTimeSig (0)->numerator;
     const int den = seq.getTimeSig (0)->denominator;
+    timeSigButton.setButtonText (juce::String (num) + "/" + juce::String (den));
+}
 
-    // Map numerator value to combo ID (items: 2,3,4,5,6,7,8,9,12)
-    const int numItems[] = { 2, 3, 4, 5, 6, 7, 8, 9, 12 };
-    for (int i = 0; i < 9; ++i)
-        if (numItems[i] == num)
-        {
-            timeSigNumerator.setSelectedId (i + 1, juce::dontSendNotification);
-            break;
-        }
+void TransportBar::applyTimeSig (int numerator, int denominator)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr) return;
 
-    // Map denominator value to combo ID (items: 2, 4, 8, 16)
-    const int denItems[] = { 2, 4, 8, 16 };
-    for (int i = 0; i < 4; ++i)
-        if (denItems[i] == den)
+    auto& seq = edit->tempoSequence;
+    if (seq.getNumTimeSigs() > 0)
+    {
+        appState.editManager.getUndoManager().beginNewTransaction ("Set time signature");
+        seq.getTimeSig (0)->setStringTimeSig (juce::String (numerator) + "/" + juce::String (denominator));
+    }
+
+    appState.audioEngine.getMetronome().setBeatsPerBar (numerator);  // keep metronome in sync
+    updateTimeSigDisplay();
+}
+
+void TransportBar::showTimeSigMenu()
+{
+    auto* edit = appState.editManager.getEdit();
+    const int curNum = (edit != nullptr && edit->tempoSequence.getNumTimeSigs() > 0)
+                           ? edit->tempoSequence.getTimeSig (0)->numerator.get()   : 4;
+    const int curDen = (edit != nullptr && edit->tempoSequence.getNumTimeSigs() > 0)
+                           ? edit->tempoSequence.getTimeSig (0)->denominator.get() : 4;
+
+    // Common signatures (Studio One-style quick list). id encodes num*100+den.
+    static const std::pair<int,int> kSigs[] = {
+        {4,4}, {3,4}, {2,4}, {6,8}, {9,8}, {12,8}, {5,4}, {7,8}, {6,4}, {2,2}
+    };
+
+    juce::PopupMenu menu;
+    for (auto [n, d] : kSigs)
+    {
+        const bool ticked = (n == curNum && d == curDen);
+        menu.addItem (n * 100 + d, juce::String (n) + "/" + juce::String (d), true, ticked);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&timeSigButton),
+        [this] (int result)
         {
-            timeSigDenominator.setSelectedId (i + 1, juce::dontSendNotification);
-            break;
-        }
+            if (result <= 0) return;
+            applyTimeSig (result / 100, result % 100);
+        });
 }
 
 void TransportBar::showMetronomeMenu()

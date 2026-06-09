@@ -1,5 +1,6 @@
 #include "ArrangementView.h"
 #include "ui/common/CloudesIcons.h"
+#include "AddTracksDialog.h"
 #include <set>
 
 namespace te = tracktion::engine;
@@ -382,78 +383,16 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     addTrackButton.setTooltip ("Add a new track (Cmd+T)");
     addTrackButton.onClick = [this]
     {
-        auto* edit = this->appState.editManager.getEdit();
-        if (edit == nullptr) return;
+        if (appState.editManager.getEdit() == nullptr) return;
 
-        juce::PopupMenu menu;
-        menu.addItem (1, "Audio Track");
-        menu.addItem (2, "MIDI Track");
-
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addTrackButton),
-            [this, edit] (int result)
-            {
-                if (result == 0) return;  // dismissed
-
-                auto& undoManager = this->appState.editManager.getUndoManager();
-
-                // Insert AFTER the last existing track so existing clips stay on their tracks.
-                // TrackInsertPoint(nullptr, nullptr) inserts at the beginning — wrong.
-                // TrackInsertPoint(nullptr, lastTrack) inserts after lastTrack — correct.
-                auto existingTracks = te::getAudioTracks (*edit);
-                te::AudioTrack* lastExistingTrack = existingTracks.isEmpty()
-                    ? nullptr : existingTracks.getLast();
-
-                if (result == 1)
-                {
-                    // Audio track
-                    undoManager.beginNewTransaction ("Add Audio Track");
-                    auto newTrack = edit->insertNewAudioTrack (
-                        te::TrackInsertPoint (nullptr, lastExistingTrack), nullptr);
-                    // Clear solo-isolated so solo shortcuts work correctly on this track.
-                    // Bake the default name into state so it is never re-derived from position
-                    // after a drag-reorder (TE generates "Track N" lazily from position).
-                    if (newTrack != nullptr)
-                    {
-                        newTrack->setSoloIsolate (false);
-                        newTrack->setName (newTrack->getName());
-                    }
-                    // ArrangementView's ValueTree listener (valueTreeChildAdded) will
-                    // automatically call rebuildTrackRows() — no manual update needed
-                }
-                else if (result == 2)
-                {
-                    // MIDI track: create an AudioTrack and insert an empty MIDI clip
-                    undoManager.beginNewTransaction ("Add MIDI Track");
-                    te::AudioTrack::Ptr newTrack = edit->insertNewAudioTrack (
-                        te::TrackInsertPoint (nullptr, lastExistingTrack), nullptr);
-
-                    if (newTrack != nullptr)
-                    {
-                        newTrack->setSoloIsolate (false);
-                        newTrack->setName ("MIDI " + juce::String (te::getAudioTracks (*edit).size()));
-
-                        // Insert a 4-bar MIDI clip so the user has something to double-click
-                        const double bpm = (edit->tempoSequence.getNumTempos() > 0)
-                                             ? edit->tempoSequence.getTempo (0)->getBpm()
-                                             : 120.0;
-                        const double barLengthSecs  = 60.0 / bpm * 4.0;   // 4 beats per bar
-                        const double clipLengthSecs = barLengthSecs * 4.0; // 4 bars
-
-                        te::ClipPosition midiPos {
-                            tracktion::TimeRange (
-                                tracktion::TimePosition::fromSeconds (0.0),
-                                tracktion::TimePosition::fromSeconds (clipLengthSecs)),
-                            tracktion::TimeDuration()
-                        };
-
-                        newTrack->insertNewClip (
-                            te::TrackItem::Type::midi,
-                            "MIDI Clip",
-                            midiPos,
-                            nullptr);
-                    }
-                }
-            });
+        // Studio One-style: open the Add Tracks dialog (count + mono/stereo + name),
+        // so several tracks can be created at once instead of one at a time.
+        juce::Component::SafePointer<ArrangementView> safe (this);
+        AddTracksDialog::show ([safe] (int count, bool midi, bool stereo, juce::String name)
+        {
+            if (safe != nullptr)
+                safe->createTracks (count, midi, stereo, name);
+        });
     };
 
     // Zoom buttons — header strip, top-right corner
@@ -1048,6 +987,61 @@ void ArrangementView::timerCallback()
 //==============================================================================
 // Keyboard — arrow key scrubbing
 
+void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::String namePrefix)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr || count < 1)
+        return;
+
+    auto& um = appState.editManager.getUndoManager();
+    um.beginNewTransaction (count == 1
+        ? juce::String ("Add ") + (midi ? "MIDI" : "Audio") + " Track"
+        : "Add " + juce::String (count) + (midi ? " MIDI Tracks" : " Audio Tracks"));
+
+    const juce::String base = namePrefix.isNotEmpty() ? namePrefix : (midi ? "MIDI" : "Audio");
+
+    for (int i = 0; i < count; ++i)
+    {
+        // Insert AFTER the current last track each iteration so the new tracks
+        // append in order (TrackInsertPoint(nullptr, last) = after last).
+        auto existing = te::getAudioTracks (*edit);
+        te::AudioTrack* last = existing.isEmpty() ? nullptr : existing.getLast();
+
+        te::AudioTrack::Ptr newTrack = edit->insertNewAudioTrack (
+            te::TrackInsertPoint (nullptr, last), nullptr);
+        if (newTrack == nullptr)
+            continue;
+
+        newTrack->setSoloIsolate (false);
+        newTrack->setName (count == 1 ? base : (base + " " + juce::String (i + 1)));
+
+        // Mono/Stereo: pure track-format property + matching pan law (same as the
+        // TrackHeader mono/stereo toggle); does NOT touch hardware input pairing.
+        if (! midi && stereo)
+        {
+            newTrack->state.setProperty (juce::Identifier ("cloudesTrackStereo"), true, &um);
+            if (auto* vp = newTrack->getVolumePlugin())
+                vp->panLaw.setValue ((int) te::PanLawLinear, &um);
+        }
+
+        if (midi)
+        {
+            // Seed a 4-bar MIDI clip so the track has something to double-click.
+            const double bpm = (edit->tempoSequence.getNumTempos() > 0)
+                                 ? edit->tempoSequence.getTempo (0)->getBpm() : 120.0;
+            const double clipLengthSecs = 60.0 / bpm * 4.0 * 4.0;   // 4 bars × 4 beats
+
+            te::ClipPosition midiPos {
+                tracktion::TimeRange (tracktion::TimePosition::fromSeconds (0.0),
+                                      tracktion::TimePosition::fromSeconds (clipLengthSecs)),
+                tracktion::TimeDuration() };
+
+            newTrack->insertNewClip (te::TrackItem::Type::midi, "MIDI Clip", midiPos, nullptr);
+        }
+        // ArrangementView's ValueTree listener rebuilds the rows automatically.
+    }
+}
+
 bool ArrangementView::keyPressed (const juce::KeyPress& key)
 {
     auto* edit = appState.editManager.getEdit();
@@ -1227,6 +1221,25 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         && rangeActive && rangeEndSecs > rangeStartSecs)
     {
         deleteTimeRange();
+        return true;
+    }
+
+    // Delete key with a selected track header (and nothing clip-level selected):
+    // delete that track (Studio One parity — select track, press Delete). Immediate
+    // and undoable (Cmd+Z), no confirmation. The clip/range guards above mean this
+    // only fires when the track itself is the active selection.
+    if ((key.getKeyCode() == juce::KeyPress::deleteKey
+         || key.getKeyCode() == juce::KeyPress::backspaceKey)
+        && selectedTrackHeader != nullptr
+        && selectedClips.isEmpty()
+        && ! (rangeActive && rangeEndSecs > rangeStartSecs))
+    {
+        auto& track = selectedTrackHeader->getTrack();
+        const auto name = track.getName();
+        setSelectedTrackHeader (nullptr);   // detach before the header is rebuilt away
+        auto& um = appState.editManager.getUndoManager();
+        um.beginNewTransaction ("Delete Track: " + name);
+        track.edit.deleteTrack (&track);    // ValueTree listener rebuilds the rows
         return true;
     }
 

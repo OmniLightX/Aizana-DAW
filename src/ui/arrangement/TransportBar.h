@@ -77,14 +77,11 @@ private:
     /** Shows the edit BPM — e.g. "120 BPM". Double-click to edit. */
     juce::Label bpmLabel;
 
-    /** Time signature numerator selector (2, 3, 4, 5, 6, 7, 8, 9, 12). */
-    juce::ComboBox timeSigNumerator;
-
-    /** "/" separator between numerator and denominator. */
-    juce::Label timeSigSlash;
-
-    /** Time signature denominator selector (2, 4, 8, 16). */
-    juce::ComboBox timeSigDenominator;
+    /** Time signature — single clean "4/4" button; click opens a list of common
+     *  signatures (Studio One style, replaces the two empty-looking combos). */
+    juce::TextButton timeSigButton { "4/4" };
+    void showTimeSigMenu();
+    void applyTimeSig (int numerator, int denominator);
 
     /** Shows the audio device sample rate — e.g. "44.1 kHz". */
     juce::Label sampleRateLabel;
