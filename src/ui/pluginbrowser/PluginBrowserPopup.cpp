@@ -9,7 +9,7 @@ PluginBrowserPopup::PluginBrowserPopup (const juce::KnownPluginList& knownPlugin
 {
     addAndMakeVisible (searchBox);
     searchBox.setTextToShowWhenEmpty ("Search plugins...", juce::Colours::grey);
-    searchBox.onTextChange = [this] { updateFilteredList (searchBox.getText()); };
+    searchBox.onTextChange = [this] { rebuildDisplayRows (searchBox.getText()); };
     searchBox.setFont (juce::Font (14.0f));
 
     addAndMakeVisible (pluginListBox);
@@ -21,8 +21,8 @@ PluginBrowserPopup::PluginBrowserPopup (const juce::KnownPluginList& knownPlugin
                              juce::Colour (0xff333333));
     pluginListBox.setOutlineThickness (1);
 
-    // Populate with all plugins immediately
-    updateFilteredList ({});
+    // Populate immediately — groups start collapsed (manufacturer headers only)
+    rebuildDisplayRows ({});
 
     // Track current count so timerCallback can detect new scan results
     lastKnownPluginCount = knownPlugins.getNumTypes();
@@ -54,23 +54,44 @@ void PluginBrowserPopup::showForComponent (juce::Component& anchor,
 
 //==============================================================================
 
-void PluginBrowserPopup::updateFilteredList (const juce::String& searchText)
+void PluginBrowserPopup::rebuildDisplayRows (const juce::String& searchText)
 {
-    filteredPlugins.clear();
+    searchActive = searchText.isNotEmpty();
+    displayRows.clear();
 
     const auto allPlugins = knownPlugins.getTypes();  // value copy — avoids data race with background scan thread
+
+    // Normalise a plugin's manufacturer (empty → "Unknown") so grouping is stable.
+    auto makerOf = [] (const juce::PluginDescription& d) -> juce::String
+    {
+        const auto m = d.manufacturerName.trim();
+        return m.isEmpty() ? juce::String ("Unknown") : m;
+    };
+
+    // Collect the matching plugins and the set of manufacturers they belong to.
+    juce::Array<juce::PluginDescription> matches;
+    juce::StringArray manufacturers;
     for (const auto& desc : allPlugins)
     {
-        if (searchText.isEmpty()
-            || desc.name.containsIgnoreCase (searchText)
-            || desc.manufacturerName.containsIgnoreCase (searchText))
-        {
-            filteredPlugins.add (desc);
-        }
+        if (searchActive
+            && ! desc.name.containsIgnoreCase (searchText)
+            && ! desc.manufacturerName.containsIgnoreCase (searchText))
+            continue;
+
+        matches.add (desc);
+        manufacturers.addIfNotAlreadyThere (makerOf (desc));
     }
 
-    // Sort alphabetically by name (case-insensitive) using a comparator struct.
-    // juce::Array::sort requires a type with int compareElements(T, T) const.
+    manufacturers.sort (true);  // case-insensitive
+
+    // First build: start with every group collapsed so the popup opens compact.
+    if (! defaultCollapseDone)
+    {
+        collapsedManufacturers = manufacturers;
+        defaultCollapseDone = true;
+    }
+
+    // Sort plugins within a group alphabetically by name (case-insensitive).
     struct AlphaComparator
     {
         int compareElements (const juce::PluginDescription& a,
@@ -79,9 +100,51 @@ void PluginBrowserPopup::updateFilteredList (const juce::String& searchText)
             return a.name.compareIgnoreCase (b.name);
         }
     } cmp;
-    filteredPlugins.sort (cmp);
+
+    for (const auto& maker : manufacturers)
+    {
+        juce::Array<juce::PluginDescription> group;
+        for (const auto& desc : matches)
+            if (makerOf (desc) == maker)
+                group.add (desc);
+        group.sort (cmp);
+
+        Row header;
+        header.type         = Row::Type::Header;
+        header.manufacturer = maker;
+        header.pluginCount  = group.size();
+        displayRows.add (header);
+
+        // Expand while searching, or when not explicitly collapsed.
+        const bool expanded = searchActive || ! collapsedManufacturers.contains (maker);
+        if (expanded)
+        {
+            for (const auto& desc : group)
+            {
+                Row r;
+                r.type         = Row::Type::Plugin;
+                r.manufacturer = maker;
+                r.desc         = desc;
+                displayRows.add (r);
+            }
+        }
+    }
 
     pluginListBox.updateContent();
+    repaint();
+}
+
+void PluginBrowserPopup::toggleManufacturer (const juce::String& manufacturer)
+{
+    if (searchActive)
+        return;  // groups are force-expanded while a filter is active
+
+    if (collapsedManufacturers.contains (manufacturer))
+        collapsedManufacturers.removeString (manufacturer);
+    else
+        collapsedManufacturers.add (manufacturer);
+
+    rebuildDisplayRows (searchBox.getText());
 }
 
 //==============================================================================
@@ -92,7 +155,7 @@ void PluginBrowserPopup::timerCallback()
     if (currentCount != lastKnownPluginCount)
     {
         lastKnownPluginCount = currentCount;
-        updateFilteredList (searchBox.getText());
+        rebuildDisplayRows (searchBox.getText());
     }
 }
 
@@ -101,54 +164,108 @@ void PluginBrowserPopup::timerCallback()
 
 int PluginBrowserPopup::getNumRows()
 {
-    return filteredPlugins.size();
+    return displayRows.size();
 }
 
 void PluginBrowserPopup::paintListBoxItem (int row, juce::Graphics& g,
                                            int width, int height, bool selected)
 {
-    if (selected)
-        g.fillAll (juce::Colours::dodgerblue.withAlpha (0.6f));
-    else if (row % 2 == 0)
-        g.fillAll (juce::Colour (0xff252525));
-
-    if (row < 0 || row >= filteredPlugins.size())
+    if (row < 0 || row >= displayRows.size())
         return;
 
-    const auto& desc = filteredPlugins.getReference (row);
+    const auto& item = displayRows.getReference (row);
+
+    if (item.type == Row::Type::Header)
+    {
+        // Manufacturer header — darker bar with a disclosure triangle, name + count.
+        g.fillAll (juce::Colour (0xff2d2d33));
+        g.setColour (juce::Colour (0xff3a3a40));
+        g.drawHorizontalLine (height - 1, 0.0f, (float) width);
+
+        const bool expanded = searchActive || ! collapsedManufacturers.contains (item.manufacturer);
+
+        // Disclosure triangle: pointing right when collapsed, down when expanded.
+        juce::Path tri;
+        const float cx = 11.0f, cy = height * 0.5f, s = 4.0f;
+        if (expanded)
+            tri.addTriangle (cx - s, cy - s * 0.55f,
+                             cx + s, cy - s * 0.55f,
+                             cx,     cy + s * 0.85f);
+        else
+            tri.addTriangle (cx - s * 0.55f, cy - s,
+                             cx - s * 0.55f, cy + s,
+                             cx + s * 0.85f, cy);
+        g.setColour (juce::Colour (0xffaaaaaa));
+        g.fillPath (tri);
+
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (juce::FontOptions (13.0f, juce::Font::bold)));
+        g.drawText (item.manufacturer, 24, 0, width - 24 - 44, height,
+                    juce::Justification::centredLeft, true);
+
+        g.setColour (juce::Colour (0xff888888));
+        g.setFont (juce::Font (juce::FontOptions (11.0f)));
+        g.drawText ("(" + juce::String (item.pluginCount) + ")",
+                    width - 44, 0, 40, height, juce::Justification::centredRight);
+        return;
+    }
+
+    // Plugin row — indented under its manufacturer header.
+    if (selected)
+        g.fillAll (juce::Colours::dodgerblue.withAlpha (0.6f));
+    else
+        g.fillAll (juce::Colour (0xff1e1e1e));
 
     g.setColour (selected ? juce::Colours::white : juce::Colours::lightgrey);
-    g.setFont (juce::Font (13.0f));
+    g.setFont (juce::Font (juce::FontOptions (13.0f)));
 
     // Show "Name  [FORMAT]" — format tag helps distinguish VST3/AU/CLAP versions
-    const juce::String label = desc.name + "  [" + desc.pluginFormatName + "]";
-    g.drawText (label, 8, 0, width - 8, height, juce::Justification::centredLeft);
+    const juce::String label = item.desc.name + "  [" + item.desc.pluginFormatName + "]";
+    g.drawText (label, 24, 0, width - 28, height, juce::Justification::centredLeft);
+}
+
+void PluginBrowserPopup::listBoxItemClicked (int row, const juce::MouseEvent&)
+{
+    // A single click on a manufacturer header expands/collapses its group.
+    if (row >= 0 && row < displayRows.size()
+        && displayRows.getReference (row).type == Row::Type::Header)
+        toggleManufacturer (displayRows.getReference (row).manufacturer);
 }
 
 void PluginBrowserPopup::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
 {
-    if (row >= 0 && row < filteredPlugins.size())
-    {
-        if (onSelected)
-            onSelected (filteredPlugins.getReference (row));
+    if (row < 0 || row >= displayRows.size())
+        return;
 
-        // Dismiss the enclosing CallOutBox
-        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-            box->dismiss();
-    }
+    const auto& item = displayRows.getReference (row);
+    if (item.type == Row::Type::Header)
+        return;  // headers toggle on single click (listBoxItemClicked); double-click = open plugin only
+
+    if (onSelected)
+        onSelected (item.desc);
+
+    // Dismiss the enclosing CallOutBox
+    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+        box->dismiss();
 }
 
 void PluginBrowserPopup::returnKeyPressed (int lastRow)
 {
-    // Trigger the same action as double-clicking; pass a dummy event
-    if (lastRow >= 0 && lastRow < filteredPlugins.size())
-    {
-        if (onSelected)
-            onSelected (filteredPlugins.getReference (lastRow));
+    if (lastRow < 0 || lastRow >= displayRows.size())
+        return;
 
-        if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-            box->dismiss();
+    const auto& item = displayRows.getReference (lastRow);
+    if (item.type == Row::Type::Header)
+    {
+        toggleManufacturer (item.manufacturer);
+        return;
     }
+
+    if (onSelected)
+        onSelected (item.desc);
+
+    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+        box->dismiss();
 }
 
 //==============================================================================
@@ -170,7 +287,7 @@ void PluginBrowserPopup::paint (juce::Graphics& g)
 
     // Empty state: draw a centred hint in the list area when no plugins are found.
     // Apple approach: quiet, informative, not alarming.
-    if (filteredPlugins.isEmpty())
+    if (displayRows.isEmpty())
     {
         const auto listBounds = pluginListBox.getBounds();
 

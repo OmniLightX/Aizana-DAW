@@ -10,10 +10,14 @@ using PluginSelectedCallback = std::function<void(const juce::PluginDescription&
  * PluginBrowserPopup — Searchable list of scanned plugins shown in a CallOutBox.
  *
  * Populated from PluginScanner::getKnownPlugins() — shows VST3, AU, and CLAP
- * plugins in a scrollable list with real-time name/manufacturer search filter.
+ * plugins grouped under collapsible manufacturer headers (Logic/Studio One style)
+ * so large libraries don't force scrolling from A to Z. Groups start collapsed;
+ * clicking a header expands/collapses it. A real-time name/manufacturer search
+ * filter force-expands all matching groups while text is present.
  *
- * Double-clicking a row calls the onSelected callback and dismisses the popup.
- * Press Return on a selected row does the same.
+ * Double-clicking a plugin row calls the onSelected callback and dismisses the
+ * popup; Return on a selected plugin row does the same. Click/Return on a header
+ * toggles its group.
  */
 class PluginBrowserPopup : public juce::Component,
                            private juce::ListBoxModel,
@@ -41,16 +45,32 @@ private:
 
     juce::TextEditor searchBox;
     juce::ListBox    pluginListBox;
-    juce::Array<juce::PluginDescription> filteredPlugins;
+
+    // A display row is either a collapsible manufacturer header or a plugin entry.
+    struct Row
+    {
+        enum class Type { Header, Plugin };
+        Type type = Type::Plugin;
+        juce::String manufacturer;            // header label / a plugin's manufacturer
+        int          pluginCount = 0;         // header only
+        juce::PluginDescription desc;         // plugin only
+    };
+
+    juce::Array<Row>  displayRows;            // flattened header+plugin rows for the ListBox
+    juce::StringArray collapsedManufacturers; // manufacturers currently collapsed
+    bool              searchActive       = false;  // force-expand all groups while filtering
+    bool              defaultCollapseDone = false; // groups start collapsed on first build
 
     // ListBoxModel overrides
     int  getNumRows() override;
     void paintListBoxItem (int rowNumber, juce::Graphics& g,
                            int width, int height, bool rowIsSelected) override;
+    void listBoxItemClicked       (int row, const juce::MouseEvent&) override;
     void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
     void returnKeyPressed         (int lastRowSelected)             override;
 
-    void updateFilteredList (const juce::String& searchText);
+    void rebuildDisplayRows (const juce::String& searchText);
+    void toggleManufacturer (const juce::String& manufacturer);
 
     // Timer — polls KnownPluginList once per second to detect new scan results
     void timerCallback() override;
