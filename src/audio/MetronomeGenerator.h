@@ -36,6 +36,14 @@ public:
         beatsPerBar.store (juce::jlimit (1, 16, bpb));
     }
 
+    /** Downbeat accent (beat 1 louder + higher). When off, all beats sound identical. */
+    void setAccentEnabled (bool e) noexcept { accentEnabled.store (e); }
+    bool getAccentEnabled() const noexcept   { return accentEnabled.load(); }
+
+    /** Click level multiplier (0..1, default 1 = reference level). */
+    void setLevel (float l) noexcept { level.store (juce::jlimit (0.0f, 1.0f, l)); }
+    float getLevel() const noexcept   { return level.load(); }
+
     // -----------------------------------------------------------------------
     // Called from audio thread
     // -----------------------------------------------------------------------
@@ -57,6 +65,8 @@ private:
     std::atomic<bool>   isEnabled     { false };
     std::atomic<double> currentBpm    { 120.0 };
     std::atomic<int>    beatsPerBar   { 4 };
+    std::atomic<bool>   accentEnabled { true };   // downbeat accent on/off
+    std::atomic<float>  level         { 1.0f };   // click level multiplier (0..1)
 
     double sr = 44100.0;
     int    clickDurationSamples = 441;   // updated in prepare() — 10ms at 44.1kHz

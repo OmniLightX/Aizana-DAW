@@ -44,25 +44,22 @@ private:
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
     IconButton tapTempoButton { CloudesIcon::Tap };
 
-    /** Pre-Count / Vorzähler — N bars of metronome before recording drops in
-     *  (Studio One parity). Cycles Off → 1 bar → 2 bars; backed by te::Edit::CountIn. */
-    juce::TextButton precountButton { "Vorz: Aus" };
-    void cyclePreCount();
-    void updatePreCountButton();
+    /** Metronome settings ▾ — opens a popover bundling Vorzähler (count-in),
+     *  Pre-Roll, Downbeat accent and click level (Sketch 006 A, Studio One pattern).
+     *  Sits right of the metronome toggle as a split-button affordance. */
+    IconButton metroMenuButton { CloudesIcon::Chevron };
+    void showMetronomeMenu();
 
-    /** Auto-Punch — recording only happens within the Loop In/Out markers
-     *  (te::Edit::recordingPunchInOut). Persisted in the edit state. */
-    juce::TextButton autoPunchButton { "Punch" };
+    /** Auto-Punch — icon toggle; recording only happens within the Loop In/Out
+     *  markers (te::Edit::recordingPunchInOut, persisted). Red when armed. */
+    IconButton autoPunchButton { CloudesIcon::Punch };
     void toggleAutoPunch();
     void updateAutoPunchButton();
 
-    /** Pre-Roll — roll the transport back N bars before the record start so the
-     *  performer hears a run-up. Cycles Off → 1 bar → 2 bars. Transient (not
-     *  persisted). Pairs with Auto-Punch: the run-up itself is not recorded. */
-    juce::TextButton preRollButton { "Pre: Aus" };
+    /** Pre-Roll bars (0/1/2): roll the transport back N bars before the record
+     *  start for an audible run-up. Set via the metronome popover; applied in
+     *  recordClicked(). Transient. Pairs with Auto-Punch (run-up not recorded). */
     int  preRollBars = 0;
-    void cyclePreRoll();
-    void updatePreRollButton();
 
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */

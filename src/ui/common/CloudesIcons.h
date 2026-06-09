@@ -16,8 +16,8 @@
  */
 enum class CloudesIcon
 {
-    Rewind, Play, Stop, Record, Loop, Metronome, Tap,   // transport
-    Pointer, Range, Scissors, Erase, Mute, Snap, Grid   // tools
+    Rewind, Play, Stop, Record, Loop, Metronome, Tap, Punch, Chevron,  // transport
+    Pointer, Range, Scissors, Erase, Mute, Snap, Grid                  // tools
 };
 
 struct CloudesIcons
@@ -87,6 +87,24 @@ struct CloudesIcons
                 p.addEllipse (4.5f, 4.5f, 15.0f, 15.0f);
                 p.startNewSubPath (12.0f, 12.0f);
                 p.lineTo (12.0f, 7.0f);
+                break;
+
+            case CloudesIcon::Punch:                        // In/Out brackets + record dot (auto-punch region)
+                p.startNewSubPath (7.0f, 5.0f);             // left bracket
+                p.lineTo (4.0f, 5.0f);
+                p.lineTo (4.0f, 19.0f);
+                p.lineTo (7.0f, 19.0f);
+                p.startNewSubPath (17.0f, 5.0f);            // right bracket
+                p.lineTo (20.0f, 5.0f);
+                p.lineTo (20.0f, 19.0f);
+                p.lineTo (17.0f, 19.0f);
+                p.addEllipse (9.5f, 9.5f, 5.0f, 5.0f);      // centre record dot (stroked ring)
+                break;
+
+            case CloudesIcon::Chevron:                      // small down caret (popover affordance)
+                p.startNewSubPath (6.0f, 9.5f);
+                p.lineTo (12.0f, 15.0f);
+                p.lineTo (18.0f, 9.5f);
                 break;
 
             case CloudesIcon::Pointer:                      // arrow cursor

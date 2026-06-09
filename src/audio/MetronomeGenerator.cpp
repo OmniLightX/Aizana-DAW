@@ -7,8 +7,10 @@ void MetronomeGenerator::processBlock (float* const* outputData,
     if (! isEnabled.load() || outputData == nullptr || numChannels < 1)
         return;
 
-    const double bpm = currentBpm.load();
-    const int    bpb = beatsPerBar.load();
+    const double bpm    = currentBpm.load();
+    const int    bpb    = beatsPerBar.load();
+    const bool   accent = accentEnabled.load();
+    const float  lvl    = level.load();
 
     // Samples per beat at current BPM and sample rate
     const double samplesPerBeat = sr * 60.0 / bpm;
@@ -27,12 +29,13 @@ void MetronomeGenerator::processBlock (float* const* outputData,
             clickSamplesLeft = clickDurationSamples;
             clickPhase = 0.0;
 
-            // Accent the downbeat (beat 0): higher pitch AND louder than off-beats.
+            // Accent the downbeat (beat 0): higher pitch AND louder than off-beats —
+            // but only when the accent is enabled; otherwise every beat sounds the same.
             // Lock both in BEFORE incrementing beatInBar so this beat uses its own
-            // values; they persist for the whole click burst.
-            const bool downbeat = (beatInBar == 0);
-            clickFreq = downbeat ? 1200.0 : 800.0;
-            clickAmp  = downbeat ? 0.34   : 0.20;
+            // values; they persist for the whole click burst. Scale by the level.
+            const bool accentedDownbeat = accent && (beatInBar == 0);
+            clickFreq = accentedDownbeat ? 1200.0 : 800.0;
+            clickAmp  = (accentedDownbeat ? 0.34 : 0.20) * (double) lvl;
 
             // Advance beat-in-bar counter after accent selection
             beatInBar = (beatInBar + 1) % bpb;

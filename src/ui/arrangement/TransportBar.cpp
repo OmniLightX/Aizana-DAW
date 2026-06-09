@@ -1,4 +1,5 @@
 #include "TransportBar.h"
+#include "MetronomeSettingsPanel.h"
 
 //==============================================================================
 
@@ -166,35 +167,21 @@ TransportBar::TransportBar (ApplicationState& appState_)
     tapTempoButton.setTooltip ("Tap Tempo — im Takt klicken (Reset nach 2 s)");
     tapTempoButton.onClick = [this] { tapTempoClicked(); };
 
-    // Pre-Count / Vorzähler — N bars of metronome before recording drops in.
-    precountButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
-    precountButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    precountButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // blue when active
-    precountButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
-    precountButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
-    precountButton.setTooltip ("Vorzähler vor der Aufnahme (Aus / 1 Takt / 2 Takte) — Metronom muss an sein");
-    precountButton.onClick = [this] { cyclePreCount(); };
-    updatePreCountButton();
-
-    // Pre-Roll — audible N-bar run-up before recording drops in.
-    preRollButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
-    preRollButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    preRollButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // blue when active
-    preRollButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
-    preRollButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
-    preRollButton.setTooltip ("Pre-Roll vor der Aufnahme (Aus / 1 Takt / 2 Takte) — hörbarer Anlauf; mit Auto-Punch wird der Anlauf nicht aufgenommen");
-    preRollButton.onClick = [this] { cyclePreRoll(); };
-    updatePreRollButton();
-
-    // Auto-Punch — record only within the Loop In/Out markers.
+    // Auto-Punch — icon toggle; record only within the Loop In/Out markers (red when armed).
+    neutral (autoPunchButton);
+    autoPunchButton.bgColourOn   = juce::Colour (0xffcc3333);
+    autoPunchButton.iconColour   = juce::Colour (0xffe0584d);
+    autoPunchButton.iconColourOn = juce::Colours::white;
     autoPunchButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
-    autoPunchButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
-    autoPunchButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff8a2d2d));  // red when armed
-    autoPunchButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
-    autoPunchButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
     autoPunchButton.setTooltip ("Auto-Punch: Aufnahme nur zwischen den Loop In/Out-Markern");
     autoPunchButton.onClick = [this] { toggleAutoPunch(); };
     updateAutoPunchButton();
+
+    // Metronome settings ▾ — opens the Vorzähler / Pre-Roll / Accent / Level popover (Sketch 006 A).
+    neutral (metroMenuButton);
+    metroMenuButton.iconScale = 0.40f;
+    metroMenuButton.setTooltip ("Metronom & Aufnahme: Vorz\xc3\xa4hler, Pre-Roll, Downbeat-Accent, Klick-Lautst\xc3\xa4rke");
+    metroMenuButton.onClick = [this] { showMetronomeMenu(); };
 
     // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----
     modeButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
@@ -217,8 +204,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (metronomeButton);
     addAndMakeVisible (loopButton);
     addAndMakeVisible (tapTempoButton);
-    addAndMakeVisible (precountButton);
-    addAndMakeVisible (preRollButton);
+    addAndMakeVisible (metroMenuButton);
     addAndMakeVisible (autoPunchButton);
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
@@ -255,14 +241,14 @@ void TransportBar::resized()
     place (playButton,   3);
     place (stopButton,   3);
     place (recordButton, 10);   // gap before the secondary cluster
-    place (metronomeButton, 3);
+
+    // Metronome + its settings ▾ (split button, hugged together), then Auto-Punch, Loop, Tap.
+    place (metronomeButton, 0);
+    metroMenuButton.setBounds (area.removeFromLeft (16).withHeight (buttonH));
+    area.removeFromLeft (8);
+    place (autoPunchButton, 8);
     place (loopButton,   3);
-    place (tapTempoButton, 6);
-    precountButton.setBounds (area.removeFromLeft (66).withHeight (buttonH));
-    area.removeFromLeft (4);
-    preRollButton.setBounds (area.removeFromLeft (62).withHeight (buttonH));
-    area.removeFromLeft (4);
-    autoPunchButton.setBounds (area.removeFromLeft (52).withHeight (buttonH));
+    place (tapTempoButton, 3);
 
     // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
@@ -326,7 +312,6 @@ void TransportBar::timerCallback()
     {
         updateBpmLabel();
         updateTimeSigDisplay();
-        updatePreCountButton();
         updateAutoPunchButton();
 
         // Keep metronome BPM in sync with the edit's current tempo
@@ -445,33 +430,41 @@ void TransportBar::updateTimeSigDisplay()
         }
 }
 
-void TransportBar::cyclePreCount()
+void TransportBar::showMetronomeMenu()
 {
-    auto* edit = appState.editManager.getEdit();
-    if (edit == nullptr)
-        return;
-
+    // Sketch 006 A: one popover bundles Vorzähler + Pre-Roll + Downbeat accent +
+    // click level, opened from the metronome ▾. All state via SafePointer-guarded
+    // callbacks so the panel (owned by the CallOutBox) is lifetime-safe.
     using CI = tracktion::engine::Edit::CountIn;
-    const auto cur  = edit->getCountInMode();
-    const auto next = (cur == CI::none)   ? CI::oneBar
-                    : (cur == CI::oneBar) ? CI::twoBar
-                                          : CI::none;
-    edit->setCountInMode (next);
-    updatePreCountButton();
-}
 
-void TransportBar::updatePreCountButton()
-{
-    auto* edit = appState.editManager.getEdit();
-    if (edit == nullptr)
-        return;
+    auto panel = std::make_unique<MetronomeSettingsPanel>();
+    juce::Component::SafePointer<TransportBar> safe (this);
 
-    using CI = tracktion::engine::Edit::CountIn;
-    const auto m = edit->getCountInMode();
-    precountButton.setButtonText (m == CI::oneBar ? "Vorz: 1T"
-                                 : m == CI::twoBar ? "Vorz: 2T"
-                                                   : "Vorz: Aus");
-    precountButton.setToggleState (m != CI::none, juce::dontSendNotification);
+    panel->getCountIn = [safe]() -> int
+    {
+        if (safe == nullptr) return 0;
+        if (auto* e = safe->appState.editManager.getEdit())
+            switch (e->getCountInMode()) { case CI::oneBar: return 1; case CI::twoBar: return 2; default: break; }
+        return 0;
+    };
+    panel->setCountIn = [safe] (int n)
+    {
+        if (safe == nullptr) return;
+        if (auto* e = safe->appState.editManager.getEdit())
+            e->setCountInMode (n == 1 ? CI::oneBar : n == 2 ? CI::twoBar : CI::none);
+    };
+
+    panel->getPreRoll = [safe]() -> int { return safe != nullptr ? safe->preRollBars : 0; };
+    panel->setPreRoll = [safe] (int n) { if (safe != nullptr) safe->preRollBars = juce::jlimit (0, 2, n); };
+
+    panel->getAccent = [safe]() -> bool { return safe != nullptr && safe->appState.audioEngine.getMetronome().getAccentEnabled(); };
+    panel->setAccent = [safe] (bool b) { if (safe != nullptr) safe->appState.audioEngine.getMetronome().setAccentEnabled (b); };
+    panel->getLevel  = [safe]() -> float { return safe != nullptr ? safe->appState.audioEngine.getMetronome().getLevel() : 1.0f; };
+    panel->setLevel  = [safe] (float l) { if (safe != nullptr) safe->appState.audioEngine.getMetronome().setLevel (l); };
+
+    panel->refresh();
+    juce::CallOutBox::launchAsynchronously (std::move (panel),
+                                            metroMenuButton.getScreenBounds(), nullptr);
 }
 
 void TransportBar::toggleAutoPunch()
@@ -491,20 +484,6 @@ void TransportBar::updateAutoPunchButton()
         return;
 
     autoPunchButton.setToggleState (edit->recordingPunchInOut.get(), juce::dontSendNotification);
-}
-
-void TransportBar::cyclePreRoll()
-{
-    preRollBars = (preRollBars + 1) % 3;   // Off → 1 bar → 2 bars → Off
-    updatePreRollButton();
-}
-
-void TransportBar::updatePreRollButton()
-{
-    preRollButton.setButtonText (preRollBars == 1 ? "Pre: 1T"
-                               : preRollBars == 2 ? "Pre: 2T"
-                                                  : "Pre: Aus");
-    preRollButton.setToggleState (preRollBars > 0, juce::dontSendNotification);
 }
 
 void TransportBar::rewindClicked()
