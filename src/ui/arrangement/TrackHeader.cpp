@@ -1,6 +1,7 @@
 #include "TrackHeader.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
+#include "ui/common/TrackColours.h"
 #include "plugins/BuiltInPluginFormat.h"
 
 // Track channel-format flag (mono/stereo). Persisted on the track ValueTree and
@@ -170,8 +171,9 @@ void TrackHeader::resized()
 
 void TrackHeader::paint (juce::Graphics& g)
 {
-    // Track colour strip on the left edge (4px wide)
-    const auto trackColour = track.getColour();
+    // Track colour strip on the left edge (4px wide). Uses the shared resolver:
+    // user-set colour, else a stable palette default (see CloudesTrackColours).
+    const auto trackColour = CloudesTrackColours::displayColour (track);
     g.setColour (trackColour);
     g.fillRect (0, 0, 4, getHeight());
 
@@ -590,6 +592,16 @@ void TrackHeader::showContextMenu()
     builtInMenu.addItem (12, "Reverb");
     builtInMenu.addItem (13, "Limiter");
 
+    // Track colour submenu (closes GAP-27): palette swatches + custom picker + reset.
+    // IDs: 100..100+paletteSize() = swatches; 98 = custom; 99 = reset to auto.
+    juce::PopupMenu colourMenu;
+    for (int i = 0; i < CloudesTrackColours::paletteSize(); ++i)
+        colourMenu.addColouredItem (100 + i, CloudesTrackColours::paletteName (i),
+                                    CloudesTrackColours::palette (i).brighter (0.3f));
+    colourMenu.addSeparator();
+    colourMenu.addItem (98, "Custom\xe2\x80\xa6");
+    colourMenu.addItem (99, "Standard (Auto)");
+
     juce::PopupMenu menu;
     menu.addSubMenu ("Built-in FX", builtInMenu);
     menu.addSeparator();
@@ -599,12 +611,19 @@ void TrackHeader::showContextMenu()
     menu.addItem (6, "Create FX Channel");
     menu.addItem (3, "Set Sidechain Source...");
     menu.addSeparator();
+    menu.addSubMenu ("Track-Farbe", colourMenu);
     menu.addItem (4, "Rename Track");
     menu.addItem (5, "Delete Track");
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
         [this] (int result)
         {
+            if (result >= 100 && result < 100 + CloudesTrackColours::paletteSize())
+            {
+                handleSetTrackColour (CloudesTrackColours::palette (result - 100));
+                return;
+            }
+
             switch (result)
             {
                 case 1:  handleAddPlugin();                             break;
@@ -617,6 +636,8 @@ void TrackHeader::showContextMenu()
                 case 11: handleInsertBuiltInFX ("Cloudes Compressor"); break;
                 case 12: handleInsertBuiltInFX ("Cloudes Reverb");     break;
                 case 13: handleInsertBuiltInFX ("Cloudes Limiter");    break;
+                case 98: handleCustomColourPicker();                   break;
+                case 99: handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
                 default: break;
             }
         });
@@ -656,6 +677,67 @@ void TrackHeader::handleInsertBuiltInFX (const juce::String& fxName)
         // GenericAudioProcessorEditor for Compressor/Reverb/Limiter).
         pluginWindowManager.openPluginWindow (*newPlugin);
     }
+}
+
+void TrackHeader::handleSetTrackColour (juce::Colour newColour)
+{
+    // setColour() writes the colour CachedValue, which is bound to the edit's
+    // UndoManager — begin a transaction so it is a discrete undo step. An empty
+    // colour resets to the near-black default → the shared resolver shows the
+    // auto palette colour again.
+    auto& um = track.edit.getUndoManager();
+    um.beginNewTransaction ("Track Colour");
+    track.setColour (newColour);
+
+    repaint();
+    if (onColourChanged)
+        onColourChanged();   // repaints the row wash + clips so all three agree
+}
+
+void TrackHeader::handleCustomColourPicker()
+{
+    // A ColourSelector hosted in a CallOutBox; applies live so the row updates
+    // as the user drags. All changes coalesce into one undo transaction.
+    struct ColourCallout : public juce::Component,
+                           private juce::ChangeListener
+    {
+        juce::ColourSelector selector { juce::ColourSelector::showColourAtTop
+                                      | juce::ColourSelector::showColourspace
+                                      | juce::ColourSelector::showSliders };
+        std::function<void (juce::Colour)> onColour;
+
+        explicit ColourCallout (juce::Colour initial)
+        {
+            selector.setCurrentColour (initial, juce::dontSendNotification);
+            selector.addChangeListener (this);
+            addAndMakeVisible (selector);
+            setSize (280, 300);
+        }
+
+        void resized() override { selector.setBounds (getLocalBounds()); }
+
+        void changeListenerCallback (juce::ChangeBroadcaster*) override
+        {
+            if (onColour)
+                onColour (selector.getCurrentColour());
+        }
+    };
+
+    track.edit.getUndoManager().beginNewTransaction ("Track Colour");
+
+    auto content = std::make_unique<ColourCallout> (CloudesTrackColours::displayColour (track));
+    juce::Component::SafePointer<TrackHeader> safe (this);
+    content->onColour = [safe] (juce::Colour c)
+    {
+        if (safe == nullptr)
+            return;
+        safe->track.setColour (c);
+        safe->repaint();
+        if (safe->onColourChanged)
+            safe->onColourChanged();
+    };
+
+    juce::CallOutBox::launchAsynchronously (std::move (content), getScreenBounds(), nullptr);
 }
 
 void TrackHeader::handleCreateBus()

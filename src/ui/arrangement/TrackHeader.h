@@ -74,6 +74,10 @@ public:
     // Callback: called by mouseDown (left click) to notify ArrangementView
     std::function<void (TrackHeader*)> onSelectionRequest;
 
+    /** Called after the track colour changes so ArrangementView can repaint the
+     *  row wash + clips (which read the same colour via CloudesTrackColours). */
+    std::function<void ()> onColourChanged;
+
 private:
     te::AudioTrack&      track;
     MixerEngine&         mixerEngine;
@@ -143,6 +147,11 @@ private:
     void handleSetSidechainSource();
     void handleRenameTrack();
     void handleDeleteTrack();
+
+    /** Set the track colour (undoable). Empty colour resets to the auto palette. */
+    void handleSetTrackColour (juce::Colour newColour);
+    /** Open a ColourSelector in a CallOutBox for a free custom track colour. */
+    void handleCustomColourPicker();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrackHeader)
 };

@@ -1962,6 +1962,13 @@ void ArrangementView::rebuildTrackRows()
             setSelectedTrackHeader (h);
         };
 
+        // Wire colour-change callback — repaint headers + timeline (rows + clips)
+        // so the colour strip, row wash and clip bodies all update together.
+        header->onColourChanged = [this] {
+            headerContainer.repaint();
+            timelineContainer.repaint();
+        };
+
         // TrackRow (right panel / timeline) — expandable, holds clips + AutomationLane
         auto* row = trackRows.add (new TrackRow (*audioTrack,
                                                   automationEngine,

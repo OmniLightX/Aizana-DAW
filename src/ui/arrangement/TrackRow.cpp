@@ -1,6 +1,7 @@
 #include "TrackRow.h"
 #include "ClipComponent.h"
 #include "ArrangementView.h"
+#include "ui/common/TrackColours.h"
 
 //==============================================================================
 TrackRow::TrackRow (te::AudioTrack&   track_,
@@ -171,6 +172,13 @@ void TrackRow::layoutClips (double pps)
 //==============================================================================
 void TrackRow::paint (juce::Graphics& g)
 {
+    // Subtle track-colour wash behind the clip area so rows read as colour-coded
+    // (Sketch 005 P1). The clipArea child is transparent, so this shows through
+    // wherever a clip isn't drawn; clips themselves use the same colour.
+    const int clipAreaH = expanded ? getHeight() - kAutomationLaneHeight : getHeight();
+    g.setColour (CloudesTrackColours::displayColour (track).withAlpha (0.10f));
+    g.fillRect (0, 0, getWidth(), clipAreaH);
+
     // Separator line at the bottom of the row
     g.setColour (juce::Colours::darkgrey);
     g.drawHorizontalLine (getHeight() - 1, 0.0f, static_cast<float> (getWidth()));

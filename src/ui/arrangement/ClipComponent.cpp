@@ -2,6 +2,7 @@
 #include "ArrangementView.h"
 #include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
+#include "ui/common/TrackColours.h"
 
 // Strong time-type aliases — same as ClipEditor.cpp, needed for clip.setPosition()
 using TimePos = tracktion::core::TimePosition;
@@ -83,18 +84,15 @@ void ClipComponent::paint (juce::Graphics& g)
     constexpr float kHeaderHeight = 16.0f;  // clip name header band height
 
     // ---- Colour calculation ----
-    // Default: vivid Studio One-style blue for tracks with no custom colour.
-    // Track colour is used as-is if vivid enough; otherwise boosted to ensure
-    // clips are bright and legible on a dark background.
-    juce::Colour baseColour = juce::Colour (0xff2a6aaa);  // Studio One default blue
+    // Use the shared track colour (user-set, or a stable palette default for
+    // uncoloured tracks — see CloudesTrackColours). Boost saturation + brightness
+    // so clips stay vivid and legible on the dark background.
+    juce::Colour baseColour = juce::Colour (0xff2a6aaa);  // Studio One default blue (fallback)
     if (auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack()))
     {
-        const juce::Colour trackColour = track->getColour();
-        // Only use the track colour if it is actually set (not near-black default).
-        // Boost saturation + brightness so clips are always vivid.
-        if (trackColour.getBrightness() > 0.05f)
-            baseColour = trackColour.withSaturation (juce::jmax (0.55f, trackColour.getSaturation()))
-                                    .withBrightness  (juce::jmax (0.65f, trackColour.getBrightness()));
+        const juce::Colour trackColour = CloudesTrackColours::displayColour (*track);
+        baseColour = trackColour.withSaturation (juce::jmax (0.55f, trackColour.getSaturation()))
+                                .withBrightness  (juce::jmax (0.65f, trackColour.getBrightness()));
     }
 
     // MIDI clips: shift hue slightly so they are visually distinct from audio clips
