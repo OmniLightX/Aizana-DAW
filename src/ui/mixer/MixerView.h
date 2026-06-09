@@ -125,6 +125,16 @@ private:
     // Select a track strip; Cmd held = add/remove from multi-selection.
     void setMixerSelectedTrack (te::AudioTrack* t);
 
+    // ---- Multi-selection group fader (Studio One-style relative move) ----
+    // When the anchor strip is part of a multi-selection, dragging its fader moves
+    // all selected strips by the same dB delta, preserving their relative balance.
+    bool   faderGroupActive       = false;
+    double faderGroupAnchorStart  = 0.0;                     // anchor's dB at drag start
+    std::map<ChannelStrip*, double> faderGroupStart;          // each selected strip's dB at drag start
+    void beginFaderGroup (ChannelStrip* anchor);
+    void applyFaderGroup (ChannelStrip* anchor, double newDb);
+    void endFaderGroup();
+
     /** Rebuild send slot panels on all audio ChannelStrips with the current FX channel list. */
     void rebuildAllSends();
 

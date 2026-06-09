@@ -80,6 +80,8 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     stereoButton.setTooltip ("Mono / Stereo track — click to toggle (does not change hardware input)");
     stereoButton.onClick = [this] { toggleTrackStereo(); };
 
+    colourBar.onClick = [this] { showTrackColourMenu(); };
+    addAndMakeVisible (colourBar);
     addAndMakeVisible (trackNameLabel);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (soloButton);
@@ -115,7 +117,12 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
 
 void TrackHeader::resized()
 {
-    auto area = getLocalBounds().reduced (2);
+    auto full = getLocalBounds();
+
+    // Dedicated colour bar on the left edge (clickable colour picker, Studio One style)
+    colourBar.setBounds (full.removeFromLeft (6));
+
+    auto area = full.reduced (2);
 
     // Name label takes full width at top
     trackNameLabel.setBounds (area.removeFromTop (20));
@@ -171,21 +178,17 @@ void TrackHeader::resized()
 
 void TrackHeader::paint (juce::Graphics& g)
 {
-    // Track colour strip on the left edge (4px wide). Uses the shared resolver:
-    // user-set colour, else a stable palette default (see CloudesTrackColours).
-    const auto trackColour = CloudesTrackColours::displayColour (track);
-    g.setColour (trackColour);
-    g.fillRect (0, 0, 4, getHeight());
+    // The track colour bar (left 6px) is drawn by the ColourBar child component.
 
-    // Background
+    // Background (right of the colour bar)
     g.setColour (juce::Colour (0xff2a2a2a));
-    g.fillRect (4, 0, getWidth() - 4, getHeight());
+    g.fillRect (6, 0, getWidth() - 6, getHeight());
 
     // Selection tint: subtle Apple-style overlay (not garish)
     if (selected)
     {
         g.setColour (juce::Colours::white.withAlpha (0.06f));
-        g.fillRect (4, 0, getWidth() - 4, getHeight());
+        g.fillRect (6, 0, getWidth() - 6, getHeight());
     }
 
     // Right border separator
@@ -593,14 +596,8 @@ void TrackHeader::showContextMenu()
     builtInMenu.addItem (13, "Limiter");
 
     // Track colour submenu (closes GAP-27): palette swatches + custom picker + reset.
-    // IDs: 100..100+paletteSize() = swatches; 98 = custom; 99 = reset to auto.
     juce::PopupMenu colourMenu;
-    for (int i = 0; i < CloudesTrackColours::paletteSize(); ++i)
-        colourMenu.addColouredItem (100 + i, CloudesTrackColours::paletteName (i),
-                                    CloudesTrackColours::palette (i).brighter (0.3f));
-    colourMenu.addSeparator();
-    colourMenu.addItem (98, "Custom\xe2\x80\xa6");
-    colourMenu.addItem (99, "Standard (Auto)");
+    populateColourMenu (colourMenu);
 
     juce::PopupMenu menu;
     menu.addSubMenu ("Built-in FX", builtInMenu);
@@ -677,6 +674,33 @@ void TrackHeader::handleInsertBuiltInFX (const juce::String& fxName)
         // GenericAudioProcessorEditor for Compressor/Reverb/Limiter).
         pluginWindowManager.openPluginWindow (*newPlugin);
     }
+}
+
+void TrackHeader::populateColourMenu (juce::PopupMenu& menu)
+{
+    // IDs: 100..100+paletteSize() = swatches; 98 = custom picker; 99 = reset to auto.
+    for (int i = 0; i < CloudesTrackColours::paletteSize(); ++i)
+        menu.addColouredItem (100 + i, CloudesTrackColours::paletteName (i),
+                              CloudesTrackColours::palette (i).brighter (0.3f));
+    menu.addSeparator();
+    menu.addItem (98, "Custom\xe2\x80\xa6");
+    menu.addItem (99, "Standard (Auto)");
+}
+
+void TrackHeader::showTrackColourMenu()
+{
+    // Standalone colour menu shown when the left colour bar is clicked (Studio One style).
+    juce::PopupMenu menu;
+    populateColourMenu (menu);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&colourBar),
+        [this] (int result)
+        {
+            if (result >= 100 && result < 100 + CloudesTrackColours::paletteSize())
+                handleSetTrackColour (CloudesTrackColours::palette (result - 100));
+            else if (result == 98) handleCustomColourPicker();
+            else if (result == 99) handleSetTrackColour (juce::Colour());
+        });
 }
 
 void TrackHeader::handleSetTrackColour (juce::Colour newColour)

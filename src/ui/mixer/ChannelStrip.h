@@ -122,6 +122,13 @@ public:
      *  MixerView wires this to apply the same routing to all other selected strips. */
     std::function<void (te::AudioTrack* targetBus)> onOutputRouted;
 
+    /** Volume-fader gesture callbacks for multi-selection group moves. MixerView
+     *  snapshots all selected strips on drag start, then applies the same dB delta
+     *  to them on each change (Studio One-style relative group fader). */
+    std::function<void()>       onVolumeDragStart;
+    std::function<void()>       onVolumeDragEnd;
+    std::function<void(double)> onVolumeChanged;   ///< new fader value in dB during the gesture
+
     /** Returns the MeterBar so MixerView::timerCallback can push master meter values. */
     MeterBar& getMeterBar() noexcept { return meterBar; }
 

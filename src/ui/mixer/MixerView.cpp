@@ -222,6 +222,12 @@ void MixerView::rebuildStrips()
             refreshAllStrips();
         };
 
+        // Multi-selection group fader: drag one selected strip's fader → all selected
+        // strips move by the same dB delta (relative, preserving balance).
+        strip->onVolumeDragStart = [this, strip] { beginFaderGroup (strip); };
+        strip->onVolumeChanged   = [this, strip] (double db) { applyFaderGroup (strip, db); };
+        strip->onVolumeDragEnd   = [this] { endFaderGroup(); };
+
         channelStripContainer.addAndMakeVisible (strip);
     }
 
@@ -616,6 +622,53 @@ void MixerView::refreshAllStrips()
 {
     for (auto* s : strips)      s->refresh();
     for (auto* s : busFXStrips) s->refresh();
+}
+
+//==============================================================================
+// Multi-selection group fader (Studio One-style relative move)
+
+void MixerView::beginFaderGroup (ChannelStrip* anchor)
+{
+    faderGroupActive = false;
+    faderGroupStart.clear();
+
+    // Only group-move when the dragged strip is part of a multi-selection.
+    if (anchor == nullptr || ! selectedStrips.contains (anchor) || selectedStrips.size() < 2)
+        return;
+
+    faderGroupActive      = true;
+    faderGroupAnchorStart = mixerEngine.getVolume (anchor->getTrack());
+    for (auto* s : selectedStrips)
+        faderGroupStart[s] = mixerEngine.getVolume (s->getTrack());
+}
+
+void MixerView::applyFaderGroup (ChannelStrip* anchor, double newDb)
+{
+    if (! faderGroupActive)
+        return;
+
+    // The anchor already moved via its own volumeChanged(); apply the same delta
+    // to every other selected strip, clamped to the fader range, preserving balance.
+    const double delta = newDb - faderGroupAnchorStart;
+    for (auto* s : selectedStrips)
+    {
+        if (s == anchor)
+            continue;
+
+        auto it = faderGroupStart.find (s);
+        if (it == faderGroupStart.end())
+            continue;
+
+        const double target = juce::jlimit (-60.0, 6.0, it->second + delta);
+        mixerEngine.setVolume (s->getTrack(), (float) target);  // merges into anchor's undo txn
+        s->refresh();                                            // sync the sibling's fader
+    }
+}
+
+void MixerView::endFaderGroup()
+{
+    faderGroupActive = false;
+    faderGroupStart.clear();
 }
 
 juce::Array<te::AudioTrack*> MixerView::getTracksInSameBusGroup (te::AudioTrack& t) const

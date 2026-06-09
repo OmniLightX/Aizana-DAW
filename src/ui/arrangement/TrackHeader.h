@@ -8,6 +8,7 @@
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/pluginwin/PluginWindowManager.h"
+#include "ui/common/TrackColours.h"
 
 namespace te = tracktion::engine;
 
@@ -79,7 +80,24 @@ public:
     std::function<void ()> onColourChanged;
 
 private:
+    /** Dedicated clickable colour bar on the left edge (Studio One style): shows the
+     *  track's display colour; a left-click opens the colour menu. A separate child
+     *  component so the click target is unambiguous (not stolen by the name label). */
+    struct ColourBar : public juce::Component,
+                       public juce::SettableTooltipClient
+    {
+        te::Track&            track;
+        std::function<void()> onClick;
+        explicit ColourBar (te::Track& t) : track (t) { setTooltip ("Track-Farbe w\xc3\xa4hlen (Klick)"); }
+        void paint (juce::Graphics& g) override { g.fillAll (CloudesTrackColours::displayColour (track)); }
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            if (! e.mods.isPopupMenu() && onClick) onClick();
+        }
+    };
+
     te::AudioTrack&      track;
+    ColourBar            colourBar { track };
     MixerEngine&         mixerEngine;
     AutomationEngine&    automationEngine;
     PluginManager&       pluginManager;
@@ -148,6 +166,10 @@ private:
     void handleRenameTrack();
     void handleDeleteTrack();
 
+    /** Fill a PopupMenu with palette swatches + Custom… + Standard (Auto). */
+    void populateColourMenu (juce::PopupMenu& menu);
+    /** Show the colour menu standalone (anchored to the colour bar) on bar-click. */
+    void showTrackColourMenu();
     /** Set the track colour (undoable). Empty colour resets to the auto palette. */
     void handleSetTrackColour (juce::Colour newColour);
     /** Open a ColourSelector in a CallOutBox for a free custom track colour. */

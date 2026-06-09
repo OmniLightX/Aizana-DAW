@@ -522,7 +522,13 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     volumeFader.setDoubleClickReturnValue (true, 0.0);  // double-click resets to 0 dB
     volumeFader.setTextValueSuffix(" dB");
     volumeFader.setValue          (mixerEngine.getVolume (track), juce::dontSendNotification);
-    volumeFader.onValueChange = [this] { volumeChanged(); };
+    volumeFader.onValueChange = [this]
+    {
+        volumeChanged();                                   // always moves this strip's own track
+        if (onVolumeChanged) onVolumeChanged (volumeFader.getValue());  // group sync (MixerView)
+    };
+    volumeFader.onDragStart = [this] { if (onVolumeDragStart) onVolumeDragStart(); };
+    volumeFader.onDragEnd   = [this] { if (onVolumeDragEnd)   onVolumeDragEnd();   };
 
     // ---- Pan knob ----
     panKnob.setSliderStyle     (juce::Slider::RotaryHorizontalVerticalDrag);
