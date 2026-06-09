@@ -180,7 +180,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     // Metronome settings ▾ — opens the Vorzähler / Pre-Roll / Accent / Level popover (Sketch 006 A).
     neutral (metroMenuButton);
     metroMenuButton.iconScale = 0.40f;
-    metroMenuButton.setTooltip ("Metronom & Aufnahme: Vorz\xc3\xa4hler, Pre-Roll, Downbeat-Accent, Klick-Lautst\xc3\xa4rke");
+    metroMenuButton.setTooltip (juce::String::fromUTF8 ("Metronom & Aufnahme: Vorz\xc3\xa4hler, Pre-Roll, Downbeat-Accent, Klick-Lautst\xc3\xa4rke"));
     metroMenuButton.onClick = [this] { showMetronomeMenu(); };
 
     // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----

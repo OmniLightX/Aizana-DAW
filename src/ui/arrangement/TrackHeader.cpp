@@ -389,7 +389,7 @@ void TrackHeader::showInputMenu()
     }
 
     menu.addSeparator();
-    menu.addItem (kManageBusesId, "Manage Buses\xe2\x80\xa6");
+    menu.addItem (kManageBusesId, juce::String::fromUTF8 ("Manage Buses\xe2\x80\xa6"));
 
     menu.showMenuAsync (
         juce::PopupMenu::Options().withTargetComponent (&inputButton),
@@ -683,7 +683,7 @@ void TrackHeader::populateColourMenu (juce::PopupMenu& menu)
         menu.addColouredItem (100 + i, CloudesTrackColours::paletteName (i),
                               CloudesTrackColours::palette (i).brighter (0.3f));
     menu.addSeparator();
-    menu.addItem (98, "Custom\xe2\x80\xa6");
+    menu.addItem (98, juce::String::fromUTF8 ("Custom\xe2\x80\xa6"));
     menu.addItem (99, "Standard (Auto)");
 }
 

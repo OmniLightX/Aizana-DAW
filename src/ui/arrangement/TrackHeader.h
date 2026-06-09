@@ -88,7 +88,7 @@ private:
     {
         te::Track&            track;
         std::function<void()> onClick;
-        explicit ColourBar (te::Track& t) : track (t) { setTooltip ("Track-Farbe w\xc3\xa4hlen (Klick)"); }
+        explicit ColourBar (te::Track& t) : track (t) { setTooltip (juce::String::fromUTF8 ("Track-Farbe w\xc3\xa4hlen (Klick)")); }
         void paint (juce::Graphics& g) override { g.fillAll (CloudesTrackColours::displayColour (track)); }
         void mouseDown (const juce::MouseEvent& e) override
         {

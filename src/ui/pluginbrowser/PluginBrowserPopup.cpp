@@ -300,7 +300,7 @@ void PluginBrowserPopup::paint (juce::Graphics& g)
         g.setFont (juce::FontOptions (10.0f));
         g.setColour (juce::Colour (0xff444444));
         // "\xe2\x80\xba" = UTF-8 encoding of › (right-pointing angle quotation mark)
-        g.drawText ("Run View \xe2\x80\xba Scan Plugins...",
+        g.drawText (juce::String::fromUTF8 ("Run View \xe2\x80\xba Scan Plugins..."),
                     listBounds.withTrimmedTop (listBounds.getHeight() / 2).toFloat(),
                     juce::Justification::centred, false);
     }
