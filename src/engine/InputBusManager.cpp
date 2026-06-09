@@ -122,6 +122,30 @@ void InputBusManager::renameBus (int index, const juce::String& newName)
     applyToEngine();
 }
 
+void InputBusManager::resetBusesToHardwareNames()
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    auto tree = getOrCreateBusesTree();
+    if (! tree.isValid())
+        return;
+
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Reset input bus names to hardware");
+
+    // WaveInputDevice::getName() is the immutable hardware channel name (e.g.
+    // "MIC/LINE/HIZ 1") — independent of getAlias(), which is the custom rename
+    // that may have gone stale. Set each bus name back to its device's getName().
+    const auto buses = getBuses();   // index order matches the tree's child order
+    for (int i = 0; i < buses.size() && i < tree.getNumChildren(); ++i)
+        if (auto* dev = resolveBusToDevice (buses[i]))
+            tree.getChild (i).setProperty (kInputBusName, dev->getName(), &um);
+
+    applyToEngine();   // pushes the hardware names back onto the device aliases
+}
+
 void InputBusManager::remapBus (int index, int hwChannel, bool stereo)
 {
     auto* edit = editManager.getEdit();

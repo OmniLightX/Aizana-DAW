@@ -87,6 +87,11 @@ public:
     /** Delete the bus at index. Undoable. */
     void deleteBus (int index);
 
+    /** Reset every bus name to its hardware channel name (WaveInputDevice::getName,
+     *  e.g. "MIC/LINE/HIZ 1"), clearing stale custom renames. Re-applies to the
+     *  engine. Undoable. */
+    void resetBusesToHardwareNames();
+
     //==============================================================================
     // Engine binding
     //==============================================================================

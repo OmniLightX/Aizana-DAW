@@ -40,6 +40,7 @@ private:
     juce::Label      titleLabel;
     juce::Label      hintLabel;
     juce::TextButton addBusButton { "+ Add Bus" };
+    juce::TextButton resetButton  { "Reset Names" };
     juce::TextButton closeButton  { "Close" };
 
     // Hardware input options (display name + first hardware channel index),

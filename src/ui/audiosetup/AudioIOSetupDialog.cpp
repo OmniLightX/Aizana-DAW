@@ -44,6 +44,15 @@ AudioIOSetupDialog::AudioIOSetupDialog (te::Engine& engine_, InputBusManager& bu
     };
     addAndMakeVisible (addBusButton);
 
+    resetButton.setTooltip ("Reset all bus names to the hardware channel names (e.g. MIC/LINE/HIZ 1) "
+                            "- clears stale custom renames");
+    resetButton.onClick = [this]
+    {
+        busManager.resetBusesToHardwareNames();
+        rebuildBuses();
+    };
+    addAndMakeVisible (resetButton);
+
     closeButton.onClick = [this]
     {
         if (auto* w = findParentComponentOfClass<juce::DialogWindow>())
@@ -183,9 +192,11 @@ void AudioIOSetupDialog::resized()
     hintLabel.setBounds  (area.removeFromTop (18));
     area.removeFromTop (6);
 
-    // Bottom button row: Add Bus (left) + Close (right)
+    // Bottom button row: Add Bus + Reset Names (left) + Close (right)
     auto buttonRow = area.removeFromBottom (30);
     addBusButton.setBounds (buttonRow.removeFromLeft (100));
+    buttonRow.removeFromLeft (6);
+    resetButton.setBounds  (buttonRow.removeFromLeft (110));
     closeButton.setBounds  (buttonRow.removeFromRight (90));
     area.removeFromBottom (8);
 
