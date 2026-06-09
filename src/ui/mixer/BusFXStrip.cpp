@@ -462,6 +462,19 @@ void BusFXStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
         const float dB = mixerEngine.getVolume (track);
         volumeFader.setValue (dB, juce::dontSendNotification);
     }
+    // Live-sync insert-slot bypass LEDs when a plugin's enabled state changes
+    // externally (e.g. toggled from its floating editor window). Property changes
+    // propagate up from the PLUGIN child node to this listener on the track state.
+    // May fire off the message thread (atomic CachedValue) → defer via callAsync.
+    else if (property == te::IDs::enabled)
+    {
+        juce::Component::SafePointer<BusFXStrip> safeThis (this);
+        juce::MessageManager::callAsync ([safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->insertSlotPanel.repaint();
+        });
+    }
 }
 
 void BusFXStrip::valueTreeChildAdded (juce::ValueTree& /*parent*/, juce::ValueTree& child)

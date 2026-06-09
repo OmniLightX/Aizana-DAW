@@ -105,21 +105,23 @@ void MasterStrip::MeterDisplay::paint (juce::Graphics& g)
 void MasterStrip::MasterInsertSlotPanel::SlotButton::paint (juce::Graphics& g)
 {
     const bool occupied = (plugin != nullptr);
-    g.fillAll (juce::Colour (occupied ? 0xff2a3a2a : 0xff1a1a1a));
+    const bool bypassed = occupied && ! plugin->isEnabled();
+    g.fillAll (juce::Colour (occupied ? (bypassed ? 0xff2a2a2a : 0xff2a3a2a) : 0xff1a1a1a));
 
     g.setColour (juce::Colour (0xff333333));
     g.drawRect (getLocalBounds(), 1);
 
     g.setFont (juce::FontOptions (9.0f));
-    g.setColour (occupied ? juce::Colour (0xff88ee88) : juce::Colour (0xff555555));
+    g.setColour (occupied ? (bypassed ? juce::Colour (0xff777777) : juce::Colour (0xff88ee88))
+                          : juce::Colour (0xff555555));
     g.drawText (occupied ? plugin->getName() : "+",
-                getLocalBounds().reduced (2), juce::Justification::centredLeft, true);
+                getLocalBounds().withTrimmedRight (occupied ? 12 : 0).reduced (2),
+                juce::Justification::centredLeft, true);
 
-    // Bypass LED for occupied slots
+    // Bypass LED for occupied slots — green = active, red = bypassed
     if (occupied)
     {
-        const bool active = plugin->isEnabled();
-        g.setColour (active ? juce::Colour (0xff33dd33) : juce::Colour (0xffdd3333));
+        g.setColour (bypassed ? juce::Colour (0xffdd3333) : juce::Colour (0xff33dd33));
         const int ledSize = 6;
         g.fillEllipse ((float)(getWidth() - ledSize - 3),
                        (float)(getHeight() / 2 - ledSize / 2),
@@ -133,12 +135,20 @@ void MasterStrip::MasterInsertSlotPanel::SlotButton::mouseDown (const juce::Mous
     {
         if (onRightClick)
             onRightClick();
+        return;
     }
-    else
+
+    // Click on bypass LED area (rightmost 12px) toggles bypass — same zone as
+    // ChannelStrip/BusFXStrip so A/B referencing works on the master chain too.
+    if (plugin != nullptr && e.x >= getWidth() - 12)
     {
-        if (onClick)
-            onClick();
+        plugin->setEnabled (! plugin->isEnabled());
+        repaint();
+        return;
     }
+
+    if (onClick)
+        onClick();
 }
 
 void MasterStrip::MasterInsertSlotPanel::SlotButton::mouseDoubleClick (const juce::MouseEvent&)
@@ -428,6 +438,20 @@ void MasterStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
             const float dB = te::volumeFaderPositionToDB (vp->volume.get());
             volumeFader.setValue (dB, juce::dontSendNotification);
         }
+    }
+    // Sync insert-slot bypass LEDs when a plugin's enabled state changes externally
+    // (e.g. toggled from its floating editor window). The change propagates up from
+    // the PLUGIN child node to this listener on the master plugin list. Property
+    // callbacks may arrive off the message thread (enabled is an atomic CachedValue)
+    // → defer the repaint via callAsync + SafePointer.
+    else if (property == te::IDs::enabled)
+    {
+        juce::Component::SafePointer<MasterStrip> safeThis (this);
+        juce::MessageManager::callAsync ([safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->insertPanel.repaint();
+        });
     }
 }
 
