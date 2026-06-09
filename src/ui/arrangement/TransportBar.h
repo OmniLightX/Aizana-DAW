@@ -50,6 +50,20 @@ private:
     void cyclePreCount();
     void updatePreCountButton();
 
+    /** Auto-Punch — recording only happens within the Loop In/Out markers
+     *  (te::Edit::recordingPunchInOut). Persisted in the edit state. */
+    juce::TextButton autoPunchButton { "Punch" };
+    void toggleAutoPunch();
+    void updateAutoPunchButton();
+
+    /** Pre-Roll — roll the transport back N bars before the record start so the
+     *  performer hears a run-up. Cycles Off → 1 bar → 2 bars. Transient (not
+     *  persisted). Pairs with Auto-Punch: the run-up itself is not recorded. */
+    juce::TextButton preRollButton { "Pre: Aus" };
+    int  preRollBars = 0;
+    void cyclePreRoll();
+    void updatePreRollButton();
+
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */
     juce::TextButton modeButton   { "Einsteiger" };

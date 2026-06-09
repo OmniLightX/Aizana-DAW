@@ -176,6 +176,26 @@ TransportBar::TransportBar (ApplicationState& appState_)
     precountButton.onClick = [this] { cyclePreCount(); };
     updatePreCountButton();
 
+    // Pre-Roll — audible N-bar run-up before recording drops in.
+    preRollButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
+    preRollButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    preRollButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2d4a6a));  // blue when active
+    preRollButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
+    preRollButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    preRollButton.setTooltip ("Pre-Roll vor der Aufnahme (Aus / 1 Takt / 2 Takte) — hörbarer Anlauf; mit Auto-Punch wird der Anlauf nicht aufgenommen");
+    preRollButton.onClick = [this] { cyclePreRoll(); };
+    updatePreRollButton();
+
+    // Auto-Punch — record only within the Loop In/Out markers.
+    autoPunchButton.setClickingTogglesState (false);   // invariant I-04: drive state ourselves
+    autoPunchButton.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+    autoPunchButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff8a2d2d));  // red when armed
+    autoPunchButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff9aa0a6));
+    autoPunchButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    autoPunchButton.setTooltip ("Auto-Punch: Aufnahme nur zwischen den Loop In/Out-Markern");
+    autoPunchButton.onClick = [this] { toggleAutoPunch(); };
+    updateAutoPunchButton();
+
     // ---- The Dial (Phase 2, Block A): switch to Beginner + assist toggle ----
     modeButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff3a3a3a));
     modeButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffcccccc));
@@ -198,6 +218,8 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (loopButton);
     addAndMakeVisible (tapTempoButton);
     addAndMakeVisible (precountButton);
+    addAndMakeVisible (preRollButton);
+    addAndMakeVisible (autoPunchButton);
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
     addAndMakeVisible (positionLabel);
@@ -237,6 +259,10 @@ void TransportBar::resized()
     place (loopButton,   3);
     place (tapTempoButton, 6);
     precountButton.setBounds (area.removeFromLeft (66).withHeight (buttonH));
+    area.removeFromLeft (4);
+    preRollButton.setBounds (area.removeFromLeft (62).withHeight (buttonH));
+    area.removeFromLeft (4);
+    autoPunchButton.setBounds (area.removeFromLeft (52).withHeight (buttonH));
 
     // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
@@ -301,6 +327,7 @@ void TransportBar::timerCallback()
         updateBpmLabel();
         updateTimeSigDisplay();
         updatePreCountButton();
+        updateAutoPunchButton();
 
         // Keep metronome BPM in sync with the edit's current tempo
         if (auto* editForBpm = appState.editManager.getEdit())
@@ -447,6 +474,39 @@ void TransportBar::updatePreCountButton()
     precountButton.setToggleState (m != CI::none, juce::dontSendNotification);
 }
 
+void TransportBar::toggleAutoPunch()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    edit->recordingPunchInOut.setValue (! edit->recordingPunchInOut.get(), nullptr);
+    updateAutoPunchButton();
+}
+
+void TransportBar::updateAutoPunchButton()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    autoPunchButton.setToggleState (edit->recordingPunchInOut.get(), juce::dontSendNotification);
+}
+
+void TransportBar::cyclePreRoll()
+{
+    preRollBars = (preRollBars + 1) % 3;   // Off → 1 bar → 2 bars → Off
+    updatePreRollButton();
+}
+
+void TransportBar::updatePreRollButton()
+{
+    preRollButton.setButtonText (preRollBars == 1 ? "Pre: 1T"
+                               : preRollBars == 2 ? "Pre: 2T"
+                                                  : "Pre: Aus");
+    preRollButton.setToggleState (preRollBars > 0, juce::dontSendNotification);
+}
+
 void TransportBar::rewindClicked()
 {
     auto* edit = appState.editManager.getEdit();
@@ -489,9 +549,26 @@ void TransportBar::recordClicked()
 
     auto& transport = edit->getTransport();
     if (transport.isRecording())
+    {
         transport.stop (false, false);
-    else
-        transport.record (false);
+        return;
+    }
+
+    // Pre-Roll: roll the transport back N bars before the record start so the
+    // performer hears a run-up. With Auto-Punch the recorded region stays the
+    // loop range (TE punches in/out), so the run-up itself is not captured.
+    if (preRollBars > 0)
+    {
+        auto& ts = edit->tempoSequence;
+        const auto recStart = edit->recordingPunchInOut.get()
+                                  ? transport.getLoopRange().getStart()
+                                  : transport.getPosition();
+        const auto bb        = ts.toBarsAndBeats (recStart);
+        const int  targetBar = juce::jmax (0, bb.bars - preRollBars);
+        transport.setPosition (ts.toTime (tracktion::tempo::BarsAndBeats { targetBar }));
+    }
+
+    transport.record (false);
 }
 
 void TransportBar::mouseDown (const juce::MouseEvent& e)

@@ -6,9 +6,10 @@
 /**
  * MetronomeGenerator — Audio-thread-safe beat click synthesizer.
  *
- * Produces a short sine-burst click on every beat, with a distinct higher-pitch
- * click on beat 1 of each bar (downbeat). Parameters are communicated via
- * std::atomic<> — no locks, no allocations on the audio thread.
+ * Produces a short sine-burst click on every beat, with an accented downbeat
+ * (beat 1 of each bar): higher pitch AND louder than the off-beats so the bar
+ * boundary is clearly audible. Parameters are communicated via std::atomic<> —
+ * no locks, no allocations on the audio thread.
  *
  * Audio thread invariants: ALL state that changes across threads uses std::atomic.
  * The processBlock() method MUST NOT allocate memory or call any non-RT-safe API.
@@ -66,6 +67,7 @@ private:
     int    clickSamplesLeft    = 0;     // samples remaining in current click burst
     double clickPhase          = 0.0;   // sine oscillator phase for click tone
     double clickFreq           = 1200.0; // frequency locked in at beat boundary, persists for full click
+    double clickAmp            = 0.34;   // peak amplitude locked at beat boundary — louder on the downbeat (accent)
 
     void reset() noexcept
     {
