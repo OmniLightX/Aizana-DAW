@@ -1,4 +1,5 @@
 #include "PluginManager.h"
+#include "PluginLoadLog.h"
 
 PluginManager::PluginManager (PluginScanner& scanner, EditManager& editManager)
     : scanner     (scanner)
@@ -20,22 +21,29 @@ te::Plugin* PluginManager::insertPlugin (te::Track& track,
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Insert plugin");
 
+    CloudesPluginLog::stage ("insertPlugin BEGIN  name=\"" + desc.name + "\"  format="
+                             + desc.pluginFormatName + "  manuf=" + desc.manufacturerName);
+
     // TE's ExternalPlugin resolves its real instance from the ENGINE's knownPluginList
     // (ExternalPlugin::findMatchingPlugin), NOT from Cloudes' scanner list. Without this,
     // third-party plugins load as empty shells: getAudioPluginInstance() is null, so the
     // editor shows "No editor available" and no audio is processed. Register the
     // description with the engine first so doFullInitialisation() creates the instance.
     edit->engine.getPluginManager().knownPluginList.addType (desc);
+    CloudesPluginLog::stage ("insertPlugin  addType done, calling createNewPlugin...");
 
     // Create a new plugin via Tracktion Engine's PluginCache.
     // createNewPlugin wraps the JUCE PluginDescription into a tracktion Plugin::Ptr.
     auto pluginPtr = edit->getPluginCache().createNewPlugin (
         te::ExternalPlugin::xmlTypeName, desc);
+    CloudesPluginLog::stage ("insertPlugin  createNewPlugin returned "
+                             + juce::String (pluginPtr != nullptr ? "OK" : "NULL"));
 
     if (pluginPtr == nullptr)
         return nullptr;
 
     track.pluginList.insertPlugin (pluginPtr, insertIndex, nullptr);
+    CloudesPluginLog::stage ("insertPlugin DONE  \"" + desc.name + "\"");
 
     return pluginPtr.get();
 }

@@ -1,5 +1,6 @@
 #include "FloatingPluginWindow.h"
 #include "PluginWindowManager.h"
+#include "plugins/PluginLoadLog.h"
 
 //==============================================================================
 // BypassWrapper — overlays a small LED toggle button on the plugin editor and
@@ -195,7 +196,11 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     };
 
     // Stage 1: Try TE's Plugin::createEditor()
+    CloudesPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName()
+                             + "\"  -> plugin.createEditor()...");
     auto editorOwned = plugin.createEditor();
+    CloudesPluginLog::stage ("FloatingPluginWindow  createEditor() returned "
+                             + juce::String (editorOwned != nullptr ? "editor" : "null"));
     if (editorOwned != nullptr)
     {
         setupWrapper (editorOwned.release());
@@ -207,15 +212,21 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
 
         if (auto* externalPlugin = dynamic_cast<te::ExternalPlugin*> (&plugin))
         {
+            CloudesPluginLog::stage ("FloatingPluginWindow  externalPlugin->initialiseFully()...");
             // Force initialisation for plugins on tracks not yet in the render graph.
             // initialiseFully() is idempotent — the fullyInitialised flag prevents
             // double-init. For BuiltInPluginFormat this completes synchronously; for
             // async VST3/AU plugins the instance may still be null, in which case the
             // Stage 3 placeholder is the correct fallback.
             externalPlugin->initialiseFully();
+            CloudesPluginLog::stage ("FloatingPluginWindow  initialiseFully() done");
 
             if (auto* pi = externalPlugin->getAudioPluginInstance())
+            {
+                CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor()...");
                 apiEditor = pi->createEditor();
+                CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor() done");
+            }
         }
 
         if (apiEditor != nullptr)
@@ -243,6 +254,7 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     // Make window visible
     setVisible (true);
     toFront (true);
+    CloudesPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName() + "\"  READY");
 }
 
 FloatingPluginWindow::~FloatingPluginWindow()
