@@ -216,6 +216,10 @@ private:
 
     void toggleMixer();
 
+    // Edit/Mix view switcher (TransportBar segmented pair): Edit = arrangement
+    // full height, Mix = mixer shown large. Cmd+M / divider keep working.
+    void setViewFocus (bool mixFocus);
+
     // Beginner world (Phase 2, Block A): the Dial swaps which view is visible.
     // applyUIMode() shows/hides the Pro composition vs the BeginnerView and re-lays out.
     void applyUIMode();

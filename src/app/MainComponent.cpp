@@ -70,6 +70,10 @@ MainComponent::MainComponent (ApplicationState& appState_)
         });
     }
 
+    // Edit/Mix view switcher in the TransportBar (Studio One pattern)
+    transportBar.onSelectViewMode = [this] (bool mixFocus) { setViewFocus (mixFocus); };
+    transportBar.isMixerShown     = [this] { return mixerVisible; };
+
     // Mixer divider bar — click to toggle, drag to resize (Studio One style)
     mixerDivider.onToggleClick = [this] { toggleMixer(); menuItemsChanged(); };
     mixerDivider.onDragDelta   = [this] (int dy)
@@ -386,6 +390,20 @@ void MainComponent::toggleMixer()
     mixerView.setVisible (mixerVisible);
     updateMixerDivider();
     resized();   // Re-layout so ArrangementView expands/collapses accordingly
+}
+
+void MainComponent::setViewFocus (bool mixFocus)
+{
+    // Edit/Mix switcher (TransportBar): Edit = arrangement only, Mix = mixer
+    // shown large. mixerHeightPx = 0 lets resized() re-derive the default; we
+    // bump it to ~60% so "Mix" actually means a console-focused layout.
+    mixerVisible = mixFocus;
+    mixerView.setVisible (mixerVisible);
+    if (mixFocus)
+        mixerHeightPx = juce::jmax (mixerHeightPx, (int) (getHeight() * 0.55f));
+    updateMixerDivider();
+    resized();
+    menuItemsChanged();   // View menu tick follows
 }
 
 void MainComponent::updateMixerDivider()

@@ -149,6 +149,23 @@ TransportBar::TransportBar (ApplicationState& appState_)
     assistButton.setTooltip ("KI-Assist ein-/ausblenden (auch im Pro-Modus)");
     assistButton.onClick = [this] { appState.uiState.toggleAssist(); };
 
+    // Edit/Mix view switcher (Studio One pattern, adapted): segmented pair,
+    // active segment highlighted; actual layout change is owned by MainComponent.
+    for (auto* b : { &editViewButton, &mixViewButton })
+    {
+        b->setClickingTogglesState (false);   // invariant I-04
+        b->setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
+        b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff4a6a8a));
+        b->setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff999999));
+        b->setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+    }
+    editViewButton.setConnectedEdges (juce::Button::ConnectedOnRight);
+    mixViewButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
+    editViewButton.setTooltip (juce::String::fromUTF8 ("Edit-Ansicht — Arrangement in voller Höhe"));
+    mixViewButton.setTooltip (juce::String::fromUTF8 ("Mix-Ansicht — Mixer groß einblenden"));
+    editViewButton.onClick = [this] { if (onSelectViewMode) onSelectViewMode (false); };
+    mixViewButton.onClick  = [this] { if (onSelectViewMode) onSelectViewMode (true); };
+
     addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
@@ -160,6 +177,8 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (autoPunchButton);
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
+    addAndMakeVisible (editViewButton);
+    addAndMakeVisible (mixViewButton);
     addAndMakeVisible (positionLabel);
     addAndMakeVisible (bpmLabel);
     addAndMakeVisible (timeSigButton);
@@ -200,10 +219,14 @@ void TransportBar::resized()
     place (loopButton,   3);
     place (tapTempoButton, 3);
 
-    // Right side: Dial (mode + assist) → sample rate → BPM → time sig (rightmost to leftmost)
+    // Right side: Dial (mode + assist) → Edit/Mix switcher → sample rate → BPM
+    // → time sig (rightmost to leftmost)
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
     area.removeFromRight (4);
     assistButton.setBounds (area.removeFromRight (62).withHeight (buttonH));
+    area.removeFromRight (10);
+    mixViewButton.setBounds  (area.removeFromRight (46).withHeight (buttonH));
+    editViewButton.setBounds (area.removeFromRight (46).withHeight (buttonH));
     area.removeFromRight (10);
     sampleRateLabel.setBounds    (area.removeFromRight (70));
     area.removeFromRight (4);
@@ -252,6 +275,14 @@ void TransportBar::timerCallback()
 
     // Keep the Dial's assist toggle in sync (assist can change from the Beginner view too)
     assistButton.setToggleState (appState.uiState.isAssistEnabled(), juce::dontSendNotification);
+
+    // Edit/Mix segment highlight follows the actual mixer state (Cmd+M, divider)
+    if (isMixerShown)
+    {
+        const bool mix = isMixerShown();
+        editViewButton.setToggleState (! mix, juce::dontSendNotification);
+        mixViewButton.setToggleState (mix, juce::dontSendNotification);
+    }
 
     // Keep BPM label and time signature combos in sync (handles undo/redo changes)
     if (! bpmLabel.isBeingEdited())

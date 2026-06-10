@@ -25,6 +25,14 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
+    /** Edit/Mix view switcher (Studio One style, adapted to Cloudes' stacked
+     *  layout): Edit = arrangement only, Mix = mixer shown large. Wired by
+     *  MainComponent, which owns the mixer visibility. */
+    std::function<void (bool mixFocus)> onSelectViewMode;
+    /** Polled by the timer to highlight the active segment (Cmd+M / divider
+     *  can change the state without going through the buttons). */
+    std::function<bool()> isMixerShown;
+
 private:
     void showSampleRateMenu();
     ApplicationState& appState;
@@ -65,6 +73,10 @@ private:
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */
     juce::TextButton modeButton   { "Einsteiger" };
     juce::TextButton assistButton { "Assist" };
+
+    /** Edit/Mix segmented pair — see onSelectViewMode. */
+    juce::TextButton editViewButton { "Edit" };
+    juce::TextButton mixViewButton  { "Mix" };
 
     // Tap tempo state — last 4 tap timestamps (juce::Time::getMillisecondCounterHiRes)
     juce::Array<double> tapTimes;
