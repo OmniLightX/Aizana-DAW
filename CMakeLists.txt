@@ -106,6 +106,7 @@ target_sources(Cloudes PRIVATE
     src/ui/mixer/ChannelStrip.cpp
     src/ui/mixer/MasterStrip.cpp
     src/ui/mixer/BusFXStrip.cpp
+    src/ui/mixer/VCAStrip.cpp
     src/ui/mixer/SendSlotPanel.cpp
     # Comping editor (Phase 2+, Studio One take comping)
     src/ui/comping/CompingView.cpp

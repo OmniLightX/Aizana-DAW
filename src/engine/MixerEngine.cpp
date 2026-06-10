@@ -108,6 +108,94 @@ bool MixerEngine::isAudioChannel (const te::AudioTrack& track)
     return tag.isEmpty();   // no tag → plain audio track
 }
 
+bool MixerEngine::isVCAChannel (const te::AudioTrack& track)
+{
+    return track.state.getProperty (kChannelTypeProp).toString() == kChannelTypeVCA;
+}
+
+// ---- VCA channels ----
+
+te::AudioTrack* MixerEngine::createVCAChannel (const juce::String& name)
+{
+    auto* edit = editManager.getEdit();
+    jassert (edit != nullptr);
+
+    // Append at END — same invariant as Bus/FX channels (no renumbering).
+    auto track = edit->insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (*edit), nullptr);
+    if (track == nullptr)
+        return nullptr;
+
+    track->setName (name);
+    track->state.setProperty (kChannelTypeProp, kChannelTypeVCA, nullptr);
+    track->setSoloIsolate (false);
+
+    // The VCA carries no audio; its VolumeAndPanPlugin only stores the fader
+    // position (and could later host VCA automation).
+    if (track->getVolumePlugin() == nullptr)
+    {
+        auto vp = edit->getPluginCache().createNewPlugin (
+            te::VolumeAndPanPlugin::xmlTypeName, {});
+        track->pluginList.insertPlugin (vp, 0, nullptr);
+    }
+
+    return track.get();
+}
+
+void MixerEngine::assignTrackToVCA (te::AudioTrack& track, te::AudioTrack& vca)
+{
+    if (! isVCAChannel (vca))
+        return;
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Assign VCA");
+    track.state.setProperty (kVCAAssignmentProp, vca.itemID.toString(), &um);
+}
+
+void MixerEngine::unassignFromVCA (te::AudioTrack& track)
+{
+    if (! track.state.hasProperty (kVCAAssignmentProp))
+        return;
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Unassign VCA");
+    track.state.removeProperty (kVCAAssignmentProp, &um);
+}
+
+te::AudioTrack* MixerEngine::getVCAFor (const te::AudioTrack& track) const
+{
+    const auto id = track.state.getProperty (kVCAAssignmentProp).toString();
+    if (id.isEmpty())
+        return nullptr;
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return nullptr;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (isVCAChannel (*t) && t->itemID.toString() == id)
+            return t;
+    return nullptr;
+}
+
+juce::Array<te::AudioTrack*> MixerEngine::getVCAChannels() const
+{
+    juce::Array<te::AudioTrack*> out;
+    if (auto* edit = editManager.getEdit())
+        for (auto* t : te::getAudioTracks (*edit))
+            if (isVCAChannel (*t))
+                out.add (t);
+    return out;
+}
+
+juce::Array<te::AudioTrack*> MixerEngine::getVCAMembers (const te::AudioTrack& vca) const
+{
+    juce::Array<te::AudioTrack*> out;
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return out;
+    const auto id = vca.itemID.toString();
+    for (auto* t : te::getAudioTracks (*edit))
+        if (t->state.getProperty (kVCAAssignmentProp).toString() == id)
+            out.add (t);
+    return out;
+}
+
 // ---- Creation ----
 
 te::AudioTrack* MixerEngine::createBusChannel (const juce::String& name)

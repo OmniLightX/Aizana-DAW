@@ -46,6 +46,7 @@ MixerView::~MixerView()
     // Clear strips (they reference MeterProcessors); then clear MeterProcessors
     strips.clear();
     busFXStrips.clear();
+    vcaStrips.clear();
     masterStrip.reset();
     meterProcessors.clear();
 }
@@ -73,19 +74,22 @@ void MixerView::resized()
 
     const int stripH = cachedStripHeight;
 
-    // Total strip count: audio + bus/fx channels
-    const int totalStrips = strips.size() + busFXStrips.size();
+    // Total strip count: audio + bus/fx + vca channels
+    const int totalStrips = strips.size() + busFXStrips.size() + vcaStrips.size();
     const int totalW = juce::jmax (totalStrips * kStripWidth,
                                    channelStripViewport.getWidth());
     channelStripContainer.setSize (totalW, stripH);
 
-    // Layout: audio strips first, then bus/fx strips (ordered as in busFXStrips)
+    // Layout: audio strips first, then bus/fx strips, then VCA strips
     int xPos = 0;
     for (int i = 0; i < strips.size(); ++i, xPos += kStripWidth)
         strips[i]->setBounds (xPos, 0, kStripWidth, stripH);
 
     for (int i = 0; i < busFXStrips.size(); ++i, xPos += kStripWidth)
         busFXStrips[i]->setBounds (xPos, 0, kStripWidth, stripH);
+
+    for (int i = 0; i < vcaStrips.size(); ++i, xPos += kStripWidth)
+        vcaStrips[i]->setBounds (xPos, 0, kStripWidth, stripH);
 }
 
 void MixerView::paint (juce::Graphics& g)
@@ -121,6 +125,7 @@ void MixerView::showContextMenu (const juce::MouseEvent& /*e*/)
     menu.addSectionHeader ("Add Channel");
     menu.addItem (1, "Add Bus Channel");
     menu.addItem (2, "Add FX Channel");
+    menu.addItem (3, "Add VCA Channel");
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
         [this] (int result)
@@ -132,6 +137,10 @@ void MixerView::showContextMenu (const juce::MouseEvent& /*e*/)
             else if (result == 2)
             {
                 mixerEngine.createFXChannel ("FX " + juce::String (mixerEngine.getFXChannels().size() + 1));
+            }
+            else if (result == 3)
+            {
+                mixerEngine.createVCAChannel ("VCA " + juce::String (mixerEngine.getVCAChannels().size() + 1));
             }
         });
 }
@@ -160,6 +169,7 @@ void MixerView::rebuildStrips()
     channelStripContainer.removeAllChildren();
     strips.clear();
     busFXStrips.clear();
+    vcaStrips.clear();
     masterStrip.reset();
     meterProcessors.clear();
 
@@ -260,6 +270,17 @@ void MixerView::rebuildStrips()
         if (MixerEngine::isFXChannel (*audioTrack))
             addBusFXStrip (audioTrack);
 
+    // ---- VCA strips (group faders, after Bus/FX, before Master) ----
+    for (auto* audioTrack : te::getAudioTracks (*edit))
+    {
+        if (! MixerEngine::isVCAChannel (*audioTrack))
+            continue;
+        auto* strip = vcaStrips.add (new VCAStrip (*audioTrack, mixerEngine));
+        strip->onTrackSelected  = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+        strip->onMembersChanged = [this] { refreshAllStrips(); };
+        channelStripContainer.addAndMakeVisible (strip);
+    }
+
     // ---- Master strip (rightmost, pinned outside viewport) ----
     masterStrip = std::make_unique<MasterStrip> (
         *edit,
@@ -293,6 +314,7 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
         selectedBusFXStrips.clear();
         for (auto* s : strips)     s->setSelected (false);
         for (auto* s : busFXStrips) s->setSelected (false);
+        for (auto* s : vcaStrips)   s->setSelected (false);
         grabKeyboardFocus();
         return;
     }
@@ -330,6 +352,8 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
         s->setSelected (sel);
         if (sel) selectedBusFXStrips.add (s);
     }
+    for (auto* s : vcaStrips)
+        s->setSelected (selectedMixerTracks.contains (&s->getTrack()));
 
     grabKeyboardFocus();
 }
@@ -622,6 +646,7 @@ void MixerView::refreshAllStrips()
 {
     for (auto* s : strips)      s->refresh();
     for (auto* s : busFXStrips) s->refresh();
+    for (auto* s : vcaStrips)   s->refresh();
 }
 
 //==============================================================================

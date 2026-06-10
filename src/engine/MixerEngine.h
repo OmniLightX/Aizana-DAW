@@ -42,6 +42,11 @@ static const juce::Identifier kChannelTypeProp { "cloudesChannelType" };
 static const juce::String kChannelTypeBus { "bus" };
 /** Property value for FX Channel AudioTracks. */
 static const juce::String kChannelTypeFX  { "fx" };
+/** Property value for VCA Channel AudioTracks (group fader — no audio path). */
+static const juce::String kChannelTypeVCA { "vca" };
+
+/** Property stored on a member track: EditItemID string of its VCA channel. */
+static const juce::Identifier kVCAAssignmentProp { "cloudesVCA" };
 
 /** Custom property stored on a source track when it is routed to a Bus Channel.
  *  Caches the bus name so the channel strip button can display it reliably even
@@ -187,6 +192,33 @@ public:
 
     /** Returns true if track is a plain audio track (no channel-type tag). */
     static bool isAudioChannel (const te::AudioTrack& track);
+
+    // -------------------------------------------------------------------------
+    // VCA channels (group faders — Studio One pattern, Cloudes semantics:
+    // the VCA fader moves its members' faders RELATIVELY; no audio routing).
+    // -------------------------------------------------------------------------
+
+    /** Create a VCA Channel — an AudioTrack tagged kChannelTypeVCA. It carries
+        no clips and no routing; its VolumeAndPanPlugin stores the fader pos. */
+    te::AudioTrack* createVCAChannel (const juce::String& name);
+
+    /** Assign a track to a VCA (stores the VCA's EditItemID on the member). Undoable. */
+    void assignTrackToVCA (te::AudioTrack& track, te::AudioTrack& vca);
+
+    /** Remove a track's VCA assignment. Undoable. */
+    void unassignFromVCA (te::AudioTrack& track);
+
+    /** The VCA channel a track is assigned to, or nullptr. */
+    te::AudioTrack* getVCAFor (const te::AudioTrack& track) const;
+
+    /** All VCA channels in the edit. */
+    juce::Array<te::AudioTrack*> getVCAChannels() const;
+
+    /** All member tracks assigned to the given VCA. */
+    juce::Array<te::AudioTrack*> getVCAMembers (const te::AudioTrack& vca) const;
+
+    /** Returns true if track is tagged as a VCA Channel. */
+    static bool isVCAChannel (const te::AudioTrack& track);
 
     // ---- Legacy API (for existing callers) ----
     te::AudioTrack*    createBus  (const juce::String& name);

@@ -7,6 +7,7 @@
 #include "metering/MeterProcessor.h"
 #include "ChannelStrip.h"
 #include "BusFXStrip.h"
+#include "VCAStrip.h"
 #include "MasterStrip.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
@@ -82,6 +83,9 @@ private:
 
     // Bus and FX channel strips — same visual class, different accent colour
     juce::OwnedArray<BusFXStrip> busFXStrips;
+
+    /** VCA channel strips (group faders) — rightmost before Master. */
+    juce::OwnedArray<VCAStrip> vcaStrips;
 
     // Per-track MeterProcessors — one per strip, fed via LevelMeterPlugin peak
     // data synthesised into 512-sample blocks so libebur128 produces per-track LUFS.

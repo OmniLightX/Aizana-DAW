@@ -21,6 +21,7 @@ target_sources(engine_tests PRIVATE
     test_undo.cpp
     test_clip_editing.cpp
     test_comping.cpp
+    test_vca.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
