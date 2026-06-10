@@ -73,6 +73,7 @@ target_sources(Cloudes PRIVATE
     src/ai/OnnxModelRunner.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
+    src/engine/CompingEngine.cpp
     src/engine/MidiRecorder.cpp
     src/engine/MixerEngine.cpp
     src/engine/InputBusManager.cpp
@@ -106,6 +107,8 @@ target_sources(Cloudes PRIVATE
     src/ui/mixer/MasterStrip.cpp
     src/ui/mixer/BusFXStrip.cpp
     src/ui/mixer/SendSlotPanel.cpp
+    # Comping editor (Phase 2+, Studio One take comping)
+    src/ui/comping/CompingView.cpp
     # Piano Roll editor (plan 01-09)
     src/ui/pianoroll/PianoRollView.cpp
     src/ui/pianoroll/NoteComponent.cpp

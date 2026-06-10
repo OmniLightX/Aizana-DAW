@@ -131,13 +131,16 @@ void ClipComponent::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.92f));
     g.setFont (juce::FontOptions (11.0f));
 
-    // Takes badge: "T2/3" shown right-aligned in header when clip has multiple takes
+    // Takes badge: "T2/3" shown right-aligned in header when clip has multiple takes;
+    // shows "C" while a Cloudes comp is active (audio is assembled from several takes).
     int numTakes = 0;
     int currentTakeIdx = 0;
+    bool compActive = false;
     if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
     {
-        numTakes      = waveClip->getNumTakes (false);
-        currentTakeIdx = waveClip->getCurrentTake();
+        numTakes       = waveClip->getNumTakes (false);
+        currentTakeIdx = juce::jmax (0, clipEditor.getActiveTake (*waveClip));
+        compActive     = waveClip->state.getChildWithName (CompingEngine::compType).isValid();
     }
     const float badgeWidth = (numTakes > 1 && getWidth() >= 50) ? 30.0f : 0.0f;
 
@@ -157,8 +160,10 @@ void ClipComponent::paint (juce::Graphics& g)
         g.fillRoundedRectangle (badgeRect, 2.0f);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
         g.setFont (juce::FontOptions (9.0f));
-        g.drawText ("T" + juce::String (currentTakeIdx + 1) + "/" + juce::String (numTakes),
-                    badgeRect.toNearestInt(), juce::Justification::centred, false);
+        const juce::String badgeText = compActive
+            ? "C/" + juce::String (numTakes)
+            : "T" + juce::String (currentTakeIdx + 1) + "/" + juce::String (numTakes);
+        g.drawText (badgeText, badgeRect.toNearestInt(), juce::Justification::centred, false);
         g.setFont (juce::FontOptions (11.0f)); // restore font for subsequent draw calls
     }
 
@@ -616,7 +621,7 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
         {
             totalTakes = waveClip->getNumTakes (false);
-            activeTake = waveClip->getCurrentTake();
+            activeTake = clipEditor.getActiveTake (*waveClip);
         }
         if (totalTakes > 1)
         {
@@ -628,6 +633,7 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
             }
             menu.addSeparator();
             menu.addSubMenu ("Select Take", takesSubMenu);
+            menu.addItem (5, juce::String::fromUTF8 ("Comping-Editor öffnen…"));
         }
 
         menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
@@ -654,6 +660,12 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                             clip.edit.getTransport().getPosition().inSeconds();
                         clipEditor.cutClip (*waveClip, playheadSecs);
                     }
+                }
+                else if (result == 5)
+                {
+                    if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
+                        if (auto* mainComp = findParentComponentOfClass<MainComponent>())
+                            mainComp->showCompingEditor (*waveClip);
                 }
                 else if (result >= 100)
                 {

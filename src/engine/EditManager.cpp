@@ -48,6 +48,14 @@ void EditManager::createNewEdit()
     currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
     unsavedDir.setAsCurrentWorkingDirectory();
 
+    // The session file must EXIST on disk even before the first save:
+    // TE stores relative source refs (e.g. loop-take files) via
+    // File::getRelativePathFrom (editFileRetriever()) — and JUCE only treats
+    // the base as a file when it exists, otherwise as a directory, which bakes
+    // one extra "../" into every stored take path (= unresolvable sources).
+    if (! currentSessionFile.existsAsFile())
+        currentSessionFile.create();
+
     if (edit != nullptr)
     {
         const auto editFile = currentSessionFile;
@@ -64,7 +72,16 @@ void EditManager::createNewEdit()
         edit->filePathResolver = [editFile] (const juce::String& desc) -> juce::File
         {
             if (juce::File::isAbsolutePath (desc)) return juce::File (desc);
-            return editFile.getParentDirectory().getChildFile (desc);
+            auto resolved = editFile.getParentDirectory().getChildFile (desc);
+            if (resolved.existsAsFile())
+                return resolved;
+            // Legacy refs stored while the session file did not yet exist on
+            // disk: JUCE then treated the edit-file path as a directory, so the
+            // stored path carries one extra "../" — re-base to compensate.
+            auto legacy = editFile.getChildFile (desc);
+            if (legacy.existsAsFile())
+                return legacy;
+            return resolved;
         };
     }
 
@@ -104,6 +121,23 @@ void EditManager::loadEdit (const juce::File& file)
 
     // Same as createNewEdit: allocate context so input devices are immediately accessible.
     edit->getTransport().ensureContextAllocated();
+
+    // TE's default filePathResolver (sibling-based) lacks the legacy fallback for
+    // take refs recorded in unsaved sessions (see createNewEdit) — install ours.
+    setCurrentFile (file);
+    const auto editFile = file;
+    edit->editFileRetriever = [editFile] { return editFile; };
+    edit->filePathResolver = [editFile] (const juce::String& desc) -> juce::File
+    {
+        if (juce::File::isAbsolutePath (desc)) return juce::File (desc);
+        auto resolved = editFile.getParentDirectory().getChildFile (desc);
+        if (resolved.existsAsFile())
+            return resolved;
+        auto legacy = editFile.getChildFile (desc);
+        if (legacy.existsAsFile())
+            return legacy;
+        return resolved;
+    };
 
     if (onEditChanged)
         onEditChanged();

@@ -1,4 +1,5 @@
 #include "ClipEditor.h"
+#include "CompingEngine.h"
 
 // Convenience aliases for Tracktion's strong time types
 using TimePos = tracktion::core::TimePosition;
@@ -322,11 +323,43 @@ void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 {
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Set active take");
+
+    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&comp))
+    {
+        auto takes = wc->state.getChildWithName (te::IDs::TAKES);
+        auto take  = takes.getChild (takeIndex);
+        const auto id = te::ProjectItemID::fromProperty (take, te::IDs::source);
+
+        if (take.isValid() && wc->edit.engine.getProjectManager().getProjectItem (id) == nullptr)
+        {
+            // Direct-file take (project-less loop recording): TE's setCurrentTake
+            // REMOVES a take whose ProjectItemID can't be resolved — switch the
+            // clip's source string directly instead (the project-less equivalent).
+            // An active Cloudes comp would keep overriding the audio, so drop it.
+            auto compTree = wc->state.getChildWithName (CompingEngine::compType);
+            if (compTree.isValid())
+                wc->state.removeChild (compTree, &undoManager);
+            CompingEngine::setSourceOverride (*wc, {});
+            wc->state.setProperty (te::IDs::source,
+                                   take.getProperty (te::IDs::source).toString(),
+                                   &undoManager);
+            return;
+        }
+    }
+
     comp.setCurrentTake (takeIndex);
 }
 
 //==============================================================================
 int ClipEditor::getActiveTake (const te::Clip& comp) const
 {
+    // For direct-file takes (project-less recordings) TE's getCurrentTake()
+    // can't resolve ProjectItemIDs — match the take sources directly instead.
+    if (auto* wc = dynamic_cast<const te::WaveAudioClip*> (&comp))
+    {
+        const int idx = CompingEngine::activeTakeIndexFor (*wc);
+        if (idx >= 0)
+            return idx;
+    }
     return comp.getCurrentTake();
 }

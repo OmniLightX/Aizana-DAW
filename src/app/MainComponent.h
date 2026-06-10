@@ -18,6 +18,7 @@
 #include "ui/export/ExportDialog.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
+#include "ui/comping/CompingView.h"
 #include "ui/beginner/BeginnerView.h"
 #include "ui/onboarding/OnboardingWizard.h"
 #include "ui/pluginbrowser/ScanProgressPanel.h"
@@ -69,6 +70,12 @@ public:
     /** Hide the docked Piano Roll panel. */
     void hidePianoRoll();
 
+    /** Show the docked Comping editor for a WaveAudioClip with loop takes.
+        Shares the bottom dock slot with the Piano Roll (mutually exclusive). */
+    void showCompingEditor (te::WaveAudioClip& clip);
+    /** Hide the docked Comping editor. */
+    void hideCompingEditor();
+
     // -------------------------------------------------------------------------
     // juce::MenuBarModel overrides (pure virtual — all three must be implemented)
     // -------------------------------------------------------------------------
@@ -88,6 +95,7 @@ private:
     InputBusManager  inputBusManager  { appState.editManager };
     AutomationEngine automationEngine { appState.editManager };
     ClipEditor       clipEditor       { appState.editManager };
+    CompingEngine    compingEngine    { appState.editManager };
 
     // Export pipeline — owned by MainComponent, passed to ExportDialog (plan 01-16)
     // ExportPipeline() takes no constructor args; edit is passed per-call
@@ -197,6 +205,11 @@ private:
     std::unique_ptr<PianoRollView> pianoRollView;  // current docked Piano Roll (nullptr when hidden)
     juce::TextButton pianoRollCloseButton { "X" };  // close button in piano roll header
     static constexpr int kPianoRollHeight = 250;  // default docked height
+
+    // Comping editor — shares the bottom dock slot with the Piano Roll
+    bool compingVisible = false;
+    std::unique_ptr<CompingView> compingView;       // nullptr when hidden
+    juce::TextButton compingCloseButton { "X" };
 
     static constexpr int kDockedPanelWidth = 350;  // px when plugins are docked
     static constexpr int kAssistRailWidth  = 330;  // px for the Pro-Assist rail (Sketch 004)

@@ -16,12 +16,15 @@ MainComponent::MainComponent (ApplicationState& appState_)
     {
         inputBusManager.initialiseDefaultBuses();
         inputBusManager.applyToEngine();
+        hideCompingEditor();                 // editor of the old edit's clip is stale
+        compingEngine.attachToEdit();        // re-render active comps of the new edit
     };
 
     // The startup Edit was created by ApplicationState before this component (and
     // its InputBusManager) existed, so onEditChanged could not fire for it — seed now.
     inputBusManager.initialiseDefaultBuses();
     inputBusManager.applyToEngine();
+    compingEngine.attachToEdit();
 
     addAndMakeVisible (transportBar);
     addAndMakeVisible (arrangementView);
@@ -97,6 +100,9 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     addChildComponent (pianoRollCloseButton);  // hidden by default
     pianoRollCloseButton.onClick = [this] { hidePianoRoll(); };
+
+    addChildComponent (compingCloseButton);    // hidden by default
+    compingCloseButton.onClick = [this] { hideCompingEditor(); };
 
     // TransportBar must always render on top of all other components (arrangement,
     // mixer, docked panel).  toFront() after all siblings are added guarantees this
@@ -213,6 +219,14 @@ void MainComponent::resized()
         pianoRollView->setBounds (pianoRollArea);
     }
 
+    // Comping editor — same bottom dock slot as the Piano Roll (mutually exclusive)
+    if (compingVisible && compingView != nullptr)
+    {
+        auto compingArea = area.removeFromBottom (kPianoRollHeight);
+        compingCloseButton.setBounds (compingArea.getRight() - 24, compingArea.getY() + 4, 20, 20);
+        compingView->setBounds (compingArea);
+    }
+
     // Divider bar — always visible; sits between ArrangementView and MixerView
     mixerDivider.setBounds (area.removeFromBottom (kMixerToggleBarHeight));
 
@@ -315,6 +329,13 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Escape: hide Comping editor if visible
+    if (key == juce::KeyPress::escapeKey && compingVisible)
+    {
+        hideCompingEditor();
+        return true;
+    }
+
     // Cmd+E: split selected clip(s) at playhead
     if (key == juce::KeyPress ('e', juce::ModifierKeys::commandModifier, 0) ||
         key == juce::KeyPress ('E', juce::ModifierKeys::commandModifier, 0))
@@ -397,6 +418,9 @@ void MainComponent::applyUIMode()
     if (pianoRollView != nullptr)
         pianoRollView->setVisible (! beginner && pianoRollVisible);
     pianoRollCloseButton.setVisible (! beginner && pianoRollVisible);
+    if (compingView != nullptr)
+        compingView->setVisible (! beginner && compingVisible);
+    compingCloseButton.setVisible (! beginner && compingVisible);
 
     if (beginner) beginnerView.toFront (false);
     else          transportBar.toFront (false);
@@ -433,6 +457,42 @@ void MainComponent::hidePianoRoll()
     {
         removeChildComponent (pianoRollView.get());
         pianoRollView.reset();
+    }
+    resized();
+}
+
+void MainComponent::showCompingEditor (te::WaveAudioClip& clip)
+{
+    hidePianoRoll();   // shared bottom dock slot
+
+    compingView.reset();
+    compingView = std::make_unique<CompingView> (clip, appState.editManager, compingEngine);
+    compingView->onCloseRequest = [this]
+    {
+        // Deleting the clip (or undoing the recording) closes the editor. The
+        // notification arrives mid-ValueTree-callback — defer the teardown.
+        juce::MessageManager::callAsync (
+            [safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe == nullptr) return;
+                safe->hideCompingEditor();
+            });
+    };
+    addAndMakeVisible (*compingView);
+    compingVisible = true;
+    compingCloseButton.setVisible (true);
+    compingCloseButton.toFront (false);
+    resized();
+}
+
+void MainComponent::hideCompingEditor()
+{
+    compingVisible = false;
+    compingCloseButton.setVisible (false);
+    if (compingView != nullptr)
+    {
+        removeChildComponent (compingView.get());
+        compingView.reset();
     }
     resized();
 }
