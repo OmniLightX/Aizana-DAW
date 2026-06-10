@@ -19,6 +19,7 @@
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
 #include "ui/comping/CompingView.h"
+#include "ui/inspector/InspectorPanel.h"
 #include "ui/beginner/BeginnerView.h"
 #include "ui/onboarding/OnboardingWizard.h"
 #include "ui/pluginbrowser/ScanProgressPanel.h"
@@ -126,6 +127,12 @@ private:
     // Pro-Assist dockable rail (Sketch 004, A of B+A) — opt-in right panel, shown in
     // Pro mode when assist is toggled on (TransportBar "Assist" → uiState.assistEnabled).
     ProAssistRail   proAssistRail   { appState };
+
+    // Inspector — left dock with selection parameters (Studio One pattern).
+    // Hidden by default; View menu / Cmd+I toggles.
+    InspectorPanel  inspectorPanel  { appState.editManager, mixerEngine };
+    bool inspectorVisible = false;
+    void toggleInspector();
 
     bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
 
@@ -255,6 +262,7 @@ private:
         ScanPlugins         = 202,
         ViewToggleBeginner  = 203,
         ViewReopenOnboarding = 204,
+        ViewToggleInspector = 205,
 
         // Export menu
         ExportMixdown = 301,

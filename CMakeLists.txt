@@ -109,6 +109,8 @@ target_sources(Cloudes PRIVATE
     src/ui/mixer/SendSlotPanel.cpp
     # Comping editor (Phase 2+, Studio One take comping)
     src/ui/comping/CompingView.cpp
+    # Inspector dock (Phase 2+, Studio One inspector)
+    src/ui/inspector/InspectorPanel.cpp
     # Piano Roll editor (plan 01-09)
     src/ui/pianoroll/PianoRollView.cpp
     src/ui/pianoroll/NoteComponent.cpp

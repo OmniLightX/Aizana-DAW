@@ -92,6 +92,12 @@ public:
         return selectedTrackHeader != nullptr ? &selectedTrackHeader->getTrack() : nullptr;
     }
 
+    /** First selected clip (or nullptr) — polled by the InspectorPanel. */
+    te::Clip* getPrimarySelectedClip() const noexcept
+    {
+        return selectedClips.isEmpty() ? nullptr : &selectedClips.getFirst()->getClip();
+    }
+
     // Zoom control (pinch/scroll — also called by MainComponent)
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
     void   setPixelsPerSecond (double pps);

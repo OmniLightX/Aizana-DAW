@@ -74,6 +74,11 @@ MainComponent::MainComponent (ApplicationState& appState_)
     transportBar.onSelectViewMode = [this] (bool mixFocus) { setViewFocus (mixFocus); };
     transportBar.isMixerShown     = [this] { return mixerVisible; };
 
+    // Inspector (left dock) — pulls the arrangement selection via providers
+    inspectorPanel.trackProvider = [this] { return arrangementView.getSelectedTrack(); };
+    inspectorPanel.clipProvider  = [this] { return arrangementView.getPrimarySelectedClip(); };
+    addChildComponent (inspectorPanel);   // hidden by default
+
     // Mixer divider bar — click to toggle, drag to resize (Studio One style)
     mixerDivider.onToggleClick = [this] { toggleMixer(); menuItemsChanged(); };
     mixerDivider.onDragDelta   = [this] (int dy)
@@ -206,6 +211,10 @@ void MainComponent::resized()
     // Fixed transport bar at top (CONTEXT.md: "Fixed transport bar at top")
     transportBar.setBounds (area.removeFromTop (50));
 
+    // Inspector — left dock, spans the full height below the transport bar
+    if (inspectorVisible)
+        inspectorPanel.setBounds (area.removeFromLeft (InspectorPanel::kWidth));
+
     // DockedPluginPanel — right-side panel (auto-hides when empty)
     auto& dockedPanel = pluginWindowManager.getDockedPanel();
     const int dockedWidth = dockedPanel.isEmpty() ? 0 : kDockedPanelWidth;
@@ -271,6 +280,14 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         key == juce::KeyPress (',', juce::ModifierKeys::ctrlModifier, 0))
     {
         AudioPreferencesDialog::show (appState.audioEngine);
+        return true;
+    }
+
+    // Cmd+I / Ctrl+I: toggle the Inspector dock
+    if (key == juce::KeyPress ('i', juce::ModifierKeys::commandModifier, 0) ||
+        key == juce::KeyPress ('i', juce::ModifierKeys::ctrlModifier, 0))
+    {
+        toggleInspector();
         return true;
     }
 
@@ -392,6 +409,15 @@ void MainComponent::toggleMixer()
     resized();   // Re-layout so ArrangementView expands/collapses accordingly
 }
 
+void MainComponent::toggleInspector()
+{
+    inspectorVisible = ! inspectorVisible;
+    inspectorPanel.setVisible (inspectorVisible
+                               && appState.uiState.getMode() != UIStateManager::UIMode::Beginner);
+    resized();
+    menuItemsChanged();
+}
+
 void MainComponent::setViewFocus (bool mixFocus)
 {
     // Edit/Mix switcher (TransportBar): Edit = arrangement only, Mix = mixer
@@ -439,6 +465,7 @@ void MainComponent::applyUIMode()
     if (compingView != nullptr)
         compingView->setVisible (! beginner && compingVisible);
     compingCloseButton.setVisible (! beginner && compingVisible);
+    inspectorPanel.setVisible (! beginner && inspectorVisible);
 
     if (beginner) beginnerView.toFront (false);
     else          transportBar.toFront (false);
@@ -573,6 +600,10 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           mixerVisible ? "Hide Mixer" : "Show Mixer",
                           true,
                           mixerVisible);
+            menu.addItem (ViewToggleInspector,
+                          inspectorVisible ? "Inspector ausblenden" : "Inspector anzeigen",
+                          true,
+                          inspectorVisible);
             menu.addSeparator();
             menu.addItem (ScanPlugins, "Scan Plugins...", true);
             menu.addItem (ViewReopenOnboarding, "Onboarding wiederholen...", true);
@@ -620,6 +651,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
         case ViewToggleMixer:
             toggleMixer();
             menuItemsChanged();
+            break;
+
+        case ViewToggleInspector:
+            toggleInspector();
             break;
 
         case ScanPlugins:
