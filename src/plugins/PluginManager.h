@@ -47,6 +47,18 @@ public:
                               int insertIndex = -1);
 
     /**
+     * Create and insert a plugin into a CLIP's own chain (Event-FX).
+     *
+     * TE processes a clip's PluginList live as part of the clip's playback
+     * node — the FX exists only while this event plays (Studio One Event-FX).
+     * Returns nullptr for clip types without a plugin list.
+     *
+     * Records one undo step: "Insert event FX".
+     */
+    te::Plugin* insertPluginOnClip (te::Clip& clip,
+                                    const juce::PluginDescription& desc);
+
+    /**
      * Move a plugin to a new position in the track's chain.
      *
      * The chain order is ValueTree child order — moving the plugin's state node

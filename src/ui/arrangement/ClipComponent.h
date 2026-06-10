@@ -104,6 +104,10 @@ public:
     juce::Rectangle<float> getGainHandleRect() const;
 
 private:
+    /** Context-menu action: estimate BPM from the clip's source audio on a
+        background thread, then offer to set the song tempo (undoable). */
+    void detectTempoFromClip();
+
     te::Clip&          clip;
     // Keeps the clip object alive for this component's lifetime. ClipComponents are
     // rebuilt asynchronously (callAsync rebuildTrackRows), but a deferred resized()

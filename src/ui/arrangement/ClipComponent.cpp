@@ -3,6 +3,8 @@
 #include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
 #include "ui/common/TrackColours.h"
+#include "ui/pluginbrowser/PluginBrowserPopup.h"
+#include "engine/TempoDetector.h"
 
 // Strong time-type aliases — same as ClipEditor.cpp, needed for clip.setPosition()
 using TimePos = tracktion::core::TimePosition;
@@ -144,11 +146,39 @@ void ClipComponent::paint (juce::Graphics& g)
     }
     const float badgeWidth = (numTakes > 1 && getWidth() >= 50) ? 30.0f : 0.0f;
 
+    // "fx" badge when the clip carries Event-FX (its own live plugin chain)
+    bool hasEventFx = false;
+    if (auto* clipPlugins = clip.getPluginList())
+        for (auto* p : clipPlugins->getPlugins())
+        {
+            const juce::String t = p->getPluginType();
+            if (t != "volume" && t != "level" && t != "auxreturn" && t != "auxsend")
+            {
+                hasEventFx = true;
+                break;
+            }
+        }
+    const float fxBadgeWidth = (hasEventFx && getWidth() >= 70) ? 20.0f : 0.0f;
+
     const auto nameRect = juce::Rectangle<float> (bounds.getX() + 5.0f,
                                                    bounds.getY() + 1.0f,
-                                                   bounds.getWidth() - 8.0f - badgeWidth,
+                                                   bounds.getWidth() - 8.0f - badgeWidth - fxBadgeWidth,
                                                    kHeaderHeight).toNearestInt();
     g.drawText (clip.getName(), nameRect, juce::Justification::centredLeft, true);
+
+    if (fxBadgeWidth > 0.0f)
+    {
+        const auto fxRect = juce::Rectangle<float> (bounds.getRight() - 1.0f - badgeWidth - fxBadgeWidth,
+                                                     bounds.getY() + 2.0f,
+                                                     fxBadgeWidth - 2.0f,
+                                                     kHeaderHeight - 4.0f);
+        g.setColour (juce::Colour (0xff44cc66).withAlpha (0.35f));
+        g.fillRoundedRectangle (fxRect, 2.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.85f));
+        g.setFont (juce::FontOptions (9.0f));
+        g.drawText ("fx", fxRect.toNearestInt(), juce::Justification::centred, false);
+        g.setFont (juce::FontOptions (11.0f));
+    }
 
     if (badgeWidth > 0.0f)
     {
@@ -614,6 +644,8 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         menu.addSeparator();
         menu.addItem (3, "Copy");
         menu.addItem (4, "Split at Playhead");
+        if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
+            menu.addItem (6, juce::String::fromUTF8 ("Tempo aus Clip erkennen…"));
 
         // Takes submenu: shown for WaveAudioClip when loop recording produced multiple takes
         int totalTakes = 0;
@@ -636,9 +668,69 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
             menu.addItem (5, juce::String::fromUTF8 ("Comping-Editor öffnen…"));
         }
 
-        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
-            [this] (int result)
+        // Event-FX submenu (Studio One: inserts on the EVENT, not the track).
+        // TE plays a clip's own PluginList live as part of the clip node.
+        juce::Array<te::Plugin*> clipFx;
+        if (auto* clipPlugins = clip.getPluginList())
+            for (auto* p : clipPlugins->getPlugins())
             {
+                const juce::String t = p->getPluginType();
+                if (t != "volume" && t != "level" && t != "auxreturn" && t != "auxsend")
+                    clipFx.add (p);
+            }
+        {
+            juce::PopupMenu fxMenu;
+            fxMenu.addItem (399, juce::String::fromUTF8 ("FX hinzufügen…"));
+            if (! clipFx.isEmpty())
+                fxMenu.addSeparator();
+            for (int i = 0; i < clipFx.size(); ++i)
+            {
+                juce::PopupMenu one;
+                one.addItem (400 + i, juce::String::fromUTF8 ("Öffnen"));
+                one.addItem (500 + i, "Entfernen");
+                fxMenu.addSubMenu (clipFx[i]->getName(), one);
+            }
+            menu.addSeparator();
+            menu.addSubMenu ("Event-FX", fxMenu);
+        }
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [this, clipFx] (int result)
+            {
+                // ---- Event-FX ----
+                if (result == 399)
+                {
+                    if (auto* av = findParentComponentOfClass<ArrangementView>())
+                        PluginBrowserPopup::showForComponent (
+                            *this,
+                            av->getPluginScanner().getKnownPlugins(),
+                            [this, av] (const juce::PluginDescription& desc)
+                            {
+                                if (auto* fx = av->getPluginManager().insertPluginOnClip (clip, desc))
+                                    av->getPluginWindowManager().openPluginWindow (*fx);
+                                repaint();
+                            });
+                    return;
+                }
+                if (result >= 500 && result < 500 + clipFx.size())
+                {
+                    if (auto* av = findParentComponentOfClass<ArrangementView>())
+                    {
+                        auto* fx = clipFx[result - 500];
+                        av->getPluginWindowManager().closePluginWindow (*fx);
+                        clip.edit.getUndoManager().beginNewTransaction ("Remove event FX");
+                        fx->removeFromParent();
+                    }
+                    repaint();
+                    return;
+                }
+                if (result >= 400 && result < 400 + clipFx.size())
+                {
+                    if (auto* av = findParentComponentOfClass<ArrangementView>())
+                        av->getPluginWindowManager().openPluginWindow (*clipFx[result - 400]);
+                    return;
+                }
+
                 if (result == 1)
                 {
                     clipEditor.duplicateClip (clip);
@@ -666,6 +758,10 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                     if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
                         if (auto* mainComp = findParentComponentOfClass<MainComponent>())
                             mainComp->showCompingEditor (*waveClip);
+                }
+                else if (result == 6)
+                {
+                    detectTempoFromClip();
                 }
                 else if (result >= 100)
                 {
@@ -1139,4 +1235,53 @@ void ClipComponent::mouseDoubleClick (const juce::MouseEvent& e)
             mainComp->showPianoRoll (*midiClip);
     }
     // Audio clips: no action in Phase 1 (future: waveform editor)
+}
+
+//==============================================================================
+void ClipComponent::detectTempoFromClip()
+{
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (waveClip == nullptr)
+        return;
+
+    const auto file = waveClip->getSourceFileReference().getFile();
+    if (! file.existsAsFile())
+        return;
+
+    // Analysis runs on a worker thread; result arrives on the message thread.
+    TempoDetector::detectAsync (file,
+        [safe = juce::Component::SafePointer<ClipComponent> (this)] (double bpm)
+        {
+            if (safe == nullptr)
+                return;
+
+            if (bpm <= 0.0)
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::InfoIcon,
+                    "Tempo-Erkennung",
+                    juce::String::fromUTF8 ("Kein eindeutiges Tempo erkennbar "
+                                            "(zu kurz, zu leise oder unrhythmisch)."));
+                return;
+            }
+
+            const auto rounded = std::round (bpm * 10.0) / 10.0;
+            juce::AlertWindow::showOkCancelBox (
+                juce::MessageBoxIconType::QuestionIcon,
+                "Tempo-Erkennung",
+                juce::String::fromUTF8 ("Geschätztes Tempo: ")
+                    + juce::String (rounded, 1) + " BPM\n\n"
+                    + juce::String::fromUTF8 ("Song-Tempo übernehmen?"),
+                juce::String::fromUTF8 ("Übernehmen"), "Abbrechen", nullptr,
+                juce::ModalCallbackFunction::create (
+                    [safe, rounded] (int result)
+                    {
+                        if (safe == nullptr || result == 0)
+                            return;
+                        auto& edit = safe->clip.edit;
+                        edit.getUndoManager().beginNewTransaction ("Set tempo from clip");
+                        edit.tempoSequence.getTempo (0)->setBpm (
+                            juce::jlimit (30.0, 250.0, rounded));
+                    }));
+        });
 }

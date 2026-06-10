@@ -74,6 +74,7 @@ target_sources(Cloudes PRIVATE
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
+    src/engine/TempoDetector.cpp
     src/engine/MidiRecorder.cpp
     src/engine/MixerEngine.cpp
     src/engine/InputBusManager.cpp

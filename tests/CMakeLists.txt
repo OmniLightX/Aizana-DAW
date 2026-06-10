@@ -22,6 +22,8 @@ target_sources(engine_tests PRIVATE
     test_clip_editing.cpp
     test_comping.cpp
     test_vca.cpp
+    test_event_fx.cpp
+    test_tempo_detector.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
@@ -56,6 +58,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/EditManager.cpp
     ../src/engine/ClipEditor.cpp
     ../src/engine/CompingEngine.cpp
+    ../src/engine/TempoDetector.cpp
     ../src/engine/MidiRecorder.cpp
     ../src/engine/MixerEngine.cpp
     ../src/engine/InputBusManager.cpp

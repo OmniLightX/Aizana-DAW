@@ -48,6 +48,36 @@ te::Plugin* PluginManager::insertPlugin (te::Track& track,
     return pluginPtr.get();
 }
 
+te::Plugin* PluginManager::insertPluginOnClip (te::Clip& clip,
+                                               const juce::PluginDescription& desc)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return nullptr;
+
+    auto* clipPlugins = clip.getPluginList();
+    if (clipPlugins == nullptr)
+        return nullptr;   // clip type without a plugin chain
+
+    auto& undoManager = editManager.getUndoManager();
+    undoManager.beginNewTransaction ("Insert event FX");
+
+    CloudesPluginLog::stage ("insertPluginOnClip BEGIN  name=\"" + desc.name + "\"");
+
+    // Same engine registration as the track path — see insertPlugin().
+    edit->engine.getPluginManager().knownPluginList.addType (desc);
+
+    auto pluginPtr = edit->getPluginCache().createNewPlugin (
+        te::ExternalPlugin::xmlTypeName, desc);
+    if (pluginPtr == nullptr)
+        return nullptr;
+
+    clipPlugins->insertPlugin (pluginPtr, -1, nullptr);   // append at end
+    CloudesPluginLog::stage ("insertPluginOnClip DONE  \"" + desc.name + "\"");
+
+    return pluginPtr.get();
+}
+
 // ---------------------------------------------------------------------------
 // Move
 // ---------------------------------------------------------------------------

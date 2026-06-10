@@ -98,6 +98,11 @@ public:
         return selectedClips.isEmpty() ? nullptr : &selectedClips.getFirst()->getClip();
     }
 
+    /** Plugin services — used by ClipComponent for the Event-FX menu. */
+    PluginManager&       getPluginManager() noexcept       { return pluginManager; }
+    PluginWindowManager& getPluginWindowManager() noexcept { return pluginWindowManager; }
+    PluginScanner&       getPluginScanner() noexcept       { return pluginScanner; }
+
     // Zoom control (pinch/scroll — also called by MainComponent)
     double getPixelsPerSecond() const noexcept { return pixelsPerSecond; }
     void   setPixelsPerSecond (double pps);
