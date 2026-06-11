@@ -25,6 +25,7 @@ target_sources(engine_tests PRIVATE
     test_event_fx.cpp
     test_tempo_detector.cpp
     test_auto_tempo.cpp
+    test_stem_analyzer.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
@@ -52,6 +53,7 @@ target_sources(engine_tests PRIVATE
     test_export_wav.cpp
     # Source files
     ../src/app/UIStateManager.cpp
+    ../src/ai/StemAnalyzer.cpp
     ../src/ai/IntentEngine.cpp
     ../src/ai/HeuristicFeedbackEngine.cpp
     ../src/ai/AIEngine.cpp
