@@ -644,8 +644,17 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         menu.addSeparator();
         menu.addItem (3, "Copy");
         menu.addItem (4, "Split at Playhead");
-        if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
+        if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+        {
             menu.addItem (6, juce::String::fromUTF8 ("Tempo aus Clip erkennen…"));
+
+            // Timestretch (Phase 3, Task 0): follow / stop following the song tempo.
+            // Item 7 is a toggle — checked while the clip is conformed (autoTempo on).
+            if (wc->getAutoTempo())
+                menu.addItem (7, juce::String::fromUTF8 ("Songtempo-Anpassung entfernen"), true, true);
+            else
+                menu.addItem (7, juce::String::fromUTF8 ("An Songtempo anpassen…"));
+        }
 
         // Takes submenu: shown for WaveAudioClip when loop recording produced multiple takes
         int totalTakes = 0;
@@ -762,6 +771,16 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 else if (result == 6)
                 {
                     detectTempoFromClip();
+                }
+                else if (result == 7)
+                {
+                    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+                    {
+                        if (wc->getAutoTempo())
+                            removeSongTempoConform();
+                        else
+                            conformClipToSongTempo();
+                    }
                 }
                 else if (result >= 100)
                 {
@@ -1284,4 +1303,72 @@ void ClipComponent::detectTempoFromClip()
                             juce::jlimit (30.0, 250.0, rounded));
                     }));
         });
+}
+
+void ClipComponent::conformClipToSongTempo()
+{
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (waveClip == nullptr)
+        return;
+
+    const auto file = waveClip->getSourceFileReference().getFile();
+    if (! file.existsAsFile())
+        return;
+
+    // Estimate the clip's source tempo first (worker thread), then enable
+    // auto-tempo so TE stretches the source to follow the song tempo map.
+    TempoDetector::detectAsync (file,
+        [safe = juce::Component::SafePointer<ClipComponent> (this)] (double bpm)
+        {
+            if (safe == nullptr)
+                return;
+
+            if (bpm <= 0.0)
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::InfoIcon,
+                    juce::String::fromUTF8 ("An Songtempo anpassen"),
+                    juce::String::fromUTF8 ("Kein eindeutiges Clip-Tempo erkennbar "
+                                            "(zu kurz, zu leise oder unrhythmisch)."));
+                return;
+            }
+
+            const auto rounded = std::round (bpm * 10.0) / 10.0;
+            auto& edit = safe->clip.edit;
+            const auto clipStart = safe->clip.getPosition().getStart();
+            const auto songBpm = edit.tempoSequence.getBpmAt (clipStart);
+
+            juce::AlertWindow::showOkCancelBox (
+                juce::MessageBoxIconType::QuestionIcon,
+                juce::String::fromUTF8 ("An Songtempo anpassen"),
+                juce::String::fromUTF8 ("Erkanntes Clip-Tempo: ")
+                    + juce::String (rounded, 1) + " BPM\n"
+                    + juce::String::fromUTF8 ("Songtempo: ")
+                    + juce::String (songBpm, 1) + " BPM\n\n"
+                    + juce::String::fromUTF8 ("Clip per Timestretch an das Songtempo "
+                                              "anpassen? Der Clip folgt danach auch "
+                                              "Tempo-Änderungen."),
+                juce::String::fromUTF8 ("Anpassen"), "Abbrechen", nullptr,
+                juce::ModalCallbackFunction::create (
+                    [safe, rounded] (int result)
+                    {
+                        if (safe == nullptr || result == 0)
+                            return;
+
+                        if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&safe->clip))
+                        {
+                            safe->clipEditor.conformToSongTempo (*wc, rounded);
+                            safe->repaint();
+                        }
+                    }));
+        });
+}
+
+void ClipComponent::removeSongTempoConform()
+{
+    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+    {
+        clipEditor.removeSongTempoConform (*wc);
+        repaint();
+    }
 }

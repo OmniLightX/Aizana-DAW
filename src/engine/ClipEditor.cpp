@@ -363,3 +363,70 @@ int ClipEditor::getActiveTake (const te::Clip& comp) const
     }
     return comp.getCurrentTake();
 }
+
+//==============================================================================
+bool ClipEditor::conformToSongTempo (te::WaveAudioClip& clip, double sourceBpm)
+{
+    if (sourceBpm < 30.0 || sourceBpm > 1000.0)
+        return false;
+
+    auto& edit = clip.edit;
+    const auto file = clip.getSourceFileReference().getFile();
+    const auto info = te::AudioFile (edit.engine, file).getInfo();
+    if (info.sampleRate <= 0.0)
+        return false;
+
+    const auto pos     = clip.getPosition();
+    const auto songBpm = edit.tempoSequence.getBpmAt (pos.getStart());
+    if (songBpm <= 0.0)
+        return false;
+
+    // One gesture = one undo step: loopInfo BPM (source tempo), stretch mode,
+    // autoTempo, and the rescaled clip length together.
+    editManager.getUndoManager().beginNewTransaction ("Conform clip to song tempo");
+
+    clip.getLoopInfo().setBpm (sourceBpm, info);
+    clip.setTimeStretchMode (te::TimeStretcher::soundtouchBetter);
+    clip.setAutoTempo (true);
+
+    // The same musical material now lasts oldLength * source/song: material
+    // recorded faster than the song stretches out, and vice versa. Clamp to
+    // the stretched source's available length.
+    const auto newLength = juce::jmin (pos.getLength() * (sourceBpm / songBpm),
+                                       clip.getMaximumLength());
+    if (newLength > tracktion::TimeDuration())
+        clip.setLength (newLength, true);
+
+    return true;
+}
+
+//==============================================================================
+bool ClipEditor::removeSongTempoConform (te::WaveAudioClip& clip)
+{
+    if (! clip.getAutoTempo())
+        return false;
+
+    auto& edit = clip.edit;
+    const auto file = clip.getSourceFileReference().getFile();
+    const auto info = te::AudioFile (edit.engine, file).getInfo();
+
+    const auto pos       = clip.getPosition();
+    const auto songBpm   = edit.tempoSequence.getBpmAt (pos.getStart());
+    const auto sourceBpm = info.sampleRate > 0.0 ? clip.getLoopInfo().getBpm (info) : 0.0;
+
+    editManager.getUndoManager().beginNewTransaction ("Remove song tempo conform");
+
+    clip.setAutoTempo (false);
+    clip.setTimeStretchMode (te::TimeStretcher::disabled);
+
+    // Restore the natural playback length (inverse of the conform factor).
+    if (sourceBpm > 0.0 && songBpm > 0.0)
+    {
+        const auto newLength = juce::jmin (pos.getLength() * (songBpm / sourceBpm),
+                                           clip.getMaximumLength());
+        if (newLength > tracktion::TimeDuration())
+            clip.setLength (newLength, true);
+    }
+
+    return true;
+}

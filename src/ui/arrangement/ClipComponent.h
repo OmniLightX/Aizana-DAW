@@ -108,6 +108,14 @@ private:
         background thread, then offer to set the song tempo (undoable). */
     void detectTempoFromClip();
 
+    /** Context-menu action: estimate the clip's source BPM, then timestretch the
+        clip to follow the song tempo (loopInfo BPM + setAutoTempo, undoable). */
+    void conformClipToSongTempo();
+
+    /** Context-menu action: stop the clip following the song tempo and restore
+        its natural playback length (undoable). */
+    void removeSongTempoConform();
+
     te::Clip&          clip;
     // Keeps the clip object alive for this component's lifetime. ClipComponents are
     // rebuilt asynchronously (callAsync rebuildTrackRows), but a deferred resized()

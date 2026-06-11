@@ -126,6 +126,32 @@ public:
     int getActiveTake (const te::Clip& comp) const;
 
     // -------------------------------------------------------------------------
+    // Timestretch — conform a clip to the song tempo (Phase 3, Task 0)
+    // Requires a timestretch backend (TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1),
+    // otherwise TE silently plays the clip unstretched.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Timestretch a clip so it follows the song tempo (and future tempo changes).
+     *
+     * Stores sourceBpm in the clip's LoopInfo, enables SoundTouch stretch mode +
+     * autoTempo, and rescales the clip length by sourceBpm/songBpm so the same
+     * musical material stays covered. One undo step.
+     *
+     * Source audio file: NEVER modified (stretching happens at playback/render).
+     *
+     * Returns false if the source file is unreadable or a tempo is invalid.
+     */
+    bool conformToSongTempo (te::WaveAudioClip& clip, double sourceBpm);
+
+    /**
+     * Stop a clip following the song tempo and restore its natural playback
+     * length (inverse of conformToSongTempo). One undo step.
+     * Returns false if autoTempo was not enabled on the clip.
+     */
+    bool removeSongTempoConform (te::WaveAudioClip& clip);
+
+    // -------------------------------------------------------------------------
     // Audio file import — creates a WaveAudioClip from a file on disk
     // -------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ target_sources(engine_tests PRIVATE
     test_vca.cpp
     test_event_fx.cpp
     test_tempo_detector.cpp
+    test_auto_tempo.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
@@ -98,6 +99,8 @@ target_compile_definitions(engine_tests PRIVATE
     # Suppress unnecessary Tracktion Engine UI/device features in test context
     TRACKTION_ENABLE_AUTOMAP=0
     TRACKTION_ENABLE_REWIRE=0
+    # Timestretch backend — must match the Cloudes app target (Phase 3, Task 0)
+    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
 )
 
 target_link_libraries(engine_tests PRIVATE

@@ -150,6 +150,11 @@ target_compile_definitions(Cloudes PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_MODAL_LOOPS_PERMITTED=1
+    # Timestretch backend (Phase 3, Task 0): SoundTouch is bundled inside the TE module
+    # (modules/tracktion_engine/3rd_party/soundtouch) and LGPL — compatible with GPL3.
+    # Without a backend, setAutoTempo/setTimeStretchMode/WarpTimeManager are silent no-ops.
+    # Elastique stays off (commercial licence). Must match the engine_tests definition.
+    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
     # Enable VST3 + AU hosting in Cloudes' OWN juce_audio_processors compilation so the
     # plugin-browser scanner (PluginScanner) can actually register and find them. Without
     # these, addDefaultFormats() adds nothing for the format and the user's library never
