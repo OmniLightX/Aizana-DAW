@@ -78,7 +78,9 @@ TEST_CASE ("StemAnalyzer Tier 1: real-world stem names classify correctly", "[st
         { "Gesang Hook",        "Vocals"  },
         { "BGV Stack",          "Vocals"  },
         { "Piano Verse",        "Keys"    },
-        { "SynthPad wide",      "Keys"    },
+        { "SynthPad wide",      "Synths"  },
+        { "Arp 16th",           "Synths"  },
+        { "Rhodes Chords",      "Keys"    },
         { "Strings Outro",      "Other"   },
         { "Riser 8bar",         "FX"      },
     };

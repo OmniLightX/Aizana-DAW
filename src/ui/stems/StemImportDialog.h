@@ -137,7 +137,7 @@ private:
             addAndMakeVisible (instrEditor);
 
             int id = 1;
-            for (auto* g : { "Drums", "Bass", "Guitars", "Keys", "Vocals", "FX" })
+            for (auto* g : { "Drums", "Bass", "Guitars", "Keys", "Synths", "Vocals", "FX" })
                 groupCombo.addItem (g, id++);
             groupCombo.addItem (juce::String::fromUTF8 ("— direkt an Master"), 99);
             groupCombo.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff2a2a2a));
@@ -153,19 +153,26 @@ private:
             addAndMakeVisible (gainLabel);
         }
 
+        static constexpr int kNumGroups = 7;
+        static const char* const* groupNames()
+        {
+            static const char* const names[kNumGroups] =
+                { "Drums", "Bass", "Guitars", "Keys", "Synths", "Vocals", "FX" };
+            return names;
+        }
+
         void selectGroup (const juce::String& g)
         {
-            const char* names[] = { "Drums", "Bass", "Guitars", "Keys", "Vocals", "FX" };
-            for (int i = 0; i < 6; ++i)
-                if (g == names[i]) { groupCombo.setSelectedId (i + 1, juce::dontSendNotification); return; }
+            for (int i = 0; i < kNumGroups; ++i)
+                if (g == groupNames()[i]) { groupCombo.setSelectedId (i + 1, juce::dontSendNotification); return; }
             groupCombo.setSelectedId (99, juce::dontSendNotification);   // direct to master
         }
 
         juce::String selectedGroup() const
         {
             const int id = groupCombo.getSelectedId();
-            const char* names[] = { "Drums", "Bass", "Guitars", "Keys", "Vocals", "FX" };
-            return (id >= 1 && id <= 6) ? juce::String (names[id - 1]) : juce::String();
+            return (id >= 1 && id <= kNumGroups) ? juce::String (groupNames()[id - 1])
+                                                 : juce::String();
         }
 
         void resized() override

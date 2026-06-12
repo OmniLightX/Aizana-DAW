@@ -3,7 +3,8 @@
 namespace
 {
     // Mixer convention order — buses are created and laid out in this order.
-    const char* const kGroupOrder[] = { "Drums", "Bass", "Guitars", "Keys", "Vocals", "FX" };
+    const char* const kGroupOrder[] = { "Drums", "Bass", "Guitars", "Keys", "Synths",
+                                        "Vocals", "FX" };
 
     bool isBusGroup (const juce::String& g)
     {
@@ -22,6 +23,7 @@ juce::Colour SessionPlanner::colourForGroup (const juce::String& group)
     if (group == "Bass")    return juce::Colour (0xff9c6bd6);   // purple
     if (group == "Guitars") return juce::Colour (0xffd9a23c);   // amber
     if (group == "Keys")    return juce::Colour (0xff4fb0a5);   // teal
+    if (group == "Synths")  return juce::Colour (0xffc95fc0);   // magenta
     if (group == "Vocals")  return juce::Colour (0xff4f8fd9);   // blue
     if (group == "FX")      return juce::Colour (0xff7fbf5a);   // green
     return juce::Colour (0xff8a8f98);                           // neutral grey (Other)

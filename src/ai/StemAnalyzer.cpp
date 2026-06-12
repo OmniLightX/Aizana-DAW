@@ -67,18 +67,22 @@ namespace
         // "lead" alone is ambiguous (lead vox vs lead synth) — low confidence
         { "lead",      "Lead",      "Vocals",  0.50, false },
 
-        // Keys / synths
+        // Keys (acoustic/electric keyboard family)
         { "piano",     "Piano",     "Keys",    0.95, true  },
         { "klavier",   "Piano",     "Keys",    0.95, true  },
         { "keys",      "Keys",      "Keys",    0.90, false },
         { "rhodes",    "Rhodes",    "Keys",    0.95, true  },
         { "organ",     "Organ",     "Keys",    0.90, true  },
         { "orgel",     "Organ",     "Keys",    0.90, true  },
-        { "synth",     "Synth",     "Keys",    0.90, true  },
-        { "pad",       "Pad",       "Keys",    0.75, false },
-        { "pluck",     "Pluck",     "Keys",    0.85, true  },
-        { "arp",       "Arp",       "Keys",    0.70, false },
         { "ep",        "E-Piano",   "Keys",    0.55, false },
+
+        // Synths — own group (user feedback 2026-06-12: 30-stem real test)
+        { "synth",     "Synth",     "Synths",  0.90, true  },
+        { "pad",       "Pad",       "Synths",  0.75, false },
+        { "pluck",     "Pluck",     "Synths",  0.85, true  },
+        { "arp",       "Arp",       "Synths",  0.70, false },
+        { "saw",       "Synth",     "Synths",  0.60, false },
+        { "wobble",    "Synth",     "Synths",  0.75, true  },
 
         // Other melodic/orchestral — preserved label, generic group
         { "strings",   "Strings",   "Other",   0.90, true  },
