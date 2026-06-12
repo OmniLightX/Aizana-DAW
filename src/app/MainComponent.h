@@ -8,7 +8,9 @@
 #include "engine/ClipEditor.h"
 #include "engine/ExportPipeline.h"
 #include "ai/StemImportEngine.h"
+#include "ai/StemSeparationEngine.h"
 #include "ui/stems/StemImportDialog.h"
+#include "ui/stems/SeparationProgressPanel.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/arrangement/TransportBar.h"
@@ -108,6 +110,10 @@ private:
     // Depends on mixerEngine (declared above — init order OK).
     StemImportEngine stemImportEngine { appState.editManager, mixerEngine,
                                         appState.aiCommandBridge };
+
+    // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
+    // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.
+    StemSeparationEngine stemSeparationEngine;
 
     // Plugin scanning + management (plan 01-15)
     // PluginScanner must be declared before PluginManager (dependency order)
@@ -277,7 +283,8 @@ private:
         ExportStems   = 302,
 
         // Song Setup menu
-        SongSetupAudioIO = 401,
+        SongSetupAudioIO  = 401,
+        SongSeparateStems = 402,
 
         // Cloudes menu
         CloudesPreferences = 501,
@@ -304,6 +311,19 @@ private:
     void handleFileImportStems();
     void startStemAnalysis (const juce::Array<juce::File>& files);
     void onStemPlanReady (const SessionPlan& plan);
+
+    // Stem-Separation (Phase 3): song → 6 stems → KI-Setup pipeline.
+    void handleSongSeparateStems();
+    void startStemSeparationFlow (const juce::File& song);
+    void downloadSeparationModel (const juce::File& songToContinueWith);
+    void pollSeparationModelDownload (const juce::File& songToContinueWith);
+    void runStemSeparation (const juce::File& song, StemSeparationEngine::Model);
+    void onStemsSeparated (const juce::Array<StemSeparationEngine::Stem>& stems);
+    void showSeparationProgress();
+    void hideSeparationProgress();
+
+    std::unique_ptr<SeparationProgressPanel>    separationPanel;
+    std::unique_ptr<juce::URL::DownloadTask>    modelDownloadTask;
 
     // -------------------------------------------------------------------------
     // View menu handlers

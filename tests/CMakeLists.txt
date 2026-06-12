@@ -28,6 +28,7 @@ target_sources(engine_tests PRIVATE
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
+    test_stem_separation.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
@@ -58,6 +59,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/StemAnalyzer.cpp
     ../src/ai/SessionPlanner.cpp
     ../src/ai/StemImportEngine.cpp
+    ../src/ai/StemSeparationEngine.cpp
     ../src/ai/IntentEngine.cpp
     ../src/ai/HeuristicFeedbackEngine.cpp
     ../src/ai/AIEngine.cpp
@@ -118,6 +120,7 @@ target_link_libraries(engine_tests PRIVATE
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128
+    demucs_inference
 )
 
 # Expose CLAP include path (consistent with Cloudes app target)

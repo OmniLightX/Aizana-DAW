@@ -48,6 +48,32 @@ FetchContent_Declare(clap_api
     GIT_TAG        1.2.0)
 FetchContent_MakeAvailable(clap_api)
 
+# Eigen — header-only linear algebra, dependency of the vendored demucs.cpp
+# inference library (extern/demucs_cpp). Pinned to the exact commit upstream
+# demucs.cpp vendors so numerical behaviour matches the spike benchmark.
+FetchContent_Declare(eigen
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG        dd8c71e62852b2fe429edb6682ac91fd1c578a26)
+set(EIGEN_BUILD_DOC OFF CACHE BOOL "" FORCE)
+set(EIGEN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Populate(eigen)   # headers only — do NOT add Eigen's CMake project
+
+# ---------------------------------------------------------------------------
+# demucs.cpp inference library (vendored, MIT — see extern/demucs_cpp/README.md)
+# Phase 3: stem separation (htdemucs 6-source / fine-tuned 4-source, ggml weights).
+# CPU-only by design; runs on a background thread via StemSeparationEngine.
+# ---------------------------------------------------------------------------
+file(GLOB DEMUCS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/extern/demucs_cpp/src/*.cpp)
+add_library(demucs_inference STATIC ${DEMUCS_SOURCES})
+target_include_directories(demucs_inference PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/demucs_cpp/src
+    ${eigen_SOURCE_DIR})
+target_compile_features(demucs_inference PUBLIC cxx_std_17)
+# Eigen needs NDEBUG + optimisation in all configs we ship; -O3 keeps inference
+# at the benchmarked ~1.6x realtime instead of >10x in unoptimised builds.
+target_compile_options(demucs_inference PRIVATE -O3 -DNDEBUG)
+
 # ---------------------------------------------------------------------------
 # Cloudes application target
 # ---------------------------------------------------------------------------
@@ -70,6 +96,7 @@ target_sources(Cloudes PRIVATE
     src/ai/StemAnalyzer.cpp
     src/ai/SessionPlanner.cpp
     src/ai/StemImportEngine.cpp
+    src/ai/StemSeparationEngine.cpp
     src/ai/IntentEngine.cpp
     src/ai/HeuristicFeedbackEngine.cpp
     src/ai/AIEngine.cpp
@@ -184,6 +211,7 @@ target_link_libraries(Cloudes PRIVATE
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128
+    demucs_inference
     "$<$<PLATFORM_ID:Darwin>:-framework AVFoundation>"
 )
 

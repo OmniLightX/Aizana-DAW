@@ -206,6 +206,16 @@ void MainComponent::resized()
         scanProgressPanel->toFront (false);
     }
 
+    // Stem-separation progress card — same corner, stacked above the scan slot
+    // so both can coexist (separation is a minutes-long background job).
+    if (separationPanel != nullptr)
+    {
+        constexpr int w = 320, h = 72, margin = 16;
+        separationPanel->setBounds (getWidth()  - w - margin,
+                                    getHeight() - 2 * h - 2 * margin, w, h);
+        separationPanel->toFront (false);
+    }
+
     // Beginner world owns the whole window when the Dial is in Beginner mode.
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
     {
@@ -620,6 +630,9 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
 
         case 4:  // Song Setup
             menu.addItem (SongSetupAudioIO, "Audio I/O Setup...", true);
+            menu.addItem (SongSeparateStems,
+                          juce::String::fromUTF8 ("Song in Stems trennen (KI)…"),
+                          hasEdit && ! stemSeparationEngine.isBusy());
             break;
 
         case 5:  // Export
@@ -682,6 +695,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongSetupAudioIO:
             AudioIOSetupDialog::show (appState.editManager.getEngine(), inputBusManager);
+            break;
+
+        case SongSeparateStems:
+            handleSongSeparateStems();
             break;
 
         case ExportMixdown:
@@ -931,6 +948,230 @@ void MainComponent::onStemPlanReady (const SessionPlan& plan)
                 return;
             safe->stemImportEngine.applyPlan (edited);
         });
+}
+
+//==============================================================================
+// Stem-Separation: Song → 6 Stems → KI-Setup (Phase 3, Spike S1 GO)
+//==============================================================================
+
+void MainComponent::handleSongSeparateStems()
+{
+    if (appState.editManager.getEdit() == nullptr || stemSeparationEngine.isBusy())
+        return;
+
+    fileChooser = std::make_unique<juce::FileChooser> (
+        juce::String::fromUTF8 ("Song auswählen (wird in Stems getrennt)"),
+        juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+        "*.wav;*.aiff;*.aif;*.mp3;*.flac;*.ogg");
+
+    fileChooser->launchAsync (
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this] (const juce::FileChooser& fc)
+        {
+            const auto song = fc.getResult();
+            fileChooser.reset();
+            if (song.existsAsFile())
+                startStemSeparationFlow (song);
+        });
+}
+
+void MainComponent::startStemSeparationFlow (const juce::File& song)
+{
+    using Model = StemSeparationEngine::Model;
+
+    if (! StemSeparationEngine::isModelInstalled (Model::fast6Stem))
+    {
+        juce::AlertWindow::showOkCancelBox (
+            juce::MessageBoxIconType::QuestionIcon,
+            "KI-Stem-Trennung",
+            juce::String::fromUTF8 ("Für die Stem-Trennung wird einmalig das "
+                                    "KI-Modell heruntergeladen (53 MB).\n\n"
+                                    "Jetzt herunterladen?"),
+            "Herunterladen", "Abbrechen", nullptr,
+            juce::ModalCallbackFunction::create (
+                [safe = juce::Component::SafePointer<MainComponent> (this), song] (int result)
+                {
+                    if (safe != nullptr && result != 0)
+                        safe->downloadSeparationModel (song);
+                }));
+        return;
+    }
+
+    // Both models present → let the user pick the trade-off (Spike S1 numbers).
+    if (StemSeparationEngine::isModelInstalled (Model::fineTuned4Stem))
+    {
+        juce::PopupMenu m;
+        m.addItem (1, juce::String::fromUTF8 ("Schnell — 6 Spuren (≈1,7× Songlänge)"));
+        m.addItem (2, juce::String::fromUTF8 ("Beste Qualität — 4 Spuren (≈7× Songlänge)"));
+        m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [safe = juce::Component::SafePointer<MainComponent> (this), song] (int result)
+            {
+                if (safe == nullptr || result == 0)
+                    return;
+                safe->runStemSeparation (song, result == 2 ? Model::fineTuned4Stem
+                                                           : Model::fast6Stem);
+            });
+        return;
+    }
+
+    runStemSeparation (song, Model::fast6Stem);
+}
+
+void MainComponent::downloadSeparationModel (const juce::File& songToContinueWith)
+{
+    using Model = StemSeparationEngine::Model;
+
+    StemSeparationEngine::modelsDirectory().createDirectory();
+    auto       url    = StemSeparationEngine::requiredModelURLs  (Model::fast6Stem)[0];
+    const auto target = StemSeparationEngine::requiredModelFiles (Model::fast6Stem)[0];
+
+    modelDownloadTask = url.downloadToFile (target, juce::URL::DownloadTaskOptions());
+    if (modelDownloadTask == nullptr)
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung", "Download konnte nicht gestartet werden.");
+        return;
+    }
+
+    showSeparationProgress();
+    separationPanel->update (0.0f, juce::String::fromUTF8 ("KI-Modell wird geladen (53 MB)…"));
+    pollSeparationModelDownload (songToContinueWith);
+}
+
+void MainComponent::pollSeparationModelDownload (const juce::File& songToContinueWith)
+{
+    if (modelDownloadTask == nullptr)
+        return;
+
+    if (! modelDownloadTask->isFinished())
+    {
+        const auto total = modelDownloadTask->getTotalLength();
+        const float p = total > 0
+            ? (float) modelDownloadTask->getLengthDownloaded() / (float) total : 0.0f;
+        if (separationPanel != nullptr)
+            separationPanel->update (p, juce::String::fromUTF8 ("KI-Modell wird geladen (53 MB)…"));
+
+        juce::Timer::callAfterDelay (250,
+            [safe = juce::Component::SafePointer<MainComponent> (this), songToContinueWith]()
+            {
+                if (safe != nullptr)
+                    safe->pollSeparationModelDownload (songToContinueWith);
+            });
+        return;
+    }
+
+    const bool failed = modelDownloadTask->hadError();
+    modelDownloadTask.reset();
+
+    if (failed)
+    {
+        hideSeparationProgress();
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung",
+            juce::String::fromUTF8 ("Modell-Download fehlgeschlagen — bitte "
+                                    "Internetverbindung prüfen und erneut versuchen."));
+        return;
+    }
+
+    startStemSeparationFlow (songToContinueWith);   // model now installed → proceed
+}
+
+void MainComponent::runStemSeparation (const juce::File& song, StemSeparationEngine::Model model)
+{
+    const auto outDir = song.getParentDirectory()
+                            .getChildFile (song.getFileNameWithoutExtension() + " Stems");
+
+    showSeparationProgress();
+
+    stemSeparationEngine.onProgress =
+        [safe = juce::Component::SafePointer<MainComponent> (this)] (float p, juce::String stage)
+        {
+            if (safe != nullptr && safe->separationPanel != nullptr)
+                safe->separationPanel->update (p, stage);
+        };
+
+    stemSeparationEngine.onError =
+        [safe = juce::Component::SafePointer<MainComponent> (this)] (juce::String error)
+        {
+            if (safe == nullptr) return;
+            safe->hideSeparationProgress();
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                    "KI-Stem-Trennung", error);
+        };
+
+    stemSeparationEngine.onFinished =
+        [safe = juce::Component::SafePointer<MainComponent> (this)]
+        (juce::Array<StemSeparationEngine::Stem> stems)
+        {
+            if (safe == nullptr) return;
+            safe->hideSeparationProgress();
+            safe->onStemsSeparated (stems);
+        };
+
+    if (! stemSeparationEngine.startSeparation (song, outDir, model, 4))
+    {
+        hideSeparationProgress();
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung", "Trennung konnte nicht gestartet werden.");
+    }
+    menuItemsChanged();   // menu item disabled while busy
+}
+
+void MainComponent::onStemsSeparated (const juce::Array<StemSeparationEngine::Stem>& stems)
+{
+    menuItemsChanged();
+
+    // The model KNOWS each stem's instrument — build StemInfos directly, no
+    // filename guessing. Silent targets (instrument absent in the song) are
+    // skipped and reported instead of polluting the session with dead tracks.
+    juce::Array<StemInfo> infos;
+    juce::StringArray skipped;
+
+    for (const auto& s : stems)
+    {
+        if (s.silent)
+        {
+            skipped.add (s.instrument);
+            continue;
+        }
+
+        StemInfo info;
+        info.file         = s.file;
+        info.instrument   = s.instrument;
+        info.group        = s.group;
+        info.confidence   = 0.95;
+        info.fromFilename = false;
+        info.peakDb       = s.peakDb;
+        info.rmsDb        = s.rmsDb;
+        infos.add (info);
+    }
+
+    if (! skipped.isEmpty())
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
+            "KI-Stem-Trennung",
+            juce::String::fromUTF8 ("Nicht im Song gefunden (übersprungen): ")
+                + skipped.joinIntoString (", "));
+
+    if (infos.isEmpty())
+        return;
+
+    onStemPlanReady (SessionPlanner::plan (infos));   // mode-dependent apply (E3)
+}
+
+void MainComponent::showSeparationProgress()
+{
+    if (separationPanel == nullptr)
+    {
+        separationPanel = std::make_unique<SeparationProgressPanel>();
+        addAndMakeVisible (*separationPanel);
+    }
+    separationPanel->toFront (false);
+    resized();
+}
+
+void MainComponent::hideSeparationProgress()
+{
+    separationPanel.reset();
 }
 
 //==============================================================================
