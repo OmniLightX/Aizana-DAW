@@ -69,6 +69,7 @@ target_sources(Cloudes PRIVATE
     src/app/UIStateManager.cpp
     src/ai/StemAnalyzer.cpp
     src/ai/SessionPlanner.cpp
+    src/ai/StemImportEngine.cpp
     src/ai/IntentEngine.cpp
     src/ai/HeuristicFeedbackEngine.cpp
     src/ai/AIEngine.cpp
