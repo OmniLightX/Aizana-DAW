@@ -4,6 +4,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/EditManager.h"
+#include "ui/common/AudioThumbnailPool.h"
 #include "EditTool.h"
 
 namespace te = tracktion::engine;
@@ -174,12 +175,14 @@ private:
     // while in Pointer mode — forwards drag/up to ArrangementView like a Marquee drag.
     bool inMarqueeZoneDrag = false;
 
-    // Waveform thumbnail — loaded asynchronously from the clip's source file
-    // Cache is per-component; for a production app it would be shared, but for Phase 1
-    // one cache per component is simpler and avoids shared-state coupling.
-    juce::AudioFormatManager        formatManager;
-    juce::AudioThumbnailCache       thumbnailCache { 128 };
-    juce::AudioThumbnail            thumbnail      { 512, formatManager, thumbnailCache };
+    // Waveform thumbnail — loaded asynchronously from the clip's source file.
+    // ONE shared cache/format manager for the whole app (AudioThumbnailPool):
+    // ClipComponents are recreated on every rebuildTrackRows, and a per-component
+    // cache restarted every waveform read from zero — with 20+ tracks the reads
+    // never finished between rebuilds and clips stayed solid-colour.
+    juce::SharedResourcePointer<AudioThumbnailPool> thumbnailPool;
+    juce::AudioThumbnail            thumbnail      { 512, thumbnailPool->formatManager,
+                                                          thumbnailPool->cache };
     bool                            thumbnailLoaded { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipComponent)

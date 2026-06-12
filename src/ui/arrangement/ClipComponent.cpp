@@ -27,8 +27,7 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
     // ClipComponent handles only mouse events — all keyboard shortcuts live in AV.
     setMouseClickGrabsKeyboardFocus (false);
 
-    // Register standard audio formats so the thumbnail knows how to read WAV/AIFF/etc.
-    formatManager.registerBasicFormats();
+    // Audio formats are registered once in the shared AudioThumbnailPool.
 
     // Load thumbnail from source file for WaveAudioClip.
     // Also register as ValueTree::Listener so we catch the case where TE's recording
