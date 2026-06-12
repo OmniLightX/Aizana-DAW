@@ -119,6 +119,11 @@ public:
     void fileDragEnter (const juce::StringArray& files, int x, int y) override;
     void fileDragExit  (const juce::StringArray& files) override;
 
+    // KI-Setup hook (Phase 3, Slice 4): set by MainComponent. When ≥3 audio files
+    // are dropped, the user is offered "Als Stems importieren (KI-Setup)" — this
+    // callback receives the files and runs the stem pipeline.
+    std::function<void (const juce::Array<juce::File>&)> onStemsDropped;
+
     // DragAndDropTarget overrides — track header drag-to-reorder
     bool isInterestedInDragSource (const juce::DragAndDropTarget::SourceDetails& details) override;
     void itemDropped  (const juce::DragAndDropTarget::SourceDetails& details) override;
@@ -182,6 +187,11 @@ public:
     void startRangeSelectionFromClickZone (const juce::MouseEvent& e);
 
 private:
+    // Shared tail of filesDropped: import dropped audio files as clip(s)/track(s)
+    // (single file → target track at drop time; multiple → one track per file).
+    void importFilesAsTracks (const juce::Array<juce::File>& audioFiles,
+                              int trackIndex, double dropTimeSecs);
+
     // ---- Ruler strip — slim horizontal bar above timeline rows showing bar numbers ----
     class RulerStrip : public juce::Component
     {

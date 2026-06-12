@@ -2337,6 +2337,46 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
     if (audioFiles.isEmpty())
         return;
 
+    // KI-Setup (Phase 3, Slice 4): ≥3 audio files = likely a stem set.
+    // Offer the AI pipeline (detect instruments → groups → gains) vs the
+    // classic one-track-per-file import. Async menu — never block the drop.
+    if (onStemsDropped != nullptr && audioFiles.size() >= 3)
+    {
+        juce::PopupMenu m;
+        m.addItem (1, juce::String::fromUTF8 ("Als Stems importieren (KI-Setup)"));
+        m.addItem (2, "Als einzelne Tracks");
+        m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+            [safe = juce::Component::SafePointer<ArrangementView> (this),
+             audioFiles, trackIndex, dropTimeSecs] (int result)
+            {
+                if (safe == nullptr || result == 0)
+                    return;
+                if (result == 1)
+                {
+                    if (safe->onStemsDropped)
+                        safe->onStemsDropped (audioFiles);
+                    return;
+                }
+                safe->importFilesAsTracks (audioFiles, trackIndex, dropTimeSecs);
+            });
+        return;
+    }
+
+    importFilesAsTracks (audioFiles, trackIndex, dropTimeSecs);
+}
+
+void ArrangementView::importFilesAsTracks (const juce::Array<juce::File>& audioFiles,
+                                           int trackIndex, double dropTimeSecs)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr || audioFiles.isEmpty())
+        return;
+
+    auto tracks = te::getAudioTracks (*edit);
+    if (tracks.isEmpty())
+        return;
+    trackIndex = juce::jlimit (0, tracks.size() - 1, trackIndex);
+
     auto& undoManager = appState.editManager.getUndoManager();
     undoManager.beginNewTransaction ("Import Audio Files");
 

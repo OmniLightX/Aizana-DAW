@@ -81,14 +81,21 @@ SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems)
                     out.tracks.getReference (i).gainDb -= excess;
     }
 
-    // --- Groups: only the buses that actually have members, in mixer order.
+    rebuildGroups (out);
+    return out;
+}
+
+//==============================================================================
+void SessionPlanner::rebuildGroups (SessionPlan& plan)
+{
+    plan.groups.clear();
+
+    // Only the buses that actually have members, in mixer order.
     for (auto* g : kGroupOrder)
-        for (const auto& t : out.tracks)
+        for (const auto& t : plan.tracks)
             if (t.group == g)
             {
-                out.groups.add (g);
+                plan.groups.add (g);
                 break;
             }
-
-    return out;
 }

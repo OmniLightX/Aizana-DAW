@@ -112,6 +112,24 @@ TEST_CASE ("SessionPlanner: many tracks trigger equal headroom trim", "[planner]
     REQUIRE_THAT (mx - mn, Catch::Matchers::WithinAbs (0.0, 0.001));
 }
 
+TEST_CASE ("SessionPlanner: rebuildGroups follows user edits from the preview dialog", "[planner]")
+{
+    juce::Array<StemInfo> stems;
+    stems.add (stem ("/t/a.wav", "Kick",   "Drums",  -20.0));
+    stems.add (stem ("/t/b.wav", "Vocals", "Vocals", -20.0));
+
+    auto plan = SessionPlanner::plan (stems);
+    REQUIRE (plan.groups.size() == 2);
+
+    // User re-assigns the vocal to FX and the kick to "direct to master"
+    plan.tracks.getReference (0).group = juce::String();
+    plan.tracks.getReference (1).group = "FX";
+    SessionPlanner::rebuildGroups (plan);
+
+    REQUIRE (plan.groups.size() == 1);
+    CHECK (plan.groups[0] == "FX");
+}
+
 TEST_CASE ("SessionPlanner: colours stable per group, plan is deterministic", "[planner]")
 {
     CHECK (SessionPlanner::colourForGroup ("Drums")  != SessionPlanner::colourForGroup ("Bass"));

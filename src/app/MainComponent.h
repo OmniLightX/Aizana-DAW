@@ -7,6 +7,8 @@
 #include "engine/AutomationEngine.h"
 #include "engine/ClipEditor.h"
 #include "engine/ExportPipeline.h"
+#include "ai/StemImportEngine.h"
+#include "ui/stems/StemImportDialog.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/arrangement/TransportBar.h"
@@ -101,6 +103,11 @@ private:
     // Export pipeline — owned by MainComponent, passed to ExportDialog (plan 01-16)
     // ExportPipeline() takes no constructor args; edit is passed per-call
     ExportPipeline   exportPipeline;
+
+    // KI-Setup (Phase 3, Iteration 1): SessionPlan → session via AICommandBridge.
+    // Depends on mixerEngine (declared above — init order OK).
+    StemImportEngine stemImportEngine { appState.editManager, mixerEngine,
+                                        appState.aiCommandBridge };
 
     // Plugin scanning + management (plan 01-15)
     // PluginScanner must be declared before PluginManager (dependency order)
@@ -252,6 +259,7 @@ private:
         FileSave        = 3,
         FileSaveAs      = 4,
         FileImportAudio = 5,
+        FileImportStems = 6,
 
         // Edit menu
         EditUndo = 101,
@@ -290,6 +298,12 @@ private:
     void handleFileSave();
     void handleFileSaveAs();
     void handleFileImportAudio();
+
+    // KI-Setup (Phase 3, Slice 4): analyse stems on a worker thread, then apply
+    // mode-dependently — Beginner instant (one undo), Pro via preview dialog (E3).
+    void handleFileImportStems();
+    void startStemAnalysis (const juce::Array<juce::File>& files);
+    void onStemPlanReady (const SessionPlan& plan);
 
     // -------------------------------------------------------------------------
     // View menu handlers

@@ -53,4 +53,8 @@ public:
 
     /** Stable colour per group (shared visual language with TrackColours palette idea). */
     static juce::Colour colourForGroup (const juce::String& group);
+
+    /** Recompute plan.groups from the tracks' group fields (mixer order, members
+        only). Call after the user edited groups in the preview dialog. */
+    static void rebuildGroups (SessionPlan& plan);
 };

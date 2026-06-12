@@ -26,6 +26,13 @@ MainComponent::MainComponent (ApplicationState& appState_)
     inputBusManager.applyToEngine();
     compingEngine.attachToEdit();
 
+    // KI-Setup (Phase 3, Slice 4): ≥3 dropped audio files can run the stem
+    // pipeline — ArrangementView offers the choice, we run analysis + apply.
+    arrangementView.onStemsDropped = [this] (const juce::Array<juce::File>& files)
+    {
+        startStemAnalysis (files);
+    };
+
     addAndMakeVisible (transportBar);
     addAndMakeVisible (arrangementView);
     addAndMakeVisible (mixerView);
@@ -571,6 +578,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (FileSaveAs,      "Save As...",      hasEdit);
             menu.addSeparator();
             menu.addItem (FileImportAudio, "Import Audio...", hasEdit);
+            menu.addItem (FileImportStems,
+                          juce::String::fromUTF8 ("Stems importieren (KI-Setup)…"), hasEdit);
             break;
 
         case 2:  // Edit
@@ -637,6 +646,7 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
         case FileSave:         handleFileSave();         break;
         case FileSaveAs:       handleFileSaveAs();       break;
         case FileImportAudio:  handleFileImportAudio();  break;
+        case FileImportStems:  handleFileImportStems();  break;
 
         case EditUndo:
             appState.editManager.undoLastAction();
@@ -848,6 +858,78 @@ void MainComponent::handleFileImportAudio()
                 waveClip->getSourceFileReference().setToDirectFileReference (audioFile, false);
 
             fileChooser.reset();
+        });
+}
+
+//==============================================================================
+// KI-Setup: Stems importieren (Phase 3, Iteration 1, Slice 4)
+//==============================================================================
+
+void MainComponent::handleFileImportStems()
+{
+    if (appState.editManager.getEdit() == nullptr)
+        return;
+
+    fileChooser = std::make_unique<juce::FileChooser> (
+        juce::String::fromUTF8 ("Stems auswählen (mehrere Dateien)"),
+        juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+        "*.wav;*.aiff;*.aif;*.mp3;*.flac;*.ogg");
+
+    fileChooser->launchAsync (
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+            | juce::FileBrowserComponent::canSelectMultipleItems,
+        [this] (const juce::FileChooser& fc)
+        {
+            juce::Array<juce::File> files;
+            for (const auto& f : fc.getResults())
+                if (f.existsAsFile())
+                    files.add (f);
+
+            fileChooser.reset();
+
+            if (! files.isEmpty())
+                startStemAnalysis (files);
+        });
+}
+
+void MainComponent::startStemAnalysis (const juce::Array<juce::File>& files)
+{
+    // Analysis reads files + runs FFTs — worker thread, never the message thread.
+    // Result marshals back via callAsync with a SafePointer (window may close).
+    juce::Thread::launch (
+        [files, safe = juce::Component::SafePointer<MainComponent> (this)]()
+        {
+            const auto stems = StemAnalyzer::analyzeFiles (files);
+            const auto plan  = SessionPlanner::plan (stems);
+
+            juce::MessageManager::callAsync ([safe, plan]()
+            {
+                if (safe == nullptr)
+                    return;
+                safe->onStemPlanReady (plan);
+            });
+        });
+}
+
+void MainComponent::onStemPlanReady (const SessionPlan& plan)
+{
+    if (plan.tracks.isEmpty())
+        return;
+
+    // Decision E3 (2026-06-12): Beginner = instant magic + one undo;
+    // Pro = preview table (file → instrument → group → gain, editable).
+    if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
+    {
+        stemImportEngine.applyPlan (plan);
+        return;
+    }
+
+    StemImportDialog::show (*this, plan,
+        [safe = juce::Component::SafePointer<MainComponent> (this)] (const SessionPlan& edited)
+        {
+            if (safe == nullptr)
+                return;
+            safe->stemImportEngine.applyPlan (edited);
         });
 }
 
