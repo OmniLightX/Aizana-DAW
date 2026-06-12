@@ -45,18 +45,22 @@ TEST_CASE ("SessionPlanner: groups follow mixer order, only with members", "[pla
     CHECK (plan.tracks[0].group == "Vocals");
 }
 
-TEST_CASE ("SessionPlanner: duplicate instrument names get numeric suffixes", "[planner]")
+TEST_CASE ("SessionPlanner: track names come from the FILE, duplicates get suffixes", "[planner]")
 {
+    // User feedback 2026-06-12: real file names must survive the import —
+    // the detected instrument only drives group + colour.
     juce::Array<StemInfo> stems;
-    stems.add (stem ("/t/gtr1.wav", "Guitar", "Guitars", -20.0));
-    stems.add (stem ("/t/gtr2.wav", "Guitar", "Guitars", -20.0));
-    stems.add (stem ("/t/gtr3.wav", "Guitar", "Guitars", -20.0));
+    stems.add (stem ("/t/135 bpm_Bassline.wav", "Bass",   "Bass",    -20.0));
+    stems.add (stem ("/a/Guitar.wav",           "Guitar", "Guitars", -20.0));
+    stems.add (stem ("/b/Guitar.wav",           "Guitar", "Guitars", -20.0));
+    stems.add (stem ("/c/Guitar.wav",           "Guitar", "Guitars", -20.0));
 
     const auto plan = SessionPlanner::plan (stems);
-    REQUIRE (plan.tracks.size() == 3);
-    CHECK (plan.tracks[0].name == "Guitar");
-    CHECK (plan.tracks[1].name == "Guitar 2");
-    CHECK (plan.tracks[2].name == "Guitar 3");
+    REQUIRE (plan.tracks.size() == 4);
+    CHECK (plan.tracks[0].name == "135 bpm_Bassline");   // file name, not "Bass"
+    CHECK (plan.tracks[1].name == "Guitar");
+    CHECK (plan.tracks[2].name == "Guitar 2");
+    CHECK (plan.tracks[3].name == "Guitar 3");
 }
 
 TEST_CASE ("SessionPlanner: gain staging targets -18 dBFS RMS (vocals -16)", "[planner]")

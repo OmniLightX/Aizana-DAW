@@ -1,6 +1,7 @@
 #include "StemAnalyzer.h"
 
 #include <juce_dsp/juce_dsp.h>
+#include <thread>
 
 namespace
 {
@@ -84,15 +85,19 @@ namespace
         { "saw",       "Synth",     "Synths",  0.60, false },
         { "wobble",    "Synth",     "Synths",  0.75, true  },
 
-        // Other melodic/orchestral — preserved label, generic group
-        { "strings",   "Strings",   "Other",   0.90, true  },
-        { "violin",    "Strings",   "Other",   0.90, true  },
-        { "cello",     "Cello",     "Other",   0.90, true  },
-        { "brass",     "Brass",     "Other",   0.90, true  },
-        { "horn",      "Horns",     "Other",   0.85, true  },
-        { "sax",       "Sax",       "Other",   0.90, true  },
-        { "trumpet",   "Trumpet",   "Other",   0.90, true  },
-        { "flute",     "Flute",     "Other",   0.85, true  },
+        // Orchestral/winds family — own "Instruments" group (user feedback
+        // 2026-06-12: "flute ist halt flute" — real instruments, no other family)
+        { "strings",   "Strings",   "Instruments", 0.90, true  },
+        { "violin",    "Strings",   "Instruments", 0.90, true  },
+        { "cello",     "Cello",     "Instruments", 0.90, true  },
+        { "brass",     "Brass",     "Instruments", 0.90, true  },
+        { "horn",      "Horns",     "Instruments", 0.85, true  },
+        { "sax",       "Sax",       "Instruments", 0.90, true  },
+        { "trumpet",   "Trumpet",   "Instruments", 0.90, true  },
+        { "flute",     "Flute",     "Instruments", 0.85, true  },
+        { "floete",    "Flute",     "Instruments", 0.85, true  },
+        { "bells",     "Bells",     "Instruments", 0.80, true  },
+        { "kalimba",   "Kalimba",   "Instruments", 0.90, true  },
 
         // FX / ambience
         { "fx",        "FX",        "FX",      0.85, false },
@@ -347,8 +352,36 @@ StemInfo StemAnalyzer::analyzeFile (const juce::File& file)
 //==============================================================================
 juce::Array<StemInfo> StemAnalyzer::analyzeFiles (const juce::Array<juce::File>& files)
 {
+    // Each file analysis reads up to 30 s of audio + runs FFTs — sequential
+    // analysis of 20+ stems took tens of seconds (user feedback 2026-06-12).
+    // analyzeFile is self-contained (own format manager, no shared state), so
+    // fan out across worker threads; each thread writes only its own slots.
+    const int numFiles   = files.size();
+    const int numThreads = juce::jlimit (1, 8,
+        juce::jmin (numFiles, (int) std::thread::hardware_concurrency()));
+
+    std::vector<StemInfo> results ((size_t) numFiles);
+
+    if (numThreads <= 1)
+    {
+        for (int i = 0; i < numFiles; ++i)
+            results[(size_t) i] = analyzeFile (files[i]);
+    }
+    else
+    {
+        std::vector<std::thread> workers;
+        for (int t = 0; t < numThreads; ++t)
+            workers.emplace_back ([&files, &results, t, numThreads, numFiles]()
+            {
+                for (int i = t; i < numFiles; i += numThreads)
+                    results[(size_t) i] = analyzeFile (files[i]);
+            });
+        for (auto& w : workers)
+            w.join();
+    }
+
     juce::Array<StemInfo> out;
-    for (const auto& f : files)
-        out.add (analyzeFile (f));
+    for (auto& r : results)
+        out.add (std::move (r));
     return out;
 }

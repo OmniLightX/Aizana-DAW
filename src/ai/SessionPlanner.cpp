@@ -3,8 +3,10 @@
 namespace
 {
     // Mixer convention order — buses are created and laid out in this order.
+    // "Instruments" = orchestral/winds family (flute, strings, brass, …) — they
+    // are real instruments that fit no other family (user feedback 2026-06-12).
     const char* const kGroupOrder[] = { "Drums", "Bass", "Guitars", "Keys", "Synths",
-                                        "Vocals", "FX" };
+                                        "Instruments", "Vocals", "FX" };
 
     bool isBusGroup (const juce::String& g)
     {
@@ -24,6 +26,7 @@ juce::Colour SessionPlanner::colourForGroup (const juce::String& group)
     if (group == "Guitars") return juce::Colour (0xffd9a23c);   // amber
     if (group == "Keys")    return juce::Colour (0xff4fb0a5);   // teal
     if (group == "Synths")  return juce::Colour (0xffc95fc0);   // magenta
+    if (group == "Instruments") return juce::Colour (0xffb08d57); // warm bronze
     if (group == "Vocals")  return juce::Colour (0xff4f8fd9);   // blue
     if (group == "FX")      return juce::Colour (0xff7fbf5a);   // green
     return juce::Colour (0xff8a8f98);                           // neutral grey (Other)
@@ -46,9 +49,13 @@ SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems)
         t.confidence   = s.confidence;
         t.fromFilename = s.fromFilename;
 
-        auto base = s.instrument.isNotEmpty()
-                        ? s.instrument
-                        : s.file.getFileNameWithoutExtension();
+        // Track name = the user's FILE name (user feedback 2026-06-12: replacing
+        // real names like "135 bpm_Bassline" with generic labels forced manual
+        // renaming). The detected instrument only drives group + colour.
+        // Separated stems keep clean names anyway (their files ARE "Drums.wav" …).
+        auto base = s.file.getFileNameWithoutExtension().isNotEmpty()
+                        ? s.file.getFileNameWithoutExtension()
+                        : s.instrument;
         auto name = base;
         for (int n = 2; usedNames.contains (name); ++n)
             name = base + " " + juce::String (n);

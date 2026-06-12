@@ -29,7 +29,7 @@ public:
         addAndMakeVisible (title);
 
         header (hdrFile,  "Datei");
-        header (hdrInstr, "Instrument");
+        header (hdrInstr, "Track-Name");
         header (hdrGroup, "Gruppe");
         header (hdrGain,  "Gain");
 
@@ -137,7 +137,8 @@ private:
             addAndMakeVisible (instrEditor);
 
             int id = 1;
-            for (auto* g : { "Drums", "Bass", "Guitars", "Keys", "Synths", "Vocals", "FX" })
+            for (auto* g : { "Drums", "Bass", "Guitars", "Keys", "Synths",
+                             "Instruments", "Vocals", "FX" })
                 groupCombo.addItem (g, id++);
             groupCombo.addItem (juce::String::fromUTF8 ("— direkt an Master"), 99);
             groupCombo.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff2a2a2a));
@@ -153,11 +154,12 @@ private:
             addAndMakeVisible (gainLabel);
         }
 
-        static constexpr int kNumGroups = 7;
+        static constexpr int kNumGroups = 8;
         static const char* const* groupNames()
         {
             static const char* const names[kNumGroups] =
-                { "Drums", "Bass", "Guitars", "Keys", "Synths", "Vocals", "FX" };
+                { "Drums", "Bass", "Guitars", "Keys", "Synths",
+                  "Instruments", "Vocals", "FX" };
             return names;
         }
 

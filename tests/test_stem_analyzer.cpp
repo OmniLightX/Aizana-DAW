@@ -81,7 +81,9 @@ TEST_CASE ("StemAnalyzer Tier 1: real-world stem names classify correctly", "[st
         { "SynthPad wide",      "Synths"  },
         { "Arp 16th",           "Synths"  },
         { "Rhodes Chords",      "Keys"    },
-        { "Strings Outro",      "Other"   },
+        { "Strings Outro",      "Instruments" },
+        { "Flute Solo",         "Instruments" },
+        { "Kalimba Hook",       "Instruments" },
         { "Riser 8bar",         "FX"      },
     };
 
@@ -103,7 +105,7 @@ TEST_CASE ("StemAnalyzer Tier 1: token matching avoids false positives", "[stems
 
     // "brass" must NOT match the "bass" keyword (token-based) — it matches Brass.
     REQUIRE (StemAnalyzer::classifyFromName ("Brass Section", instr, group, conf));
-    CHECK (group == "Other");
+    CHECK (group == "Instruments");
     CHECK (instr == "Brass");
 
     // Names with no instrument hint at all → no Tier-1 result

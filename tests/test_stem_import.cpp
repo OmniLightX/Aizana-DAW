@@ -78,13 +78,13 @@ TEST_CASE ("StemImportEngine: full pipeline files→plan→session, one undo ste
     importer.applyPlan (plan);
     bridge.applyPendingCommands();   // message thread in tests — apply synchronously
 
-    // --- Tracks created, named, clip imported with absolute source ref
-    auto* kick = findTrackByName (*edit, "Kick");
+    // --- Tracks created, named after their FILES, clip with absolute source ref
+    auto* kick = findTrackByName (*edit, "Kick In");
     REQUIRE (kick != nullptr);
     REQUIRE (kick->getClips().size() == 1);
     CHECK (kick->getClips()[0]->getSourceFileReference().getFile() == files[0]);
 
-    auto* vox = findTrackByName (*edit, "Vocals");
+    auto* vox = findTrackByName (*edit, "Vocal Mic");
     REQUIRE (vox != nullptr);
 
     // --- Gain staging applied (fader round-trip tolerance)
@@ -105,19 +105,19 @@ TEST_CASE ("StemImportEngine: full pipeline files→plan→session, one undo ste
     // --- Routing: kick → Drums bus (TrackOutput points at the bus track)
     CHECK (kick->getOutput().getDestinationTrack() == drumsBus);
     // "Other" stem routes direct to master (no destination track)
-    auto* other = findTrackByName (*edit, "Audio");
+    auto* other = findTrackByName (*edit, "Track 9");
     REQUIRE (other != nullptr);
     CHECK (other->getOutput().getDestinationTrack() == nullptr);
 
     // --- AI-04: ONE undo reverts the entire setup
     em.getUndoManager().undo();
     CHECK (te::getAudioTracks (*edit).size() == initialTracks);
-    CHECK (findTrackByName (*edit, "Kick") == nullptr);
+    CHECK (findTrackByName (*edit, "Kick In") == nullptr);
     CHECK (findTrackByName (*edit, "Drums") == nullptr);
 
     // …and redo restores it
     em.getUndoManager().redo();
-    CHECK (findTrackByName (*edit, "Kick") != nullptr);
+    CHECK (findTrackByName (*edit, "Kick In") != nullptr);
     CHECK (findTrackByName (*edit, "Drums") != nullptr);
 
     dir.deleteRecursively();
