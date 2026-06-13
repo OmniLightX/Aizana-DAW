@@ -266,8 +266,32 @@ void TrackHeader::paint (juce::Graphics& g)
 
 //==============================================================================
 
+void TrackHeader::applyScaleDrag (float x)
+{
+    const auto xMin = (float) volumeSlider.getX()
+                      + volumeSlider.getPositionOfValue (volumeSlider.getMinimum());
+    const auto xMax = (float) volumeSlider.getX()
+                      + volumeSlider.getPositionOfValue (volumeSlider.getMaximum());
+    if (xMax <= xMin)
+        return;
+
+    const double prop = juce::jlimit (0.0, 1.0, (double) (x - xMin) / (double) (xMax - xMin));
+    // sendNotificationSync → onValueChange → MixerEngine::setVolume (undoable)
+    volumeSlider.setValue (volumeSlider.proportionOfLengthToValue (prop),
+                           juce::sendNotificationSync);
+}
+
 void TrackHeader::mouseDown (const juce::MouseEvent& e)
 {
+    // dB scale strip behaves like the mixer scale: click jumps the fader to
+    // that value, dragging rides it (user feedback 2026-06-13).
+    if (e.mods.isLeftButtonDown() && dbScaleArea.contains (e.getPosition()))
+    {
+        scaleDragActive = true;
+        applyScaleDrag (e.position.x);
+        return;
+    }
+
     if (! e.mods.isRightButtonDown())
     {
         // Notify ArrangementView to update selection
@@ -279,8 +303,20 @@ void TrackHeader::mouseDown (const juce::MouseEvent& e)
         showContextMenu();
 }
 
+void TrackHeader::mouseUp (const juce::MouseEvent&)
+{
+    scaleDragActive = false;
+}
+
 void TrackHeader::mouseDrag (const juce::MouseEvent& e)
 {
+    // Riding the dB scale — follow the x position only (y may leave the strip)
+    if (scaleDragActive)
+    {
+        applyScaleDrag (e.position.x);
+        return;
+    }
+
     // Only start drag after a minimum drag distance to avoid accidental reorders
     if (e.getDistanceFromDragStart() < 8) return;
 

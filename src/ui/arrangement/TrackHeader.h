@@ -48,6 +48,7 @@ public:
     void paint     (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp   (const juce::MouseEvent& e) override;
 
     te::AudioTrack& getTrack() const noexcept { return track; }
 
@@ -143,8 +144,13 @@ private:
     juce::Label  panLabel;
 
     // dB tick scale strip under the volume fader — painted in paint(),
-    // positioned in resized() (mirrors the mixer's scale column).
+    // positioned in resized() (mirrors the mixer's scale column). The strip is
+    // INTERACTIVE like the mixer scale: click jumps, drag rides the fader.
     juce::Rectangle<int> dbScaleArea;
+    bool scaleDragActive = false;
+
+    /** Map an x position on the scale strip to a fader value and apply it. */
+    void applyScaleDrag (float x);
 
     bool selected = false;
 
