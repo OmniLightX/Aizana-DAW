@@ -286,6 +286,7 @@ private:
         // Song Setup menu
         SongSetupAudioIO  = 401,
         SongSeparateStems = 402,
+        SongAddMarker     = 403,
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,

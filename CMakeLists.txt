@@ -132,6 +132,7 @@ target_sources(Cloudes PRIVATE
     # UI Shell (plan 01-08)
     src/ui/arrangement/TransportBar.cpp
     src/ui/arrangement/ArrangementView.cpp
+    src/ui/arrangement/MarkerLane.cpp
     src/ui/arrangement/TrackHeader.cpp
     src/ui/arrangement/ClipComponent.cpp
     src/ui/mixer/MixerView.cpp

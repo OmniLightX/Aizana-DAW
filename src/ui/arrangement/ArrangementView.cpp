@@ -353,6 +353,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     , pluginScanner       (pluginScanner_)
     , automationEngine    (automationEngine_)
     , inputBusManager     (inputBusManager_)
+    , markerLane          (appState_, pixelsPerSecond, scrollPositionSecs)
     , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs, gridResolution, snapEnabled)
     , toolSelector        (activeTool, [this] (EditTool t) { setActiveTool (t); })
 {
@@ -464,6 +465,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
 
         rulerStrip.repaint();
+        markerLane.repaint();
         repaint();
     };
 
@@ -475,6 +477,9 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         const double newPPS = juce::jlimit (10.0, 2000.0, pixelsPerSecond * scaleFactor);
         setPixelsPerSecond (newPPS);
     };
+
+    // Marker lane — above the ruler, aligned with the timeline panel (not headers)
+    addAndMakeVisible (markerLane);
 
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
@@ -600,9 +605,14 @@ void ArrangementView::resized()
     // Autoscroll button — immediately right of gridCombo
     autoScrollButton.setBounds (snapBtnX + 44 + 60, headerStrip.getY() + 4, 28, 20);
 
-    // Ruler strip — full width, sits between header strip and track rows
-    // The ruler portion under the header column (left of kHeaderWidth) is filled
-    // by paint() to match the ruler colour, keeping alignment clean.
+    // Marker lane — directly under the header strip, above the ruler. Aligned
+    // with the timeline panel (trimmed left by the header column width).
+    auto markerArea = area.removeFromTop (kMarkerLaneHeight);
+    markerLane.setBounds (markerArea.withTrimmedLeft (kHeaderWidth));
+
+    // Ruler strip — full width, sits between marker lane and track rows.
+    // The marker-lane + ruler portion under the header column (left of
+    // kHeaderWidth) is filled by paint() to match the colour, keeping alignment clean.
     auto rulerArea = area.removeFromTop (kRulerHeight);
     rulerStrip.setBounds (rulerArea.withTrimmedLeft (kHeaderWidth));
 
@@ -647,10 +657,10 @@ void ArrangementView::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff1a1a1a));
 
-    // Fill the ruler-height column on the left (under the header column) to
-    // match the ruler strip colour, so the two form a visually continuous strip.
+    // Fill the marker-lane + ruler column on the left (under the header column)
+    // to match their colour, so they form a visually continuous strip.
     g.setColour (juce::Colour (0xff191919));
-    g.fillRect (0, kHeaderStripHeight, kHeaderWidth, kRulerHeight);
+    g.fillRect (0, kHeaderStripHeight, kHeaderWidth, kMarkerLaneHeight + kRulerHeight);
 
     // Draw a blue highlight border when audio files are being dragged over
     if (isDragHovering)
@@ -668,7 +678,7 @@ void ArrangementView::paint (juce::Graphics& g)
         int cumulativeRowH = 0;
         for (int i = 0; i < dragOverRowIndex && i < trackRows.size(); ++i)
             cumulativeRowH += (int)(trackRows[i]->getPreferredHeight() * trackHeightScale);
-        const int indicatorY = kHeaderStripHeight + kRulerHeight + cumulativeRowH;
+        const int indicatorY = kTimelineTopY + cumulativeRowH;
         g.setColour (juce::Colour (0xff3d9eff));  // Apple system blue accent
         g.fillRect (0, indicatorY - 1, getWidth(), 2);
     }
@@ -677,7 +687,7 @@ void ArrangementView::paint (juce::Graphics& g)
     if (! selectedClips.isEmpty())
     {
         const int timelineLeft = kHeaderWidth;
-        const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+        const int timelineTop  = kTimelineTopY;
 
         g.setColour (juce::Colours::dodgerblue.withAlpha (0.25f));
         for (auto* cc : selectedClips)
@@ -709,7 +719,7 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
     {
         const int absolutePlayheadX = (int)(playheadPositionSecs * pixelsPerSecond);
         const int screenX = kHeaderWidth + absolutePlayheadX - timelineViewport.getViewPositionX();
-        const int rulerBottom = kHeaderStripHeight + kRulerHeight;
+        const int rulerBottom = kTimelineTopY;
 
         if (screenX >= kHeaderWidth && screenX <= getWidth())
         {
@@ -729,7 +739,7 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
         const int x1 = kHeaderWidth + (int)(rangeStartSecs * pixelsPerSecond) - timelineViewport.getViewPositionX();
         const int x2 = kHeaderWidth + (int)(rangeEndSecs   * pixelsPerSecond) - timelineViewport.getViewPositionX();
         const int viewScrollY    = timelineViewport.getViewPositionY();
-        const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+        const int timelineOriginY = kTimelineTopY;
 
         int cumY = 0;
         for (int i = 0; i < rangeTrackStart && i < trackRows.size(); ++i)
@@ -766,7 +776,7 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
             const int x2 = kHeaderWidth + (int)(playheadPositionSecs * pixelsPerSecond)
                            - timelineViewport.getViewPositionX();
             const int viewScrollY    = timelineViewport.getViewPositionY();
-            const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+            const int timelineOriginY = kTimelineTopY;
 
             int cumY = 0;
             for (auto* row : trackRows)
@@ -823,7 +833,7 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
     {
         const int viewScrollX     = timelineViewport.getViewPositionX();
         const int viewScrollY     = timelineViewport.getViewPositionY();
-        const int timelineOriginY = kHeaderStripHeight + kRulerHeight;
+        const int timelineOriginY = kTimelineTopY;
 
         // Ghost X: time-based, scroll-corrected (same formula as playhead)
         const int ghostX = kHeaderWidth + (int)(ghostStartSecs * pixelsPerSecond) - viewScrollX;
@@ -868,6 +878,7 @@ void ArrangementView::setPixelsPerSecond (double pps)
     // scrollPositionSecs must always == getViewPositionX() / pixelsPerSecond.
     scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
     rulerStrip.repaint();
+    markerLane.repaint();
     repaint();
     // Reposition automation lane controls for new zoom level
     for (auto* row : trackRows)
@@ -918,6 +929,7 @@ void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
         scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
 
         rulerStrip.repaint();
+        markerLane.repaint();
         repaint();
         return;
     }
@@ -950,6 +962,7 @@ void ArrangementView::timerCallback()
         // Repaint timeline container and ruler (not headers — avoids layout flicker)
         timelineContainer.repaint();
         rulerStrip.repaint();
+        markerLane.repaint();
         repaint();  // repaints the playhead line (paintOverChildren — always on top of clips)
     }
 
@@ -970,6 +983,7 @@ void ArrangementView::timerCallback()
             // does not trigger scrollBarMoved for programmatic calls
             scrollPositionSecs = juce::jmax (0.0, newStartSecs);
             rulerStrip.repaint();
+            markerLane.repaint();
         }
 
         // Also handle playhead scrolling left (e.g., loop back to start)
@@ -980,6 +994,7 @@ void ArrangementView::timerCallback()
             timelineViewport.setViewPosition (newScrollX, timelineViewport.getViewPositionY());
             scrollPositionSecs = newStartSecs;
             rulerStrip.repaint();
+            markerLane.repaint();
         }
     }
 }
@@ -1494,7 +1509,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
     if (! e.mods.isLeftButtonDown()) return;
 
     const int timelineLeft = kHeaderWidth;
-    const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+    const int timelineTop  = kTimelineTopY;
 
     if (e.x < timelineLeft || e.y < timelineTop) return;
 
@@ -1642,7 +1657,7 @@ void ArrangementView::mouseDrag (const juce::MouseEvent& e)
 
             // Convert to timelineContainer coordinates to test clip intersection
             const int timelineLeft = kHeaderWidth;
-            const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+            const int timelineTop  = kTimelineTopY;
             juce::Rectangle<int> containerBand (
                 pointerBandRect.getX() - timelineLeft + timelineViewport.getViewPositionX(),
                 pointerBandRect.getY() - timelineTop  + timelineViewport.getViewPositionY(),
@@ -1687,7 +1702,7 @@ void ArrangementView::mouseDrag (const juce::MouseEvent& e)
     // Determine which clips intersect the marquee.
     // Convert marquee rect to timeline-container-local coordinates.
     const int timelineLeft = kHeaderWidth;
-    const int timelineTop  = kHeaderStripHeight + kRulerHeight;
+    const int timelineTop  = kTimelineTopY;
 
     juce::Rectangle<int> timelineMarquee (
         marqueeRect.getX() - timelineLeft + timelineViewport.getViewPositionX(),
@@ -1878,7 +1893,7 @@ void ArrangementView::splitClipAtTime (double timeSecs, int screenY)
     if (edit == nullptr) return;
 
     // Map screenY → row within the timeline area
-    const int timelineTop = kHeaderStripHeight + kRulerHeight;
+    const int timelineTop = kTimelineTopY;
     int rowLocalY = screenY - timelineTop + timelineViewport.getViewPositionY();
 
     int cumY = 0;
@@ -2210,6 +2225,7 @@ void ArrangementView::valueTreePropertyChanged (juce::ValueTree&, const juce::Id
         resized();
         repaint();
         rulerStrip.repaint();
+        markerLane.repaint();
         if (gridCombo.onChange)
             gridCombo.onChange();  // recompute gridResolution using live BPM
     });
@@ -2235,6 +2251,7 @@ void ArrangementView::scrollBarMoved (juce::ScrollBar* scrollBar, double newRang
         // Keep scrollPositionSecs in sync so ruler and playhead stay aligned
         scrollPositionSecs = newRangeStart / pixelsPerSecond;
         rulerStrip.repaint();
+        markerLane.repaint();
         repaint();  // repaint playhead line with updated scroll offset
 
         // Reposition automation lane controls so they stay at the visible left edge

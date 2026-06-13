@@ -641,6 +641,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (SongSeparateStems,
                           juce::String::fromUTF8 ("Song in Stems trennen (KI)…"),
                           hasEdit && ! stemSeparationEngine.isBusy());
+            menu.addItem (SongAddMarker,
+                          juce::String::fromUTF8 ("Marker am Playhead setzen"), hasEdit);
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -745,6 +747,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongSeparateStems:
             handleSongSeparateStems();
+            break;
+
+        case SongAddMarker:
+            arrangementView.addMarkerAtPlayhead();
             break;
 
         case SongRefAnalyze:

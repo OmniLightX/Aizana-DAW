@@ -13,6 +13,7 @@
 #include "TrackHeader.h"
 #include "TrackRow.h"
 #include "ClipComponent.h"
+#include "MarkerLane.h"
 #include "EditTool.h"
 
 /**
@@ -109,6 +110,9 @@ public:
                 return;
             }
     }
+
+    /** Drop a named marker at the current transport position (menu / shortcut). */
+    void addMarkerAtPlayhead() { markerLane.addMarkerAtPlayhead(); }
 
     /** First selected clip (or nullptr) — polled by the InspectorPanel. */
     te::Clip* getPrimarySelectedClip() const noexcept
@@ -391,6 +395,10 @@ private:
 
     void setSelectedTrackHeader (TrackHeader* header);
 
+    // ---- Marker lane (named song markers) — sits above the ruler ----
+    MarkerLane markerLane;
+    static constexpr int kMarkerLaneHeight = 18;
+
     // ---- Ruler strip ----
     RulerStrip rulerStrip;
     static constexpr int kRulerHeight = 18;  // slim ruler, one line of bar number text
@@ -414,6 +422,10 @@ private:
     static constexpr int kTrackHeight       = 60;
     // kHeaderWidth is declared in public section for ClipComponent access
     static constexpr int kHeaderStripHeight = 28;   // top strip holding Add Track button
+
+    // Y where the scrollable timeline content begins: below the header strip,
+    // the marker lane, and the ruler. Single source of truth for overlay math.
+    static constexpr int kTimelineTopY = kHeaderStripHeight + kMarkerLaneHeight + kRulerHeight;
 
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
