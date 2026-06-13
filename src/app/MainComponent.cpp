@@ -33,6 +33,13 @@ MainComponent::MainComponent (ApplicationState& appState_)
         startStemAnalysis (files);
     };
 
+    // Selecting a strip in the mixer selects the same track in the arrangement
+    // (user request 2026-06-13: the two views must stay in sync).
+    mixerView.onSelectionForwarded = [this] (te::AudioTrack* t)
+    {
+        arrangementView.selectTrack (t);
+    };
+
     addAndMakeVisible (transportBar);
     addAndMakeVisible (arrangementView);
     addAndMakeVisible (mixerView);

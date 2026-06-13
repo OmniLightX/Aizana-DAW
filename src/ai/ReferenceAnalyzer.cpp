@@ -112,6 +112,50 @@ void ReferenceAnalyzer::measureBandBalance (const float* mono, int numSamples,
 }
 
 //==============================================================================
+double ReferenceAnalyzer::measureVocalPresence (const float* mono, int numSamples,
+                                                double sampleRate)
+{
+    if (mono == nullptr || numSamples < 8192 || sampleRate <= 0.0)
+        return 0.0;
+
+    constexpr int fftOrder = 12;
+    constexpr int fftSize  = 1 << fftOrder;
+    juce::dsp::FFT fft (fftOrder);
+    juce::dsp::WindowingFunction<float> window ((size_t) fftSize,
+        juce::dsp::WindowingFunction<float>::hann);
+
+    double presenceSum = 0.0, restSum = 0.0;
+    std::vector<float> buf ((size_t) fftSize * 2);
+
+    const int numWindows = juce::jlimit (1, 24, numSamples / fftSize);
+    const int stride     = juce::jmax (fftSize, numSamples / numWindows);
+
+    for (int w = 0; w < numWindows; ++w)
+    {
+        const int start = w * stride;
+        if (start + fftSize > numSamples)
+            break;
+
+        std::fill (buf.begin(), buf.end(), 0.0f);
+        std::copy (mono + start, mono + start + fftSize, buf.begin());
+        window.multiplyWithWindowingTable (buf.data(), (size_t) fftSize);
+        fft.performFrequencyOnlyForwardTransform (buf.data());
+
+        for (int bin = 1; bin < fftSize / 2; ++bin)
+        {
+            const double freq   = bin * sampleRate / fftSize;
+            const double energy = (double) buf[(size_t) bin] * (double) buf[(size_t) bin];
+            if (freq >= 1000.0 && freq < 4000.0) presenceSum += energy;
+            else if (freq < 16000.0)             restSum     += energy;
+        }
+    }
+
+    const auto toDb = [] (double e) { return 10.0 * std::log10 (juce::jmax (1.0e-12, e)); };
+    // restSum spans ~3x the bandwidth — compare against its per-band share
+    return juce::jlimit (-3.0, 3.0, (toDb (presenceSum) - toDb (restSum / 3.0)) * 0.25);
+}
+
+//==============================================================================
 ReferenceProfile ReferenceAnalyzer::analyzeFile (const juce::File& file)
 {
     ReferenceProfile profile;
@@ -133,6 +177,8 @@ ReferenceProfile ReferenceAnalyzer::analyzeFile (const juce::File& file)
 
     measureBandBalance (mono.getReadPointer (0), mono.getNumSamples(), sampleRate,
                         profile.lowDb, profile.midDb, profile.highDb);
+    profile.vocalDb = measureVocalPresence (mono.getReadPointer (0),
+                                            mono.getNumSamples(), sampleRate);
 
     return profile;
 }

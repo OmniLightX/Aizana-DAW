@@ -92,6 +92,24 @@ public:
         return selectedTrackHeader != nullptr ? &selectedTrackHeader->getTrack() : nullptr;
     }
 
+    /** Select the header belonging to the given track (or clear with nullptr).
+        Used by MainComponent to mirror the mixer-strip selection into the
+        arrangement (user request 2026-06-13). */
+    void selectTrack (te::AudioTrack* track)
+    {
+        if (track == nullptr)
+        {
+            setSelectedTrackHeader (nullptr);
+            return;
+        }
+        for (auto* h : trackHeaders)
+            if (&h->getTrack() == track)
+            {
+                setSelectedTrackHeader (h);
+                return;
+            }
+    }
+
     /** First selected clip (or nullptr) — polled by the InspectorPanel. */
     te::Clip* getPrimarySelectedClip() const noexcept
     {

@@ -30,7 +30,8 @@ namespace te = tracktion::engine;
  *
  * Calls MixerEngine for mute/solo so they are undoable.
  */
-class TrackHeader : public juce::Component
+class TrackHeader : public juce::Component,
+                    private juce::ValueTree::Listener
 {
 public:
     TrackHeader (te::AudioTrack&       track,
@@ -40,6 +41,8 @@ public:
                  PluginWindowManager&  pluginWindowManager,
                  PluginScanner&        pluginScanner,
                  InputBusManager&      inputBusManager);
+
+    ~TrackHeader() override;
 
     void resized()  override;
     void paint     (juce::Graphics& g) override;
@@ -54,6 +57,19 @@ public:
 
     // Sync button visual state from actual track mute/solo state
     void refresh();
+
+private:
+    // ValueTree::Listener — mute/solo/volume can change from ANYWHERE (mixer
+    // strip, VCA, AI batch, undo). Listening on the track state keeps the
+    // header in sync with all of them (user report 2026-06-13: mixer M/S
+    // changes were invisible in the arrangement).
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
+    void valueTreeChildAdded      (juce::ValueTree&, juce::ValueTree&) override {}
+    void valueTreeChildRemoved    (juce::ValueTree&, juce::ValueTree&, int) override {}
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+    void valueTreeParentChanged   (juce::ValueTree&) override {}
+
+public:
 
     /** Toggle mute via keyboard shortcut — sets button state directly then calls MixerEngine.
      *  Mirrors toggleArm(): direct visual update, no TE read-back dependency. */

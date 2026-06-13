@@ -29,4 +29,9 @@ public:
         the mean — low 20-250 Hz, mid 250-4k, high 4k-20k). */
     static void measureBandBalance (const float* mono, int numSamples, double sampleRate,
                                     double& lowDb, double& midDb, double& highDb);
+
+    /** Exposed for tests: vocal-presence emphasis (1-4 kHz band vs the rest,
+        clamped ±3 dB). Heuristic — a bright lead synth reads as presence too;
+        a real vocal-detection model is Phase 4 (IInferenceBackend). */
+    static double measureVocalPresence (const float* mono, int numSamples, double sampleRate);
 };

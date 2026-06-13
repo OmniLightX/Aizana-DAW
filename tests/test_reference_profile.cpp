@@ -51,9 +51,12 @@ TEST_CASE ("ReferenceProfile: genre presets + ValueTree roundtrip", "[reference]
     CHECK_FALSE (ReferenceProfile::genre ("Polka").isValid());
     CHECK_FALSE (ReferenceProfile::fromValueTree (juce::ValueTree ("WRONG")).isValid());
 
-    // Podcast is vocal-forward, Hip-Hop is bass-forward — sanity of the presets
+    // Modern conventions (user feedback 2026-06-13): rap vocals sit PRESENT in
+    // the mix; Trap is the bass-heaviest; Podcast stays the vocal extreme.
+    CHECK (ReferenceProfile::genre ("Hip-Hop / Rap").vocalDb >= 2.0);
     CHECK (ReferenceProfile::genre ("Podcast").vocalDb > ReferenceProfile::genre ("Rock").vocalDb);
-    CHECK (ReferenceProfile::genre ("Hip-Hop").lowDb  > ReferenceProfile::genre ("Podcast").lowDb);
+    CHECK (ReferenceProfile::genre ("Trap / Phonk").lowDb >= ReferenceProfile::genre ("Hip-Hop / Rap").lowDb);
+    CHECK (ReferenceProfile::genre ("Hip-Hop / Rap").lowDb > ReferenceProfile::genre ("Podcast").lowDb);
 }
 
 TEST_CASE ("ReferenceAnalyzer: band balance separates bass-heavy from bright material",
@@ -79,6 +82,17 @@ TEST_CASE ("ReferenceAnalyzer: band balance separates bass-heavy from bright mat
     CHECK (l1 > h1);
     CHECK (h2 > 0.5);          // bright → high emphasis positive
     CHECK (h2 > l2);
+
+    // Vocal presence (1-4 kHz): a presence-band tone reads positive, a sub
+    // bass reads non-positive.
+    std::vector<float> presence ((size_t) n), sub ((size_t) n);
+    for (int i = 0; i < n; ++i)
+    {
+        presence[(size_t) i] = 0.5f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 2500.0 * i / kSr);
+        sub[(size_t) i]      = 0.5f * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 55.0   * i / kSr);
+    }
+    CHECK (ReferenceAnalyzer::measureVocalPresence (presence.data(), n, kSr) > 0.5);
+    CHECK (ReferenceAnalyzer::measureVocalPresence (sub.data(),      n, kSr) <= 0.0);
 }
 
 TEST_CASE ("ReferenceAnalyzer: analyzeFile measures LUFS and sets profile fields",
@@ -125,7 +139,7 @@ TEST_CASE ("SessionPlanner: reference profile nudges gain staging (REF-01/02), n
     stems.add (stem ("/t/Bass.wav",   "Bass",   "Bass",   -20.0));
     stems.add (stem ("/t/Vocals.wav", "Vocals", "Vocals", -20.0));
 
-    const auto hipHop  = ReferenceProfile::genre ("Hip-Hop");
+    const auto hipHop  = ReferenceProfile::genre ("Hip-Hop / Rap");
     const auto podcast = ReferenceProfile::genre ("Podcast");
 
     const auto neutral = SessionPlanner::plan (stems);

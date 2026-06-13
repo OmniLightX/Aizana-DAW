@@ -316,6 +316,8 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
         for (auto* s : busFXStrips) s->setSelected (false);
         for (auto* s : vcaStrips)   s->setSelected (false);
         grabKeyboardFocus();
+        if (onSelectionForwarded)
+            onSelectionForwarded (nullptr);
         return;
     }
 
@@ -356,6 +358,10 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
         s->setSelected (selectedMixerTracks.contains (&s->getTrack()));
 
     grabKeyboardFocus();
+
+    // Mirror the primary selection into the arrangement (set by MainComponent)
+    if (onSelectionForwarded)
+        onSelectionForwarded (selectedMixerTracks.isEmpty() ? nullptr : t);
 }
 
 bool MixerView::keyPressed (const juce::KeyPress& key)

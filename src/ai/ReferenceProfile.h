@@ -63,26 +63,46 @@ struct ReferenceProfile
 
     //==========================================================================
     // REF-02: built-in genre profiles (pro defaults — user reviews results).
+    // Tuned to CURRENT mix conventions (user feedback 2026-06-13: modern rap
+    // mixes carry very present vocals; one "Hip-Hop" bucket is too coarse).
+    // For anything not listed: analyse a reference track instead (REF-01).
     static ReferenceProfile genre (const juce::String& genreName)
     {
         ReferenceProfile p;
         p.name = genreName;
 
-        if (genreName == "Hip-Hop")
+        if (genreName == "Hip-Hop / Rap")
         {
-            p.targetLufs = -9.0;  p.lowDb = 2.5; p.midDb = -0.5; p.highDb = 0.0; p.vocalDb = 1.0;
+            // modern rap: vocals sit on top of the beat, 808 carries the low end
+            p.targetLufs = -9.0;  p.lowDb = 2.0;  p.midDb = -0.5; p.highDb = 0.5; p.vocalDb = 2.5;
+        }
+        else if (genreName == "Trap / Phonk")
+        {
+            p.targetLufs = -8.0;  p.lowDb = 3.0;  p.midDb = -1.0; p.highDb = 1.0; p.vocalDb = 2.0;
+        }
+        else if (genreName == "R&B")
+        {
+            p.targetLufs = -10.0; p.lowDb = 1.5;  p.midDb = 0.5;  p.highDb = 0.5; p.vocalDb = 2.5;
+        }
+        else if (genreName == "Pop")
+        {
+            p.targetLufs = -9.0;  p.lowDb = 0.5;  p.midDb = 0.5;  p.highDb = 1.0; p.vocalDb = 2.5;
+        }
+        else if (genreName == "Afrobeats")
+        {
+            p.targetLufs = -9.0;  p.lowDb = 2.0;  p.midDb = 1.0;  p.highDb = 0.5; p.vocalDb = 1.5;
         }
         else if (genreName == "Rock")
         {
-            p.targetLufs = -10.0; p.lowDb = 0.0; p.midDb = 1.0;  p.highDb = 0.5; p.vocalDb = 0.5;
+            p.targetLufs = -10.0; p.lowDb = 0.0;  p.midDb = 1.0;  p.highDb = 0.5; p.vocalDb = 1.0;
         }
-        else if (genreName == "Electronic")
+        else if (genreName == "Electronic / EDM")
         {
-            p.targetLufs = -8.0;  p.lowDb = 2.0; p.midDb = -1.0; p.highDb = 1.0; p.vocalDb = 0.0;
+            p.targetLufs = -8.0;  p.lowDb = 2.0;  p.midDb = -1.0; p.highDb = 1.5; p.vocalDb = 0.0;
         }
         else if (genreName == "Podcast")
         {
-            p.targetLufs = -16.0; p.lowDb = -2.0; p.midDb = 1.0; p.highDb = 0.0; p.vocalDb = 3.0;
+            p.targetLufs = -16.0; p.lowDb = -2.0; p.midDb = 1.0;  p.highDb = 0.0; p.vocalDb = 3.0;
         }
         else
         {
@@ -93,6 +113,7 @@ struct ReferenceProfile
 
     static juce::StringArray genreNames()
     {
-        return { "Hip-Hop", "Rock", "Electronic", "Podcast" };
+        return { "Hip-Hop / Rap", "Trap / Phonk", "R&B", "Pop", "Afrobeats",
+                 "Rock", "Electronic / EDM", "Podcast" };
     }
 };

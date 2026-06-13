@@ -93,7 +93,13 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
 
     // Compact volume slider — horizontal, no text box, wired to MixerEngine
     volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    volumeSlider.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    // dB readout next to the fader (Studio One style — user request 2026-06-13:
+    // the arrangement had no dB value, only the mixer). Editable: click to type.
+    volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 46, 14);
+    volumeSlider.setNumDecimalPlacesToDisplay (1);
+    volumeSlider.setTextValueSuffix (" dB");
+    volumeSlider.setColour (juce::Slider::textBoxTextColourId, juce::Colour (0xffb6bcc4));
+    volumeSlider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     volumeSlider.setRange (-60.0, 6.0, 0.1);
     volumeSlider.setDoubleClickReturnValue (true, 0.0);  // double-click resets to 0 dB
     volumeSlider.setValue (mixerEngine.getVolume (track), juce::dontSendNotification);
@@ -111,6 +117,31 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     addAndMakeVisible (panLabel);
     updatePanLabel();
 
+    // Keep M/S/volume in sync with changes from ANY source (mixer strip, VCA,
+    // AI batch, undo) — the listener receives the whole track subtree.
+    track.state.addListener (this);
+}
+
+TrackHeader::~TrackHeader()
+{
+    track.state.removeListener (this);
+}
+
+void TrackHeader::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier& id)
+{
+    if (id == te::IDs::mute || id == te::IDs::solo)
+    {
+        refresh();
+        return;
+    }
+
+    // Volume lives on the VolumeAndPanPlugin child state. Don't fight the user
+    // mid-drag — the slider is the source of truth while the mouse is down.
+    if (id == te::IDs::volume && ! volumeSlider.isMouseButtonDown())
+        volumeSlider.setValue (mixerEngine.getVolume (track), juce::dontSendNotification);
+
+    if (id == te::IDs::pan)
+        updatePanLabel();
 }
 
 //==============================================================================

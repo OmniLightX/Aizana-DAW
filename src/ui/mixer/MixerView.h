@@ -50,6 +50,12 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     bool keyPressed (const juce::KeyPress& key) override;
 
+    /** Fired when the user selects a track strip — set by MainComponent to
+        mirror the selection into the ArrangementView (user request 2026-06-13:
+        mixer and arrangement selection must stay in sync). Receives the
+        primary selected track, or nullptr when the selection is cleared. */
+    std::function<void (te::AudioTrack*)> onSelectionForwarded;
+
     /**
      * Returns the MeterProcessor for a given track.
      * Retained from plan 01-10 for future per-track metering.
