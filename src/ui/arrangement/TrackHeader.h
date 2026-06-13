@@ -199,6 +199,7 @@ private:
     void handleCreateBus();
     void handleCreateFXChannel();
     void handleSetSidechainSource();
+    void handleToggleFreeze();
     void handleRenameTrack();
     void handleDeleteTrack();
 

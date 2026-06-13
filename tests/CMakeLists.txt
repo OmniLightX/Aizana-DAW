@@ -26,6 +26,7 @@ target_sources(engine_tests PRIVATE
     test_tempo_detector.cpp
     test_auto_tempo.cpp
     test_markers.cpp
+    test_freeze.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp

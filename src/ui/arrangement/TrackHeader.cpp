@@ -3,6 +3,7 @@
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/common/TrackColours.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include "engine/TrackFreeze.h"
 
 // Track channel-format flag (mono/stereo). Persisted on the track ValueTree and
 // fully decoupled from hardware input pairing — see TrackHeader::toggleTrackStereo().
@@ -165,6 +166,14 @@ void TrackHeader::valueTreePropertyChanged (juce::ValueTree&, const juce::Identi
         return;
     }
 
+    // Freeze state changed (also fires when undone/redone or set elsewhere) →
+    // redraw so the frozen indicator appears/disappears.
+    if (id == te::IDs::frozenIndividually)
+    {
+        repaint();
+        return;
+    }
+
     // Volume lives on the VolumeAndPanPlugin child state. Don't fight the user
     // mid-drag — the slider is the source of truth while the mouse is down.
     if (id == te::IDs::volume && ! volumeSlider.isMouseButtonDown())
@@ -253,6 +262,18 @@ void TrackHeader::paint (juce::Graphics& g)
     {
         g.setColour (juce::Colours::white.withAlpha (0.06f));
         g.fillRect (6, 0, getWidth() - 6, getHeight());
+    }
+
+    // Frozen indicator: icy wash + snowflake glyph. Signals the plugin chain is
+    // rendered to a freeze file and live processing is bypassed (CPU freed).
+    if (track.isFrozen (te::Track::individualFreeze))
+    {
+        g.setColour (juce::Colour (0x3340a4d8));        // translucent icy blue
+        g.fillRect (6, 0, getWidth() - 6, getHeight());
+        g.setColour (juce::Colour (0xff9fd6f0));
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawText (juce::String::fromUTF8 ("\xe2\x9d\x84"),   // snowflake U+2744
+                    getWidth() - 18, 1, 16, 14, juce::Justification::centred, false);
     }
 
     // dB tick scale under the volume fader — the arrangement counterpart of
@@ -754,6 +775,17 @@ void TrackHeader::showContextMenu()
     menu.addItem (6, "Create FX Channel");
     menu.addItem (3, "Set Sidechain Source...");
     menu.addSeparator();
+
+    // Freeze (Bounce-in-Place): renders the track's plugin chain to a file and
+    // bypasses live processing to free CPU. TE refuses freeze on bus-routed tracks,
+    // so offer it only when the track is freezable (or already frozen, to unfreeze).
+    const bool isFrozen = track.isFrozen (te::Track::individualFreeze);
+    menu.addItem (7,
+                  isFrozen ? juce::String::fromUTF8 ("Auftauen (Unfreeze)")
+                           : juce::String::fromUTF8 ("Spur einfrieren (Freeze)"),
+                  isFrozen || cloudes::canFreezeIndividually (track),
+                  isFrozen);
+    menu.addSeparator();
     menu.addSubMenu ("Track-Farbe", colourMenu);
     menu.addItem (4, "Rename Track");
     menu.addItem (5, "Delete Track");
@@ -773,6 +805,7 @@ void TrackHeader::showContextMenu()
                 case 2:  handleCreateBus();                            break;
                 case 6:  handleCreateFXChannel();                      break;
                 case 3:  handleSetSidechainSource();                   break;
+                case 7:  handleToggleFreeze();                         break;
                 case 4:  handleRenameTrack();                          break;
                 case 5:  handleDeleteTrack();                          break;
                 case 10: handleInsertBuiltInFX ("Cloudes EQ");         break;
@@ -820,6 +853,20 @@ void TrackHeader::handleInsertBuiltInFX (const juce::String& fxName)
         // GenericAudioProcessorEditor for Compressor/Reverb/Limiter).
         pluginWindowManager.openPluginWindow (*newPlugin);
     }
+}
+
+void TrackHeader::handleToggleFreeze()
+{
+    const bool nowFrozen = track.isFrozen (te::Track::individualFreeze);
+
+    // Freeze is intentionally NOT undoable: TE keeps the flag on a CachedValue
+    // with a null UndoManager and the freeze file is a regenerable cache (matches
+    // Logic / Studio One). Flipping the flag triggers AudioTrack::freezeTrack()
+    // synchronously on this (message) thread; the registered CloudesUIBehaviour
+    // drives the render progress (I-10). We're already on the message thread here.
+    track.setFrozen (! nowFrozen, te::Track::individualFreeze);
+
+    repaint();   // show/hide the frozen indicator immediately
 }
 
 void TrackHeader::populateColourMenu (juce::PopupMenu& menu)
