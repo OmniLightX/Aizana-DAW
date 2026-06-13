@@ -142,6 +142,10 @@ private:
     juce::Slider volumeSlider;
     juce::Label  panLabel;
 
+    // dB tick scale strip under the volume fader — painted in paint(),
+    // positioned in resized() (mirrors the mixer's scale column).
+    juce::Rectangle<int> dbScaleArea;
+
     bool selected = false;
 
     void muteClicked();

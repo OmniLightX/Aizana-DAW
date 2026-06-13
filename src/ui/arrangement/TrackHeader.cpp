@@ -159,13 +159,16 @@ void TrackHeader::resized()
     trackNameLabel.setBounds (area.removeFromTop (20));
     area.removeFromTop (2);
 
-    // Volume slider: horizontal, full width minus pan label, 16px tall, near bottom
+    // Volume slider: horizontal, full width minus pan label, 16px tall, near
+    // bottom — with a dB tick scale beneath it (user request 2026-06-13: the
+    // mixer has a scale, the arrangement only had the number).
     auto controlArea = area.reduced (0, 0);
-    auto volumeRow = controlArea.removeFromBottom (16);
+    dbScaleArea = controlArea.removeFromBottom (9);
+    auto volumeRow = controlArea.removeFromBottom (14);
     // Pan label: 24px wide on the right, same row as volume slider
     panLabel.setBounds (volumeRow.removeFromRight (24));
     volumeSlider.setBounds (volumeRow);
-    controlArea.removeFromBottom (2);
+    controlArea.removeFromBottom (1);
 
     // Buttons in a row: M / S / REC / I (monitor)
     // Widths: 24 / 24 / 30 / 18 = 96px + 3×2 gaps = 102px — fits any track header ≥110px wide
@@ -220,6 +223,35 @@ void TrackHeader::paint (juce::Graphics& g)
     {
         g.setColour (juce::Colours::white.withAlpha (0.06f));
         g.fillRect (6, 0, getWidth() - 6, getHeight());
+    }
+
+    // dB tick scale under the volume fader — the arrangement counterpart of
+    // the mixer's scale column (user request 2026-06-13). Tick positions come
+    // from the slider itself so they always align with the fader mapping.
+    if (! dbScaleArea.isEmpty() && volumeSlider.isVisible()
+        && dbScaleArea.getY() + 8 <= getHeight())
+    {
+        const float yTop = (float) dbScaleArea.getY();
+
+        for (double v : { -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0, 6.0 })
+        {
+            const bool major = (v == 0.0);
+            const int  x     = volumeSlider.getX()
+                               + (int) volumeSlider.getPositionOfValue (v);
+            g.setColour (major ? juce::Colour (0xffaab1b9) : juce::Colour (0xff5a6068));
+            g.drawVerticalLine (x, yTop, yTop + (major ? 4.0f : 3.0f));
+        }
+
+        g.setFont (juce::FontOptions (7.0f));
+        g.setColour (juce::Colour (0xff8a9097));
+        for (auto [v, txt] : { std::pair<double, const char*> { 0.0, "0" },
+                               { -20.0, "20" }, { -40.0, "40" }, { -60.0, "60" } })
+        {
+            const int x = volumeSlider.getX()
+                          + (int) volumeSlider.getPositionOfValue (v);
+            g.drawText (txt, x - 9, dbScaleArea.getY() + 3, 18, 6,
+                        juce::Justification::centred, false);
+        }
     }
 
     // Right border separator
