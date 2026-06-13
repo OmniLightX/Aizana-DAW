@@ -859,14 +859,33 @@ void TrackHeader::handleToggleFreeze()
 {
     const bool nowFrozen = track.isFrozen (te::Track::individualFreeze);
 
-    // Freeze is intentionally NOT undoable: TE keeps the flag on a CachedValue
-    // with a null UndoManager and the freeze file is a regenerable cache (matches
-    // Logic / Studio One). Flipping the flag triggers AudioTrack::freezeTrack()
-    // synchronously on this (message) thread; the registered CloudesUIBehaviour
-    // drives the render progress (I-10). We're already on the message thread here.
-    track.setFrozen (! nowFrozen, te::Track::individualFreeze);
+    // Guard: freezing a track with no clips renders nothing useful and only
+    // exercises a degenerate offline-render path — skip it with a hint.
+    if (! nowFrozen && track.getClips().isEmpty())
+    {
+        track.edit.engine.getUIBehaviour().showWarningMessage (
+            juce::String::fromUTF8 ("Nichts zum Einfrieren – diese Spur hat keinen Clip."));
+        return;
+    }
 
-    repaint();   // show/hide the frozen indicator immediately
+    // Flipping frozenIndividually triggers AudioTrack::freezeTrack() synchronously,
+    // which renders the track via the Renderer. CloudesUIBehaviour now PUMPS the
+    // message loop during that render, so the render may itself dispatch events
+    // (incl. a rebuildTrackRows that deletes THIS header). Therefore:
+    //   - defer onto a clean tick (out of the popup-menu teardown), and
+    //   - drive the mutation through the AudioTrack pointer (which outlives this
+    //     component), only touching `this` again behind a SafePointer guard.
+    // Freeze is intentionally NOT undoable (TE design: null-UM CachedValue, the
+    // freeze file is a regenerable cache — like Logic / Studio One).
+    auto* trackPtr = &track;
+    juce::Component::SafePointer<TrackHeader> safe (this);
+    juce::MessageManager::callAsync ([safe, trackPtr, nowFrozen]
+    {
+        if (trackPtr == nullptr) return;
+        trackPtr->setFrozen (! nowFrozen, te::Track::individualFreeze);
+        if (safe != nullptr)
+            safe->repaint();
+    });
 }
 
 void TrackHeader::populateColourMenu (juce::PopupMenu& menu)
