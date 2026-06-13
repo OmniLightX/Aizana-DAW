@@ -28,6 +28,7 @@ target_sources(engine_tests PRIVATE
     test_markers.cpp
     test_freeze.cpp
     test_mix_plan.cpp
+    test_mixing_engine.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
@@ -62,6 +63,7 @@ target_sources(engine_tests PRIVATE
     ../src/app/UIStateManager.cpp
     ../src/ai/StemAnalyzer.cpp
     ../src/ai/SessionPlanner.cpp
+    ../src/ai/MixingEngine.cpp
     ../src/ai/StemImportEngine.cpp
     ../src/ai/StemSeparationEngine.cpp
     ../src/ai/ReferenceAnalyzer.cpp

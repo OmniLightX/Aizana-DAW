@@ -23,10 +23,13 @@ namespace cloudes
     {
         SetTrackGain,    // gainDb  = target track gain in dB
         SetTrackPan,     // pan     = -1 (L) .. +1 (R)
-        HighPassFilter,  // freqHz  = high-pass corner
-        CarveBand,       // freqHz, gainDb (< 0), q  — cut mud/resonance
-        BoostBand,       // freqHz, gainDb (> 0), q  — presence/air
-        Compress,        // thresholdDb, ratio
+        HighPassFilter,  // freqHz  = high-pass corner (low cut)
+        CarveBand,       // freqHz, gainDb (< 0), q  — cut mud/resonance (bell)
+        BoostBand,       // freqHz, gainDb (> 0), q  — presence (bell)
+        LowShelf,        // freqHz, gainDb (±), q    — broad low-end shaping
+        HighShelf,       // freqHz, gainDb (±), q    — air / top-end (preferred over a bell up high)
+        Compress,        // thresholdDb, ratio, makeupGainDb (target "Master" = mix-bus glue)
+        DeEss,           // freqHz (~5.5 kHz), thresholdDb, ratio — tame sibilance (Grammy-universal on vocals)
     };
 
     struct MixAction
@@ -42,6 +45,7 @@ namespace cloudes
         float q           = 0.7f;
         float thresholdDb = 0.0f;
         float ratio       = 1.0f;
+        float makeupGainDb = 0.0f;   // Compress: gain back the level the ratio took
 
         juce::String reason;   // jargon-free rationale (beginner learns / pro reviews)
 
@@ -55,7 +59,10 @@ namespace cloudes
                 case MixActionType::HighPassFilter: return "high_pass_filter";
                 case MixActionType::CarveBand:      return "carve_band";
                 case MixActionType::BoostBand:      return "boost_band";
+                case MixActionType::LowShelf:       return "low_shelf";
+                case MixActionType::HighShelf:      return "high_shelf";
                 case MixActionType::Compress:       return "compress";
+                case MixActionType::DeEss:          return "de_ess";
             }
             return "unknown";
         }
@@ -80,14 +87,34 @@ namespace cloudes
                 case MixActionType::BoostBand:
                     return t + ": +" + juce::String (gainDb, 1) + " dB bei "
                              + juce::String (juce::roundToInt (freqHz)) + " Hz";
+                case MixActionType::LowShelf:
+                    return t + ": Low-Shelf " + signedDb (gainDb) + " ab "
+                             + juce::String (juce::roundToInt (freqHz)) + " Hz";
+                case MixActionType::HighShelf:
+                    return t + ": High-Shelf " + signedDb (gainDb) + " ab "
+                             + juce::String (juce::roundToInt (freqHz)) + " Hz";
                 case MixActionType::Compress:
-                    return t + ": Kompressor " + juce::String (ratio, 1) + ":1 @ "
-                             + juce::String (thresholdDb, 1) + " dB";
+                {
+                    auto s = t + ": Kompressor " + juce::String (ratio, 1) + ":1 @ "
+                               + juce::String (thresholdDb, 1) + " dB";
+                    if (makeupGainDb > 0.05f)
+                        s += ", +" + juce::String (makeupGainDb, 1) + " dB Makeup";
+                    return s;
+                }
+                case MixActionType::DeEss:
+                    return t + ": De-Esser bei "
+                             + juce::String (juce::roundToInt (freqHz)) + " Hz";
             }
             return t;
         }
 
     private:
+        /** Signed dB with an explicit '+' for boosts (shelves cut or boost). */
+        static juce::String signedDb (float db)
+        {
+            return (db >= 0.0f ? "+" : "") + juce::String (db, 1) + " dB";
+        }
+
         juce::String panLabel() const
         {
             if (std::abs (pan) < 0.02f) return "Mitte";

@@ -1,0 +1,287 @@
+#include "MixingEngine.h"
+
+namespace cloudes
+{
+    using Role = MixingEngine::Role;
+
+    //==========================================================================
+    namespace
+    {
+        // A small action factory keeps the rule code below readable.
+        MixAction make (MixActionType type, const TrackMixProfile& t, juce::String reason)
+        {
+            MixAction a;
+            a.type        = type;
+            a.targetTrack = t.id;
+            a.targetName  = t.name;
+            a.reason      = std::move (reason);
+            return a;
+        }
+
+        double clampGain (double db)
+        {
+            return juce::jlimit ((double) MixingEngine::kMinGainDb,
+                                 (double) MixingEngine::kMaxGainDb, db);
+        }
+
+        // Reference nudge, always small and clamped (REF-04: a hint, not a target).
+        double nudged (double base, double ref, double scale, double lo, double hi)
+        {
+            return juce::jlimit (lo, hi, base + ref * scale);
+        }
+
+        // Role-dependent low-cut corner; 0 = no high-pass (kick/808 live here).
+        float highPassHzFor (Role r)
+        {
+            switch (r)
+            {
+                case Role::Vocals:      return 80.0f;
+                case Role::Keys:        return 90.0f;
+                case Role::Instruments: return 100.0f;
+                case Role::Guitars:     return 100.0f;
+                case Role::Synths:      return 120.0f;
+                case Role::FX:          return 120.0f;
+                case Role::Drums:       return 0.0f;   // full kit / kick — leave the bottom
+                case Role::Bass:        return 0.0f;
+                case Role::Other:       return 0.0f;
+            }
+            return 0.0f;
+        }
+
+        bool wantsMudCarve (Role r)
+        {
+            return r == Role::Keys || r == Role::Guitars || r == Role::Synths
+                || r == Role::Vocals || r == Role::Instruments;
+        }
+
+        // Pan width for the spread depends on the genre feel of the reference.
+        float spreadWidthFor (const ReferenceProfile* ref)
+        {
+            if (ref == nullptr || ! ref->isValid())
+                return 0.40f;
+
+            const auto& g = ref->name;
+            if (g == "Rock" || g == "Electronic / EDM")          return 0.50f;  // wide
+            if (g == "Hip-Hop / Rap" || g == "Trap / Phonk")     return 0.28f;  // tight, mono-ish low end
+            if (g == "Podcast")                                   return 0.0f;   // mono-safe
+            return 0.40f;
+        }
+
+        bool centreLocked (Role r, const TrackMixProfile& t)
+        {
+            return r == Role::Bass || r == Role::Drums || t.isLeadVocal;
+        }
+    }
+
+    //==========================================================================
+    Role MixingEngine::roleForGroup (const juce::String& group)
+    {
+        const auto g = group.trim();
+        if (g == "Drums")       return Role::Drums;
+        if (g == "Bass")        return Role::Bass;
+        if (g == "Guitars")     return Role::Guitars;
+        if (g == "Keys")        return Role::Keys;
+        if (g == "Synths")      return Role::Synths;
+        if (g == "Instruments") return Role::Instruments;
+        if (g == "Vocals")      return Role::Vocals;
+        if (g == "FX")          return Role::FX;
+        return Role::Other;
+    }
+
+    //==========================================================================
+    MixPlan MixingEngine::mix (const std::vector<TrackMixProfile>& tracks,
+                               const ReferenceProfile* reference,
+                               const MixOptions& options)
+    {
+        MixPlan plan;
+        if (tracks.empty())
+            return plan;   // nothing to mix → no plan (and no empty-master glue)
+
+        const double lowRef   = reference ? reference->lowDb   : 0.0;
+        const double midRef   = reference ? reference->midDb   : 0.0;
+        const double highRef  = reference ? reference->highDb  : 0.0;
+        const double vocalRef = reference ? reference->vocalDb : 0.0;
+
+        //----------------------------------------------------------------------
+        // 1) Per-track moves: level → EQ (subtractive first) → dynamics.
+        for (const auto& t : tracks)
+        {
+            const Role role = roleForGroup (t.group);
+
+            // --- Level / gain staging (skip silent or already-balanced tracks) ---
+            if (t.rmsDb > kSilenceRmsDb)
+            {
+                double target = (role == Role::Vocals || t.isLeadVocal)
+                                  ? nudged (kVocalRmsDb, vocalRef, 0.5, kVocalRmsDb, -13.0)
+                                  : kDefaultRmsDb;
+                if (role == Role::Bass)
+                    target = nudged (kDefaultRmsDb, lowRef, 0.4, -20.0, -16.0);
+
+                const double gain = clampGain (target - t.rmsDb);
+                if (std::abs (gain) >= kMinGainMoveDb)
+                {
+                    auto a = make (MixActionType::SetTrackGain, t,
+                                   gain >= 0.0 ? "Lauter, damit die Spur im Mix sitzt"
+                                               : "Leiser, macht Platz für die anderen");
+                    a.gainDb = (float) gain;
+                    plan.add (a);
+                }
+            }
+
+            // --- Low cut: rumble out of everything that isn't bass/kick ---
+            if (const float hp = highPassHzFor (role); hp > 0.0f)
+            {
+                auto a = make (MixActionType::HighPassFilter, t,
+                               "Tiefen-Rumpeln raus, hält den Bassbereich sauber");
+                a.freqHz = hp;
+                plan.add (a);
+            }
+
+            // --- Bass: shape the low end with a shelf, driven by genre emphasis ---
+            if (role == Role::Bass)
+            {
+                const double shelf = juce::jlimit (-3.0, 3.0, lowRef);
+                if (std::abs (shelf) >= 0.5)
+                {
+                    auto a = make (MixActionType::LowShelf, t,
+                                   shelf >= 0.0 ? "Mehr Fundament im Bass"
+                                                : "Weniger Wummern im Bass");
+                    a.freqHz = 90.0f;
+                    a.gainDb = (float) shelf;
+                    a.q      = 0.7f;
+                    plan.add (a);
+                }
+            }
+
+            // --- Mud carve: subtractive cleanup of the boxy low-mids ---
+            if (wantsMudCarve (role))
+            {
+                auto a = make (MixActionType::CarveBand, t,
+                               "Nimmt das Dumpfe um 300 Hz weg, der Mix wird klarer");
+                a.freqHz = kMudFreqHz;
+                a.gainDb = (float) juce::jlimit (-4.0, -1.5, kMudCutDb + midRef * 0.5);
+                a.q      = kMudQ;
+                plan.add (a);
+            }
+
+            // --- Lead vocal: presence + air + de-ess + serial compression ---
+            if (t.isLeadVocal)
+            {
+                auto presence = make (MixActionType::BoostBand, t,
+                                      "Holt die Stimme nach vorn, mehr Verständlichkeit");
+                presence.freqHz = kVocalPresenceHz;
+                presence.gainDb = (float) nudged (kVocalPresenceDb, highRef, 0.3, 1.5, 3.0);
+                presence.q      = kVocalPresenceQ;
+                plan.add (presence);
+
+                auto air = make (MixActionType::HighShelf, t,
+                                 "Öffnet die Höhen, mehr Luft und Glanz");
+                air.freqHz = kVocalAirHz;
+                air.gainDb = (float) nudged (kVocalAirDb, highRef, 0.3, 0.5, 3.0);
+                air.q      = 0.7f;
+                plan.add (air);
+
+                auto deess = make (MixActionType::DeEss, t,
+                                   "Zähmt scharfe S-Laute (Zischen)");
+                deess.freqHz      = kDeEssHz;
+                deess.thresholdDb = kDeEssThreshDb;
+                deess.ratio       = kDeEssRatio;
+                plan.add (deess);
+
+                // Serial-lite (user decision): a gentle leveller, then a peak catcher
+                // — the Grammy-standard two-stage vocal chain (LA-2A → 1176).
+                auto level = make (MixActionType::Compress, t,
+                                   "Stufe 1: hält die Lautstärke der Stimme konstant");
+                level.ratio        = 2.5f;
+                level.thresholdDb  = -22.0f;
+                level.makeupGainDb = 0.0f;
+                plan.add (level);
+
+                auto peak = make (MixActionType::Compress, t,
+                                  "Stufe 2: fängt die lautesten Spitzen ab");
+                peak.ratio        = 4.0f;
+                peak.thresholdDb  = kVocalCompThreshDb;
+                peak.makeupGainDb = 2.0f;
+                plan.add (peak);
+            }
+
+            // --- Role compressors (bass steadiness, drum punch) ---
+            if (role == Role::Bass)
+            {
+                auto a = make (MixActionType::Compress, t, "Bass bleibt gleichmäßig laut");
+                a.ratio        = 2.5f;
+                a.thresholdDb  = -18.0f;
+                a.makeupGainDb = 1.0f;
+                plan.add (a);
+            }
+            else if (role == Role::Drums)
+            {
+                auto a = make (MixActionType::Compress, t, "Drums bekommen Punch und Druck");
+                a.ratio        = 4.0f;
+                a.thresholdDb  = -12.0f;
+                a.makeupGainDb = 2.0f;
+                plan.add (a);
+            }
+        }
+
+        //----------------------------------------------------------------------
+        // 2) Panning pass: anchors stay centre, the rest spreads round-robin.
+        const float width = spreadWidthFor (reference);
+        int spreadIndex = 0;
+        for (const auto& t : tracks)
+        {
+            const Role role = roleForGroup (t.group);
+
+            if (centreLocked (role, t))
+            {
+                if (std::abs (t.currentPan) > 0.05f)
+                {
+                    auto a = make (MixActionType::SetTrackPan, t,
+                                   "In die Mitte — trägt den Mix");
+                    a.pan = 0.0f;
+                    plan.add (a);
+                }
+                continue;
+            }
+
+            if (width <= 0.0f)
+                continue;   // mono-safe genre (e.g. podcast)
+
+            // Alternate L / R, widening with each pair.
+            const float side   = (spreadIndex % 2 == 0) ? -1.0f : 1.0f;
+            const float amount = juce::jlimit (0.0f, 0.85f, width + 0.08f * (spreadIndex / 2));
+            const float target = side * amount;
+            ++spreadIndex;
+
+            if (std::abs (target - t.currentPan) > 0.05f)
+            {
+                auto a = make (MixActionType::SetTrackPan, t,
+                               "Ins Stereobild verteilt, mehr Breite");
+                a.pan = target;
+                plan.add (a);
+            }
+        }
+
+        //----------------------------------------------------------------------
+        // 3) Master glue — gentle, the "mix into the bus" move (reviewable).
+        if (options.allowMasterGlue)
+        {
+            MixAction g;
+            g.type         = MixActionType::Compress;
+            g.targetTrack  = options.masterId;
+            g.targetName   = options.masterName;
+            g.ratio        = kGlueRatio;
+            g.thresholdDb  = kGlueThreshDb;
+            g.makeupGainDb = kGlueMakeupDb;
+            g.reason       = "Klebt den ganzen Mix zusammen — sanft, wie die Profis in den Bus mixen";
+            plan.add (g);
+        }
+
+        //----------------------------------------------------------------------
+        juce::String genre = (reference && reference->isValid()) ? reference->name : juce::String();
+        plan.summary = "Mix-Vorschlag: " + juce::String (plan.size()) + " Schritte über "
+                     + juce::String ((int) tracks.size()) + " Spuren"
+                     + (genre.isNotEmpty() ? " (Stil: " + genre + ")" : juce::String());
+        return plan;
+    }
+}

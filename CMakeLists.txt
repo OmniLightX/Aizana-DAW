@@ -102,6 +102,7 @@ target_sources(Cloudes PRIVATE
     src/ai/HeuristicFeedbackEngine.cpp
     src/ai/AIEngine.cpp
     src/ai/OnnxModelRunner.cpp
+    src/ai/MixingEngine.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
