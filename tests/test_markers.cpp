@@ -83,6 +83,13 @@ TEST_CASE ("MarkerManager: rename, move and delete a marker", "[markers]")
     REQUIRE_THAT (firstMarker (*edit)->getPosition().getStart().inSeconds(),
                   Catch::Matchers::WithinAbs (5.0, 0.01));
 
+    // Resize the region length (matches the MarkerLane right-edge drag) — markers
+    // are stretchable ranges, not just point flags.
+    um.beginNewTransaction ("Resize Marker");
+    clip->setLength (tracktion::TimeDuration::fromSeconds (4.0), false);
+    REQUIRE_THAT (firstMarker (*edit)->getPosition().getLength().inSeconds(),
+                  Catch::Matchers::WithinAbs (4.0, 0.01));
+
     // Delete
     um.beginNewTransaction ("Delete Marker");
     clip->removeFromParent();

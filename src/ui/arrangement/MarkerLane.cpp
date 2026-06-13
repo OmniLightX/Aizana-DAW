@@ -3,15 +3,17 @@
 //==============================================================================
 namespace
 {
-    // Flag / lane palette — amber accent reads clearly against the near-black ruler.
-    const juce::Colour kLaneBg     { 0xff202020 };
-    const juce::Colour kSeparator  { 0xff333333 };
-    const juce::Colour kFlag       { 0xffd9a441 };  // amber
-    const juce::Colour kFlagText   { 0xff1a1a1a };  // dark text on amber tab
-    const juce::Colour kHint       { 0xff666666 };
+    // Region / lane palette — amber accent reads clearly against the near-black ruler.
+    const juce::Colour kLaneBg      { 0xff202020 };
+    const juce::Colour kSeparator   { 0xff333333 };
+    const juce::Colour kRegion      { 0xffd9a441 };  // amber body
+    const juce::Colour kRegionEdge  { 0xfff0c25e };  // brighter amber for start/end edges
+    const juce::Colour kRegionText  { 0xff1a1a1a };  // dark text on amber
+    const juce::Colour kHint        { 0xff666666 };
 
-    constexpr int kFlagPadX = 6;   // horizontal text padding inside a flag tab
-    constexpr int kMinFlagW = 14;
+    constexpr int    kTextPadX     = 6;     // text inset inside the region
+    constexpr int    kResizeHandle = 6;     // px from the right edge that grabs to resize
+    constexpr double kMinLenSecs   = 0.05;  // a marker region can't be dragged shorter than this
 }
 
 //==============================================================================
@@ -41,28 +43,38 @@ int MarkerLane::timeToX (double sec) const
     return (int) ((sec - scrollPositionSecs) * pixelsPerSecond);
 }
 
-juce::Rectangle<int> MarkerLane::flagBounds (te::MarkerClip& clip) const
+juce::Rectangle<int> MarkerLane::regionBounds (te::MarkerClip& clip) const
 {
-    const int x = timeToX (clip.getPosition().getStart().inSeconds());
+    const auto pos = clip.getPosition();
+    const int x0 = timeToX (pos.getStart().inSeconds());
+    const int x1 = timeToX (pos.getEnd().inSeconds());
 
-    const juce::Font font (juce::FontOptions (11.0f));
-    const int textW = juce::GlyphArrangement::getStringWidthInt (font, clip.getName());
-    const int w = juce::jmax (kMinFlagW, textW + kFlagPadX * 2);
-
-    return { x, 1, w, getHeight() - 3 };
+    // Always at least grab-able even at extreme zoom-out.
+    const int w = juce::jmax (kResizeHandle + 2, x1 - x0);
+    return { x0, 1, w, getHeight() - 3 };
 }
 
-te::MarkerClip* MarkerLane::markerAtX (int x) const
+te::MarkerClip* MarkerLane::markerAtX (int x, bool& onRightEdge) const
 {
+    onRightEdge = false;
+
     auto* edit = getEdit();
     if (edit == nullptr) return nullptr;
 
-    // Iterate in reverse so a later (visually on-top) flag wins on overlap.
+    // Iterate in reverse so a later (visually on-top) region wins on overlap.
     auto markers = edit->getMarkerManager().getMarkers();
     for (int i = markers.size(); --i >= 0;)
+    {
         if (auto* m = markers[i].get())
-            if (flagBounds (*m).expanded (3, 0).contains (x, getHeight() / 2))
+        {
+            const auto b = regionBounds (*m);
+            if (b.expanded (2, 0).contains (x, getHeight() / 2))
+            {
+                onRightEdge = (x >= b.getRight() - kResizeHandle);
                 return m;
+            }
+        }
+    }
 
     return nullptr;
 }
@@ -110,19 +122,23 @@ void MarkerLane::paint (juce::Graphics& g)
     {
         if (m == nullptr) continue;
 
-        const auto bounds = flagBounds (*m);
-        if (bounds.getRight() < 0 || bounds.getX() > getWidth())
+        const auto b = regionBounds (*m);
+        if (b.getRight() < 0 || b.getX() > getWidth())
             continue;
 
-        // Position anchor — thin vertical line at the exact marker time.
-        g.setColour (kFlag);
-        g.drawVerticalLine (bounds.getX(), 0.0f, (float) getHeight());
+        // Region body (slightly translucent so overlapping sections still read).
+        g.setColour (kRegion.withAlpha (0.85f));
+        g.fillRect (b);
 
-        // Flag tab + name.
-        g.setColour (kFlag);
-        g.fillRect (bounds);
-        g.setColour (kFlagText);
-        g.drawText (m->getName(), bounds.reduced (kFlagPadX, 0),
+        // Brighter start anchor + right-edge resize grip.
+        g.setColour (kRegionEdge);
+        g.fillRect (b.getX(), b.getY(), 2, b.getHeight());
+        g.fillRect (b.getRight() - 2, b.getY(), 2, b.getHeight());
+
+        // Name, left-aligned, truncated to the region (clear of the resize grip).
+        g.setColour (kRegionText);
+        g.drawText (m->getName(),
+                    b.reduced (kTextPadX, 0).withTrimmedRight (kResizeHandle),
                     juce::Justification::centredLeft, true);
     }
 }
@@ -133,7 +149,8 @@ void MarkerLane::mouseDown (const juce::MouseEvent& e)
     auto* edit = getEdit();
     if (edit == nullptr) return;
 
-    auto* hit = markerAtX (e.x);
+    bool onRightEdge = false;
+    auto* hit = markerAtX (e.x, onRightEdge);
 
     if (e.mods.isPopupMenu())
     {
@@ -144,36 +161,49 @@ void MarkerLane::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Left button: prepare a potential drag on a flag; seek happens on mouseUp
-    // only if no drag occurred (so a plain click locates without moving).
+    // Left button: arm a drag. Right edge → resize the region length, body → move.
+    // A plain click (no drag) locates the transport on mouseUp.
     draggingMarker = hit;
+    dragMode = hit == nullptr ? DragMode::None
+                              : (onRightEdge ? DragMode::Resize : DragMode::Move);
     didDrag = false;
 }
 
 void MarkerLane::mouseDrag (const juce::MouseEvent& e)
 {
-    if (draggingMarker == nullptr) return;
+    if (draggingMarker == nullptr || dragMode == DragMode::None) return;
 
     auto* edit = getEdit();
     if (edit == nullptr) return;
 
     // I-02: one undo transaction per gesture — opened on the first drag delta,
-    // subsequent setStart calls coalesce into it.
+    // subsequent set calls coalesce into it.
     if (! didDrag)
     {
-        appState.editManager.getUndoManager().beginNewTransaction ("Move Marker");
+        appState.editManager.getUndoManager().beginNewTransaction (
+            dragMode == DragMode::Resize ? "Resize Marker" : "Move Marker");
         didDrag = true;
     }
 
-    const double newTime = xToTime (e.x);
-    draggingMarker->setStart (tracktion::TimePosition::fromSeconds (newTime),
-                              /*preserveSync=*/ false, /*keepLength=*/ true);
+    if (dragMode == DragMode::Resize)
+    {
+        const double startSecs = draggingMarker->getPosition().getStart().inSeconds();
+        const double newLen = juce::jmax (kMinLenSecs, xToTime (e.x) - startSecs);
+        draggingMarker->setLength (tracktion::TimeDuration::fromSeconds (newLen),
+                                   /*preserveSync=*/ false);
+    }
+    else
+    {
+        draggingMarker->setStart (tracktion::TimePosition::fromSeconds (xToTime (e.x)),
+                                  /*preserveSync=*/ false, /*keepLength=*/ true);
+    }
+
     repaint();
 }
 
 void MarkerLane::mouseUp (const juce::MouseEvent&)
 {
-    // Plain click on a flag (no drag) = locate transport to the marker.
+    // Plain click on a region (no drag) = locate transport to the marker start.
     if (draggingMarker != nullptr && ! didDrag)
     {
         if (auto* edit = getEdit())
@@ -181,6 +211,7 @@ void MarkerLane::mouseUp (const juce::MouseEvent&)
     }
 
     draggingMarker = nullptr;
+    dragMode = DragMode::None;
     didDrag = false;
 }
 
@@ -188,10 +219,22 @@ void MarkerLane::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (e.mods.isPopupMenu()) return;
 
-    // Double-click on empty space creates a marker; on a flag it does nothing
+    // Double-click on empty space creates a marker; on a region it does nothing
     // extra (the preceding single-click already located the transport).
-    if (markerAtX (e.x) == nullptr)
+    bool dummy = false;
+    if (markerAtX (e.x, dummy) == nullptr)
         createMarkerAt (xToTime (e.x));
+}
+
+juce::MouseCursor MarkerLane::getMouseCursor()
+{
+    // Left-right resize cursor over a region's right edge signals "drag to stretch".
+    bool onRightEdge = false;
+    const auto p = getMouseXYRelative();
+    if (markerAtX (p.x, onRightEdge) != nullptr && onRightEdge)
+        return juce::MouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+
+    return juce::MouseCursor (juce::MouseCursor::NormalCursor);
 }
 
 //==============================================================================
