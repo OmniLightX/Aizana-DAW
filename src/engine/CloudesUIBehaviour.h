@@ -64,7 +64,9 @@ public:
 
         TaskRunner runner (task);
 
+       #if JUCE_MODAL_LOOPS_PERMITTED
         auto* mm = juce::MessageManager::getInstanceWithoutCreating();
+       #endif
 
         // Stall watchdog: track the last time render progress advanced. If it
         // stops advancing for this long, the render is stuck (e.g. a 3rd-party
@@ -77,11 +79,13 @@ public:
         {
             // Pump the message loop (NOT a bare sleep) so the render thread's
             // message-thread dependencies are serviced — prevents the deadlock
-            // that froze the whole app. Falls back to sleep only if there is no
-            // message manager (e.g. headless test context).
+            // that froze the whole app. Requires JUCE_MODAL_LOOPS_PERMITTED (set
+            // for the app target); headless test targets fall back to sleep.
+           #if JUCE_MODAL_LOOPS_PERMITTED
             if (mm != nullptr)
                 mm->runDispatchLoopUntil (20);
             else
+           #endif
                 juce::Thread::sleep (20);
 
             const float p = task.getCurrentTaskProgress();
