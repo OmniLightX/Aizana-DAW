@@ -120,11 +120,41 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     // Keep M/S/volume in sync with changes from ANY source (mixer strip, VCA,
     // AI batch, undo) — the listener receives the whole track subtree.
     track.state.addListener (this);
+
+    // Live level meter behind the dB scale — same source as the mixer strip.
+    if (auto* levelPlugin = track.getLevelMeterPlugin())
+    {
+        levelPlugin->measurer.addClient (levelClient);
+        levelClientAdded = true;
+        startTimerHz (30);
+    }
 }
 
 TrackHeader::~TrackHeader()
 {
+    if (levelClientAdded)
+        if (auto* levelPlugin = track.getLevelMeterPlugin())
+            levelPlugin->measurer.removeClient (levelClient);
     track.state.removeListener (this);
+}
+
+void TrackHeader::timerCallback()
+{
+    const auto levelL = levelClient.getAndClearAudioLevel (0);
+    const auto levelR = levelClient.getAndClearAudioLevel (1);
+    const float peak  = juce::jmax (levelL.dB, levelR.dB);
+
+    // Rise instantly, fall smoothly (ballistics like the mixer meter)
+    const float next = juce::jmax (peak, meterDb - 2.0f);
+    if (std::abs (next - meterDb) > 0.1f)
+    {
+        meterDb = next;
+        repaint (dbScaleArea);
+    }
+    else
+    {
+        meterDb = next;
+    }
 }
 
 void TrackHeader::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier& id)
@@ -232,6 +262,23 @@ void TrackHeader::paint (juce::Graphics& g)
         && dbScaleArea.getY() + 8 <= getHeight())
     {
         const float yTop = (float) dbScaleArea.getY();
+
+        // Live peak meter bar behind the ticks — same data as the mixer strip.
+        if (meterDb > -60.0f)
+        {
+            const float xMin = (float) volumeSlider.getX()
+                               + volumeSlider.getPositionOfValue (-60.0);
+            const float xLvl = (float) volumeSlider.getX()
+                               + volumeSlider.getPositionOfValue (
+                                     juce::jlimit (-60.0, 6.0, (double) meterDb));
+            if (xLvl > xMin)
+            {
+                g.setColour (meterDb > 0.0f     ? juce::Colour (0xffd9544f)
+                             : meterDb > -12.0f ? juce::Colour (0xffd9c34f)
+                                                : juce::Colour (0xff58b85c));
+                g.fillRect (xMin, yTop, xLvl - xMin, 3.0f);
+            }
+        }
 
         for (double v : { -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0, 6.0 })
         {

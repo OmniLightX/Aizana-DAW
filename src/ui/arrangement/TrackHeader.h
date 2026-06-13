@@ -31,7 +31,8 @@ namespace te = tracktion::engine;
  * Calls MixerEngine for mute/solo so they are undoable.
  */
 class TrackHeader : public juce::Component,
-                    private juce::ValueTree::Listener
+                    private juce::ValueTree::Listener,
+                    private juce::Timer
 {
 public:
     TrackHeader (te::AudioTrack&       track,
@@ -151,6 +152,15 @@ private:
 
     /** Map an x position on the scale strip to a fader value and apply it. */
     void applyScaleDrag (float x);
+
+    // Live level meter behind the scale strip (user request 2026-06-13: the
+    // header must show the same live peaks as the mixer strip). Same source
+    // as the mixer: te::LevelMeasurer::Client on the track's LevelMeterPlugin,
+    // polled at 30 Hz on the message thread — never touches the audio thread.
+    void timerCallback() override;
+    te::LevelMeasurer::Client levelClient;
+    bool  levelClientAdded = false;
+    float meterDb          = -100.0f;
 
     bool selected = false;
 
