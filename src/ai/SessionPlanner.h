@@ -1,6 +1,7 @@
 #pragma once
 
 #include "StemAnalyzer.h"
+#include "ReferenceProfile.h"
 #include <juce_graphics/juce_graphics.h>
 
 /**
@@ -41,7 +42,16 @@ struct SessionPlan
 class SessionPlanner
 {
 public:
-    static SessionPlan plan (const juce::Array<StemInfo>& stems);
+    /** Plans the session; an optional ReferenceProfile (genre or analysed
+        reference track, REF-01/02) nudges the per-group gain staging. The
+        profile's targetLufs is information only (REF-04) — the planner never
+        touches the master. */
+    static SessionPlan plan (const juce::Array<StemInfo>& stems,
+                             const ReferenceProfile* reference = nullptr);
+
+    /** The gain-staging emphasis a profile applies to one group (clamped, dB).
+        Exposed for tests. */
+    static double groupOffsetDb (const juce::String& group, const ReferenceProfile&);
 
     // Tuning constants — exposed so tests assert against the same source of truth.
     static constexpr double kTargetRmsDb   = -18.0;  // per-track target after gain

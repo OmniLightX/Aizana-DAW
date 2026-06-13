@@ -629,10 +629,39 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             break;
 
         case 4:  // Song Setup
+        {
             menu.addItem (SongSetupAudioIO, "Audio I/O Setup...", true);
             menu.addItem (SongSeparateStems,
                           juce::String::fromUTF8 ("Song in Stems trennen (KI)…"),
                           hasEdit && ! stemSeparationEngine.isBusy());
+
+            // KI-Referenz (REF-01/02/04): genre profile or analysed track.
+            // The active profile's LUFS is shown as INFO — never enforced.
+            juce::PopupMenu refMenu;
+            const auto active = getActiveReferenceProfile();
+
+            const auto genres = ReferenceProfile::genreNames();
+            for (int i = 0; i < genres.size(); ++i)
+                refMenu.addItem (SongRefGenreBase + i, genres[i], hasEdit,
+                                 active.isValid() && ! active.fromReferenceTrack
+                                     && active.name == genres[i]);
+            refMenu.addSeparator();
+            refMenu.addItem (SongRefAnalyze,
+                             juce::String::fromUTF8 ("Referenztrack analysieren…"), hasEdit,
+                             active.fromReferenceTrack);
+            refMenu.addItem (SongRefClear, "Referenz entfernen", hasEdit && active.isValid());
+
+            if (active.isValid())
+            {
+                refMenu.addSeparator();
+                refMenu.addItem (9999,
+                                 juce::String::fromUTF8 ("Aktiv: ") + active.name
+                                     + "  (" + juce::String (active.targetLufs, 1)
+                                     + " LUFS als Richtwert)",
+                                 false);   // disabled = pure info (REF-04)
+            }
+            menu.addSubMenu (juce::String::fromUTF8 ("KI-Referenz"), refMenu);
+        }
             break;
 
         case 5:  // Export
@@ -648,6 +677,16 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
 
 void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 {
+    // KI-Referenz genre profiles use a contiguous ID range (REF-02)
+    if (itemID >= SongRefGenreBase
+        && itemID < SongRefGenreBase + ReferenceProfile::genreNames().size())
+    {
+        setActiveReferenceProfile (ReferenceProfile::genre (
+            ReferenceProfile::genreNames()[itemID - SongRefGenreBase]));
+        menuItemsChanged();
+        return;
+    }
+
     switch (itemID)
     {
         case CloudesPreferences:
@@ -699,6 +738,15 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongSeparateStems:
             handleSongSeparateStems();
+            break;
+
+        case SongRefAnalyze:
+            handleAnalyzeReferenceTrack();
+            break;
+
+        case SongRefClear:
+            clearActiveReferenceProfile();
+            menuItemsChanged();
             break;
 
         case ExportMixdown:
@@ -913,11 +961,15 @@ void MainComponent::startStemAnalysis (const juce::Array<juce::File>& files)
 {
     // Analysis reads files + runs FFTs — worker thread, never the message thread.
     // Result marshals back via callAsync with a SafePointer (window may close).
+    // The active reference profile (REF-01/02) is read HERE on the message
+    // thread and captured by value for the worker.
     juce::Thread::launch (
-        [files, safe = juce::Component::SafePointer<MainComponent> (this)]()
+        [files, reference = getActiveReferenceProfile(),
+         safe = juce::Component::SafePointer<MainComponent> (this)]()
         {
             const auto stems = StemAnalyzer::analyzeFiles (files);
-            const auto plan  = SessionPlanner::plan (stems);
+            const auto plan  = SessionPlanner::plan (stems,
+                                                     reference.isValid() ? &reference : nullptr);
 
             juce::MessageManager::callAsync ([safe, plan]()
             {
@@ -947,6 +999,105 @@ void MainComponent::onStemPlanReady (const SessionPlan& plan)
             if (safe == nullptr)
                 return;
             safe->stemImportEngine.applyPlan (edited);
+        });
+}
+
+//==============================================================================
+// KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04)
+//==============================================================================
+
+ReferenceProfile MainComponent::getActiveReferenceProfile() const
+{
+    if (auto* edit = appState.editManager.getEdit())
+        return ReferenceProfile::fromValueTree (
+            edit->state.getChildWithName (juce::Identifier (ReferenceProfile::kStateType)));
+    return {};
+}
+
+void MainComponent::setActiveReferenceProfile (const ReferenceProfile& profile)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr || ! profile.isValid())
+        return;
+
+    auto& um = appState.editManager.getUndoManager();
+    um.beginNewTransaction ("Set reference profile");
+
+    auto existing = edit->state.getChildWithName (
+        juce::Identifier (ReferenceProfile::kStateType));
+    if (existing.isValid())
+        edit->state.removeChild (existing, &um);
+    edit->state.addChild (profile.toValueTree(), -1, &um);
+}
+
+void MainComponent::clearActiveReferenceProfile()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    auto existing = edit->state.getChildWithName (
+        juce::Identifier (ReferenceProfile::kStateType));
+    if (! existing.isValid())
+        return;
+
+    auto& um = appState.editManager.getUndoManager();
+    um.beginNewTransaction ("Clear reference profile");
+    edit->state.removeChild (existing, &um);
+}
+
+void MainComponent::handleAnalyzeReferenceTrack()
+{
+    if (appState.editManager.getEdit() == nullptr)
+        return;
+
+    fileChooser = std::make_unique<juce::FileChooser> (
+        juce::String::fromUTF8 ("Referenztrack auswählen"),
+        juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+        "*.wav;*.aiff;*.aif;*.mp3;*.flac;*.ogg");
+
+    fileChooser->launchAsync (
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this] (const juce::FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            fileChooser.reset();
+            if (! file.existsAsFile())
+                return;
+
+            ReferenceAnalyzer::analyzeAsync (file,
+                [safe = juce::Component::SafePointer<MainComponent> (this)]
+                (ReferenceProfile profile)
+                {
+                    if (safe == nullptr)
+                        return;
+
+                    if (! profile.isValid())
+                    {
+                        juce::AlertWindow::showMessageBoxAsync (
+                            juce::MessageBoxIconType::WarningIcon, "KI-Referenz",
+                            "Referenztrack konnte nicht analysiert werden.");
+                        return;
+                    }
+
+                    safe->setActiveReferenceProfile (profile);
+                    safe->menuItemsChanged();
+
+                    // REF-04: values are presented as reference INFORMATION.
+                    juce::AlertWindow::showMessageBoxAsync (
+                        juce::MessageBoxIconType::InfoIcon, "KI-Referenz",
+                        juce::String::fromUTF8 ("Referenz gesetzt: ") + profile.name
+                            + "\n\nLautheit (Richtwert): "
+                            + juce::String (profile.targetLufs, 1) + " LUFS\n"
+                            + juce::String::fromUTF8 ("Klangbalance (Tendenz): Bässe ")
+                            + juce::String (profile.lowDb, 1) + " dB, Mitten "
+                            + juce::String (profile.midDb, 1) + " dB, "
+                            + juce::String::fromUTF8 ("Höhen ")
+                            + juce::String (profile.highDb, 1) + " dB\n\n"
+                            + juce::String::fromUTF8 (
+                                "Die KI nutzt diese Werte als Orientierung beim Setup "
+                                "— nie als Pflicht-Ziel."));
+                });
         });
 }
 
@@ -1155,7 +1306,9 @@ void MainComponent::onStemsSeparated (const juce::Array<StemSeparationEngine::St
     if (infos.isEmpty())
         return;
 
-    onStemPlanReady (SessionPlanner::plan (infos));   // mode-dependent apply (E3)
+    const auto reference = getActiveReferenceProfile();   // REF-01/02 guides staging
+    onStemPlanReady (SessionPlanner::plan (infos,
+                                           reference.isValid() ? &reference : nullptr));
 }
 
 void MainComponent::showSeparationProgress()

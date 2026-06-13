@@ -9,6 +9,7 @@
 #include "engine/ExportPipeline.h"
 #include "ai/StemImportEngine.h"
 #include "ai/StemSeparationEngine.h"
+#include "ai/ReferenceAnalyzer.h"
 #include "ui/stems/StemImportDialog.h"
 #include "ui/stems/SeparationProgressPanel.h"
 #include "plugins/PluginManager.h"
@@ -285,6 +286,9 @@ private:
         // Song Setup menu
         SongSetupAudioIO  = 401,
         SongSeparateStems = 402,
+        SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
+        SongRefAnalyze    = 420,   // analyse reference track (REF-01)
+        SongRefClear      = 421,
 
         // Cloudes menu
         CloudesPreferences = 501,
@@ -311,6 +315,14 @@ private:
     void handleFileImportStems();
     void startStemAnalysis (const juce::Array<juce::File>& files);
     void onStemPlanReady (const SessionPlan& plan);
+
+    // KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04): genre profile or
+    // analysed reference track, persisted in the Edit state. Guides gain
+    // staging; LUFS is reference info only, never enforced.
+    ReferenceProfile getActiveReferenceProfile() const;
+    void setActiveReferenceProfile (const ReferenceProfile&);
+    void clearActiveReferenceProfile();
+    void handleAnalyzeReferenceTrack();
 
     // Stem-Separation (Phase 3): song → 6 stems → KI-Setup pipeline.
     void handleSongSeparateStems();

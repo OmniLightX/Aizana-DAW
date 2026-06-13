@@ -97,6 +97,7 @@ target_sources(Cloudes PRIVATE
     src/ai/SessionPlanner.cpp
     src/ai/StemImportEngine.cpp
     src/ai/StemSeparationEngine.cpp
+    src/ai/ReferenceAnalyzer.cpp
     src/ai/IntentEngine.cpp
     src/ai/HeuristicFeedbackEngine.cpp
     src/ai/AIEngine.cpp

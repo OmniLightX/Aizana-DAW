@@ -33,7 +33,29 @@ juce::Colour SessionPlanner::colourForGroup (const juce::String& group)
 }
 
 //==============================================================================
-SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems)
+double SessionPlanner::groupOffsetDb (const juce::String& group, const ReferenceProfile& ref)
+{
+    if (! ref.isValid())
+        return 0.0;
+
+    // Map the profile's tonal emphasis onto the instrument families. Weights
+    // are deliberately < 1 — the reference NUDGES the staging (REF-04:
+    // guideline, not target). Clamped so an extreme profile can't wreck a mix.
+    double offset = 0.0;
+    if      (group == "Bass")        offset = ref.lowDb * 0.8;
+    else if (group == "Drums")       offset = ref.lowDb * 0.4 + ref.highDb * 0.2;
+    else if (group == "Guitars")     offset = ref.midDb * 0.6;
+    else if (group == "Keys")        offset = ref.midDb * 0.5;
+    else if (group == "Instruments") offset = ref.midDb * 0.5;
+    else if (group == "Synths")      offset = ref.midDb * 0.3 + ref.highDb * 0.4;
+    else if (group == "Vocals")      offset = ref.vocalDb;
+
+    return juce::jlimit (-3.0, 3.0, offset);
+}
+
+//==============================================================================
+SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems,
+                                  const ReferenceProfile* reference)
 {
     SessionPlan out;
 
@@ -62,9 +84,12 @@ SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems)
         usedNames.add (name);
         t.name = name;
 
-        // --- Gain staging (AI-03): bring measured RMS to the target level.
+        // --- Gain staging (AI-03): bring measured RMS to the target level,
+        // nudged by the active reference/genre profile (REF-01/02).
         // Silence (or unreadable file, rmsDb = -120) is never boosted.
-        const double target = (s.group == "Vocals") ? kVocalRmsDb : kTargetRmsDb;
+        double target = (s.group == "Vocals") ? kVocalRmsDb : kTargetRmsDb;
+        if (reference != nullptr)
+            target += groupOffsetDb (s.group, *reference);
         if (s.rmsDb > kSilenceRmsDb)
             t.gainDb = juce::jlimit (kMinGainDb, kMaxGainDb, target - s.rmsDb);
 
