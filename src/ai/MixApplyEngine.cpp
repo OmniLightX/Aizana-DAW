@@ -1,0 +1,335 @@
+#include "MixApplyEngine.h"
+#include "StemAnalyzer.h"
+#include "../engine/MixerEngine.h"
+#include "../plugins/BuiltInPluginFormat.h"
+#include "../fx/EQProcessor.h"
+#include "../fx/CompressorProcessor.h"
+#include "../fx/DeEsserProcessor.h"
+
+#include <map>
+#include <vector>
+#include <cmath>
+
+using cloudes::MixAction;
+using cloudes::MixActionType;
+using cloudes::MixPlan;
+using cloudes::TrackMixProfile;
+
+namespace
+{
+    // Identifies the master-bus glue action (MixingEngine labels it "Master").
+    const juce::String kMasterTarget { "Master" };
+
+    //==========================================================================
+    // Built-in FX plumbing — mirrors IntentEngine: set parameters via the host
+    // RangedAudioParameter (keeps the generic editor + APVTS state in sync, not
+    // just the audio-thread atomic) and flush state so it survives undo/redo.
+
+    void setHostParam (juce::AudioPluginInstance& inst, const juce::String& id, float realValue)
+    {
+        for (auto* p : inst.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                if (rp->paramID == id)
+                {
+                    rp->setValueNotifyingHost (rp->convertTo0to1 (realValue));
+                    return;
+                }
+    }
+
+    template <typename ConfigFn>
+    void insertBuiltIn (te::Edit& edit, te::PluginList& list,
+                        const juce::String& fxName, ConfigFn&& configure)
+    {
+        const auto desc = BuiltInPluginFormat::getDescriptionFor (fxName);
+        auto ptr = edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, desc);
+
+        if (auto* ext = dynamic_cast<te::ExternalPlugin*> (ptr.get()))
+        {
+            list.insertPlugin (ptr, -1, nullptr);   // append; undoable in the open txn
+            ext->initialiseFully();
+
+            if (auto* inst = ext->getAudioPluginInstance())
+                configure (*inst);
+
+            ext->flushPluginStateToValueTree();      // persist for undo/redo + save
+        }
+    }
+
+    //==========================================================================
+    // Track volume / pan — transaction-free cores (the bridge owns the txn).
+
+    void setTrackGainNoTxn (te::AudioTrack& track, float dB, juce::UndoManager& um)
+    {
+        if (auto* vp = track.getVolumePlugin())
+        {
+            const float pos = te::decibelsToVolumeFaderPosition (dB);   // SetTrackGain = absolute fader
+            vp->volume.setValue (pos, &um);
+            vp->setSliderPos (pos);
+        }
+    }
+
+    void setTrackPanNoTxn (te::AudioTrack& track, float pan, juce::UndoManager& um)
+    {
+        if (auto* vp = track.getVolumePlugin())
+        {
+            const float clamped = juce::jlimit (-1.0f, 1.0f, pan);
+            vp->pan.setValue (clamped, &um);
+            vp->setPan (clamped);
+        }
+    }
+
+    //==========================================================================
+    // MixAction EQ band → EQProcessor band.
+
+    EQBand toEqBand (const MixAction& a)
+    {
+        EQBand b;
+        b.frequencyHz = a.freqHz;
+        b.gainDB      = a.gainDb;
+        b.Q           = a.q;
+        b.enabled     = true;
+
+        switch (a.type)
+        {
+            case MixActionType::HighPassFilter: b.type = EQBandType::HighPass; b.Q = 0.707f; b.slopeOrder = 2; break;
+            case MixActionType::LowShelf:       b.type = EQBandType::LowShelf;  break;
+            case MixActionType::HighShelf:      b.type = EQBandType::HighShelf; break;
+            case MixActionType::CarveBand:
+            case MixActionType::BoostBand:
+            default:                            b.type = EQBandType::Peak; break;
+        }
+        return b;
+    }
+
+    bool isEqAction (MixActionType t)
+    {
+        return t == MixActionType::HighPassFilter || t == MixActionType::CarveBand
+            || t == MixActionType::BoostBand     || t == MixActionType::LowShelf
+            || t == MixActionType::HighShelf;
+    }
+
+    //==========================================================================
+    // Reader helpers.
+
+    juce::File firstClipSource (te::AudioTrack& track)
+    {
+        for (auto* c : track.getClips())
+            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (c))
+            {
+                auto f = wc->getSourceFileReference().getFile();
+                if (f.existsAsFile())
+                    return f;
+            }
+        return {};
+    }
+
+    struct Levels { double rmsDb = -120.0; double peakDb = -120.0; };
+
+    Levels fileLevels (const juce::File& f)
+    {
+        juce::AudioFormatManager afm;
+        afm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (afm.createReaderFor (f));
+        if (r == nullptr || r->lengthInSamples <= 0 || r->sampleRate <= 0.0)
+            return {};
+
+        const int len = (int) juce::jmin ((juce::int64) r->lengthInSamples,
+                                          (juce::int64) (r->sampleRate * 30.0));   // cap at 30s
+        const int chans = (int) juce::jmax (1u, r->numChannels);
+        juce::AudioBuffer<float> buf (chans, len);
+        r->read (&buf, 0, len, 0, true, true);
+
+        double sumSq = 0.0;
+        float  peak  = 0.0f;
+        for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+        {
+            const float* d = buf.getReadPointer (ch);
+            for (int i = 0; i < len; ++i)
+            {
+                peak  = std::max (peak, std::abs (d[i]));
+                sumSq += (double) d[i] * d[i];
+            }
+        }
+
+        const double n = (double) len * juce::jmax (1, buf.getNumChannels());
+        const double rmsLin = n > 0.0 ? std::sqrt (sumSq / n) : 0.0;
+
+        Levels lv;
+        lv.rmsDb  = rmsLin > 1e-10 ? 20.0 * std::log10 (rmsLin) : -120.0;
+        lv.peakDb = peak   > 1e-10f ? 20.0 * std::log10 (peak)  : -120.0;
+        return lv;
+    }
+}
+
+//==============================================================================
+MixApplyEngine::MixApplyEngine (EditManager& em, AICommandBridge& bridge)
+    : editManager (em), commandBridge (bridge)
+{
+}
+
+//==============================================================================
+std::vector<TrackMixProfile> MixApplyEngine::readProfiles() const
+{
+    std::vector<TrackMixProfile> out;
+
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return out;
+
+    for (auto* t : te::getAudioTracks (*edit))
+    {
+        if (! MixerEngine::isAudioChannel (*t))   // skip bus / FX channels
+            continue;
+
+        const auto src = firstClipSource (*t);
+        if (! src.existsAsFile())                 // skip empty tracks — nothing to mix
+            continue;
+
+        TrackMixProfile p;
+        p.id   = t->itemID;
+        p.name = t->getName();
+
+        juce::String instrument, group;
+        double confidence = 0.0;
+        if (! StemAnalyzer::classifyFromName (t->getName(), instrument, group, confidence))
+            group = "Other";
+        p.group = group;
+
+        const auto lv = fileLevels (src);
+        p.rmsDb  = lv.rmsDb;
+        p.peakDb = lv.peakDb;
+
+        if (auto* vp = t->getVolumePlugin())
+            p.currentPan = vp->pan.get();
+
+        out.push_back (p);
+    }
+
+    // Lead vocal: a Vocals-group track named "lead"/"main" wins; else the first vocal.
+    int lead = -1;
+    for (size_t i = 0; i < out.size(); ++i)
+    {
+        if (out[i].group != "Vocals")
+            continue;
+        if (lead < 0)
+            lead = (int) i;
+        const auto n = out[i].name.toLowerCase();
+        if (n.contains ("lead") || n.contains ("main"))
+        {
+            lead = (int) i;
+            break;
+        }
+    }
+    if (lead >= 0)
+        out[(size_t) lead].isLeadVocal = true;
+
+    return out;
+}
+
+//==============================================================================
+void MixApplyEngine::applyPlan (const MixPlan& plan)
+{
+    if (plan.isEmpty())
+        return;
+
+    const juce::String desc = plan.summary.isNotEmpty() ? plan.summary : juce::String ("KI-Mix");
+    commandBridge.enqueue (desc, [this, plan] (juce::UndoManager& um)
+    {
+        applyMixNow (plan, um);
+    });
+}
+
+//==============================================================================
+void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    const auto audioTracks = te::getAudioTracks (*edit);
+    auto findTrack = [&] (tracktion::engine::EditItemID id) -> te::AudioTrack*
+    {
+        for (auto* t : audioTracks)
+            if (t->itemID == id)
+                return t;
+        return nullptr;
+    };
+
+    // 1) Collect EQ moves per track → ONE Cloudes EQ per track (bands in plan order).
+    std::map<te::AudioTrack*, std::vector<EQBand>> eqByTrack;
+    for (const auto& a : plan.actions)
+        if (isEqAction (a.type))
+            if (auto* t = findTrack (a.targetTrack))
+                eqByTrack[t].push_back (toEqBand (a));
+
+    for (auto& [track, bands] : eqByTrack)
+    {
+        insertBuiltIn (*edit, track->pluginList, "Cloudes EQ",
+                       [&bands] (juce::AudioPluginInstance& inst)
+        {
+            if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
+                for (int i = 0; i < (int) bands.size() && i < EQProcessor::NumBands; ++i)
+                    eq->setBand (i, bands[(size_t) i]);
+        });
+    }
+
+    // 2) Everything else, in plan order.
+    for (const auto& a : plan.actions)
+    {
+        if (isEqAction (a.type))
+            continue;   // already folded into the per-track EQ
+
+        // Master-bus glue: a Compress targeting "Master" → master plugin list.
+        if (a.type == MixActionType::Compress && a.targetName == kMasterTarget)
+        {
+            insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
+                           [&a] (juce::AudioPluginInstance& inst)
+            {
+                setHostParam (inst, "ratio",     a.ratio);
+                setHostParam (inst, "threshold", a.thresholdDb);
+                setHostParam (inst, "makeup",    a.makeupGainDb);
+            });
+            continue;
+        }
+
+        auto* track = findTrack (a.targetTrack);
+        if (track == nullptr)
+            continue;
+
+        switch (a.type)
+        {
+            case MixActionType::SetTrackGain:
+                setTrackGainNoTxn (*track, a.gainDb, um);
+                break;
+
+            case MixActionType::SetTrackPan:
+                setTrackPanNoTxn (*track, a.pan, um);
+                break;
+
+            case MixActionType::Compress:
+                insertBuiltIn (*edit, track->pluginList, "Cloudes Compressor",
+                               [&a] (juce::AudioPluginInstance& inst)
+                {
+                    setHostParam (inst, "ratio",     a.ratio);
+                    setHostParam (inst, "threshold", a.thresholdDb);
+                    setHostParam (inst, "makeup",    a.makeupGainDb);
+                });
+                break;
+
+            case MixActionType::DeEss:
+                insertBuiltIn (*edit, track->pluginList, "Cloudes De-Esser",
+                               [&a] (juce::AudioPluginInstance& inst)
+                {
+                    // MixAction carries no Range — derive it from the de-ess ratio.
+                    const float range = juce::jlimit (4.0f, 12.0f, a.ratio * 2.0f);
+                    setHostParam (inst, "frequency", a.freqHz);
+                    setHostParam (inst, "threshold", a.thresholdDb);
+                    setHostParam (inst, "range",     range);
+                });
+                break;
+
+            default:
+                break;   // EQ types handled above
+        }
+    }
+}

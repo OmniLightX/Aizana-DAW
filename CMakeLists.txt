@@ -103,6 +103,7 @@ target_sources(Cloudes PRIVATE
     src/ai/AIEngine.cpp
     src/ai/OnnxModelRunner.cpp
     src/ai/MixingEngine.cpp
+    src/ai/MixApplyEngine.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
