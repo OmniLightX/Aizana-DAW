@@ -8,10 +8,12 @@
 #include "engine/ClipEditor.h"
 #include "engine/ExportPipeline.h"
 #include "ai/StemImportEngine.h"
+#include "ai/MixApplyEngine.h"
 #include "ai/StemSeparationEngine.h"
 #include "ai/ReferenceAnalyzer.h"
 #include "ui/stems/StemImportDialog.h"
 #include "ui/stems/SeparationProgressPanel.h"
+#include "ui/mix/MixPreviewDialog.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/arrangement/TransportBar.h"
@@ -111,6 +113,9 @@ private:
     // Depends on mixerEngine (declared above — init order OK).
     StemImportEngine stemImportEngine { appState.editManager, mixerEngine,
                                         appState.aiCommandBridge };
+
+    // KI-Mixing (Phase 4, Iteration 1): MixPlan → session via AICommandBridge.
+    MixApplyEngine   mixApplyEngine   { appState.editManager, appState.aiCommandBridge };
 
     // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
     // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.
@@ -287,6 +292,7 @@ private:
         SongSetupAudioIO  = 401,
         SongSeparateStems = 402,
         SongAddMarker     = 403,
+        SongMixAI         = 404,   // KI-Mix (Phase 4 — heuristic mixing co-pilot)
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,
@@ -316,6 +322,11 @@ private:
     void handleFileImportStems();
     void startStemAnalysis (const juce::Array<juce::File>& files);
     void onStemPlanReady (const SessionPlan& plan);
+
+    // KI-Mix (Phase 4, Slice 4): scan tracks (message thread) → measure + mix on a
+    // worker → apply mode-dependently (Beginner instant / Pro preview dialog).
+    void startMix();
+    void onMixPlanReady (const cloudes::MixPlan& plan);
 
     // KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04): genre profile or
     // analysed reference track, persisted in the Edit state. Guides gain

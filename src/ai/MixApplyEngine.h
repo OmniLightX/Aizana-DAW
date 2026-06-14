@@ -32,8 +32,25 @@ class MixApplyEngine
 public:
     MixApplyEngine (EditManager& em, AICommandBridge& bridge);
 
-    /** Read the current session into mix profiles (one per plain audio/stem
-        track; buses and FX channels are skipped). */
+    /** A track to mix, gathered from the live Edit WITHOUT file I/O. */
+    struct TrackScan
+    {
+        tracktion::engine::EditItemID id;
+        juce::String name;
+        juce::File   source;
+        float        currentPan = 0.0f;
+    };
+
+    /** Message-thread, cheap: enumerate plain stem tracks (bus/FX/empty skipped),
+        reading only TE structure — no audio decoding. */
+    std::vector<TrackScan> scanTracks() const;
+
+    /** Background-safe (no Edit access): measure source RMS, classify the group
+        from the name, flag the lead vocal. Run this off the message thread. */
+    static std::vector<cloudes::TrackMixProfile> profilesFromScan (const std::vector<TrackScan>& scan);
+
+    /** Convenience (message thread): scanTracks() + profilesFromScan(). Does file
+        I/O — prefer the split form for big sessions. Used by tests. */
     std::vector<cloudes::TrackMixProfile> readProfiles() const;
 
     /** Enqueue the whole plan as one AI batch (one undo step). Any thread. */

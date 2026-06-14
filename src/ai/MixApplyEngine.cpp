@@ -168,13 +168,13 @@ MixApplyEngine::MixApplyEngine (EditManager& em, AICommandBridge& bridge)
 }
 
 //==============================================================================
-std::vector<TrackMixProfile> MixApplyEngine::readProfiles() const
+std::vector<MixApplyEngine::TrackScan> MixApplyEngine::scanTracks() const
 {
-    std::vector<TrackMixProfile> out;
+    std::vector<TrackScan> scan;
 
     auto* edit = editManager.getEdit();
     if (edit == nullptr)
-        return out;
+        return scan;
 
     for (auto* t : te::getAudioTracks (*edit))
     {
@@ -185,22 +185,40 @@ std::vector<TrackMixProfile> MixApplyEngine::readProfiles() const
         if (! src.existsAsFile())                 // skip empty tracks — nothing to mix
             continue;
 
+        TrackScan s;
+        s.id     = t->itemID;
+        s.name   = t->getName();
+        s.source = src;
+        if (auto* vp = t->getVolumePlugin())
+            s.currentPan = vp->pan.get();
+
+        scan.push_back (std::move (s));
+    }
+
+    return scan;
+}
+
+std::vector<TrackMixProfile> MixApplyEngine::profilesFromScan (const std::vector<TrackScan>& scan)
+{
+    std::vector<TrackMixProfile> out;
+    out.reserve (scan.size());
+
+    for (const auto& s : scan)
+    {
         TrackMixProfile p;
-        p.id   = t->itemID;
-        p.name = t->getName();
+        p.id         = s.id;
+        p.name       = s.name;
+        p.currentPan = s.currentPan;
 
         juce::String instrument, group;
         double confidence = 0.0;
-        if (! StemAnalyzer::classifyFromName (t->getName(), instrument, group, confidence))
+        if (! StemAnalyzer::classifyFromName (s.name, instrument, group, confidence))
             group = "Other";
         p.group = group;
 
-        const auto lv = fileLevels (src);
+        const auto lv = fileLevels (s.source);   // file I/O — caller runs us off the message thread
         p.rmsDb  = lv.rmsDb;
         p.peakDb = lv.peakDb;
-
-        if (auto* vp = t->getVolumePlugin())
-            p.currentPan = vp->pan.get();
 
         out.push_back (p);
     }
@@ -224,6 +242,11 @@ std::vector<TrackMixProfile> MixApplyEngine::readProfiles() const
         out[(size_t) lead].isLeadVocal = true;
 
     return out;
+}
+
+std::vector<TrackMixProfile> MixApplyEngine::readProfiles() const
+{
+    return profilesFromScan (scanTracks());
 }
 
 //==============================================================================

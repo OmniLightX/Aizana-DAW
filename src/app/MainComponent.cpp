@@ -643,6 +643,9 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           hasEdit && ! stemSeparationEngine.isBusy());
             menu.addItem (SongAddMarker,
                           juce::String::fromUTF8 ("Marker am Playhead setzen"), hasEdit);
+            menu.addSeparator();
+            menu.addItem (SongMixAI,
+                          juce::String::fromUTF8 ("KI-Mix (Heuristik)…"), hasEdit);
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -751,6 +754,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongAddMarker:
             arrangementView.addMarkerAtPlayhead();
+            break;
+
+        case SongMixAI:
+            startMix();
             break;
 
         case SongRefAnalyze:
@@ -1012,6 +1019,62 @@ void MainComponent::onStemPlanReady (const SessionPlan& plan)
             if (safe == nullptr)
                 return;
             safe->stemImportEngine.applyPlan (edited);
+        });
+}
+
+//==============================================================================
+// KI-Mix (Phase 4, Iteration 1, Slice 4)
+//==============================================================================
+
+void MainComponent::startMix()
+{
+    // Scan TE structure on the message thread (cheap, no I/O); measure + mix on a
+    // worker (file decoding). Result marshals back via callAsync + SafePointer.
+    auto scan = mixApplyEngine.scanTracks();
+    if (scan.empty())
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "KI-Mix",
+            juce::String::fromUTF8 ("Keine Spuren zum Mischen gefunden. Importiere zuerst Stems."));
+        return;
+    }
+
+    juce::Thread::launch (
+        [scan = std::move (scan), reference = getActiveReferenceProfile(),
+         safe = juce::Component::SafePointer<MainComponent> (this)]()
+        {
+            const auto profiles = MixApplyEngine::profilesFromScan (scan);
+            const auto plan = cloudes::MixingEngine::mix (
+                profiles, reference.isValid() ? &reference : nullptr);
+
+            juce::MessageManager::callAsync ([safe, plan]()
+            {
+                if (safe == nullptr)
+                    return;
+                safe->onMixPlanReady (plan);
+            });
+        });
+}
+
+void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan)
+{
+    if (plan.isEmpty())
+        return;
+
+    // Beginner = instant mix + one undo; Pro = review dialog (moves + reasons,
+    // each de-selectable) — mirrors the stem-import E3 split.
+    if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
+    {
+        mixApplyEngine.applyPlan (plan);
+        return;
+    }
+
+    MixPreviewDialog::show (*this, plan,
+        [safe = juce::Component::SafePointer<MainComponent> (this)] (const cloudes::MixPlan& edited)
+        {
+            if (safe == nullptr)
+                return;
+            safe->mixApplyEngine.applyPlan (edited);
         });
 }
 
