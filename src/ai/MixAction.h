@@ -124,16 +124,33 @@ namespace cloudes
     };
 
     /**
-        MixPlan — an ordered set of MixActions plus a short human summary. The unit
-        the co-pilot proposes; applied as ONE AICommandBridge batch = one undo step.
+        MixRouting — a declarative "send this track to that sub-bus" instruction
+        (e.g. backings → "Backings" bus, adlibs → "Adlibs" bus, the way pros bus
+        their vocal layers). Kept separate from MixAction because it changes session
+        STRUCTURE (create bus + route), applied by MixApplyEngine, not a plugin move.
+    */
+    struct MixRouting
+    {
+        tracktion::engine::EditItemID trackId;
+        juce::String trackName;
+        juce::String busName;     // sub-bus to create/route into ("Backings", "Adlibs")
+        juce::String reason;
+    };
+
+    /**
+        MixPlan — an ordered set of MixActions (+ optional sub-bus routings) plus a
+        short human summary. The unit the co-pilot proposes; applied as ONE
+        AICommandBridge batch = one undo step.
     */
     struct MixPlan
     {
-        std::vector<MixAction> actions;
+        std::vector<MixAction>  actions;
+        std::vector<MixRouting> routings;
         juce::String summary;
 
-        bool isEmpty() const noexcept { return actions.empty(); }
+        bool isEmpty() const noexcept { return actions.empty() && routings.empty(); }
         int  size()    const noexcept { return (int) actions.size(); }
         void add (MixAction a)        { actions.push_back (std::move (a)); }
+        void route (MixRouting r)     { routings.push_back (std::move (r)); }
     };
 }

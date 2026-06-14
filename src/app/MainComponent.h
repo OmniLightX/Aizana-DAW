@@ -115,7 +115,7 @@ private:
                                         appState.aiCommandBridge };
 
     // KI-Mixing (Phase 4, Iteration 1): MixPlan → session via AICommandBridge.
-    MixApplyEngine   mixApplyEngine   { appState.editManager, appState.aiCommandBridge };
+    MixApplyEngine   mixApplyEngine   { appState.editManager, mixerEngine, appState.aiCommandBridge };
 
     // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
     // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.

@@ -3,6 +3,7 @@
 #include "MixingEngine.h"
 #include "../engine/AICommandBridge.h"
 #include "../engine/EditManager.h"
+#include "../engine/MixerEngine.h"
 
 /**
  * MixApplyEngine — Phase 4 / Iteration 1, Slice 3.
@@ -30,7 +31,7 @@
 class MixApplyEngine
 {
 public:
-    MixApplyEngine (EditManager& em, AICommandBridge& bridge);
+    MixApplyEngine (EditManager& em, MixerEngine& mixer, AICommandBridge& bridge);
 
     /** A track to mix, gathered from the live Edit WITHOUT file I/O. */
     struct TrackScan
@@ -61,6 +62,7 @@ public:
 
 private:
     EditManager&     editManager;
+    MixerEngine&     mixerEngine;
     AICommandBridge& commandBridge;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixApplyEngine)

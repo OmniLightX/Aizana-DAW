@@ -93,7 +93,7 @@ TEST_CASE ("MixApplyEngine: reader profiles the stem tracks and flags the lead v
     MixerEngine mixer (em);
     AICommandBridge bridge (em);
     StemImportEngine importer (em, mixer, bridge);
-    MixApplyEngine applyEngine (em, bridge);
+    MixApplyEngine applyEngine (em, mixer, bridge);
 
     juce::File dir;
     buildSession (em, mixer, bridge, importer, dir);
@@ -123,7 +123,7 @@ TEST_CASE ("MixApplyEngine: full mix applies as built-in FX, one undo reverts", 
     MixerEngine mixer (em);
     AICommandBridge bridge (em);
     StemImportEngine importer (em, mixer, bridge);
-    MixApplyEngine applyEngine (em, bridge);
+    MixApplyEngine applyEngine (em, mixer, bridge);
 
     juce::File dir;
     auto& edit = buildSession (em, mixer, bridge, importer, dir);
@@ -171,11 +171,61 @@ TEST_CASE ("MixApplyEngine: full mix applies as built-in FX, one undo reverts", 
     dir.deleteRecursively();
 }
 
+TEST_CASE ("MixApplyEngine: backings/adlibs are routed to their own sub-buses, one undo", "[mixapply]")
+{
+    EditManager em; em.createNewEdit();
+    MixerEngine mixer (em);
+    AICommandBridge bridge (em);
+    StemImportEngine importer (em, mixer, bridge);
+    MixApplyEngine applyEngine (em, mixer, bridge);
+
+    auto dir = makeTempDir();
+    juce::Array<juce::File> files;
+    files.add (writeToneWav (dir, "Lead Vocal.wav", 440.0, 0.30f));
+    files.add (writeToneWav (dir, "Backings L.wav", 480.0, 0.25f));
+    files.add (writeToneWav (dir, "Backings R.wav", 520.0, 0.25f));
+    files.add (writeToneWav (dir, "Adlibz.wav",     600.0, 0.20f));
+
+    importer.applyPlan (SessionPlanner::plan (StemAnalyzer::analyzeFiles (files)));
+    bridge.applyPendingCommands();
+    auto& edit = *em.getEdit();
+
+    const auto plan = MixingEngine::mix (applyEngine.readProfiles());
+    REQUIRE_FALSE (plan.routings.empty());
+
+    applyEngine.applyPlan (plan);
+    bridge.applyPendingCommands();
+
+    auto busByName = [&] (const juce::String& n) -> te::AudioTrack*
+    {
+        for (auto* b : mixer.getBusChannels())
+            if (b->getName() == n) return b;
+        return nullptr;
+    };
+
+    auto* backingsBus = busByName ("Backings");
+    auto* adlibsBus   = busByName ("Adlibs");
+    REQUIRE (backingsBus != nullptr);
+    REQUIRE (adlibsBus   != nullptr);
+
+    // The backing tracks now feed the Backings bus; the adlib feeds the Adlibs bus.
+    CHECK (findTrackByName (edit, "Backings L")->getOutput().getDestinationTrack() == backingsBus);
+    CHECK (findTrackByName (edit, "Adlibz")->getOutput().getDestinationTrack()     == adlibsBus);
+
+    // One undo reverts the whole mix incl. the new sub-buses.
+    em.getUndoManager().undo();
+    CHECK (busByName ("Backings") == nullptr);
+    CHECK (busByName ("Adlibs")   == nullptr);
+
+    dir.deleteRecursively();
+}
+
 TEST_CASE ("MixApplyEngine: empty plan is a no-op", "[mixapply]")
 {
     EditManager em; em.createNewEdit();
+    MixerEngine mixer (em);
     AICommandBridge bridge (em);
-    MixApplyEngine applyEngine (em, bridge);
+    MixApplyEngine applyEngine (em, mixer, bridge);
 
     applyEngine.applyPlan (MixPlan{});
     bridge.applyPendingCommands();

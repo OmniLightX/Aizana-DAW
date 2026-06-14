@@ -162,8 +162,8 @@ namespace
 }
 
 //==============================================================================
-MixApplyEngine::MixApplyEngine (EditManager& em, AICommandBridge& bridge)
-    : editManager (em), commandBridge (bridge)
+MixApplyEngine::MixApplyEngine (EditManager& em, MixerEngine& mixer, AICommandBridge& bridge)
+    : editManager (em), mixerEngine (mixer), commandBridge (bridge)
 {
 }
 
@@ -357,6 +357,51 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
 
             default:
                 break;   // EQ types handled above
+        }
+    }
+
+    // 3) Sub-bus routing (backings / adlibs) — pro vocal bussing. Create each named
+    //    bus once, route its members in, nest it under the existing Vocals bus (else
+    //    master), and glue it gently. All inside the same batch → one undo.
+    auto findBusByName = [&] (const juce::String& name) -> te::AudioTrack*
+    {
+        for (auto* b : mixerEngine.getBusChannels())
+            if (b->getName() == name)
+                return b;
+        return nullptr;
+    };
+
+    std::map<juce::String, std::vector<te::AudioTrack*>> byBus;
+    for (const auto& r : plan.routings)
+        if (auto* tr = findTrack (r.trackId))
+            byBus[r.busName].push_back (tr);
+
+    for (auto& [busName, trks] : byBus)
+    {
+        te::AudioTrack* bus = findBusByName (busName);
+        const bool created = (bus == nullptr);
+        if (created)
+            bus = mixerEngine.createBusChannel (busName);
+        if (bus == nullptr)
+            continue;
+
+        for (auto* tr : trks)
+            mixerEngine.routeTrackToBus (*tr, *bus);
+
+        if (created)
+        {
+            // Nest under the Vocals bus if the session has one (Backings → Vocals → Master).
+            if (auto* vocalsBus = findBusByName ("Vocals"); vocalsBus != nullptr && vocalsBus != bus)
+                mixerEngine.routeTrackToBus (*bus, *vocalsBus);
+
+            // Gentle glue on the sub-bus — the layers move as one.
+            insertBuiltIn (*edit, bus->pluginList, "Cloudes Compressor",
+                           [] (juce::AudioPluginInstance& inst)
+            {
+                setHostParam (inst, "ratio",     2.0f);
+                setHostParam (inst, "threshold", -14.0f);
+                setHostParam (inst, "makeup",    1.0f);
+            });
         }
     }
 }

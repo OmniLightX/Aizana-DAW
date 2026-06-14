@@ -338,6 +338,17 @@ namespace cloudes
                 comp.thresholdDb  = -20.0f;
                 comp.makeupGainDb = 0.0f;
                 plan.add (comp);
+
+                // Pro bussing: backings/harmonies/doubles on a "Backings" sub-bus,
+                // adlibs/shouts on an "Adlibs" sub-bus (each gets bus glue on apply).
+                const bool isAdlibLayer = (t.subRole == "Adlib" || t.subRole == "Shout");
+                MixRouting r;
+                r.trackId   = t.id;
+                r.trackName = t.name;
+                r.busName   = isAdlibLayer ? "Adlibs" : "Backings";
+                r.reason    = isAdlibLayer ? "Adlibs auf eigenen Bus (wie die Profis)"
+                                           : "Backings auf eigenen Bus, zusammen verklebt";
+                plan.route (r);
             }
 
             // --- Role compressors (bass steadiness, drum punch) ---
