@@ -151,6 +151,58 @@ TEST_CASE ("StemAnalyzer: pro vocal sub-roles + L/R side (industry jargon)", "[s
     CHECK (cl ("Double Bass").group == "Bass");
 }
 
+TEST_CASE ("StemAnalyzer: broad pro vocabulary — drum kit, instruments, FX, abbreviations", "[stems]")
+{
+    auto grp = [] (const char* n) { return StemAnalyzer::classify (n).group; };
+
+    // Full drum kit + engineer abbreviations
+    CHECK (grp ("HH Closed")      == "Drums");
+    CHECK (grp ("OHH 03")         == "Drums");
+    CHECK (grp ("Open Hat")       == "Drums");
+    CHECK (grp ("Rimshot")        == "Drums");
+    CHECK (grp ("Splash 1")       == "Drums");
+    CHECK (grp ("China")          == "Drums");
+    CHECK (grp ("Floor Tom")      == "Drums");
+    CHECK (grp ("Cowbell")        == "Drums");
+    CHECK (grp ("Conga Loop")     == "Drums");
+    CHECK (grp ("Snaps")          == "Drums");
+    CHECK (grp ("Cajon")          == "Drums");
+    CHECK (grp ("Tambourine")     == "Drums");
+    CHECK (grp ("Kik 02")         == "Drums");
+    CHECK (grp ("Snr Top")        == "Drums");
+
+    // Instruments (orchestral / world / mallets)
+    CHECK (grp ("Trombone")       == "Instruments");
+    CHECK (grp ("Clarinet")       == "Instruments");
+    CHECK (grp ("Vibraphone")     == "Instruments");
+    CHECK (grp ("Marimba")        == "Instruments");
+    CHECK (grp ("Harmonica")      == "Instruments");
+    CHECK (grp ("Sitar")          == "Instruments");
+
+    // Keys / synth family
+    CHECK (grp ("Wurli")          == "Keys");
+    CHECK (grp ("Hammond Organ")  == "Keys");
+    CHECK (grp ("Clavinet")       == "Keys");
+    CHECK (grp ("Supersaw Lead")  == "Synths");
+    CHECK (grp ("Synth Stab")     == "Synths");
+
+    // Guitar family
+    CHECK (grp ("Banjo")          == "Guitars");
+    CHECK (grp ("Ukulele")        == "Guitars");
+    CHECK (grp ("Nylon")          == "Guitars");
+
+    // Bass conventions
+    CHECK (grp ("Sub Bass")       == "Bass");
+    CHECK (grp ("Reese")          == "Bass");
+
+    // FX / transitions / producer tag (no longer falling through to Other)
+    CHECK (grp ("SFX Hit")        == "FX");
+    CHECK (grp ("Uplifter")       == "FX");
+    CHECK (grp ("Whoosh")         == "FX");
+    CHECK (grp ("Reverse Crash")  == "Drums");   // "crash" wins — it IS a drum hit
+    CHECK (grp ("Producer Tag")   == "FX");
+}
+
 TEST_CASE ("StemAnalyzer Tier 2: audio fallback separates drums / bass / other", "[stems]")
 {
     juce::String instr, group;
