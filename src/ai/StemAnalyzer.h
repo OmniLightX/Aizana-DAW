@@ -22,16 +22,33 @@
  * THREAD: analyzeFile/analyzeFiles do file I/O + FFT — call from a background
  * thread (AIEngine pool), NEVER the audio thread. Results are plain values.
  */
+/** Stereo placement parsed from a stem name ("Doubles L", "Gtr R", "Backings Rechts"). */
+enum class StemSide { None, Left, Right };
+
 struct StemInfo
 {
     juce::File   file;
     juce::String instrument;       // display label → track name ("Kick", "Vocals", …)
     juce::String group;            // mixer group → named bus ("Drums", "Bass", "Guitars",
                                    //                          "Vocals", "Keys", "FX", "Other")
+    juce::String subRole;          // pro-jargon sub-role within the group: "Lead", "Backing",
+                                   // "Double", "Adlib", "Shout", "Harmony", "Choir" … ("" = none)
+    StemSide     side = StemSide::None;   // L/R parsed from the name (stereo pairs / hard pans)
     double       confidence  = 0.0;   // 0..1
     bool         fromFilename = false;
     double       peakDb = -120.0;     // for gain staging (AI-03)
     double       rmsDb  = -120.0;
+};
+
+/** Rich result of the filename tier — instrument/group plus pro sub-role and L/R side. */
+struct StemClassification
+{
+    bool         matched = false;
+    juce::String instrument;
+    juce::String group;
+    juce::String subRole;
+    StemSide     side = StemSide::None;
+    double       confidence = 0.0;
 };
 
 class StemAnalyzer
@@ -43,7 +60,11 @@ public:
     /** Convenience: analyse a set of files (e.g. one drag-drop batch). */
     static juce::Array<StemInfo> analyzeFiles (const juce::Array<juce::File>& files);
 
-    /** Tier 1 only — exposed for tests. Returns false if no keyword matched. */
+    /** Tier 1, rich: instrument + group + pro sub-role + L/R side. Returns matched=false
+        if nothing recognised. The single source of truth for filename classification. */
+    static StemClassification classify (const juce::String& fileNameWithoutExtension);
+
+    /** Tier 1 (legacy 4-arg) — delegates to classify(). Returns false if no match. */
     static bool classifyFromName (const juce::String& fileNameWithoutExtension,
                                   juce::String& instrumentOut,
                                   juce::String& groupOut,

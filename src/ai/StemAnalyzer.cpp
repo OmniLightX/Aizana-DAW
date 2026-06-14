@@ -60,11 +60,24 @@ namespace
         { "gesang",    "Vocals",    "Vocals",  0.95, true  },
         { "stimme",    "Vocals",    "Vocals",  0.90, true  },
         { "bgv",       "BGVs",      "Vocals",  0.90, false },
-        { "backing",   "BGVs",      "Vocals",  0.80, true  },
-        { "adlib",     "Adlibs",    "Vocals",  0.90, true  },
+        { "bvox",      "BGVs",      "Vocals",  0.85, false },
+        { "backing",   "BGVs",      "Vocals",  0.80, true  },   // backing/backings (substr)
+        { "harmony",   "Harmony",   "Vocals",  0.88, true  },   // harmony/harmonies (substr)
+        { "harm",      "Harmony",   "Vocals",  0.65, false },
+        { "double",    "Doubles",   "Vocals",  0.78, true  },   // doubles (substr); "double bass" → bass 0.95 wins
+        { "dbl",       "Doubles",   "Vocals",  0.80, false },
+        { "adlib",     "Adlibs",    "Vocals",  0.90, true  },   // adlib/adlibs/adlibz (substr)
+        { "shout",     "Shouts",    "Vocals",  0.85, true  },   // shout/shoutout/shoutoutz (substr)
+        { "shoutout",  "Shouts",    "Vocals",  0.90, true  },
+        { "shotz",     "Shouts",    "Vocals",  0.80, false },
+        { "chant",     "Chants",    "Vocals",  0.80, true  },
+        { "gang",      "Gang",      "Vocals",  0.65, false },
+        { "hook",      "Hook",      "Vocals",  0.70, false },
         { "choir",     "Choir",     "Vocals",  0.90, true  },
         { "chor",      "Choir",     "Vocals",  0.85, false },
         { "rap",       "Vocals",    "Vocals",  0.80, false },
+        { "lvox",      "Lead",      "Vocals",  0.90, false },
+        { "leadvox",   "Lead",      "Vocals",  0.92, true  },
         // "lead" alone is ambiguous (lead vox vs lead synth) — low confidence
         { "lead",      "Lead",      "Vocals",  0.50, false },
 
@@ -148,14 +161,43 @@ namespace
         }
         return out;
     }
+
+    // L/R side from the name: standalone token "l"/"r" or a left/right word (DE/EN).
+    StemSide detectSide (const juce::StringArray& tokens)
+    {
+        for (const auto& t : tokens)
+        {
+            if (t == "l" || t == "left"  || t == "links")  return StemSide::Left;
+            if (t == "r" || t == "right" || t == "rechts") return StemSide::Right;
+        }
+        return StemSide::None;
+    }
+
+    // Pro vocal sub-role from the name (only meaningful once the group is "Vocals").
+    // Order = specificity: a "Lead Double" is a Double, an "Adlib" is an Adlib.
+    juce::String detectVocalSubRole (const juce::StringArray& tokens, const juce::String& lower)
+    {
+        auto has = [&] (const char* k) { return tokens.contains (k) || lower.contains (k); };
+
+        if (has ("double") || tokens.contains ("dbl") || has ("dub"))      return "Double";
+        if (has ("adlib"))                                                  return "Adlib";
+        if (has ("shout") || tokens.contains ("shotz") || has ("yell"))     return "Shout";
+        if (has ("harmon") || tokens.contains ("harm"))                     return "Harmony";
+        if (has ("choir") || tokens.contains ("chor") || has ("chant")
+            || has ("gang"))                                                return "Choir";
+        if (has ("backing") || tokens.contains ("bgv") || tokens.contains ("bvox")
+            || has ("bgvox"))                                               return "Backing";
+        if (has ("hook"))                                                    return "Hook";
+        if (has ("lead") || tokens.contains ("lvox") || has ("leadvox"))    return "Lead";
+        return {};
+    }
 }
 
 //==============================================================================
-bool StemAnalyzer::classifyFromName (const juce::String& name,
-                                     juce::String& instrumentOut,
-                                     juce::String& groupOut,
-                                     double& confidenceOut)
+StemClassification StemAnalyzer::classify (const juce::String& name)
 {
+    StemClassification out;
+
     const auto tokens = tokenise (name);
     const auto lower  = name.toLowerCase();
 
@@ -181,12 +223,40 @@ bool StemAnalyzer::classifyFromName (const juce::String& name,
             best = &kw;
     }
 
+    // L/R side is independent of the instrument and applies to anything.
+    out.side = detectSide (tokens);
+
     if (best == nullptr)
+        return out;   // matched stays false; side may still be set (rare)
+
+    out.matched    = true;
+    out.instrument = best->instrument;
+    out.group      = best->group;
+    out.confidence = best->confidence;
+
+    // Sub-role refines the mix WITHIN the Vocals group (pro jargon).
+    if (out.group == "Vocals")
+    {
+        out.subRole = detectVocalSubRole (tokens, lower);
+        if (out.subRole.isEmpty())
+            out.subRole = "Lead";   // a plain "Vocals"/"Vox" stem is the lead by default
+    }
+
+    return out;
+}
+
+bool StemAnalyzer::classifyFromName (const juce::String& name,
+                                     juce::String& instrumentOut,
+                                     juce::String& groupOut,
+                                     double& confidenceOut)
+{
+    const auto c = classify (name);
+    if (! c.matched)
         return false;
 
-    instrumentOut = best->instrument;
-    groupOut      = best->group;
-    confidenceOut = best->confidence;
+    instrumentOut = c.instrument;
+    groupOut      = c.group;
+    confidenceOut = c.confidence;
     return true;
 }
 
@@ -306,15 +376,16 @@ StemInfo StemAnalyzer::analyzeFile (const juce::File& file)
     info.instrument = file.getFileNameWithoutExtension();
     info.group      = "Other";
 
-    // Tier 1 — filename
-    juce::String instr, group;
-    double conf = 0.0;
-    const bool named = classifyFromName (file.getFileNameWithoutExtension(), instr, group, conf);
+    // Tier 1 — filename (instrument + group + pro sub-role + L/R side)
+    const auto c = classify (file.getFileNameWithoutExtension());
+    const bool named = c.matched;
+    info.side = c.side;   // side is parsed even when the instrument is unknown
     if (named)
     {
-        info.instrument   = instr;
-        info.group        = group;
-        info.confidence   = conf;
+        info.instrument   = c.instrument;
+        info.group        = c.group;
+        info.subRole      = c.subRole;
+        info.confidence   = c.confidence;
         info.fromFilename = true;
     }
 

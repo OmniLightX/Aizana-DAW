@@ -114,6 +114,43 @@ TEST_CASE ("StemAnalyzer Tier 1: token matching avoids false positives", "[stems
     CHECK_FALSE (StemAnalyzer::classifyFromName ("final_v3_MASTER", instr, group, conf));
 }
 
+TEST_CASE ("StemAnalyzer: pro vocal sub-roles + L/R side (industry jargon)", "[stems]")
+{
+    auto cl = [] (const char* n) { return StemAnalyzer::classify (n); };
+
+    // Vocal sub-roles
+    CHECK (cl ("Lead Vox").subRole       == "Lead");
+    CHECK (cl ("Backings L").subRole     == "Backing");
+    CHECK (cl ("BGV R").subRole          == "Backing");
+    CHECK (cl ("Doubles L").subRole      == "Double");
+    CHECK (cl ("Vox Dbl").subRole        == "Double");
+    CHECK (cl ("Adlibz").subRole         == "Adlib");
+    CHECK (cl ("Shoutoutz R").subRole    == "Shout");
+    CHECK (cl ("Harmony L").subRole      == "Harmony");
+    CHECK (cl ("Choir").subRole          == "Choir");
+    CHECK (cl ("Vocals").subRole         == "Lead");   // plain vocal = lead by default
+
+    // All the above are still in the Vocals group
+    CHECK (cl ("Doubles L").group        == "Vocals");
+    CHECK (cl ("Shoutoutz R").group      == "Vocals");
+
+    // L/R side parsing (vocals AND instruments), DE + EN
+    CHECK (cl ("Backings L").side        == StemSide::Left);
+    CHECK (cl ("Doubles R").side         == StemSide::Right);
+    CHECK (cl ("Gtr Rechts").side        == StemSide::Right);
+    CHECK (cl ("Synth Left").side        == StemSide::Left);
+    CHECK (cl ("Lead Vox").side          == StemSide::None);
+
+    // Instruments get a side but no vocal sub-role
+    auto g = cl ("Gtr R");
+    CHECK (g.group   == "Guitars");
+    CHECK (g.side    == StemSide::Right);
+    CHECK (g.subRole.isEmpty());
+
+    // "double bass" is a bass, NOT a vocal double (instrument keyword wins on confidence)
+    CHECK (cl ("Double Bass").group == "Bass");
+}
+
 TEST_CASE ("StemAnalyzer Tier 2: audio fallback separates drums / bass / other", "[stems]")
 {
     juce::String instr, group;
