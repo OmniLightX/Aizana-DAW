@@ -55,6 +55,7 @@ target_sources(engine_tests PRIVATE
     test_compressor_dsp.cpp
     test_reverb_dsp.cpp
     test_limiter_dsp.cpp
+    test_deesser_dsp.cpp
     # Metering tests (EXP-03) — require JUCE + libebur128
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
@@ -97,6 +98,7 @@ target_sources(engine_tests PRIVATE
     ../src/fx/CompressorProcessor.cpp
     ../src/fx/ReverbProcessor.cpp
     ../src/fx/LimiterProcessor.cpp
+    ../src/fx/DeEsserProcessor.cpp
     # Metering + Export implementations (plan 01-07)
     ../src/metering/MeterProcessor.cpp
     ../src/engine/ExportPipeline.cpp

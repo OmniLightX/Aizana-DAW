@@ -3,6 +3,7 @@
 #include "fx/CompressorProcessor.h"
 #include "fx/ReverbProcessor.h"
 #include "fx/LimiterProcessor.h"
+#include "fx/DeEsserProcessor.h"
 
 // ---------------------------------------------------------------------------
 // Static description helpers
@@ -36,6 +37,7 @@ void BuiltInPluginFormat::getBuiltInDescriptions (juce::OwnedArray<juce::PluginD
     results.add (new juce::PluginDescription (makeDesc ("Cloudes Compressor", "Dynamics", "cloudes.compressor")));
     results.add (new juce::PluginDescription (makeDesc ("Cloudes Reverb",     "Reverb",   "cloudes.reverb")));
     results.add (new juce::PluginDescription (makeDesc ("Cloudes Limiter",    "Dynamics", "cloudes.limiter")));
+    results.add (new juce::PluginDescription (makeDesc ("Cloudes De-Esser",   "Dynamics", "cloudes.deesser")));
 }
 
 juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::String& fxName)
@@ -44,6 +46,7 @@ juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::Stri
     if (fxName == "Cloudes Compressor") return makeDesc ("Cloudes Compressor", "Dynamics", "cloudes.compressor");
     if (fxName == "Cloudes Reverb")     return makeDesc ("Cloudes Reverb",     "Reverb",   "cloudes.reverb");
     if (fxName == "Cloudes Limiter")    return makeDesc ("Cloudes Limiter",    "Dynamics", "cloudes.limiter");
+    if (fxName == "Cloudes De-Esser")   return makeDesc ("Cloudes De-Esser",   "Dynamics", "cloudes.deesser");
 
     jassertfalse;  // Unknown built-in FX name
     return {};
@@ -64,6 +67,8 @@ void BuiltInPluginFormat::findAllTypesForFile (juce::OwnedArray<juce::PluginDesc
         results.add (new juce::PluginDescription (makeDesc ("Cloudes Reverb", "Reverb", "cloudes.reverb")));
     else if (fileOrIdentifier == "cloudes.limiter")
         results.add (new juce::PluginDescription (makeDesc ("Cloudes Limiter", "Dynamics", "cloudes.limiter")));
+    else if (fileOrIdentifier == "cloudes.deesser")
+        results.add (new juce::PluginDescription (makeDesc ("Cloudes De-Esser", "Dynamics", "cloudes.deesser")));
 }
 
 bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fileOrIdentifier)
@@ -73,7 +78,7 @@ bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fi
 
 juce::StringArray BuiltInPluginFormat::searchPathsForPlugins (const juce::FileSearchPath&, bool, bool)
 {
-    return { "cloudes.eq", "cloudes.compressor", "cloudes.reverb", "cloudes.limiter" };
+    return { "cloudes.eq", "cloudes.compressor", "cloudes.reverb", "cloudes.limiter", "cloudes.deesser" };
 }
 
 void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& desc,
@@ -91,6 +96,8 @@ void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& d
         instance = std::make_unique<ReverbProcessor>();
     else if (desc.fileOrIdentifier == "cloudes.limiter")
         instance = std::make_unique<LimiterProcessor>();
+    else if (desc.fileOrIdentifier == "cloudes.deesser")
+        instance = std::make_unique<DeEsserProcessor>();
 
     if (instance != nullptr)
     {
