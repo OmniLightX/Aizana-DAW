@@ -177,6 +177,33 @@ TEST_CASE ("MixingEngine: vocal sub-roles — doubles hard-pan, supports tuck un
     CHECK (bgGain->gainDb < 0.0f);
 }
 
+TEST_CASE ("MixingEngine: drum elements are mixed individually (kick != hihat != snare)", "[mixing]")
+{
+    auto kick  = track ("Kick",  "Drums", -18.0); kick.instrument  = "Kick";
+    auto snare = track ("Snare", "Drums", -18.0); snare.instrument = "Snare";
+    auto hat   = track ("HiHat", "Drums", -22.0); hat.instrument   = "HiHat";
+
+    std::vector<TrackMixProfile> tracks { kick, snare, hat };
+    const auto plan = MixingEngine::mix (tracks);
+
+    // Kick: NO high-pass (keep the bottom), but a low-shelf for weight + a comp.
+    CHECK_FALSE (has (plan, MixActionType::HighPassFilter, "Kick"));
+    CHECK       (has (plan, MixActionType::LowShelf,       "Kick"));
+    CHECK       (has (plan, MixActionType::Compress,       "Kick"));
+
+    // HiHat: high-passed HARD (~400 Hz) and NOT compressed.
+    const auto* hp = find (plan, MixActionType::HighPassFilter, "HiHat");
+    REQUIRE (hp != nullptr);
+    CHECK (hp->freqHz > 300.0f);
+    CHECK_FALSE (has (plan, MixActionType::Compress, "HiHat"));
+
+    // Snare: gentle high-pass (~90 Hz, far below the hat) + body boost + comp.
+    const auto* snHp = find (plan, MixActionType::HighPassFilter, "Snare");
+    REQUIRE (snHp != nullptr);
+    CHECK (snHp->freqHz < 150.0f);
+    CHECK (has (plan, MixActionType::Compress, "Snare"));
+}
+
 TEST_CASE ("MixingEngine: master glue is opt-out", "[mixing]")
 {
     std::vector<TrackMixProfile> tracks { track ("Drums", "Drums", -18.0) };

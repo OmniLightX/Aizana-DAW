@@ -211,9 +211,10 @@ std::vector<TrackMixProfile> MixApplyEngine::profilesFromScan (const std::vector
         p.currentPan = s.currentPan;
 
         const auto c = StemAnalyzer::classify (s.name);   // instrument + group + sub-role + L/R side
-        p.group   = c.matched ? c.group : juce::String ("Other");
-        p.subRole = c.subRole;
-        p.side    = c.side;
+        p.group      = c.matched ? c.group : juce::String ("Other");
+        p.instrument = c.instrument;
+        p.subRole    = c.subRole;
+        p.side       = c.side;
 
         const auto lv = fileLevels (s.source);   // file I/O — caller runs us off the message thread
         p.rmsDb  = lv.rmsDb;

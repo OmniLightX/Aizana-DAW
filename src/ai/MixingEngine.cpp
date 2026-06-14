@@ -94,6 +94,97 @@ namespace cloudes
         {
             return s == StemSide::Left ? -amount : (s == StemSide::Right ? amount : 0.0f);
         }
+
+        //----------------------------------------------------------------------
+        // Drum-element-specific mixing (the kit is not one thing — Grammy practice).
+        enum class DrumElement { Kick, Snare, HiHat, CymbalOH, Tom, Clap, Perc, Generic };
+
+        DrumElement drumElementFor (const juce::String& instrument)
+        {
+            const auto n = instrument.toLowerCase();
+            if (n.contains ("kick"))                                         return DrumElement::Kick;
+            if (n.contains ("snare") || n.contains ("rim") || n.contains ("stick"))
+                                                                            return DrumElement::Snare;
+            if (n.contains ("hat") || n.contains ("hihat") || n == "hh")     return DrumElement::HiHat;
+            if (n.contains ("crash") || n.contains ("ride") || n.contains ("splash")
+                || n.contains ("china") || n.contains ("cymbal") || n.contains ("overhead"))
+                                                                            return DrumElement::CymbalOH;
+            if (n.contains ("tom"))                                          return DrumElement::Tom;
+            if (n.contains ("clap") || n.contains ("snap"))                  return DrumElement::Clap;
+            if (n.contains ("perc")  || n.contains ("conga") || n.contains ("bongo")
+                || n.contains ("timbale") || n.contains ("cowbell") || n.contains ("shaker")
+                || n.contains ("tamb") || n.contains ("clave") || n.contains ("triangle")
+                || n.contains ("djembe") || n.contains ("cajon") || n.contains ("woodblock")
+                || n.contains ("cabasa") || n.contains ("tabla"))           return DrumElement::Perc;
+            return DrumElement::Generic;
+        }
+
+        // Appends the element's HPF + EQ + compression to the plan (Grammy-informed).
+        void addDrumElementMoves (MixPlan& plan, const TrackMixProfile& t)
+        {
+            auto eq = [&] (MixActionType type, float hz, float gain, float q, juce::String why)
+            {
+                auto a = make (type, t, std::move (why));
+                a.freqHz = hz; a.gainDb = gain; a.q = q;
+                plan.add (a);
+            };
+            auto hpf = [&] (float hz, juce::String why)
+            {
+                auto a = make (MixActionType::HighPassFilter, t, std::move (why));
+                a.freqHz = hz;
+                plan.add (a);
+            };
+            auto comp = [&] (float ratio, float thr, float makeup, juce::String why)
+            {
+                auto a = make (MixActionType::Compress, t, std::move (why));
+                a.ratio = ratio; a.thresholdDb = thr; a.makeupGainDb = makeup;
+                plan.add (a);
+            };
+
+            switch (drumElementFor (t.instrument))
+            {
+                case DrumElement::Kick:
+                    // Heartbeat: keep the bottom, clean the box, add beater click.
+                    eq (MixActionType::LowShelf,  60.0f,  2.0f, 0.7f, "Mehr Wucht im Kick-Fundament");
+                    eq (MixActionType::CarveBand, 350.0f, -2.5f, 1.0f, "Nimmt das Pappige aus dem Kick");
+                    eq (MixActionType::BoostBand, 4000.0f, 2.0f, 1.0f, "Beater-Click, damit der Kick durchkommt");
+                    comp (4.0f, -14.0f, 1.0f, "Kick bleibt konstant und punchy");
+                    break;
+                case DrumElement::Snare:
+                    hpf (90.0f, "Tiefen-Rumpeln raus");
+                    eq (MixActionType::BoostBand, 200.0f, 2.0f, 1.0f, "Body in die Snare");
+                    eq (MixActionType::HighShelf, 6000.0f, 2.0f, 0.7f, "Crispness oben drauf");
+                    comp (4.0f, -16.0f, 2.0f, "Snare poppt und sitzt");
+                    break;
+                case DrumElement::HiHat:
+                    // High-passed hard — the hat adds crispness, not low end. No comp.
+                    hpf (400.0f, "HiHat hoch beschnitten — nur Glanz, kein Tiefton");
+                    eq (MixActionType::HighShelf, 9000.0f, 1.5f, 0.7f, "Mehr Crispness in der HiHat");
+                    break;
+                case DrumElement::CymbalOH:
+                    hpf (350.0f, "Bleed/Tiefton raus, Becken bleiben luftig");
+                    eq (MixActionType::HighShelf, 10000.0f, 1.0f, 0.7f, "Luft in den Becken");
+                    break;
+                case DrumElement::Tom:
+                    hpf (80.0f, "Sub-Rumpeln raus");
+                    eq (MixActionType::CarveBand, 400.0f, -2.0f, 1.0f, "Mulm aus den Toms");
+                    eq (MixActionType::BoostBand, 5000.0f, 2.0f, 1.0f, "Attack der Toms");
+                    comp (3.0f, -16.0f, 1.0f, "Toms gleichmäßiger");
+                    break;
+                case DrumElement::Clap:
+                    hpf (150.0f, "Tiefen raus");
+                    eq (MixActionType::BoostBand, 4000.0f, 2.0f, 1.0f, "Snap nach vorn");
+                    comp (3.0f, -16.0f, 1.0f, "Claps konstant");
+                    break;
+                case DrumElement::Perc:
+                    hpf (150.0f, "Tiefen raus, Percussion bleibt sauber");
+                    comp (2.5f, -16.0f, 0.5f, "Percussion gleichmäßig");
+                    break;
+                case DrumElement::Generic:
+                    comp (4.0f, -12.0f, 2.0f, "Drums bekommen Punch und Druck");
+                    break;
+            }
+        }
     }
 
     //==========================================================================
@@ -260,11 +351,8 @@ namespace cloudes
             }
             else if (role == Role::Drums)
             {
-                auto a = make (MixActionType::Compress, t, "Drums bekommen Punch und Druck");
-                a.ratio        = 4.0f;
-                a.thresholdDb  = -12.0f;
-                a.makeupGainDb = 2.0f;
-                plan.add (a);
+                // Element-specific: kick ≠ hihat ≠ snare ≠ cymbal (HPF + EQ + comp).
+                addDrumElementMoves (plan, t);
             }
         }
 

@@ -28,6 +28,7 @@ namespace cloudes
         tracktion::engine::EditItemID id;     // stable track id (bridge target)
         juce::String name;                    // track / human label
         juce::String group;                   // role bucket (StemAnalyzer groups)
+        juce::String instrument;              // specific element ("Kick", "HiHat", "Snare", …)
         juce::String subRole;                 // pro sub-role within the group ("Backing", "Double", …)
         StemSide side = StemSide::None;        // L/R from the name (hard pan / stereo pair)
         double rmsDb      = -120.0;           // measured, for gain staging
