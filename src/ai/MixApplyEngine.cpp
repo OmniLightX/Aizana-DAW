@@ -210,11 +210,10 @@ std::vector<TrackMixProfile> MixApplyEngine::profilesFromScan (const std::vector
         p.name       = s.name;
         p.currentPan = s.currentPan;
 
-        juce::String instrument, group;
-        double confidence = 0.0;
-        if (! StemAnalyzer::classifyFromName (s.name, instrument, group, confidence))
-            group = "Other";
-        p.group = group;
+        const auto c = StemAnalyzer::classify (s.name);   // instrument + group + sub-role + L/R side
+        p.group   = c.matched ? c.group : juce::String ("Other");
+        p.subRole = c.subRole;
+        p.side    = c.side;
 
         const auto lv = fileLevels (s.source);   // file I/O — caller runs us off the message thread
         p.rmsDb  = lv.rmsDb;
@@ -223,21 +222,25 @@ std::vector<TrackMixProfile> MixApplyEngine::profilesFromScan (const std::vector
         out.push_back (p);
     }
 
-    // Lead vocal: a Vocals-group track named "lead"/"main" wins; else the first vocal.
-    int lead = -1;
+    // Exactly ONE lead vocal: prefer a "Lead" sub-role (named lead/main if several),
+    // else the first vocal. Every other vocal stays a supporting layer (the MixingEngine
+    // tucks backings/doubles/adlibs under it using subRole + side).
+    int lead = -1, firstVocal = -1;
     for (size_t i = 0; i < out.size(); ++i)
     {
         if (out[i].group != "Vocals")
             continue;
-        if (lead < 0)
-            lead = (int) i;
-        const auto n = out[i].name.toLowerCase();
-        if (n.contains ("lead") || n.contains ("main"))
+        if (firstVocal < 0)
+            firstVocal = (int) i;
+        if (out[i].subRole == "Lead")
         {
-            lead = (int) i;
-            break;
+            const auto n = out[i].name.toLowerCase();
+            if (lead < 0 || n.contains ("lead") || n.contains ("main"))
+                lead = (int) i;
         }
     }
+    if (lead < 0)
+        lead = firstVocal;
     if (lead >= 0)
         out[(size_t) lead].isLeadVocal = true;
 

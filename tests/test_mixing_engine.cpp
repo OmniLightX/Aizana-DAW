@@ -145,6 +145,38 @@ TEST_CASE ("MixingEngine: anchors centre, others spread", "[mixing]")
     REQUIRE ((a->pan < 0.0f) != (b->pan < 0.0f));   // opposite sides
 }
 
+TEST_CASE ("MixingEngine: vocal sub-roles — doubles hard-pan, supports tuck under lead", "[mixing]")
+{
+    auto lead = track ("Lead Vox", "Vocals", -20.0, /*lead*/ true);
+    lead.subRole = "Lead";
+    auto dl = track ("Doubles L", "Vocals", -18.0); dl.subRole = "Double"; dl.side = StemSide::Left;
+    auto dr = track ("Doubles R", "Vocals", -18.0); dr.subRole = "Double"; dr.side = StemSide::Right;
+    auto bg = track ("Backings",  "Vocals", -18.0); bg.subRole = "Backing";
+
+    std::vector<TrackMixProfile> tracks { lead, dl, dr, bg };
+    const auto plan = MixingEngine::mix (tracks);
+
+    // Doubles get hard-panned to their named sides.
+    const auto* pl = find (plan, MixActionType::SetTrackPan, "Doubles L");
+    const auto* pr = find (plan, MixActionType::SetTrackPan, "Doubles R");
+    REQUIRE (pl != nullptr); CHECK (pl->pan < -0.7f);
+    REQUIRE (pr != nullptr); CHECK (pr->pan >  0.7f);
+
+    // Every vocal layer gets de-essed — not just the lead.
+    CHECK (has (plan, MixActionType::DeEss, "Lead Vox"));
+    CHECK (has (plan, MixActionType::DeEss, "Doubles L"));
+    CHECK (has (plan, MixActionType::DeEss, "Backings"));
+
+    // Presence/air stay exclusive to the lead (supports don't fight it up top).
+    CHECK      (has (plan, MixActionType::HighShelf, "Lead Vox"));
+    CHECK_FALSE (has (plan, MixActionType::HighShelf, "Backings"));
+
+    // The backing is pulled down under the lead (a negative gain move).
+    const auto* bgGain = find (plan, MixActionType::SetTrackGain, "Backings");
+    REQUIRE (bgGain != nullptr);
+    CHECK (bgGain->gainDb < 0.0f);
+}
+
 TEST_CASE ("MixingEngine: master glue is opt-out", "[mixing]")
 {
     std::vector<TrackMixProfile> tracks { track ("Drums", "Drums", -18.0) };

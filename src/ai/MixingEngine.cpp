@@ -71,6 +71,29 @@ namespace cloudes
         {
             return r == Role::Bass || r == Role::Drums || t.isLeadVocal;
         }
+
+        // How far under the lead a supporting vocal sits (dB, negative).
+        double vocalSupportOffsetDb (const juce::String& subRole)
+        {
+            if (subRole == "Choir")    return -5.0;
+            if (subRole == "Backing")  return -4.0;
+            if (subRole == "Harmony")  return -4.0;
+            if (subRole == "Adlib")    return -3.0;
+            if (subRole == "Double")   return -2.0;   // doubles sit close, just spread
+            if (subRole == "Shout")    return -1.0;   // shouts are meant to cut through
+            return -3.0;                              // any other non-lead vocal
+        }
+
+        // Hard for doubles (tight stereo widening), moderate for the rest.
+        float sidePanAmount (const juce::String& subRole)
+        {
+            return subRole == "Double" ? 0.85f : 0.55f;
+        }
+
+        float sideToPan (StemSide s, float amount)
+        {
+            return s == StemSide::Left ? -amount : (s == StemSide::Right ? amount : 0.0f);
+        }
     }
 
     //==========================================================================
@@ -114,6 +137,8 @@ namespace cloudes
                 double target = (role == Role::Vocals || t.isLeadVocal)
                                   ? nudged (kVocalRmsDb, vocalRef, 0.5, kVocalRmsDb, -13.0)
                                   : kDefaultRmsDb;
+                if (role == Role::Vocals && ! t.isLeadVocal)
+                    target += vocalSupportOffsetDb (t.subRole);   // backings/doubles sit under the lead
                 if (role == Role::Bass)
                     target = nudged (kDefaultRmsDb, lowRef, 0.4, -20.0, -16.0);
 
@@ -204,6 +229,25 @@ namespace cloudes
                 peak.makeupGainDb = 2.0f;
                 plan.add (peak);
             }
+            // --- Supporting vocals (backings / doubles / adlibs / shouts / harmonies) ---
+            else if (role == Role::Vocals)
+            {
+                // Sibilance lives on every vocal layer, not just the lead.
+                auto deess = make (MixActionType::DeEss, t,
+                                   "Z\xC3\xA4hmt scharfe S-Laute der " + t.subRole + "-Stimme");
+                deess.freqHz      = kDeEssHz;
+                deess.thresholdDb = kDeEssThreshDb;
+                deess.ratio       = kDeEssRatio;
+                plan.add (deess);
+
+                // One gentle leveller — keep the layer steady and tucked under the lead.
+                auto comp = make (MixActionType::Compress, t,
+                                  "H\xC3\xA4lt die St\xC3\xBctzstimme gleichm\xC3\xA4\xC3\x9Fig unter dem Lead");
+                comp.ratio        = 3.0f;
+                comp.thresholdDb  = -20.0f;
+                comp.makeupGainDb = 0.0f;
+                plan.add (comp);
+            }
 
             // --- Role compressors (bass steadiness, drum punch) ---
             if (role == Role::Bass)
@@ -239,6 +283,21 @@ namespace cloudes
                     auto a = make (MixActionType::SetTrackPan, t,
                                    "In die Mitte — trägt den Mix");
                     a.pan = 0.0f;
+                    plan.add (a);
+                }
+                continue;
+            }
+
+            // Explicit L/R in the name (Doubles L, Gtr R, Backings Rechts) → hard placement.
+            if (t.side != StemSide::None && width > 0.0f)
+            {
+                const float target = sideToPan (t.side, sidePanAmount (t.subRole));
+                if (std::abs (target - t.currentPan) > 0.05f)
+                {
+                    auto a = make (MixActionType::SetTrackPan, t,
+                                   juce::String (t.side == StemSide::Left ? "Nach links" : "Nach rechts")
+                                       + " gepannt (Stereo-Paar)");
+                    a.pan = target;
                     plan.add (a);
                 }
                 continue;
