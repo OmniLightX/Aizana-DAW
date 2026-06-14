@@ -33,6 +33,10 @@ public:
      *  can change the state without going through the buttons). */
     std::function<bool()> isMixerShown;
 
+    /** KI-Mix co-pilot trigger — wired by MainComponent to startMix()
+     *  (Beginner = instant, Pro = preview dialog). */
+    std::function<void()> onMixRequested;
+
 private:
     void showSampleRateMenu();
     ApplicationState& appState;
@@ -77,6 +81,9 @@ private:
     /** Edit/Mix segmented pair — see onSelectViewMode. */
     juce::TextButton editViewButton { "Edit" };
     juce::TextButton mixViewButton  { "Mix" };
+
+    /** KI-Mix co-pilot — heuristic mix in one click (see onMixRequested). */
+    juce::TextButton kiMixButton { juce::String::fromUTF8 ("KI-Mix") };
 
     // Tap tempo state — last 4 tap timestamps (juce::Time::getMillisecondCounterHiRes)
     juce::Array<double> tapTimes;

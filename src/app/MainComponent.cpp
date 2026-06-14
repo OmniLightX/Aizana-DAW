@@ -87,6 +87,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Edit/Mix view switcher in the TransportBar (Studio One pattern)
     transportBar.onSelectViewMode = [this] (bool mixFocus) { setViewFocus (mixFocus); };
     transportBar.isMixerShown     = [this] { return mixerVisible; };
+    transportBar.onMixRequested   = [this] { startMix(); };
 
     // Inspector (left dock) — pulls the arrangement selection via providers
     inspectorPanel.trackProvider = [this] { return arrangementView.getSelectedTrack(); };

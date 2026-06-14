@@ -166,6 +166,13 @@ TransportBar::TransportBar (ApplicationState& appState_)
     editViewButton.onClick = [this] { if (onSelectViewMode) onSelectViewMode (false); };
     mixViewButton.onClick  = [this] { if (onSelectViewMode) onSelectViewMode (true); };
 
+    // KI-Mix co-pilot — accent button (teal = "AI acts"); distinct from the Mix view toggle.
+    kiMixButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff1fa882));
+    kiMixButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    kiMixButton.setTooltip (juce::String::fromUTF8 (
+        "KI-Mix — automatischer Mix-Vorschlag (Einsteiger: sofort · Pro: Vorschau)"));
+    kiMixButton.onClick = [this] { if (onMixRequested) onMixRequested(); };
+
     addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
@@ -177,6 +184,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (autoPunchButton);
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
+    addAndMakeVisible (kiMixButton);
     addAndMakeVisible (editViewButton);
     addAndMakeVisible (mixViewButton);
     addAndMakeVisible (positionLabel);
@@ -224,6 +232,8 @@ void TransportBar::resized()
     modeButton.setBounds   (area.removeFromRight (104).withHeight (buttonH));
     area.removeFromRight (4);
     assistButton.setBounds (area.removeFromRight (62).withHeight (buttonH));
+    area.removeFromRight (10);
+    kiMixButton.setBounds  (area.removeFromRight (66).withHeight (buttonH));
     area.removeFromRight (10);
     mixViewButton.setBounds  (area.removeFromRight (46).withHeight (buttonH));
     editViewButton.setBounds (area.removeFromRight (46).withHeight (buttonH));
