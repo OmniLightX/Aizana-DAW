@@ -154,6 +154,22 @@ namespace
         };
     }
 
+    // ---- de-ess: Cloudes De-Esser (tames vocal sibilance) ----
+    Cmd deEssCmd (te::AudioTrack* t)
+    {
+        return [t] (juce::UndoManager&)
+        {
+            if (t == nullptr) return;
+            insertBuiltIn (t->edit, t->pluginList, "Cloudes De-Esser",
+                           [] (juce::AudioPluginInstance& inst)
+            {
+                setHostParam (inst, "frequency", 6500.0f);
+                setHostParam (inst, "threshold", -22.0f);
+                setHostParam (inst, "range",     8.0f);
+            });
+        };
+    }
+
     // ---- space: Cloudes Reverb ----
     Cmd reverbCmd (te::AudioTrack* t, float wet, float room)
     {
@@ -267,6 +283,11 @@ IntentEngine::Plan IntentEngine::plan (Intent intent, te::AudioTrack* requested)
             p.description = "Mehr Punch: " + tn;
             p.mechanic    = "Kompressor 3:1, Schwelle -12 dB, schneller Attack (5 ms) auf " + tn + ".";
             break;
+        case Intent::DeEss:
+            p.commands.push_back (deEssCmd (t));
+            p.description = "De-Esser: " + tn;
+            p.mechanic    = "De-Esser: 6.5 kHz, Schwelle -22 dB, Range 8 dB (Split) auf " + tn + ".";
+            break;
 
         case Intent::MoreReverb:
             p.commands.push_back (reverbCmd (t, 0.20f, 0.6f));
@@ -313,7 +334,7 @@ IntentEngine::Category IntentEngine::category (Intent i)
     {
         case Intent::VocalForward: case Intent::QuieterInMix: case Intent::CenterInMix:
             return Category::LevelBalance;
-        case Intent::Warmer: case Intent::Clearer: case Intent::MorePunch:
+        case Intent::Warmer: case Intent::Clearer: case Intent::MorePunch: case Intent::DeEss:
             return Category::Character;
         case Intent::MoreReverb: case Intent::Wider: case Intent::Closer:
             return Category::SpaceDepth;
@@ -333,6 +354,7 @@ juce::String IntentEngine::label (Intent i)
         case Intent::Warmer:            return "Waermer";
         case Intent::Clearer:           return "Klarer";
         case Intent::MorePunch:         return "Mehr Punch";
+        case Intent::DeEss:             return "De-Esser (Zischlaute)";
         case Intent::MoreReverb:        return "Mehr Hall";
         case Intent::Wider:             return "Breiter";
         case Intent::Closer:            return "Naeher";
@@ -360,9 +382,48 @@ std::vector<IntentEngine::Intent> IntentEngine::intentsFor (Category c)
     switch (c)
     {
         case Category::LevelBalance:      return { Intent::VocalForward, Intent::QuieterInMix, Intent::CenterInMix };
-        case Category::Character:         return { Intent::Warmer, Intent::Clearer, Intent::MorePunch };
+        case Category::Character:         return { Intent::Warmer, Intent::Clearer, Intent::MorePunch, Intent::DeEss };
         case Category::SpaceDepth:        return { Intent::MoreReverb, Intent::Wider, Intent::Closer };
         case Category::ReferenceLoudness: return { Intent::Louder, Intent::GlueMix, Intent::MatchPopReference };
         default:                          return {};
     }
+}
+
+bool IntentEngine::parsePrompt (const juce::String& text, Intent& out)
+{
+    const auto s = text.toLowerCase();
+    using I = Intent;
+
+    // Most specific first (de-ess before generic "vocal"; "leiser" before "laut").
+    if (s.contains ("de-ess") || s.contains ("deess") || s.contains ("de ess")
+        || s.contains ("zisch") || s.contains ("s-laut") || s.contains ("sibilan")
+        || s.contains ("scharf"))                           { out = I::DeEss;            return true; }
+    if (s.contains ("leis") || s.contains ("quiet")
+        || s.contains ("zurueck") || s.contains ("back"))   { out = I::QuieterInMix;     return true; }
+    if (s.contains ("vorn") || s.contains ("vorne") || s.contains ("forward")
+        || s.contains ("gesang") || s.contains ("vocal")
+        || s.contains ("stimme"))                           { out = I::VocalForward;     return true; }
+    if (s.contains ("mittig") || s.contains ("zentr") || s.contains ("center")
+        || s.contains ("centre") || s.contains ("mitte"))   { out = I::CenterInMix;      return true; }
+    if (s.contains ("warm"))                                { out = I::Warmer;           return true; }
+    if (s.contains ("klar") || s.contains ("clear") || s.contains ("praesen")
+        || s.contains ("hell") || s.contains ("bright")
+        || s.contains ("air") || s.contains ("luft"))       { out = I::Clearer;          return true; }
+    if (s.contains ("punch") || s.contains ("druck")
+        || s.contains ("tight") || s.contains ("knack"))    { out = I::MorePunch;        return true; }
+    if (s.contains ("hall") || s.contains ("raum") || s.contains ("reverb")
+        || s.contains ("room") || s.contains ("space")
+        || s.contains ("tiefe") || s.contains ("depth"))    { out = I::MoreReverb;       return true; }
+    if (s.contains ("breit") || s.contains ("wide")
+        || s.contains ("stereo"))                           { out = I::Wider;            return true; }
+    if (s.contains ("naeh") || s.contains ("nah") || s.contains ("close")
+        || s.contains ("near"))                             { out = I::Closer;           return true; }
+    if (s.contains ("kleb") || s.contains ("glue") || s.contains ("zusammen")
+        || s.contains ("kohaeren") || s.contains ("gluing")){ out = I::GlueMix;          return true; }
+    if (s.contains ("referenz") || s.contains ("referen") || s.contains ("pop")
+        || s.contains ("master") || s.contains ("loudness")){ out = I::MatchPopReference; return true; }
+    if (s.contains ("laut") || s.contains ("loud")
+        || s.contains ("volume"))                           { out = I::Louder;           return true; }
+
+    return false;
 }

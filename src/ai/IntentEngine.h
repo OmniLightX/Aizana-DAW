@@ -39,7 +39,7 @@ public:
         // Pegel & Balance
         VocalForward, QuieterInMix, CenterInMix,
         // Charakter / Klangfarbe
-        Warmer, Clearer, MorePunch,
+        Warmer, Clearer, MorePunch, DeEss,
         // Raum & Tiefe
         MoreReverb, Wider, Closer,
         // Referenz & Loudness
@@ -68,6 +68,11 @@ public:
     static juce::String        label (Intent);            // short German UI label
     static juce::String        categoryLabel (Category);
     static std::vector<Intent> intentsFor (Category);
+
+    /** Free-text → intent (local keyword/phrase match, DE/EN). Returns false if
+        nothing recognised. Shared by the Beginner Coach and the Pro Assist rail;
+        a future opt-in LLM/MCP adapter can replace this without touching callers. */
+    static bool parsePrompt (const juce::String& text, Intent& out);
 
 private:
     EditManager& editManager;

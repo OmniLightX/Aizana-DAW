@@ -111,11 +111,48 @@ TEST_CASE ("IntentEngine: category/label/intentsFor mapping is consistent", "[ai
     for (auto cat : { C::LevelBalance, C::Character, C::SpaceDepth, C::ReferenceLoudness })
     {
         auto intents = IntentEngine::intentsFor (cat);
-        CHECK (intents.size() == 3);
+        CHECK (intents.size() >= 3);
         for (auto i : intents)
         {
             CHECK (IntentEngine::category (i) == cat);
             CHECK (IntentEngine::label (i).isNotEmpty());
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+TEST_CASE ("IntentEngine: parsePrompt maps free text to intents (DE/EN, incl. de-ess)", "[ai][phase2][intent]")
+{
+    using I = IntentEngine::Intent;
+    IntentEngine::Intent out;
+
+    REQUIRE (IntentEngine::parsePrompt ("bitte die vocals de-essen", out)); CHECK (out == I::DeEss);
+    REQUIRE (IntentEngine::parsePrompt ("zu viel zischen",          out)); CHECK (out == I::DeEss);
+    REQUIRE (IntentEngine::parsePrompt ("vocals nach vorn",         out)); CHECK (out == I::VocalForward);
+    REQUIRE (IntentEngine::parsePrompt ("make it warmer",           out)); CHECK (out == I::Warmer);
+    REQUIRE (IntentEngine::parsePrompt ("more air please",          out)); CHECK (out == I::Clearer);
+    REQUIRE (IntentEngine::parsePrompt ("wider stereo",             out)); CHECK (out == I::Wider);
+    REQUIRE (IntentEngine::parsePrompt ("louder",                   out)); CHECK (out == I::Louder);
+    REQUIRE (IntentEngine::parsePrompt ("glue the mix",             out)); CHECK (out == I::GlueMix);
+
+    CHECK_FALSE (IntentEngine::parsePrompt ("xyzzy nonsense", out));
+}
+
+// DeEss intent inserts the De-Esser built-in on the target, one undo reverts.
+TEST_CASE ("IntentEngine: DeEss inserts the De-Esser, one undo reverts", "[ai][phase2][intent]")
+{
+    EditManager em; em.createNewEdit();
+    auto* edit = em.getEdit(); REQUIRE (edit != nullptr);
+    AICommandBridge bridge (em);
+    IntentEngine engine (em);
+
+    auto* track = te::getAudioTracks (*edit)[0];
+    REQUIRE (track != nullptr);
+    CHECK (countBuiltIn (track->pluginList, "DeEsserProcessor") == 0);
+
+    applyPlan (bridge, engine.plan (IntentEngine::Intent::DeEss, track));
+    CHECK (countBuiltIn (track->pluginList, "DeEsserProcessor") == 1);
+
+    em.getUndoManager().undo();
+    CHECK (countBuiltIn (track->pluginList, "DeEsserProcessor") == 0);
 }

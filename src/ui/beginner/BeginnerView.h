@@ -113,6 +113,12 @@ private:
     juce::TextButton act1 { "Nach vorne holen" };
     juce::TextButton act2 { "Punchiger machen" };
     juce::TextButton act3 { "Lauter machen" };
+
+    // Always-available breadth (user feedback 2026-06-14): every intent as a flat
+    // chip grid — same power as the Pro rail, but without the category drill-down.
+    juce::OwnedArray<juce::TextButton> chips;
+    int chipsTopY = 0;   // for the "Schnell-Aktionen" label (computed in resized())
+
     juce::TextEditor cmdInput;
 
     Reveal reveal;

@@ -235,6 +235,19 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
     styleAct (act1); styleAct (act2); styleAct (act3);
     // act button labels + onClick handlers are (re)bound per feedback item in refreshFeedback().
 
+    // Flat chip grid of every intent — always available (breadth like Pro, no drill-down).
+    for (auto cat : { IntentEngine::Category::LevelBalance, IntentEngine::Category::Character,
+                      IntentEngine::Category::SpaceDepth,   IntentEngine::Category::ReferenceLoudness })
+        for (auto intent : IntentEngine::intentsFor (cat))
+        {
+            auto* b = new juce::TextButton (IntentEngine::label (intent));
+            b->setColour (juce::TextButton::buttonColourId, kSurfaceRaised);
+            b->setColour (juce::TextButton::textColourOffId, kTeal);
+            b->onClick = [this, intent] { runIntent (intent); };
+            chips.add (b);
+            addChildComponent (*b);
+        }
+
     cmdInput.setTextToShowWhenEmpty ("...oder sag's mir selbst", kTextMuted);
     cmdInput.setColour (juce::TextEditor::backgroundColourId, kBgDeep);
     cmdInput.setColour (juce::TextEditor::outlineColourId, kBorder);
@@ -246,7 +259,7 @@ BeginnerView::BeginnerView (ApplicationState& appState_, MixerEngine& mixerEngin
             runIntent (matched);   // heuristic keyword-lite; real NLP is Phase 3
         else
             showReveal ("Noch nicht verstanden",
-                        "Probier einen der Vorschlaege oben - freie Texteingabe kommt mit Phase 3.");
+                        "Versuch z.B. 'Vocals nach vorn', 'waermer', 'de-ess', 'breiter' oder 'lauter'.");
         cmdInput.clear();
     };
     addChildComponent (cmdInput);
@@ -332,21 +345,8 @@ void BeginnerView::runIntent (IntentEngine::Intent intent)
 
 bool BeginnerView::matchKeyword (const juce::String& text, IntentEngine::Intent& out)
 {
-    const auto s = text.toLowerCase();
-    using I = IntentEngine::Intent;
-    if (s.contains ("vorne") || s.contains ("gesang"))   { out = I::VocalForward;      return true; }
-    if (s.contains ("leis"))                              { out = I::QuieterInMix;      return true; }
-    if (s.contains ("mittig") || s.contains ("zentr"))    { out = I::CenterInMix;       return true; }
-    if (s.contains ("warm"))                              { out = I::Warmer;            return true; }
-    if (s.contains ("klar") || s.contains ("praesen"))    { out = I::Clearer;           return true; }
-    if (s.contains ("punch") || s.contains ("druck"))     { out = I::MorePunch;         return true; }
-    if (s.contains ("hall") || s.contains ("raum"))       { out = I::MoreReverb;        return true; }
-    if (s.contains ("breit"))                             { out = I::Wider;             return true; }
-    if (s.contains ("naeh") || s.contains ("nah"))        { out = I::Closer;            return true; }
-    if (s.contains ("laut"))                              { out = I::Louder;            return true; }
-    if (s.contains ("verkleb") || s.contains ("glue"))    { out = I::GlueMix;           return true; }
-    if (s.contains ("pop") || s.contains ("referenz"))    { out = I::MatchPopReference; return true; }
-    return false;
+    // Single source of truth, shared with the Pro Assist rail (incl. de-ess + EN).
+    return IntentEngine::parsePrompt (text, out);
 }
 
 //==============================================================================
@@ -512,10 +512,24 @@ void BeginnerView::resized()
             acts[i]->setBounds (c.getX() + 12, c.getBottom() - 34, 180, 26);
         }
     }
+    for (auto* c : chips) c->setVisible (a);
     if (a)
     {
         auto rail = railArea().reduced (16);
         cmdInput.setBounds (rail.getX(), rail.getBottom() - 34, rail.getWidth(), 30);
+
+        // Chip grid (2 columns) sits above the command bar, always visible.
+        const int chipH = 24, chipGap = 5, cols = 2;
+        const int colW  = (rail.getWidth() - chipGap) / 2;
+        const int rows  = (chips.size() + 1) / 2;
+        const int gridBottom = rail.getBottom() - 34 - 10;          // 10px above cmdInput
+        chipsTopY = gridBottom - rows * (chipH + chipGap);
+        for (int i = 0; i < chips.size(); ++i)
+        {
+            const int cx = rail.getX() + (i % cols) * (colW + chipGap);
+            const int cy = chipsTopY + (i / cols) * (chipH + chipGap);
+            chips[i]->setBounds (cx, cy, colW, chipH);
+        }
     }
 
     reveal.setBounds (getLocalBounds());
@@ -664,6 +678,16 @@ void BeginnerView::paint (juce::Graphics& g)
             const int textH = feedback[i].hasIntent ? 40 : (c.getHeight() - 20);
             g.drawFittedText (feedback[i].message, c.getX() + 14, c.getY() + 10, c.getWidth() - 24, textH,
                               juce::Justification::topLeft, 3);
+        }
+
+        // "Schnell-Aktionen" label above the chip grid.
+        if (! chips.isEmpty() && chipsTopY > 0)
+        {
+            g.setColour (kTextFaint);
+            g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+            g.drawText (juce::String::fromUTF8 ("SCHNELL-AKTIONEN"),
+                        rail.getX() + 16, chipsTopY - 17, rail.getWidth() - 32, 14,
+                        juce::Justification::centredLeft, false);
         }
     }
 

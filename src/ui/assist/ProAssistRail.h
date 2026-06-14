@@ -51,6 +51,30 @@ public:
             addAndMakeVisible (b);
         }
 
+        // Free-text prompt — same parser as the Beginner Coach (IntentEngine::parsePrompt).
+        // A mix engineer can type e.g. "de-ess vocals" instead of hunting for the button.
+        promptInput.setTextToShowWhenEmpty (juce::String::fromUTF8 ("\xE2\x80\xA6 oder sag's mir selbst"),
+                                            juce::Colour (0xff777777));
+        promptInput.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff111111));
+        promptInput.setColour (juce::TextEditor::outlineColourId,    juce::Colour (0xff3a3a3a));
+        promptInput.setColour (juce::TextEditor::textColourId,       juce::Colours::white);
+        promptInput.onReturnKey = [this]
+        {
+            IntentEngine::Intent matched;
+            if (IntentEngine::parsePrompt (promptInput.getText(), matched))
+                runIntent (matched);
+            else
+            {
+                revealTitle = juce::String::fromUTF8 ("Noch nicht verstanden");
+                revealBody  = juce::String::fromUTF8 (
+                    "Versuch z.B. 'Vocals nach vorn', 'w\xC3\xA4rmer', 'de-ess', 'breiter' oder 'lauter'.");
+                hasReveal   = true;
+                resized(); repaint();
+            }
+            promptInput.clear();
+        };
+        addAndMakeVisible (promptInput);
+
         undoButton.setButtonText (juce::String::fromUTF8 ("R\xC3\xBC" "ckg\xC3\xA4ngig"));
         styleGhost (undoButton);
         undoButton.onClick = [this]
@@ -135,6 +159,9 @@ public:
             g.drawFittedText (obs[i].message, textArea, juce::Justification::centredLeft, 2);
         }
 
+        // prompt section label
+        drawSection (g, getHeight() - 84, juce::String::fromUTF8 ("ODER SAG'S MIR SELBST"));
+
         // footer ⌘K hint
         g.setColour (juce::Colour (0xff555555));
         g.setFont (juce::Font (juce::FontOptions (10.5f)));
@@ -146,6 +173,9 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced (13, 12);
+
+        // Prompt field pinned above the ⌘K footer (always reachable).
+        promptInput.setBounds (area.getX(), getHeight() - 64, area.getWidth(), 28);
 
         headerAv   = { area.getX(), area.getY(), 22, 22 };
         headerText = { area.getX() + 30, area.getY(), area.getWidth() - 60, 22 };
@@ -318,6 +348,7 @@ private:
     ApplicationState& appState;
 
     juce::TextButton                   closeButton;
+    juce::TextEditor                   promptInput;       // "… oder sag's mir selbst"
     juce::OwnedArray<juce::TextButton> catButtons;
     juce::OwnedArray<juce::TextButton> intentButtons;
     int                                selectedCat = 0;
