@@ -103,6 +103,65 @@ if(CLOUDES_ENABLE_ONNX)
 endif()
 
 # ---------------------------------------------------------------------------
+# Plugin Generator (Phase 4 / Iteration B, B1) — Text → Faust → CLAP.
+# Compiles curated Faust DSP templates (generator/templates/*.dsp) to self-contained
+# universal .clap at build time (recipe proven in Spike S2) and bundles them into the
+# app. Gated: needs the Faust compiler (brew install faust). Off / Faust missing →
+# generator feature compiles out (CLOUDES_HAVE_GENERATOR undefined), build stays green.
+# The generator's clap/clap-helpers are fetched at main, ISOLATED from the hosting
+# clap_api (1.2.0) — they meet only at the stable CLAP C-ABI when the .clap is loaded.
+# ---------------------------------------------------------------------------
+option(CLOUDES_BUILD_GENERATOR "Build the Faust→CLAP plugin generator templates" ON)
+find_program(FAUST_EXECUTABLE faust)
+set(CLOUDES_HAVE_GENERATOR 0)
+
+if(CLOUDES_BUILD_GENERATOR AND FAUST_EXECUTABLE)
+    execute_process(COMMAND ${FAUST_EXECUTABLE} --archdir
+        OUTPUT_VARIABLE FAUST_ARCHDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    get_filename_component(_faust_bin    ${FAUST_EXECUTABLE} DIRECTORY)
+    get_filename_component(_faust_prefix ${_faust_bin}       DIRECTORY)
+    set(FAUST_INCLUDE ${_faust_prefix}/include)   # Faust C++ runtime headers (NOT archdir)
+
+    # Header-only; Populate (not MakeAvailable) so we don't add_subdirectory a SECOND
+    # clap CMake project (target-name clash with clap_api above).
+    FetchContent_Declare(clap_gen
+        GIT_REPOSITORY https://github.com/free-audio/clap.git
+        GIT_TAG        main)
+    FetchContent_Declare(clap_helpers
+        GIT_REPOSITORY https://github.com/free-audio/clap-helpers.git
+        GIT_TAG        main)
+    FetchContent_Populate(clap_gen)
+    FetchContent_Populate(clap_helpers)
+
+    set(GEN_OUT ${CMAKE_BINARY_DIR}/generator)
+    file(GLOB GEN_TEMPLATES ${CMAKE_CURRENT_SOURCE_DIR}/generator/templates/*.dsp)
+    set(GEN_CLAPS "")
+    foreach(tpl ${GEN_TEMPLATES})
+        get_filename_component(_name ${tpl} NAME_WE)
+        set(_out ${GEN_OUT}/${_name}.clap)
+        add_custom_command(
+            OUTPUT  ${_out}
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generator/build_clap.sh
+                    ${FAUST_EXECUTABLE} ${tpl} ${_out}
+                    ${FAUST_ARCHDIR} ${FAUST_INCLUDE}
+                    ${clap_gen_SOURCE_DIR}/include ${clap_helpers_SOURCE_DIR}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp
+                    ${GEN_OUT}/work/${_name}
+            DEPENDS ${tpl} ${CMAKE_CURRENT_SOURCE_DIR}/generator/build_clap.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp
+            COMMENT "Faust→CLAP: ${_name}.clap"
+            VERBATIM)
+        list(APPEND GEN_CLAPS ${_out})
+    endforeach()
+
+    add_custom_target(cloudes_generator_templates ALL DEPENDS ${GEN_CLAPS})
+    set(CLOUDES_HAVE_GENERATOR 1)
+    message(STATUS "Cloudes: plugin generator ENABLED (Faust ${FAUST_EXECUTABLE})")
+else()
+    message(STATUS "Cloudes: plugin generator disabled (Faust not found or CLOUDES_BUILD_GENERATOR=OFF)")
+endif()
+
+# ---------------------------------------------------------------------------
 # Cloudes application target
 # ---------------------------------------------------------------------------
 
@@ -133,6 +192,7 @@ target_sources(Cloudes PRIVATE
     src/ai/MixingEngine.cpp
     src/ai/MixApplyEngine.cpp
     src/ai/MixDataLogger.cpp
+    src/generator/PluginGenerator.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
@@ -268,6 +328,19 @@ if(CLOUDES_ENABLE_ONNX)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CLOUDES_ORT_DYLIB}"
             "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Frameworks/"
+        VERBATIM)
+endif()
+
+# Plugin generator: build the template .clap before the app, then bundle them into
+# Contents/Resources/Generator so the in-app generator can load them (Iteration B).
+if(CLOUDES_HAVE_GENERATOR)
+    add_dependencies(Cloudes cloudes_generator_templates)
+    target_compile_definitions(Cloudes PRIVATE CLOUDES_HAVE_GENERATOR=1)
+    add_custom_command(TARGET Cloudes POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_CLAPS}
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator/"
         VERBATIM)
 endif()
 
