@@ -1,18 +1,36 @@
 # Cloudes
 
-A professional, open-source DAW built on JUCE 8 and Tracktion Engine for macOS. Mixing-first design: familiar enough that anyone starts immediately, powerful enough that professionals prefer it.
+An open-source, **AI-first DAW** built on JUCE 8 and Tracktion Engine for macOS. Mixing-first design: familiar enough that anyone starts immediately, with AI that turns intent into normal, reviewable, one-undo DAW actions — built for beginners and pros over the same session.
 
-Licensed under GPL-3.0.
+> **Status: Public Alpha / Developer Preview.** Cloudes is real and works, but it is
+> not a finished v1.0. A DAW is high-trust software (it records performances, hosts
+> third-party plugins, writes files) — treat it as a preview, keep backups, and see
+> *Known limitations* below. This is not a replacement for Logic, Studio One, Pro
+> Tools, Ableton, Cubase, or REAPER.
+
+Cloudes source code is licensed under GPL-3.0-or-later.
+
+Binary/source distributions also include third-party components under their own
+licenses. In particular, JUCE 8 is AGPLv3/Commercial, and Tracktion Engine is
+GPL3-or-later/Commercial. Public Cloudes releases therefore need to comply with
+the applicable copyleft obligations for those components. See
+`THIRD_PARTY_NOTICES.md` for the dependency and model-weight notices.
 
 ## Features
 
 - Multi-track recording, editing, and mixing
-- AI stem separation: split a full song into stems (drums, bass, vocals, guitar,
+- **AI mixing (heuristic co-pilot):** one "AI Mix" button proposes gain staging,
+  EQ, compression, de-essing, panning, and sub-bus routing as named, jargon-free,
+  reviewable moves — Beginner applies instantly, Pro reviews each move; one undo step
+- **AI stem separation:** split a full song into stems (drums, bass, vocals, guitar,
   piano, synths) and get a ready-routed session — one undo step
-- AI session setup: import stems, instruments are detected and grouped with
+- **AI session setup:** import stems, instruments are detected and grouped with
   routing and gain staging applied automatically
-- VST3 / AU plugin hosting with floating editors
-- Parametric EQ, Compressor, Reverb, and Limiter built-in
+- **Local-first AI:** inference runs on-device via ONNX Runtime + CoreML (Apple
+  Neural Engine); no audio leaves your computer. A local training-data flywheel
+  records reviewed mix decisions so the AI can learn your taste over time
+- VST3 / AU / **CLAP** plugin hosting with floating editors
+- Parametric EQ, Compressor, Reverb, Limiter, and a split-band De-Esser built-in
 - Piano Roll with MIDI editing and velocity lanes
 - Automation lanes with Read / Touch / Latch / Write modes
 - Clip timestretch: conform any clip to the song tempo (SoundTouch)
@@ -49,6 +67,24 @@ The app bundle is written to `build/Cloudes_artefacts/Release/Cloudes.app`.
 cmake -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 cmake --build build --config Release -j8
 ```
+
+The first `cmake -B build` downloads dependencies via `FetchContent`, including a
+prebuilt ONNX Runtime (~16 MB) for the local inference backend. To build without
+it, configure with `-DCLOUDES_ENABLE_ONNX=OFF` (the AI backend then compiles as a
+defined no-op and Cloudes falls back to its heuristics).
+
+## Known Limitations
+
+- **macOS only** (CoreAudio; no Windows/Linux build).
+- **Public alpha** — expect rough edges; session-format stability is not yet
+  guaranteed across versions. Keep backups; don't use on irreplaceable client work yet.
+- **AI mixing is heuristic** today (Grammy-informed rules). A trained local model is
+  in progress — the inference seam is in place but ships without a bundled model, so
+  mixing currently runs on the heuristics.
+- **Plugin compatibility** across the full VST3/AU/CLAP ecosystem is not yet
+  exhaustively tested.
+- **Model weights are not bundled** (see below) — stem separation downloads them on
+  first use.
 
 ## AI Model Weights
 
