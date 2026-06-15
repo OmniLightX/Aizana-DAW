@@ -9,6 +9,7 @@
 #include "engine/ExportPipeline.h"
 #include "ai/StemImportEngine.h"
 #include "ai/MixApplyEngine.h"
+#include "ai/MixDataLogger.h"
 #include "ai/StemSeparationEngine.h"
 #include "ai/ReferenceAnalyzer.h"
 #include "ui/stems/StemImportDialog.h"
@@ -326,7 +327,8 @@ private:
     // KI-Mix (Phase 4, Slice 4): scan tracks (message thread) → measure + mix on a
     // worker → apply mode-dependently (Beginner instant / Pro preview dialog).
     void startMix();
-    void onMixPlanReady (const cloudes::MixPlan& plan);
+    void onMixPlanReady (const cloudes::MixPlan& plan,
+                         const std::vector<cloudes::TrackMixProfile>& profiles);
 
     // KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04): genre profile or
     // analysed reference track, persisted in the Edit state. Guides gain

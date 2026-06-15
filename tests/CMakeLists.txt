@@ -31,6 +31,7 @@ target_sources(engine_tests PRIVATE
     test_mixing_engine.cpp
     test_mix_apply.cpp
     test_onnx_backend.cpp
+    test_mix_data_logger.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
@@ -68,6 +69,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/SessionPlanner.cpp
     ../src/ai/MixingEngine.cpp
     ../src/ai/MixApplyEngine.cpp
+    ../src/ai/MixDataLogger.cpp
     ../src/ai/StemImportEngine.cpp
     ../src/ai/StemSeparationEngine.cpp
     ../src/ai/ReferenceAnalyzer.cpp

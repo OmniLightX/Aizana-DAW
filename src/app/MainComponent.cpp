@@ -1058,34 +1058,46 @@ void MainComponent::startMix()
             const auto plan = cloudes::MixingEngine::mix (
                 profiles, reference.isValid() ? &reference : nullptr, {}, engine->getBackend());
 
-            juce::MessageManager::callAsync ([safe, plan]()
+            juce::MessageManager::callAsync ([safe, plan, profiles]()
             {
                 if (safe == nullptr)
                     return;
-                safe->onMixPlanReady (plan);
+                safe->onMixPlanReady (plan, profiles);
             });
         });
 }
 
-void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan)
+void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan,
+                                    const std::vector<cloudes::TrackMixProfile>& profiles)
 {
     if (plan.isEmpty())
         return;
 
+    // Active genre/reference labels the example (helps a model condition on style).
+    const auto ref = getActiveReferenceProfile();
+    const juce::String genre = ref.isValid() ? ref.name : juce::String();
+
     // Beginner = instant mix + one undo; Pro = review dialog (moves + reasons,
-    // each de-selectable) — mirrors the stem-import E3 split.
+    // each de-selectable) — mirrors the stem-import E3 split. Both feed the
+    // training-data flywheel (Beginner = auto-accepted, weaker; Pro = real verdict).
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
     {
         mixApplyEngine.applyPlan (plan);
+        cloudes::MixDataLogger::logReview (profiles, plan, plan,
+                                           { "heuristic", "beginner", genre, "" });
         return;
     }
 
     MixPreviewDialog::show (*this, plan,
-        [safe = juce::Component::SafePointer<MainComponent> (this)] (const cloudes::MixPlan& edited)
+        [safe = juce::Component::SafePointer<MainComponent> (this),
+         proposed = plan, profiles, genre] (const cloudes::MixPlan& edited)
         {
             if (safe == nullptr)
                 return;
             safe->mixApplyEngine.applyPlan (edited);
+            // The Pro user's keep/drop per move = the strong training signal.
+            cloudes::MixDataLogger::logReview (profiles, proposed, edited,
+                                               { "heuristic", "pro", genre, "" });
         });
 }
 
