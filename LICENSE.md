@@ -1,10 +1,11 @@
 # Cloudes License
 
 Copyright (C) 2026 Aizanagi (Cloudes DAW project).
-<!-- Replace with your full legal name or entity before any commercial/relicensing
-     step — the copyright holder must be unambiguous to ever dual-license or sell
-     the work. Require a Contributor License Agreement (CLA) from any contributor
-     for the same reason. -->
+<!-- PLACEHOLDER. Aizanagi intends to hold copyright via an entity/pseudonym — set the
+     final legal holder (entity or pseudonym) before any commercial/relicensing step;
+     the copyright holder must be unambiguous to ever dual-license or sell the work.
+     Require a Contributor License Agreement (CLA) from any contributor for the same
+     reason. -->
 
 Cloudes' own source code is free software: you can redistribute it and/or
 modify it under the terms of the GNU General Public License as published by the
