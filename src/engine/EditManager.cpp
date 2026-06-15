@@ -1,5 +1,6 @@
 #include "EditManager.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include "plugins/ClapPluginFormat.h"
 
 // Convenience aliases for Tracktion's strong time types
 using TimePos = tracktion::core::TimePosition;
@@ -12,6 +13,12 @@ EditManager::EditManager()
     // so ExternalPlugin can instantiate built-in FX processors.
     // This MUST happen before any Edit is created (i.e., before createNewEdit / loadEdit).
     engine.getPluginManager().pluginFormatManager.addFormat (new BuiltInPluginFormat());
+
+    // Register CLAP with the ENGINE's format manager so ExternalPlugin (and thus
+    // PluginManager::insertPlugin) can instantiate .clap plugins — both 3rd-party CLAPs
+    // and the Cloudes-generated ones (Phase 4 / Iteration B). The scanner has its own
+    // ClapPluginFormat; the engine needs its own to host them.
+    engine.getPluginManager().pluginFormatManager.addFormat (new ClapPluginFormat());
 
     // Also add built-in descriptions to TE's knownPluginList so ExternalPlugin::findMatchingPlugin()
     // can locate them. TE's ExternalPlugin::doFullInitialisation() searches engine.getPluginManager().knownPluginList

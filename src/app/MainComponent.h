@@ -11,6 +11,8 @@
 #include "ai/MixApplyEngine.h"
 #include "ai/MixDataLogger.h"
 #include "ai/StemSeparationEngine.h"
+#include "generator/PluginGenerator.h"
+#include "plugins/ClapPluginFormat.h"
 #include "ai/ReferenceAnalyzer.h"
 #include "ui/stems/StemImportDialog.h"
 #include "ui/stems/SeparationProgressPanel.h"
@@ -294,6 +296,7 @@ private:
         SongSeparateStems = 402,
         SongAddMarker     = 403,
         SongMixAI         = 404,   // KI-Mix (Phase 4 — heuristic mixing co-pilot)
+        SongGeneratePlugin = 405,  // Plugin generieren (Phase 4 — Faust→CLAP generator)
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,
@@ -329,6 +332,12 @@ private:
     void startMix();
     void onMixPlanReady (const cloudes::MixPlan& plan,
                          const std::vector<cloudes::TrackMixProfile>& profiles);
+
+    // Plugin generator (Phase 4 / Iteration B, B2): describe/pick a template → load the
+    // generated .clap onto the selected track via ClapPluginFormat → open its editor.
+    void startPluginGenerator();
+    void describeAndGenerate();   // free-text prompt → match → generate on the selected track
+    void generatePluginOnTrack (const cloudes::GeneratorTemplate& tmpl, te::AudioTrack& track);
 
     // KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04): genre profile or
     // analysed reference track, persisted in the Edit state. Guides gain

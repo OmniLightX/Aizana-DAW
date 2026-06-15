@@ -647,6 +647,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addSeparator();
             menu.addItem (SongMixAI,
                           juce::String::fromUTF8 ("KI-Mix (Heuristik)…"), hasEdit);
+            menu.addItem (SongGeneratePlugin,
+                          juce::String::fromUTF8 ("Plugin generieren…"), hasEdit);
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -759,6 +761,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongMixAI:
             startMix();
+            break;
+
+        case SongGeneratePlugin:
+            startPluginGenerator();
             break;
 
         case SongRefAnalyze:
@@ -1099,6 +1105,121 @@ void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan,
             cloudes::MixDataLogger::logReview (profiles, proposed, edited,
                                                { "heuristic", "pro", genre, "" });
         });
+}
+
+//==============================================================================
+// Plugin Generator (Phase 4 / Iteration B, B2) — describe/pick → load .clap on track
+//==============================================================================
+
+void MainComponent::startPluginGenerator()
+{
+    auto* track = arrangementView.getSelectedTrack();
+    if (track == nullptr)
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Wähle zuerst eine Spur, auf die das Plugin soll."));
+        return;
+    }
+
+    juce::PopupMenu menu;
+    const auto& tmpls = cloudes::PluginGenerator::templates();
+    for (int i = 0; i < (int) tmpls.size(); ++i)
+        menu.addItem (i + 1, tmpls[(size_t) i].displayName + "  —  " + tmpls[(size_t) i].description);
+    menu.addSeparator();
+    menu.addItem (1000, juce::String::fromUTF8 ("Beschreiben…"));
+
+    menu.showMenuAsync (juce::PopupMenu::Options{},
+        [safe = juce::Component::SafePointer<MainComponent> (this)] (int choice)
+        {
+            if (safe == nullptr || choice == 0)
+                return;
+
+            if (choice == 1000)
+            {
+                safe->describeAndGenerate();
+                return;
+            }
+
+            auto* t = safe->arrangementView.getSelectedTrack();
+            if (t == nullptr)
+                return;
+
+            const auto& list = cloudes::PluginGenerator::templates();
+            const int idx = choice - 1;
+            if (idx >= 0 && idx < (int) list.size())
+                safe->generatePluginOnTrack (list[(size_t) idx], *t);
+        });
+}
+
+void MainComponent::describeAndGenerate()
+{
+    auto aw = std::make_unique<juce::AlertWindow> (
+        juce::String::fromUTF8 ("Plugin generieren"),
+        juce::String::fromUTF8 ("Beschreibe das Plugin (z. B. „mehr Verzerrung\", „dunkler\", „lauter\"):"),
+        juce::MessageBoxIconType::QuestionIcon);
+    aw->addTextEditor ("desc", juce::String(), juce::String::fromUTF8 ("Beschreibung:"));
+    aw->addButton (juce::String::fromUTF8 ("Generieren"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+    aw->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    aw->setVisible (true);
+
+    auto* awPtr = aw.get();
+    awPtr->enterModalState (true,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<MainComponent> (this),
+             awPtr, owner = std::move (aw)] (int result) mutable
+            {
+                const auto text = awPtr->getTextEditorContents ("desc");
+                owner.reset();   // close + delete the window now (we own it)
+
+                if (safe == nullptr || result == 0)
+                    return;
+
+                const auto* m = cloudes::PluginGenerator::match (text);
+                auto* t = safe->arrangementView.getSelectedTrack();
+                if (t == nullptr)
+                    return;
+
+                if (m == nullptr)
+                {
+                    juce::NativeMessageBox::showMessageBoxAsync (
+                        juce::MessageBoxIconType::InfoIcon, "Plugin generieren",
+                        juce::String::fromUTF8 ("Konnte nichts zuordnen. Versuch z. B. „Verzerrung\", "
+                                                "„Filter\"/„dunkler\" oder „lauter\"."));
+                    return;
+                }
+                safe->generatePluginOnTrack (*m, *t);
+            }),
+        false);   // we delete the window ourselves via the captured unique_ptr
+}
+
+void MainComponent::generatePluginOnTrack (const cloudes::GeneratorTemplate& tmpl, te::AudioTrack& track)
+{
+    const auto clapFile = cloudes::PluginGenerator::clapFileFor (tmpl);
+    if (! clapFile.existsAsFile())
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Generiertes Plugin nicht gefunden:\n") + clapFile.getFullPathName()
+                + juce::String::fromUTF8 ("\n\n(App ohne Faust-Generator gebaut?)"));
+        return;
+    }
+
+    // Resolve a PluginDescription for the bundled .clap, then insert via the standard
+    // ExternalPlugin path (CLAP is registered with the engine format manager in EditManager).
+    ClapPluginFormat clap;
+    juce::OwnedArray<juce::PluginDescription> descs;
+    clap.findAllTypesForFile (descs, clapFile.getFullPathName());
+    if (descs.isEmpty())
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Konnte das generierte Plugin nicht laden."));
+        return;
+    }
+
+    if (auto* plugin = pluginManager.insertPlugin (track, *descs[0]))
+        pluginWindowManager.openPluginWindow (*plugin);
 }
 
 //==============================================================================
