@@ -30,6 +30,7 @@ target_sources(engine_tests PRIVATE
     test_mix_plan.cpp
     test_mixing_engine.cpp
     test_mix_apply.cpp
+    test_onnx_backend.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
@@ -143,6 +144,16 @@ target_include_directories(engine_tests PRIVATE
 target_include_directories(engine_tests PRIVATE
     ${ebur128_SOURCE_DIR}/ebur128
 )
+
+# ONNX Runtime — same imported target as the app (declared GLOBAL in the root).
+# Resource dir exposes the dummy .onnx fixture used by test_onnx_backend.cpp.
+target_compile_definitions(engine_tests PRIVATE
+    CLOUDES_TEST_RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
+if(CLOUDES_ENABLE_ONNX)
+    target_link_libraries(engine_tests PRIVATE onnxruntime)
+    target_compile_definitions(engine_tests PRIVATE CLOUDES_HAVE_ONNXRUNTIME=1)
+    set_target_properties(engine_tests PROPERTIES BUILD_RPATH "${CLOUDES_ORT_LIBDIR}")
+endif()
 
 include(CTest)
 include(Catch)

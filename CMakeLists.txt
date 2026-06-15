@@ -75,6 +75,34 @@ target_compile_features(demucs_inference PUBLIC cxx_std_17)
 target_compile_options(demucs_inference PRIVATE -O3 -DNDEBUG)
 
 # ---------------------------------------------------------------------------
+# ONNX Runtime 1.20.1 — prebuilt macOS universal2 (arm64 + x86_64) with the
+# CoreML execution provider (Apple Neural Engine). Phase 4 / Slice 5a: the real
+# inference backend behind IInferenceBackend (OnnxModelRunner). We use Microsoft's
+# prebuilt binary — CoreML EP is compiled into the macOS build; we do NOT build
+# ORT from source. Toggle off with -DCLOUDES_ENABLE_ONNX=OFF to skip the download
+# (OnnxModelRunner then compiles as a defined no-op stub).
+# ---------------------------------------------------------------------------
+option(CLOUDES_ENABLE_ONNX "Build with the ONNX Runtime + CoreML inference backend" ON)
+if(CLOUDES_ENABLE_ONNX)
+    FetchContent_Declare(onnxruntime_prebuilt
+        URL      https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-osx-universal2-1.20.1.tgz
+        URL_HASH SHA256=da4349e01a7e997f5034563183c7183d069caadc1d95f499b560961787813efd)
+    FetchContent_MakeAvailable(onnxruntime_prebuilt)
+
+    set(ORT_DIR   ${onnxruntime_prebuilt_SOURCE_DIR})
+    set(ORT_DYLIB ${ORT_DIR}/lib/libonnxruntime.1.20.1.dylib)
+
+    # IMPORTED GLOBAL so the tests/ subdirectory can link the same target.
+    add_library(onnxruntime SHARED IMPORTED GLOBAL)
+    set_target_properties(onnxruntime PROPERTIES
+        IMPORTED_LOCATION             ${ORT_DYLIB}
+        INTERFACE_INCLUDE_DIRECTORIES ${ORT_DIR}/include)
+
+    set(CLOUDES_ORT_DYLIB  ${ORT_DYLIB}    CACHE INTERNAL "ONNX Runtime dylib path")
+    set(CLOUDES_ORT_LIBDIR ${ORT_DIR}/lib  CACHE INTERNAL "ONNX Runtime lib dir (for RPATH)")
+endif()
+
+# ---------------------------------------------------------------------------
 # Cloudes application target
 # ---------------------------------------------------------------------------
 
@@ -226,6 +254,21 @@ target_include_directories(Cloudes PRIVATE
     ${clap_api_SOURCE_DIR}/include
     ${ebur128_SOURCE_DIR}/ebur128
 )
+
+# ONNX Runtime: link + bundle the dylib into the .app (install name is @rpath/...).
+if(CLOUDES_ENABLE_ONNX)
+    target_link_libraries(Cloudes PRIVATE onnxruntime)
+    target_compile_definitions(Cloudes PRIVATE CLOUDES_HAVE_ONNXRUNTIME=1)
+    set_target_properties(Cloudes PROPERTIES
+        BUILD_RPATH "${CLOUDES_ORT_LIBDIR};@executable_path/../Frameworks")
+    add_custom_command(TARGET Cloudes POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Frameworks"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CLOUDES_ORT_DYLIB}"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Frameworks/"
+        VERBATIM)
+endif()
 
 # ---------------------------------------------------------------------------
 # Tests

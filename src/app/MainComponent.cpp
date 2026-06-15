@@ -1040,13 +1040,23 @@ void MainComponent::startMix()
         return;
     }
 
+    // Local ML (Slice 5a): drop a model at ~/Library/Application Support/Cloudes/
+    // models/mix_gain_trim.onnx and the mix consults it (CoreML/Neural Engine);
+    // absent → pure heuristic. Load + run on the SAME worker (no load/run race).
+    const auto modelFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                               .getChildFile ("Cloudes/models/mix_gain_trim.onnx");
+
     juce::Thread::launch (
-        [scan = std::move (scan), reference = getActiveReferenceProfile(),
+        [scan = std::move (scan), reference = getActiveReferenceProfile(), modelFile,
+         engine = &appState.aiEngine,
          safe = juce::Component::SafePointer<MainComponent> (this)]()
         {
+            if (auto* b = engine->getBackend(); b != nullptr && ! b->isAvailable())
+                engine->tryLoadModel (modelFile);
+
             const auto profiles = MixApplyEngine::profilesFromScan (scan);
             const auto plan = cloudes::MixingEngine::mix (
-                profiles, reference.isValid() ? &reference : nullptr);
+                profiles, reference.isValid() ? &reference : nullptr, {}, engine->getBackend());
 
             juce::MessageManager::callAsync ([safe, plan]()
             {

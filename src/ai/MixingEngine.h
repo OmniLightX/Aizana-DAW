@@ -3,6 +3,7 @@
 #include "MixAction.h"
 #include "ReferenceProfile.h"
 #include "StemAnalyzer.h"     // StemSide
+#include "IInferenceBackend.h"
 #include <vector>
 
 namespace cloudes
@@ -53,10 +54,14 @@ namespace cloudes
         using Options = MixOptions;
 
         /** Builds the mix plan. `reference` (genre preset or analysed track) nudges
-            the per-role targets; nullptr = neutral pro defaults. */
+            the per-role targets; nullptr = neutral pro defaults. `backend`, when
+            non-null and available, refines gain-trim magnitudes (Slice 5a); nullptr
+            or unavailable = pure heuristic (byte-identical to the golden tests).
+            Call off the audio thread — backend inference runs synchronously here. */
         static MixPlan mix (const std::vector<TrackMixProfile>& tracks,
                             const ReferenceProfile* reference = nullptr,
-                            const MixOptions& options = {});
+                            const MixOptions& options = {},
+                            IInferenceBackend* backend = nullptr);
 
         //======================================================================
         enum class Role { Drums, Bass, Guitars, Keys, Synths, Instruments, Vocals, FX, Other };
@@ -74,6 +79,7 @@ namespace cloudes
         static constexpr double kMinGainDb    = -24.0;
         static constexpr double kSilenceRmsDb = -60.0;   // below: leave the track alone
         static constexpr double kMinGainMoveDb = 0.5;    // skip no-op fader moves
+        static constexpr float  kMlTrimClampDb = 2.0f;   // max ± the ML backend may nudge a gain move (Slice 5a)
 
         // EQ
         static constexpr float kMudFreqHz       = 300.0f;

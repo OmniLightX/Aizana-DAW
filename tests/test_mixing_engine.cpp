@@ -5,8 +5,10 @@
 // panning, genre nudges (± clamped, REF-04), and the reviewable master glue.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "ai/MixingEngine.h"
+#include "ai/MixFeatures.h"
 
 using cloudes::MixAction;
 using cloudes::MixActionType;
@@ -247,4 +249,82 @@ TEST_CASE ("MixingEngine: reference nudges stay clamped (REF-04)", "[mixing]")
     REQUIRE (mud != nullptr);
     REQUIRE (mud->gainDb >= -4.0f);         // mud carve clamp
     REQUIRE (mud->gainDb <  0.0f);          // it's a cut
+}
+
+//==============================================================================
+// Slice 5a — the ML backend seam. A fake in-memory backend isolates the blend +
+// fallback logic from ONNX Runtime (the ORT path is covered in test_onnx_backend).
+
+namespace
+{
+    struct FakeBackend : IInferenceBackend
+    {
+        FakeBackend (float trimDb, bool avail = true) : trim (trimDb), available (avail) {}
+        juce::String getName() const override { return "fake"; }
+        bool isAvailable() const override     { return available; }
+        std::vector<float> run (const std::vector<float>& in) override
+        {
+            lastInputSize = (int) in.size();
+            return { trim };               // out[0] = suggested gain trim (dB)
+        }
+        float trim; bool available; int lastInputSize = 0;
+    };
+}
+
+TEST_CASE ("MixingEngine: ML backend refines gain magnitude, clamped", "[mixing][onnx]")
+{
+    const std::vector<TrackMixProfile> tracks { track ("Synth", "Synths", -24.0) }; // heuristic wants ~+6 dB
+
+    const auto basePlan = MixingEngine::mix (tracks);
+    const auto* base = find (basePlan, MixActionType::SetTrackGain, "Synth");
+    REQUIRE (base != nullptr);
+    const float heuristic = base->gainDb;
+
+    SECTION ("positive trim is clamped to +kMlTrimClampDb")
+    {
+        FakeBackend ml (+5.0f);            // asks for +5, clamp is ±2
+        const auto plan = MixingEngine::mix (tracks, nullptr, {}, &ml);
+        const auto* g = find (plan, MixActionType::SetTrackGain, "Synth");
+        REQUIRE (g != nullptr);
+        REQUIRE (g->gainDb == Catch::Approx (heuristic + MixingEngine::kMlTrimClampDb));
+        REQUIRE (ml.lastInputSize == (int) cloudes::mixfeatures::GainTrimCount);
+    }
+
+    SECTION ("negative trim is clamped to -kMlTrimClampDb")
+    {
+        FakeBackend ml (-9.0f);
+        const auto plan = MixingEngine::mix (tracks, nullptr, {}, &ml);
+        const auto* g = find (plan, MixActionType::SetTrackGain, "Synth");
+        REQUIRE (g != nullptr);
+        REQUIRE (g->gainDb == Catch::Approx (heuristic - MixingEngine::kMlTrimClampDb));
+    }
+
+    SECTION ("an unavailable backend leaves the heuristic untouched")
+    {
+        FakeBackend ml (+5.0f, /*avail*/ false);
+        const auto plan = MixingEngine::mix (tracks, nullptr, {}, &ml);
+        const auto* g = find (plan, MixActionType::SetTrackGain, "Synth");
+        REQUIRE (g != nullptr);
+        REQUIRE (g->gainDb == Catch::Approx (heuristic));
+    }
+}
+
+TEST_CASE ("MixingEngine: ML backend invents no new moves (move-set is deterministic)", "[mixing][onnx]")
+{
+    const std::vector<TrackMixProfile> tracks {
+        track ("Lead Vox", "Vocals", -16.0, true),
+        track ("Bass",     "Bass",   -18.0),
+        track ("Kick",     "Drums",  -18.0),
+    };
+
+    FakeBackend ml (+1.0f);
+    const auto heuristicOnly = MixingEngine::mix (tracks);
+    const auto withMl        = MixingEngine::mix (tracks, nullptr, {}, &ml);
+
+    REQUIRE (withMl.actions.size() == heuristicOnly.actions.size());
+    for (size_t i = 0; i < withMl.actions.size(); ++i)
+    {
+        REQUIRE (withMl.actions[i].type       == heuristicOnly.actions[i].type);
+        REQUIRE (withMl.actions[i].targetName == heuristicOnly.actions[i].targetName);
+    }
 }

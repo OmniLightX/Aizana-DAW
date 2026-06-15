@@ -37,6 +37,14 @@ void AIEngine::setBackend (std::unique_ptr<IInferenceBackend> newBackend)
     backend = std::move (newBackend);
 }
 
+bool AIEngine::tryLoadModel (const juce::File& modelFile)
+{
+    if (auto* onnx = dynamic_cast<OnnxModelRunner*> (backend.get()))
+        return onnx->loadModel (modelFile);
+
+    return false;
+}
+
 int AIEngine::getNumThreads() const noexcept
 {
     return pool.getNumThreads();

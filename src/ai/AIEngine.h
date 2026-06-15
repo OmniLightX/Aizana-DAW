@@ -37,6 +37,12 @@ public:
     IInferenceBackend* getBackend() const noexcept { return backend.get(); }
     void setBackend (std::unique_ptr<IInferenceBackend> newBackend);
 
+    /** Loads an ONNX model into the backend if it is an OnnxModelRunner. Synchronous —
+        call from a worker (it builds an ORT session). Returns true on success; a missing
+        or invalid model leaves the backend unavailable (callers fall back to heuristics).
+        Slice 5a: dropping a model at the path below activates local ML with no rebuild. */
+    bool tryLoadModel (const juce::File& modelFile);
+
     int  getNumThreads() const noexcept;
 
     /** Block until all queued jobs finish (for tests / clean shutdown). */

@@ -1,8 +1,25 @@
 #include "MixingEngine.h"
+#include "MixFeatures.h"
 
 namespace cloudes
 {
     using Role = MixingEngine::Role;
+
+    //==========================================================================
+    // Feature contract for the local ML backend (see MixFeatures.h).
+    std::vector<float> mixfeatures::buildGainTrim (const TrackMixProfile& t)
+    {
+        const auto norm = [] (double db) { return (float) juce::jlimit (0.0, 1.0, (db + 60.0) / 60.0); };
+
+        std::vector<float> f ((size_t) GainTrimCount, 0.0f);
+        f[RmsNorm]  = norm (t.rmsDb);
+        f[PeakNorm] = norm (t.peakDb);
+        f[IsVocal]  = (t.group == "Vocals") ? 1.0f : 0.0f;
+        f[IsDrums]  = (t.group == "Drums")  ? 1.0f : 0.0f;
+        f[IsBass]   = (t.group == "Bass")   ? 1.0f : 0.0f;
+        f[IsLead]   = t.isLeadVocal ? 1.0f : 0.0f;
+        return f;
+    }
 
     //==========================================================================
     namespace
@@ -16,6 +33,14 @@ namespace cloudes
             a.targetName  = t.name;
             a.reason      = std::move (reason);
             return a;
+        }
+
+        // const char* overload — string literals in this build are NOT decoded as UTF-8
+        // by juce::String(const char*) (umlauts mojibake to "Ã¤"). All literal reasons
+        // funnel through here, so decoding once with fromUTF8 fixes the whole engine.
+        MixAction make (MixActionType type, const TrackMixProfile& t, const char* reason)
+        {
+            return make (type, t, juce::String::fromUTF8 (reason));
         }
 
         double clampGain (double db)
@@ -122,21 +147,21 @@ namespace cloudes
         // Appends the element's HPF + EQ + compression to the plan (Grammy-informed).
         void addDrumElementMoves (MixPlan& plan, const TrackMixProfile& t)
         {
-            auto eq = [&] (MixActionType type, float hz, float gain, float q, juce::String why)
+            auto eq = [&] (MixActionType type, float hz, float gain, float q, const char* why)
             {
-                auto a = make (type, t, std::move (why));
+                auto a = make (type, t, why);
                 a.freqHz = hz; a.gainDb = gain; a.q = q;
                 plan.add (a);
             };
-            auto hpf = [&] (float hz, juce::String why)
+            auto hpf = [&] (float hz, const char* why)
             {
-                auto a = make (MixActionType::HighPassFilter, t, std::move (why));
+                auto a = make (MixActionType::HighPassFilter, t, why);
                 a.freqHz = hz;
                 plan.add (a);
             };
-            auto comp = [&] (float ratio, float thr, float makeup, juce::String why)
+            auto comp = [&] (float ratio, float thr, float makeup, const char* why)
             {
-                auto a = make (MixActionType::Compress, t, std::move (why));
+                auto a = make (MixActionType::Compress, t, why);
                 a.ratio = ratio; a.thresholdDb = thr; a.makeupGainDb = makeup;
                 plan.add (a);
             };
@@ -205,8 +230,11 @@ namespace cloudes
     //==========================================================================
     MixPlan MixingEngine::mix (const std::vector<TrackMixProfile>& tracks,
                                const ReferenceProfile* reference,
-                               const MixOptions& options)
+                               const MixOptions& options,
+                               IInferenceBackend* backend)
     {
+        const bool useMl = (backend != nullptr && backend->isAvailable());
+
         MixPlan plan;
         if (tracks.empty())
             return plan;   // nothing to mix → no plan (and no empty-master glue)
@@ -236,10 +264,26 @@ namespace cloudes
                 const double gain = clampGain (target - t.rmsDb);
                 if (std::abs (gain) >= kMinGainMoveDb)
                 {
+                    // Heuristic decides WHETHER to move; the ML backend (when available)
+                    // only refines the magnitude — clamped hard and folded into the same
+                    // action, so an unavailable/misbehaving model degrades to the heuristic.
+                    double finalGain = gain;
+                    if (useMl)
+                    {
+                        const auto out = backend->run (mixfeatures::buildGainTrim (t));
+                        if (! out.empty())
+                        {
+                            const double trim = juce::jlimit (-(double) kMlTrimClampDb,
+                                                              (double) kMlTrimClampDb,
+                                                              (double) out[0]);
+                            finalGain = clampGain (gain + trim);
+                        }
+                    }
+
                     auto a = make (MixActionType::SetTrackGain, t,
                                    gain >= 0.0 ? "Lauter, damit die Spur im Mix sitzt"
                                                : "Leiser, macht Platz für die anderen");
-                    a.gainDb = (float) gain;
+                    a.gainDb = (float) finalGain;
                     plan.add (a);
                 }
             }
@@ -325,7 +369,7 @@ namespace cloudes
             {
                 // Sibilance lives on every vocal layer, not just the lead.
                 auto deess = make (MixActionType::DeEss, t,
-                                   "Z\xC3\xA4hmt scharfe S-Laute der " + t.subRole + "-Stimme");
+                                   juce::String::fromUTF8 ("Zähmt scharfe S-Laute der ") + t.subRole + "-Stimme");
                 deess.freqHz      = kDeEssHz;
                 deess.thresholdDb = kDeEssThreshDb;
                 deess.ratio       = kDeEssRatio;
@@ -333,7 +377,7 @@ namespace cloudes
 
                 // One gentle leveller — keep the layer steady and tucked under the lead.
                 auto comp = make (MixActionType::Compress, t,
-                                  "H\xC3\xA4lt die St\xC3\xBctzstimme gleichm\xC3\xA4\xC3\x9Fig unter dem Lead");
+                                  "Hält die Stützstimme gleichmäßig unter dem Lead");
                 comp.ratio        = 3.0f;
                 comp.thresholdDb  = -20.0f;
                 comp.makeupGainDb = 0.0f;
@@ -431,13 +475,14 @@ namespace cloudes
             g.ratio        = kGlueRatio;
             g.thresholdDb  = kGlueThreshDb;
             g.makeupGainDb = kGlueMakeupDb;
-            g.reason       = "Klebt den ganzen Mix zusammen — sanft, wie die Profis in den Bus mixen";
+            g.reason       = juce::String::fromUTF8 ("Klebt den ganzen Mix zusammen — sanft, wie die Profis in den Bus mixen");
             plan.add (g);
         }
 
         //----------------------------------------------------------------------
         juce::String genre = (reference && reference->isValid()) ? reference->name : juce::String();
-        plan.summary = "Mix-Vorschlag: " + juce::String (plan.size()) + " Schritte über "
+        plan.summary = "Mix-Vorschlag: " + juce::String (plan.size())
+                     + juce::String::fromUTF8 (" Schritte über ")
                      + juce::String ((int) tracks.size()) + " Spuren"
                      + (genre.isNotEmpty() ? " (Stil: " + genre + ")" : juce::String());
         return plan;
