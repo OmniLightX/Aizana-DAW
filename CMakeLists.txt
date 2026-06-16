@@ -337,6 +337,9 @@ if(CLOUDES_HAVE_GENERATOR)
     add_dependencies(Cloudes cloudes_generator_templates)
     target_compile_definitions(Cloudes PRIVATE CLOUDES_HAVE_GENERATOR=1)
     add_custom_command(TARGET Cloudes POST_BUILD
+        # Clear first so removed/renamed templates don't linger in the bundle.
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_CLAPS}

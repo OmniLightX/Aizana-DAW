@@ -11,23 +11,35 @@ namespace cloudes
         // the displayed descriptions AND keywords used by the matcher.
         const auto u8 = [] (const char* s) { return juce::String::fromUTF8 (s); };
 
+        // Real, full plugins (Faust-compiled) — built-in calibre, not toys. Each .dsp in
+        // generator/templates/ has a matching entry here. id == .dsp/.clap basename.
         static const std::vector<GeneratorTemplate> kTemplates {
-            { "gain", "Gain", "Dynamics",
-              u8 ("Lautstärke anheben oder absenken"),
-              { "gain", "volume", "level", "loud", "louder", "quieter",
-                "lauter", "leiser", "pegel", u8 ("lautstärke"), "boost" } },
+            { "compressor", "Compressor", "Dynamics",
+              u8 ("Dynamik bändigen — Threshold, Ratio, Attack, Release, Makeup"),
+              { "compressor", "compression", "compress", "kompressor", "kompression",
+                "dynamics", "dynamik", "glue", "punch", "leveling", "tame", "level" } },
 
-            { "lowpass", "Low-Pass Filter", "Filter",
-              u8 ("Höhen wegnehmen, Klang abdunkeln"),
-              { "lowpass", "low-pass", "low pass", "filter", "tiefpass", "highcut",
-                "high cut", "dark", "darker", "dumpf", "dunkel", "muffle", "warm",
-                u8 ("höhen"), "weicher" } },
+            { "eq3", "EQ (3-Band)", "EQ",
+              u8 ("3-Band-EQ — Bässe, Mitten, Höhen formen"),
+              { "eq", "equalizer", "equalize", "frequency", "frequenz", "bass", u8 ("bässe"),
+                "mid", "mitten", u8 ("höhen"), "treble", "tone", "klang", "shelf", "bell",
+                "brighten", "dunkler", "filter", "tiefpass", "highcut" } },
+
+            { "reverb", "Reverb", "Reverb",
+              u8 ("Raum & Hall — Size, Damping, Mix"),
+              { "reverb", "hall", "raum", "room", "space", "ambience", "ambient",
+                "verhallen", "wet", "nachhall" } },
+
+            { "delay", "Delay", "Delay",
+              u8 ("Echo mit Feedback — Time, Feedback, Mix"),
+              { "delay", "echo", u8 ("verzögerung"), "feedback", "repeat", "slap", "ping",
+                "pong" } },
 
             { "drive", "Saturation / Drive", "Saturation",
               u8 ("Sättigung/Verzerrung für Wärme und Druck"),
               { "drive", "distortion", "distort", "saturation", "saturate", "overdrive",
                 "verzerrung", "verzerren", u8 ("sättigung"), "saturieren", "dirt", "crunch",
-                "fuzz", "tube", u8 ("röhre"), "druck" } },
+                "fuzz", "tube", u8 ("röhre"), "druck", "warm", "warmth" } },
         };
         return kTemplates;
     }
