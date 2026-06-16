@@ -6,23 +6,28 @@ namespace cloudes
     {
         // Curated B1 set — one entry per generator/templates/*.dsp. Keywords are DE/EN
         // and lower-case; the matcher lower-cases the prompt before comparing.
+        // NOTE: non-ASCII literals MUST go through fromUTF8 — juce::String(const char*)
+        // does not decode UTF-8 in this build (umlauts render as "Ã¤"). Applies to both
+        // the displayed descriptions AND keywords used by the matcher.
+        const auto u8 = [] (const char* s) { return juce::String::fromUTF8 (s); };
+
         static const std::vector<GeneratorTemplate> kTemplates {
             { "gain", "Gain", "Dynamics",
-              "Lautstärke anheben oder absenken",
+              u8 ("Lautstärke anheben oder absenken"),
               { "gain", "volume", "level", "loud", "louder", "quieter",
-                "lauter", "leiser", "pegel", "lautstärke", "boost" } },
+                "lauter", "leiser", "pegel", u8 ("lautstärke"), "boost" } },
 
             { "lowpass", "Low-Pass Filter", "Filter",
-              "Höhen wegnehmen, Klang abdunkeln",
+              u8 ("Höhen wegnehmen, Klang abdunkeln"),
               { "lowpass", "low-pass", "low pass", "filter", "tiefpass", "highcut",
                 "high cut", "dark", "darker", "dumpf", "dunkel", "muffle", "warm",
-                "höhen", "weicher" } },
+                u8 ("höhen"), "weicher" } },
 
             { "drive", "Saturation / Drive", "Saturation",
-              "Sättigung/Verzerrung für Wärme und Druck",
+              u8 ("Sättigung/Verzerrung für Wärme und Druck"),
               { "drive", "distortion", "distort", "saturation", "saturate", "overdrive",
-                "verzerrung", "verzerren", "sättigung", "saturieren", "dirt", "crunch",
-                "fuzz", "tube", "röhre", "druck" } },
+                "verzerrung", "verzerren", u8 ("sättigung"), "saturieren", "dirt", "crunch",
+                "fuzz", "tube", u8 ("röhre"), "druck" } },
         };
         return kTemplates;
     }
