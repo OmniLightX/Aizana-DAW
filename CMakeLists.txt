@@ -193,6 +193,7 @@ target_sources(Cloudes PRIVATE
     src/ai/MixApplyEngine.cpp
     src/ai/MixDataLogger.cpp
     src/generator/PluginGenerator.cpp
+    src/generator/FaustCompiler.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
@@ -344,6 +345,23 @@ if(CLOUDES_HAVE_GENERATOR)
             "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_CLAPS}
             "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator/"
+        VERBATIM)
+
+    # Runtime-generator toolchain (G1): bundle the CLAP/clap-helpers headers + GUI globals
+    # so FaustCompiler can compile user-/AI-authored DSP at runtime (system `faust` provides
+    # the rest). clang comes from the Command Line Tools.
+    add_custom_command(TARGET Cloudes POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${clap_gen_SOURCE_DIR}/include"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/clap/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${clap_helpers_SOURCE_DIR}/include"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/clap-helpers/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/"
         VERBATIM)
 endif()
 

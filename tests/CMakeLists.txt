@@ -33,6 +33,7 @@ target_sources(engine_tests PRIVATE
     test_onnx_backend.cpp
     test_mix_data_logger.cpp
     test_plugin_generator.cpp
+    test_faust_compiler.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
@@ -72,6 +73,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/MixApplyEngine.cpp
     ../src/ai/MixDataLogger.cpp
     ../src/generator/PluginGenerator.cpp
+    ../src/generator/FaustCompiler.cpp
     ../src/ai/StemImportEngine.cpp
     ../src/ai/StemSeparationEngine.cpp
     ../src/ai/ReferenceAnalyzer.cpp
@@ -152,7 +154,9 @@ target_include_directories(engine_tests PRIVATE
 # ONNX Runtime — same imported target as the app (declared GLOBAL in the root).
 # Resource dir exposes the dummy .onnx fixture used by test_onnx_backend.cpp.
 target_compile_definitions(engine_tests PRIVATE
-    CLOUDES_TEST_RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
+    CLOUDES_TEST_RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    CLOUDES_TEST_BUILD_DIR="${CMAKE_BINARY_DIR}"
+    CLOUDES_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 if(CLOUDES_ENABLE_ONNX)
     target_link_libraries(engine_tests PRIVATE onnxruntime)
     target_compile_definitions(engine_tests PRIVATE CLOUDES_HAVE_ONNXRUNTIME=1)
