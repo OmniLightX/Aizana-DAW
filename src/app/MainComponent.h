@@ -333,8 +333,19 @@ private:
     void onMixPlanReady (const cloudes::MixPlan& plan,
                          const std::vector<cloudes::TrackMixProfile>& profiles);
 
-    // Plugin generator (Phase 4 / Iteration B, B2): describe/pick a template → load the
-    // generated .clap onto the selected track via ClapPluginFormat → open its editor.
+    // Plugin generator — RUNTIME path (Phase 4 / Generator G3): describe a plugin → the
+    // local composer writes Faust → FaustCompiler builds a brand-new .clap on a background
+    // thread → load it onto the selected track + open its editor. This is the real generator
+    // (writes new DSP), superseding the precompiled-palette path below.
+    void startRuntimeGenerator();
+    void runGeneratorFromPrompt (const juce::String& prompt, te::EditItemID trackID);
+    void onGeneratedPluginReady (bool ok, const juce::String& clapPath, const juce::String& log,
+                                 const juce::String& pluginName, te::EditItemID trackID);
+    bool        generatorBusy = false;            // guards against concurrent generations
+    juce::Label generatorStatusLabel;             // transient "Generiere…" overlay
+
+    // Plugin generator — PALETTE path (Phase 4 / Iteration B, B2): pick/describe a bundled
+    // precompiled template. Dormant (superseded by the runtime path); kept until B-rollback.
     void startPluginGenerator();
     void describeAndGenerate();   // free-text prompt → match → generate on the selected track
     void generatePluginOnTrack (const cloudes::GeneratorTemplate& tmpl, te::AudioTrack& track);

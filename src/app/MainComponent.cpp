@@ -1,5 +1,10 @@
 #include "MainComponent.h"
 
+#include "generator/PluginSpec.h"
+#include "generator/FaustEmitter.h"
+#include "generator/LocalComposer.h"
+#include "generator/FaustCompiler.h"
+
 namespace te = tracktion::engine;
 
 //==============================================================================
@@ -127,6 +132,12 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     addChildComponent (compingCloseButton);    // hidden by default
     compingCloseButton.onClick = [this] { hideCompingEditor(); };
+
+    // Transient "Generiere…" overlay for the runtime plugin generator (G3).
+    generatorStatusLabel.setJustificationType (juce::Justification::centred);
+    generatorStatusLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0xee1c1c1e));
+    generatorStatusLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    addChildComponent (generatorStatusLabel);   // hidden until a generation runs
 
     // TransportBar must always render on top of all other components (arrangement,
     // mixer, docked panel).  toFront() after all siblings are added guarantees this
@@ -764,7 +775,7 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
             break;
 
         case SongGeneratePlugin:
-            startPluginGenerator();
+            startRuntimeGenerator();
             break;
 
         case SongRefAnalyze:
@@ -1105,6 +1116,160 @@ void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan,
             cloudes::MixDataLogger::logReview (profiles, proposed, edited,
                                                { "heuristic", "pro", genre, "" });
         });
+}
+
+//==============================================================================
+// Plugin Generator — RUNTIME path (Phase 4 / Generator G3): describe → local composer
+// writes Faust → FaustCompiler builds a brand-new .clap (background) → load on track.
+//==============================================================================
+
+void MainComponent::startRuntimeGenerator()
+{
+    auto* track = arrangementView.getSelectedTrack();
+    if (track == nullptr)
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Wähle zuerst eine Spur, auf die das Plugin soll."));
+        return;
+    }
+
+    if (generatorBusy)
+        return;   // a generation is already running
+
+    // The runtime generator shells out to `faust` + `clang` — tell the user up front if the
+    // toolchain isn't installed instead of failing after they've typed a description.
+    if (! cloudes::FaustCompiler::isAvailable())
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Der Plugin-Generator braucht Faust. Installier es einmalig "
+                                    "per Terminal:\n\n    brew install faust\n\n"
+                                    "(Eine eigene Faust-Bibliothek wird mit dem Release gebündelt.)"));
+        return;
+    }
+
+    const auto trackID = track->itemID;
+
+    auto aw = std::make_unique<juce::AlertWindow> (
+        juce::String::fromUTF8 ("Neues Plugin generieren"),
+        juce::String::fromUTF8 ("Beschreibe dein Plugin — der Generator baut die DSP daraus neu.\n"
+                                "Z. B. „warmer Tape-Sound mit etwas Reverb\", „Bus-Glue-Kompressor "
+                                "mit Air\", „Tremolo mit Filter\"."),
+        juce::MessageBoxIconType::QuestionIcon);
+    aw->addTextEditor ("desc", juce::String(), juce::String::fromUTF8 ("Beschreibung:"));
+    aw->addButton (juce::String::fromUTF8 ("Generieren"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+    aw->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    aw->setVisible (true);
+
+    auto* awPtr = aw.get();
+    awPtr->enterModalState (true,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<MainComponent> (this),
+             awPtr, owner = std::move (aw), trackID] (int result) mutable
+            {
+                const auto text = awPtr->getTextEditorContents ("desc");
+                owner.reset();   // close + delete the window now (we own it)
+
+                if (safe == nullptr || result == 0 || text.trim().isEmpty())
+                    return;
+
+                safe->runGeneratorFromPrompt (text, trackID);
+            }),
+        false);   // we delete the window ourselves via the captured unique_ptr
+}
+
+void MainComponent::runGeneratorFromPrompt (const juce::String& prompt, te::EditItemID trackID)
+{
+    if (generatorBusy)
+        return;
+
+    // Compose + emit on the message thread (pure, instant); compile on a worker (file I/O +
+    // spawns faust/clang → seconds). Result marshals back via callAsync + SafePointer.
+    const auto spec = cloudes::LocalComposer::compose (prompt);
+    const auto src  = cloudes::FaustEmitter::emit (spec);
+
+    generatorBusy = true;
+
+    // Transient on-canvas status so the few-second compile doesn't look like a hang.
+    generatorStatusLabel.setText (
+        juce::String::fromUTF8 ("Generiere „") + spec.name
+            + juce::String::fromUTF8 ("\" … (Faust kompiliert, kann ein paar Sekunden dauern)"),
+        juce::dontSendNotification);
+    generatorStatusLabel.setBounds (getLocalBounds().withSizeKeepingCentre (520, 60));
+    generatorStatusLabel.setVisible (true);
+    generatorStatusLabel.toFront (false);
+
+    juce::Thread::launch (
+        [src, name = spec.name, trackID,
+         safe = juce::Component::SafePointer<MainComponent> (this)]()
+        {
+            const auto r = cloudes::FaustCompiler::compile (src, name);   // background thread
+
+            juce::MessageManager::callAsync (
+                [safe, ok = r.ok, path = r.clapFile.getFullPathName(), log = r.log, name, trackID]()
+                {
+                    if (safe == nullptr)
+                        return;
+                    safe->onGeneratedPluginReady (ok, path, log, name, trackID);
+                });
+        });
+}
+
+void MainComponent::onGeneratedPluginReady (bool ok, const juce::String& clapPath,
+                                            const juce::String& log, const juce::String& pluginName,
+                                            te::EditItemID trackID)
+{
+    generatorBusy = false;
+    generatorStatusLabel.setVisible (false);
+
+    if (! ok)
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Konnte das Plugin nicht bauen.\n\n")
+                + log.substring (juce::jmax (0, log.length() - 1200)));   // tail of the log
+        return;
+    }
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    // Re-resolve the track by id — the compile took seconds and the selection/edit may have
+    // changed. Fall back to the current selection; warn if there's nowhere to put it.
+    te::AudioTrack* track = nullptr;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (t->itemID == trackID)
+            { track = t; break; }
+    if (track == nullptr)
+        track = arrangementView.getSelectedTrack();
+    if (track == nullptr)
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("„") + pluginName
+                + juce::String::fromUTF8 ("\" wurde gebaut, aber die Zielspur existiert nicht mehr.\n"
+                                          "Liegt in der Plugin-Library."));
+        return;
+    }
+
+    // Insert via the standard ExternalPlugin path (CLAP is registered with the engine format
+    // manager in EditManager) and open its editor.
+    ClapPluginFormat clap;
+    juce::OwnedArray<juce::PluginDescription> descs;
+    clap.findAllTypesForFile (descs, clapPath);
+    if (descs.isEmpty())
+    {
+        juce::NativeMessageBox::showMessageBoxAsync (
+            juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
+            juce::String::fromUTF8 ("Das generierte Plugin „") + pluginName
+                + juce::String::fromUTF8 ("\" konnte nicht geladen werden."));
+        return;
+    }
+
+    if (auto* plugin = pluginManager.insertPlugin (*track, *descs[0]))
+        pluginWindowManager.openPluginWindow (*plugin);
 }
 
 //==============================================================================
