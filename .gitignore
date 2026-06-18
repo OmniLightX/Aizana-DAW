@@ -71,6 +71,9 @@ compile_commands.json
 # Claude Code local tooling (per-machine — not product code)
 .claude/
 
+# Local/private notes
+xtra mds/
+
 # Local audio test material (never commit songs/stems)
 /Stems_*/
 /*.mp3
