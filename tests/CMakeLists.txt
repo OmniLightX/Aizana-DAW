@@ -34,6 +34,7 @@ target_sources(engine_tests PRIVATE
     test_mix_data_logger.cpp
     test_plugin_generator.cpp
     test_faust_compiler.cpp
+    test_faust_emitter.cpp
     test_stem_analyzer.cpp
     test_session_planner.cpp
     test_stem_import.cpp
@@ -74,6 +75,9 @@ target_sources(engine_tests PRIVATE
     ../src/ai/MixDataLogger.cpp
     ../src/generator/PluginGenerator.cpp
     ../src/generator/FaustCompiler.cpp
+    ../src/generator/PluginSpec.cpp
+    ../src/generator/FaustEmitter.cpp
+    ../src/generator/LocalComposer.cpp
     ../src/ai/StemImportEngine.cpp
     ../src/ai/StemSeparationEngine.cpp
     ../src/ai/ReferenceAnalyzer.cpp

@@ -194,6 +194,9 @@ target_sources(Cloudes PRIVATE
     src/ai/MixDataLogger.cpp
     src/generator/PluginGenerator.cpp
     src/generator/FaustCompiler.cpp
+    src/generator/PluginSpec.cpp
+    src/generator/FaustEmitter.cpp
+    src/generator/LocalComposer.cpp
     src/engine/EditManager.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
