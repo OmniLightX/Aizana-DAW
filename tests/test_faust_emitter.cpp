@@ -105,6 +105,55 @@ TEST_CASE ("LocalComposer: prompts → sensible chains in mixing order", "[faust
     }
 }
 
+TEST_CASE ("LocalComposer: generic vocal prompt → usable vocal chain, not bare Gain", "[faustgen][g2]")
+{
+    // The exact kind of request that used to fall back to a single Gain block.
+    const auto spec = LocalComposer::compose (
+        "vielseitiges und intuitiv bedienbares Effekt-Plugin zur Stimmmanipulation");
+
+    REQUIRE (spec.chain.size() >= 3);
+    REQUIRE (spec.chain[0].kind != BlockKind::Gain);   // not the neutral fallback
+
+    bool hasDeEss = false, hasDoubler = false;
+    for (const auto& b : spec.chain)
+    {
+        hasDeEss   = hasDeEss   || b.kind == BlockKind::DeEss;
+        hasDoubler = hasDoubler || b.kind == BlockKind::Doubler;
+    }
+    REQUIRE (hasDeEss);
+    REQUIRE (hasDoubler);
+}
+
+// Integration: every voice block emits valid Faust that actually compiles to a .clap.
+TEST_CASE ("FaustEmitter: all voice blocks compile to a real .clap", "[faustgen][g2]")
+{
+    auto tc = FaustToolchain::resolve();
+    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+
+    if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
+        SKIP ("Faust toolchain not available in this environment");
+
+    PluginSpec spec;
+    spec.name  = "Voice Lab";
+    spec.chain = { Blocks::deEsser(), Blocks::telephone(), Blocks::pitchShift (12.0f),
+                   Blocks::harmonizer(), Blocks::ringMod(), Blocks::doubler() };
+    const auto src = FaustEmitter::emit (spec);
+
+    const auto outDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                            .getChildFile ("cloudes_voice_test");
+    outDir.deleteRecursively();
+
+    const auto r = FaustCompiler::compile (src, spec.name, tc, outDir);
+    INFO ("faust source:\n" << src);
+    INFO ("compiler log:\n" << r.log);
+    REQUIRE (r.ok);
+    REQUIRE (r.clapFile.existsAsFile());
+
+    outDir.deleteRecursively();
+}
+
 // Integration: composed spec → Faust source → real .clap (G2 feeds G1, no LLM).
 TEST_CASE ("LocalComposer → FaustEmitter → FaustCompiler produces a .clap", "[faustgen][g2]")
 {

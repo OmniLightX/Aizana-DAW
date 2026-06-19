@@ -130,6 +130,59 @@ namespace cloudes
                     s.needsDryWet = true;
                     break;
                 }
+
+                //============================================================ voice blocks
+                case BlockKind::PitchShift:
+                {
+                    bind ("p", slider (*find (b, "pitch")));
+                    s.expr = "par(i, 2, ef.transpose(1024, 256, p))";
+                    break;
+                }
+
+                case BlockKind::Harmonizer:
+                {
+                    bind ("s",   slider (*find (b, "interval")));
+                    bind ("mix", slider (*find (b, "mix")));
+                    s.expr = "par(i, 2, \\(x).(x * (1 - mix) + (x : ef.transpose(1024, 256, s)) * mix))";
+                    break;
+                }
+
+                case BlockKind::Doubler:
+                {
+                    bind ("det", slider (*find (b, "detune")) + " / 100");   // cents → semitones
+                    bind ("dms", slider (*find (b, "delay")));
+                    bind ("mix", slider (*find (b, "mix")));
+                    s.expr = "par(i, 2, \\(x).(x * (1 - mix * 0.5) + "
+                             "(x : de.fdelay(ma.SR, ba.sec2samp(dms / 1000)) : "
+                             "ef.transpose(1024, 256, det)) * mix))";
+                    break;
+                }
+
+                case BlockKind::DeEss:
+                {
+                    bind ("fc",    slider (*find (b, "freq")));
+                    bind ("thr",   slider (*find (b, "threshold")));
+                    bind ("ratio", slider (*find (b, "ratio")));
+                    s.expr = "par(i, 2, _ <: fi.lowpass(2, fc), "
+                             "(fi.highpass(2, fc) : co.compressor_mono(ratio, thr, 0.003, 0.05)) :> _)";
+                    break;
+                }
+
+                case BlockKind::Telephone:
+                {
+                    bind ("lo", slider (*find (b, "low")));
+                    bind ("hi", slider (*find (b, "high")));
+                    s.expr = "par(i, 2, fi.highpass(2, lo) : fi.lowpass(2, hi))";
+                    break;
+                }
+
+                case BlockKind::RingMod:
+                {
+                    bind ("freq", slider (*find (b, "freq")));
+                    bind ("mix",  slider (*find (b, "mix")));
+                    s.expr = "par(i, 2, \\(x).(x * (1 - mix) + (x * os.osc(freq)) * mix))";
+                    break;
+                }
             }
 
             return s;

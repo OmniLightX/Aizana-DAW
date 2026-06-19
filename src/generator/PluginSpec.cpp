@@ -19,6 +19,12 @@ namespace cloudes
             case BlockKind::Tremolo:    return "Tremolo";
             case BlockKind::Delay:      return "Delay";
             case BlockKind::Reverb:     return "Reverb";
+            case BlockKind::PitchShift: return "Pitch Shift";
+            case BlockKind::Harmonizer: return "Harmonizer";
+            case BlockKind::Doubler:    return "Doubler";
+            case BlockKind::DeEss:      return "De-Esser";
+            case BlockKind::Telephone:  return "Telephone";
+            case BlockKind::RingMod:    return "Ring Mod";
         }
         return "Stage";
     }
@@ -119,6 +125,50 @@ namespace cloudes
                      { { "size", "Size",    "", size,    0.0f, 1.0f, 0.01f, false },
                        { "damp", "Damping", "", damping, 0.0f, 1.0f, 0.01f, false },
                        { "mix",  "Mix",     "", mix,     0.0f, 1.0f, 0.01f, false } } };
+        }
+
+        //========================================================================== voice
+        SpecBlock pitchShift (float semitones)
+        {
+            return { BlockKind::PitchShift, "",
+                     { { "pitch", "Pitch", "st", semitones, -12.0f, 12.0f, 1.0f, false } } };
+        }
+
+        SpecBlock harmonizer (float intervalSemitones, float mix)
+        {
+            return { BlockKind::Harmonizer, "",
+                     { { "interval", "Interval", "st", intervalSemitones, -12.0f, 12.0f, 1.0f, false },
+                       { "mix",      "Mix",      "",   mix,               0.0f,  1.0f,  0.01f, false } } };
+        }
+
+        SpecBlock doubler (float detuneCents, float delayMs, float mix)
+        {
+            return { BlockKind::Doubler, "",
+                     { { "detune", "Detune", "cent", detuneCents, 0.0f, 50.0f, 1.0f,  false },
+                       { "delay",  "Delay",  "ms",   delayMs,     0.0f, 40.0f, 0.1f,  false },
+                       { "mix",    "Mix",    "",     mix,         0.0f, 1.0f,  0.01f, false } } };
+        }
+
+        SpecBlock deEsser (float freqHz, float thresholdDb, float ratio)
+        {
+            return { BlockKind::DeEss, "",
+                     { { "freq",      "Frequency", "Hz", freqHz,      2000.0f, 12000.0f, 1.0f, true },
+                       { "threshold", "Threshold", "dB", thresholdDb, -60.0f,  0.0f,     0.1f, false },
+                       { "ratio",     "Ratio",     "",   ratio,       1.0f,    20.0f,    0.1f, false } } };
+        }
+
+        SpecBlock telephone (float lowHz, float highHz)
+        {
+            return { BlockKind::Telephone, "",
+                     { { "low",  "Low Cut",  "Hz", lowHz,  100.0f,  2000.0f, 1.0f, true },
+                       { "high", "High Cut", "Hz", highHz, 1000.0f, 8000.0f, 1.0f, true } } };
+        }
+
+        SpecBlock ringMod (float freqHz, float mix)
+        {
+            return { BlockKind::RingMod, "",
+                     { { "freq", "Frequency", "Hz", freqHz, 20.0f, 2000.0f, 1.0f,  true },
+                       { "mix",  "Mix",       "",   mix,    0.0f,  1.0f,    0.01f, false } } };
         }
     }
 }

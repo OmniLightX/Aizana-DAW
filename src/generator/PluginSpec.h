@@ -25,7 +25,14 @@ namespace cloudes
         Compressor,  // stereo dynamics
         Tremolo,     // amplitude LFO
         Delay,       // feedback echo
-        Reverb       // freeverb + dry/wet
+        Reverb,      // freeverb + dry/wet
+        // --- voice manipulation (ef.transpose / co.compressor_mono / ring mod) ---
+        PitchShift,  // transpose in semitones
+        Harmonizer,  // dry + a pitched voice
+        Doubler,     // detuned + delayed copy → thickening/width
+        DeEss,       // split-band high-frequency compression
+        Telephone,   // band-limited lo-fi voice
+        RingMod      // ring modulation → robot voice
     };
 
     /** One automatable control → one Faust hslider. */
@@ -78,5 +85,14 @@ namespace cloudes
         SpecBlock tremolo    (float rateHz = 5.0f, float depth = 0.5f);
         SpecBlock delay      (float timeS = 0.3f, float feedback = 0.4f);
         SpecBlock reverb     (float size = 0.5f, float damping = 0.5f, float mix = 0.3f);
+
+        // Voice manipulation — defaults are deliberately audible (generated plugins have no
+        // GUI yet, so the out-of-the-box sound must already do something).
+        SpecBlock pitchShift (float semitones = 7.0f);
+        SpecBlock harmonizer (float intervalSemitones = 7.0f, float mix = 0.45f);
+        SpecBlock doubler    (float detuneCents = 12.0f, float delayMs = 18.0f, float mix = 0.5f);
+        SpecBlock deEsser    (float freqHz = 6000.0f, float thresholdDb = -24.0f, float ratio = 4.0f);
+        SpecBlock telephone  (float lowHz = 300.0f, float highHz = 3000.0f);
+        SpecBlock ringMod    (float freqHz = 200.0f, float mix = 0.6f);
     }
 }
