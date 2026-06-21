@@ -1,10 +1,16 @@
 #include "ClapPluginFormat.h"
 
+#include <atomic>
+
 #if JUCE_MAC || JUCE_LINUX
   #include <dlfcn.h>
 #elif JUCE_WINDOWS
   #include <windows.h>
 #endif
+
+// Max parameter-change events drained from the FIFO into a single process block.
+// Far more than a human can generate per ~1.5 ms block; surplus stays queued.
+static constexpr int kMaxParamEventsPerBlock = 128;
 
 // ===========================================================================
 // Stub host callbacks (C-compatible, CLAP_ABI calling convention)
@@ -16,12 +22,31 @@ static void CLAP_ABI stubHostRequestRestart  (const clap_host_t*) {}
 static void CLAP_ABI stubHostRequestProcess  (const clap_host_t*) {}
 static void CLAP_ABI stubHostRequestCallback (const clap_host_t*) {}
 
-// Stub input event list — always empty
-static uint32_t CLAP_ABI emptyInputSize (const clap_input_events_t*) { return 0; }
-static const clap_event_header_t* CLAP_ABI emptyInputGet (const clap_input_events_t*, uint32_t) { return nullptr; }
-
 // Stub output event list — silently discards
 static bool CLAP_ABI discardOutputTryPush (const clap_output_events_t*, const clap_event_header_t*) { return true; }
+
+// ---------------------------------------------------------------------------
+// Audio-thread input event list backed by a stack array of param-value events.
+// `ctx` points to a ClapInputEventList that lives on the process() stack.
+// ---------------------------------------------------------------------------
+struct ClapInputEventList
+{
+    const clap_event_param_value_t* events { nullptr };
+    uint32_t                        count  { 0 };
+};
+
+static uint32_t CLAP_ABI inputEventsSize (const clap_input_events_t* list)
+{
+    return static_cast<const ClapInputEventList*> (list->ctx)->count;
+}
+
+static const clap_event_header_t* CLAP_ABI inputEventsGet (const clap_input_events_t* list, uint32_t index)
+{
+    auto* l = static_cast<const ClapInputEventList*> (list->ctx);
+    if (index >= l->count)
+        return nullptr;
+    return &l->events[index].header;
+}
 
 // ===========================================================================
 // Static stub host definition — shared across all ClapAudioPluginInstances.
@@ -379,42 +404,37 @@ juce::PluginDescription ClapPluginFormat::makeDescription (
 class ClapParameter : public juce::HostedAudioProcessorParameter
 {
 public:
-    ClapParameter (const clap_plugin_t*        plugin,
+    ClapParameter (ClapAudioPluginInstance&    owner,
+                   const clap_plugin_t*        plugin,
                    const clap_plugin_params_t* paramsExt,
                    clap_id                     paramId,
                    uint32_t                    paramIndex,
                    const juce::String&         name,
+                   double                      minValue,
+                   double                      maxValue,
                    float                       defaultValue)
-        : plugin     (plugin)
+        : owner      (owner)
+        , plugin     (plugin)
         , paramsExt  (paramsExt)
         , paramId    (paramId)
         , paramIndex (paramIndex)
         , paramName  (name)
+        , rangeMin   (minValue)
+        , rangeSize  (maxValue - minValue)
         , defaultVal (defaultValue)
+        , currentNorm (defaultValue)
     {}
 
-    float getValue() const override
+    // The host is the source of truth for the value: we return the last value the
+    // host set (or the default), not a read-back from the plugin. This keeps the UI
+    // thumb stable and instant — the plugin converges on the next process() block.
+    float getValue() const override { return currentNorm.load (std::memory_order_relaxed); }
+
+    void setValue (float newValue) override
     {
-        if (paramsExt == nullptr || plugin == nullptr)
-            return defaultVal;
-
-        double rawValue = 0.0;
-        if (! paramsExt->get_value (plugin, paramId, &rawValue))
-            return defaultVal;
-
-        clap_param_info_t info{};
-        if (paramsExt->get_info (plugin, paramIndex, &info))
-        {
-            const double range = info.max_value - info.min_value;
-            if (range > 0.0)
-                return static_cast<float> ((rawValue - info.min_value) / range);
-        }
-        return defaultVal;
-    }
-
-    void setValue (float /*newValue*/) override
-    {
-        // Phase 1: host-to-plugin parameter automation is deferred
+        newValue = juce::jlimit (0.0f, 1.0f, newValue);
+        currentNorm.store (newValue, std::memory_order_relaxed);
+        owner.enqueueParamChange (paramId, rangeMin + (double) newValue * rangeSize);
     }
 
     float getDefaultValue() const override { return defaultVal; }
@@ -431,18 +451,49 @@ public:
         return juce::String (static_cast<juce::int64> (paramId));
     }
 
+    // Format the normalised value using the plugin's own value_to_text (eg "2.3 kHz",
+    // "-6 dB"). [main-thread] per ext/params.h — getText is only called from the UI.
+    juce::String getText (float normValue, int maximumStringLength) const override
+    {
+        if (paramsExt != nullptr && plugin != nullptr && paramsExt->value_to_text != nullptr)
+        {
+            const double raw = rangeMin + (double) juce::jlimit (0.0f, 1.0f, normValue) * rangeSize;
+            char buffer[128] = {};
+            if (paramsExt->value_to_text (plugin, paramId, raw, buffer, sizeof (buffer)))
+            {
+                juce::String s = juce::String::fromUTF8 (buffer);
+                return maximumStringLength > 0 ? s.substring (0, maximumStringLength) : s;
+            }
+        }
+        return juce::AudioProcessorParameter::getText (normValue, maximumStringLength);
+    }
+
     float getValueForText (const juce::String& text) const override
     {
-        return text.getFloatValue();
+        if (paramsExt != nullptr && plugin != nullptr && paramsExt->text_to_value != nullptr)
+        {
+            double raw = 0.0;
+            if (paramsExt->text_to_value (plugin, paramId, text.toRawUTF8(), &raw))
+                return rangeSize > 0.0 ? (float) juce::jlimit (0.0, 1.0, (raw - rangeMin) / rangeSize)
+                                       : 0.0f;
+        }
+        // Fallback: interpret the text as a raw value in [min, max] and normalise.
+        return rangeSize > 0.0
+                 ? (float) juce::jlimit (0.0, 1.0, ((double) text.getFloatValue() - rangeMin) / rangeSize)
+                 : 0.0f;
     }
 
 private:
+    ClapAudioPluginInstance&    owner;
     const clap_plugin_t*        plugin     { nullptr };
     const clap_plugin_params_t* paramsExt  { nullptr };
     clap_id                     paramId    { CLAP_INVALID_ID };
     uint32_t                    paramIndex { 0 };
     juce::String                paramName;
+    double                      rangeMin   { 0.0 };
+    double                      rangeSize  { 1.0 };
     float                       defaultVal { 0.0f };
+    std::atomic<float>          currentNorm { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClapParameter)
 };
@@ -465,6 +516,8 @@ ClapAudioPluginInstance::ClapAudioPluginInstance (
                           desc.numOutputChannels,
                           44100.0,
                           512);
+    // Pre-allocate the param-change queue storage on the message thread (never on audio).
+    paramChangeStorage.resize (kParamFifoCapacity);
     buildParameterList();
 }
 
@@ -510,10 +563,22 @@ void ClapAudioPluginInstance::buildParameterList()
         if (range > 0.0)
             normDefault = static_cast<float> ((info.default_value - info.min_value) / range);
 
-        addHostedParameter (std::make_unique<ClapParameter> (plugin, paramsExt, info.id, i,
+        addHostedParameter (std::make_unique<ClapParameter> (*this, plugin, paramsExt, info.id, i,
                                                               juce::String::fromUTF8 (info.name),
+                                                              info.min_value, info.max_value,
                                                               normDefault));
     }
+}
+
+void ClapAudioPluginInstance::enqueueParamChange (clap_id id, double rawValue) noexcept
+{
+    // Message thread (producer). Lock-free single-slot write; if the queue is full
+    // (audio thread starved) the change is dropped — the next move supersedes it.
+    int start1, size1, start2, size2;
+    paramChangeFifo.prepareToWrite (1, start1, size1, start2, size2);
+    if (size1 > 0)
+        paramChangeStorage[(size_t) start1] = { id, rawValue };
+    paramChangeFifo.finishedWrite (size1);
 }
 
 void ClapAudioPluginInstance::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -592,10 +657,45 @@ void ClapAudioPluginInstance::processBlock (
         0                      // constant_mask
     };
 
-    static const clap_input_events_t kEmptyInputEvents {
-        nullptr,
-        emptyInputSize,
-        emptyInputGet
+    // Drain pending host→plugin parameter changes into CLAP param-value events.
+    // Stack-allocated, lock-free SPSC read — audio-thread safe (no alloc, no lock).
+    clap_event_param_value_t paramEvents[kMaxParamEventsPerBlock];
+    uint32_t numParamEvents = 0;
+    {
+        const int toRead = juce::jmin (paramChangeFifo.getNumReady(), kMaxParamEventsPerBlock);
+        int start1, size1, start2, size2;
+        paramChangeFifo.prepareToRead (toRead, start1, size1, start2, size2);
+
+        const auto appendRange = [&] (int start, int size)
+        {
+            for (int i = 0; i < size; ++i)
+            {
+                const auto& c = paramChangeStorage[(size_t) (start + i)];
+                auto& e = paramEvents[numParamEvents++];
+                e.header.size     = sizeof (clap_event_param_value_t);
+                e.header.time     = 0;
+                e.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                e.header.type     = CLAP_EVENT_PARAM_VALUE;
+                e.header.flags    = 0;
+                e.param_id        = c.id;
+                e.cookie          = nullptr;
+                e.note_id         = -1;
+                e.port_index      = -1;
+                e.channel         = -1;
+                e.key             = -1;
+                e.value           = c.value;
+            }
+        };
+        appendRange (start1, size1);
+        appendRange (start2, size2);
+        paramChangeFifo.finishedRead (size1 + size2);
+    }
+
+    ClapInputEventList inEventList { paramEvents, numParamEvents };
+    const clap_input_events_t inputEvents {
+        &inEventList,
+        inputEventsSize,
+        inputEventsGet
     };
 
     static const clap_output_events_t kDiscardOutputEvents {
@@ -611,7 +711,7 @@ void ClapAudioPluginInstance::processBlock (
         &audioBuffer,                                // audio_outputs (in-place)
         1,                                           // audio_inputs_count
         1,                                           // audio_outputs_count
-        &kEmptyInputEvents,
+        &inputEvents,
         &kDiscardOutputEvents
     };
 

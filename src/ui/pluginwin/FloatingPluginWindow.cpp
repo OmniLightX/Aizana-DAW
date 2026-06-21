@@ -226,6 +226,18 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
                 CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor()...");
                 apiEditor = pi->createEditor();
                 CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor() done");
+
+                // Stage 2b: plugins without a native editor (e.g. Cloudes-generated
+                // Faust/CLAP plugins, which expose params but no GUI) get a generic
+                // editor built from getParameters() — real, labelled, working sliders.
+                // Without this they fall through to the "No editor available" placeholder
+                // and are only usable at their baked-in defaults.
+                if (apiEditor == nullptr && pi->getParameters().size() > 0)
+                {
+                    CloudesPluginLog::stage ("FloatingPluginWindow  building GenericAudioProcessorEditor ("
+                                             + juce::String (pi->getParameters().size()) + " params)");
+                    apiEditor = new juce::GenericAudioProcessorEditor (*pi);
+                }
             }
         }
 

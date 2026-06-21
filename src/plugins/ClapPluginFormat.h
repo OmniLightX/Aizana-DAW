@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <clap/clap.h>
+#include <vector>
 
 /**
  * ClapPluginFormat — JUCE AudioPluginFormat subclass for CLAP plugin hosting.
@@ -157,7 +158,21 @@ public:
     void getStateInformation (juce::MemoryBlock&) override {}
     void setStateInformation (const void*, int) override {}
 
+    /** Enqueue a raw (denormalised) parameter value for delivery to the plugin
+        on the audio thread. Called from the message thread by ClapParameter::setValue.
+        Lock-free SPSC — never allocates, locks, or blocks. */
+    void enqueueParamChange (clap_id id, double rawValue) noexcept;
+
 private:
+    // Host→plugin parameter changes. ClapParameter::setValue() (message thread)
+    // enqueues a raw value; processBlock() (audio thread) drains the queue into
+    // CLAP CLAP_EVENT_PARAM_VALUE events. CLAP delivers param updates via process()
+    // while the plugin is active (TE keeps the graph running) — see ext/params.h.
+    struct ParamChange { clap_id id { CLAP_INVALID_ID }; double value { 0.0 }; };
+    static constexpr int      kParamFifoCapacity = 1024;
+    juce::AbstractFifo        paramChangeFifo { kParamFifoCapacity };
+    std::vector<ParamChange>  paramChangeStorage;
+
     const clap_plugin_t*       plugin        { nullptr };
     const clap_plugin_entry_t* entry         { nullptr };
     void*                      libraryHandle { nullptr };
