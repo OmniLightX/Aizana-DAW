@@ -200,6 +200,36 @@ void PluginScanner::cancelScan()
 }
 
 // ---------------------------------------------------------------------------
+// Generated plugin library
+// ---------------------------------------------------------------------------
+
+int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
+{
+    if (! dir.isDirectory())
+        return 0;
+
+    // A local format instance is enough to read the descriptions — findAllTypesForFile
+    // dlopens/scans/dlcloses each .clap on its own (no dependency on formatManager state).
+    ClapPluginFormat clap;
+    int added = 0;
+
+    for (const auto& file : dir.findChildFiles (juce::File::findFiles, false, "*.clap"))
+    {
+        juce::OwnedArray<juce::PluginDescription> descs;
+        clap.findAllTypesForFile (descs, file.getFullPathName());
+
+        for (auto* d : descs)
+        {
+            d->manufacturerName = "Cloudes";   // group as the Cloudes plugin library
+            if (knownPlugins.addType (*d))     // de-dupes by identifier (file path)
+                ++added;
+        }
+    }
+
+    return added;
+}
+
+// ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
 

@@ -85,6 +85,23 @@ public:
     juce::KnownPluginList& getKnownPlugins()              { return knownPlugins; }
 
     // ---------------------------------------------------------------------------
+    // Generated plugin library (Cloudes-generated CLAP plugins)
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Scan a directory of Cloudes-generated .clap plugins and add them to the
+     * KnownPluginList, so they appear in the plugin browser / insert menu like any
+     * other plugin AND survive restarts (the .clap files on disk are the source of
+     * truth — call this at startup and after each generation, not the XML cache).
+     *
+     * Generated plugins are grouped under the "Cloudes" manufacturer. addType()
+     * de-dupes by identifier, so repeat calls are safe and idempotent.
+     *
+     * @return number of NEW plugins added (0 if all were already known).
+     */
+    int registerGeneratedPlugins (const juce::File& generatedPluginsDir);
+
+    // ---------------------------------------------------------------------------
     // Persistence — serialize/deserialize KnownPluginList to/from XML file
     // ---------------------------------------------------------------------------
 

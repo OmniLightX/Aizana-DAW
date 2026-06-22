@@ -68,6 +68,12 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Load previously-scanned plugin list so the browser is populated on startup.
     pluginScanner.loadPluginList (pluginCache);
 
+    // Register Cloudes-generated plugins (the user's local plugin library) so they appear
+    // in the browser/insert menu and survive restarts — the .clap files on disk are the
+    // source of truth. Before syncScannedPluginsToEngine() so they're also made
+    // instantiable by the engine (a saved session may reference a generated plugin).
+    pluginScanner.registerGeneratedPlugins (cloudes::FaustCompiler::generatedPluginsDir());
+
     // Make the cached plugins instantiable by Tracktion Engine (editor + audio), and
     // crucially BEFORE any saved session is reloaded — TE recreates its plugins from the
     // engine's knownPluginList on load.
@@ -1231,6 +1237,13 @@ void MainComponent::onGeneratedPluginReady (bool ok, const juce::String& clapPat
                 + log.substring (juce::jmax (0, log.length() - 1200)));   // tail of the log
         return;
     }
+
+    // Add the freshly built plugin to the user's library (browser/insert menu) and make it
+    // instantiable by the engine — independent of whether the target track still exists, so
+    // it's reusable on any track and after restart. PluginBrowserPopup polls the list, so it
+    // shows up immediately without a manual rescan.
+    pluginScanner.registerGeneratedPlugins (cloudes::FaustCompiler::generatedPluginsDir());
+    syncScannedPluginsToEngine();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)

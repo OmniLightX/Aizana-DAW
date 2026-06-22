@@ -6,6 +6,7 @@
 
 #include "generator/FaustCompiler.h"
 #include "../src/plugins/ClapPluginFormat.h"
+#include "../src/plugins/PluginScanner.h"
 
 #ifndef CLOUDES_TEST_BUILD_DIR
  #define CLOUDES_TEST_BUILD_DIR "."
@@ -139,4 +140,56 @@ TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue chang
 
     instance->releaseResources();
     outDir.deleteRecursively();
+}
+
+// G5 Library: a generated .clap registered into the KnownPluginList so it appears in the
+// plugin browser / insert menu like any other plugin and survives restarts.
+TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap to the KnownPluginList", "[faustgen][plugins][library]")
+{
+    auto tc = FaustToolchain::resolve();
+    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+
+    if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
+        SKIP ("Faust toolchain not available in this environment");
+
+    const juce::String dsp =
+        "declare name \"LibraryGain\";\n"
+        "import(\"stdfaust.lib\");\n"
+        "g = hslider(\"Gain\", 1, 0, 1, 0.001);\n"
+        "process = par(i, 2, _ * g);\n";
+
+    const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                         .getChildFile ("cloudes_genlib_test");
+    dir.deleteRecursively();
+    dir.createDirectory();
+
+    const auto r = FaustCompiler::compile (dsp, "Library Gain", tc, dir);
+    INFO ("compiler log:\n" << r.log);
+    REQUIRE (r.ok);
+    REQUIRE (r.clapFile.existsAsFile());
+
+    PluginScanner scanner;
+    const int before = scanner.getKnownPlugins().getTypes().size();
+
+    const int added = scanner.registerGeneratedPlugins (dir);
+    CHECK (added >= 1);
+    CHECK (scanner.getKnownPlugins().getTypes().size() == before + added);
+
+    // The new entry is a CLAP plugin grouped under the "Cloudes" manufacturer.
+    bool found = false;
+    for (const auto& t : scanner.getKnownPlugins().getTypes())
+        if (t.fileOrIdentifier == r.clapFile.getFullPathName())
+        {
+            found = true;
+            CHECK (t.pluginFormatName == "CLAP");
+            CHECK (t.manufacturerName == "Cloudes");
+        }
+    CHECK (found);
+
+    // Idempotent: re-registering the same directory adds nothing (de-duped by identifier).
+    CHECK (scanner.registerGeneratedPlugins (dir) == 0);
+
+    dir.deleteRecursively();
 }
