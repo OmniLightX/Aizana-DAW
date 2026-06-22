@@ -66,14 +66,35 @@ namespace cloudes
             tc.faustInclude = tc.faust.getParentDirectory().getParentDirectory().getChildFile ("include");
         }
 
-        // clap / clap-helpers headers + GUI globals: bundled in the app, dev fallback otherwise.
-        const auto bundle = juce::File::getSpecialLocation (juce::File::currentApplicationFile)
-                                .getChildFile ("Contents/Resources/GeneratorToolchain");
-        if (bundle.isDirectory())
+        // clap / clap-helpers headers + GUI globals: bundled with Cloudes. Resolution order:
+        //   1. CLOUDES_TOOLCHAIN_DIR env — explicit override (used by the standalone MCP server)
+        //   2. this executable's own .app bundle — the Cloudes app case
+        //   3. a GeneratorToolchain dir next to the executable — the standalone cloudes-mcp case
+        //   4. an installed Cloudes.app — so a relocated cloudes-mcp still finds the headers
+        const auto exe = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+
+        juce::StringArray candidates;
+        if (const auto env = juce::SystemStats::getEnvironmentVariable ("CLOUDES_TOOLCHAIN_DIR", {});
+            env.isNotEmpty())
+            candidates.add (env);
+        candidates.add (juce::File::getSpecialLocation (juce::File::currentApplicationFile)
+                            .getChildFile ("Contents/Resources/GeneratorToolchain").getFullPathName());
+        candidates.add (exe.getParentDirectory().getChildFile ("GeneratorToolchain").getFullPathName());
+        candidates.add ("/Applications/Cloudes.app/Contents/Resources/GeneratorToolchain");
+        candidates.add (juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+                            .getChildFile ("Applications/Cloudes.app/Contents/Resources/GeneratorToolchain")
+                            .getFullPathName());
+
+        for (const auto& c : candidates)
         {
-            tc.clapInclude        = bundle.getChildFile ("clap/include");
-            tc.clapHelpersInclude = bundle.getChildFile ("clap-helpers/include");
-            tc.guiGlobals         = bundle.getChildFile ("faust_gui_globals.cpp");
+            const juce::File dir (c);
+            if (dir.getChildFile ("faust_gui_globals.cpp").existsAsFile())
+            {
+                tc.clapInclude        = dir.getChildFile ("clap/include");
+                tc.clapHelpersInclude = dir.getChildFile ("clap-helpers/include");
+                tc.guiGlobals         = dir.getChildFile ("faust_gui_globals.cpp");
+                break;
+            }
         }
 
         return tc;

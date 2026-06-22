@@ -74,6 +74,16 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // instantiable by the engine (a saved session may reference a generated plugin).
     pluginScanner.registerGeneratedPlugins (cloudes::FaustCompiler::generatedPluginsDir());
 
+    // Live-watch the generated-plugins dir so a plugin authored by an external MCP client
+    // (Claude/Codex via cloudes-mcp) shows up in this running session without a restart.
+    {
+        const auto genDir = cloudes::FaustCompiler::generatedPluginsDir();
+        lastGeneratedClapCount = genDir.isDirectory()
+            ? genDir.getNumberOfChildFiles (juce::File::findFiles, "*.clap") : 0;
+    }
+    generatedLibraryWatcher.onTick = [this] { pollGeneratedLibrary(); };
+    generatedLibraryWatcher.startTimer (4000);
+
     // Make the cached plugins instantiable by Tracktion Engine (editor + audio), and
     // crucially BEFORE any saved session is reloaded — TE recreates its plugins from the
     // engine's knownPluginList on load.
@@ -1843,6 +1853,20 @@ void MainComponent::syncScannedPluginsToEngine()
     auto& engineList = appState.editManager.getEngine().getPluginManager().knownPluginList;
     for (const auto& type : pluginScanner.getKnownPlugins().getTypes())
         engineList.addType (type);
+}
+
+void MainComponent::pollGeneratedLibrary()
+{
+    const auto dir = cloudes::FaustCompiler::generatedPluginsDir();
+    const int count = dir.isDirectory()
+                        ? dir.getNumberOfChildFiles (juce::File::findFiles, "*.clap") : 0;
+
+    if (count == lastGeneratedClapCount)   // cheap guard — no dlopen unless the set changed
+        return;
+    lastGeneratedClapCount = count;
+
+    if (pluginScanner.registerGeneratedPlugins (dir) > 0)
+        syncScannedPluginsToEngine();      // a NEW plugin appeared — mirror it to the engine
 }
 
 juce::File MainComponent::getPluginListCacheFile()

@@ -387,6 +387,20 @@ private:
     // own list; TE resolves instances from the engine's list. Call after load and scan.
     void syncScannedPluginsToEngine();
 
+    // Picks up plugins authored by an external MCP client (Claude/Codex via cloudes-mcp)
+    // while Cloudes is running, so they appear in the browser without a restart. Cheap:
+    // only re-registers (dlopen) when the .clap count in the generated dir actually changes.
+    void pollGeneratedLibrary();
+
+    // Lightweight 4s message-thread timer driving pollGeneratedLibrary().
+    struct GeneratedLibraryWatcher : public juce::Timer
+    {
+        std::function<void()> onTick;
+        void timerCallback() override { if (onTick) onTick(); }
+    };
+    GeneratedLibraryWatcher generatedLibraryWatcher;
+    int lastGeneratedClapCount = -1;
+
     // Returns the path to the cached plugin list XML file
     // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)
     static juce::File getPluginListCacheFile();

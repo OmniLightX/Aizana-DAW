@@ -369,6 +369,43 @@ if(CLOUDES_HAVE_GENERATOR)
 endif()
 
 # ---------------------------------------------------------------------------
+# cloudes-mcp — standalone MCP (stdio) server (Generator G4). Lets Claude Code /
+# Codex author brand-new plugins for Cloudes from free text, reusing the SAME C++
+# generator code (single source of truth). Console app, juce_core only. Built only
+# when the generator toolchain is available (Faust present).
+# ---------------------------------------------------------------------------
+if(CLOUDES_HAVE_GENERATOR)
+    juce_add_console_app(cloudes-mcp PRODUCT_NAME "cloudes-mcp")
+    target_sources(cloudes-mcp PRIVATE
+        src/mcp/CloudesMcpServer.cpp
+        src/generator/FaustCompiler.cpp
+        src/generator/FaustEmitter.cpp
+        src/generator/LocalComposer.cpp
+        src/generator/PluginSpec.cpp)
+    target_include_directories(cloudes-mcp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(cloudes-mcp PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+    target_link_libraries(cloudes-mcp PRIVATE juce::juce_core)
+
+    # Ship a GeneratorToolchain dir next to the binary so FaustToolchain::resolve() finds the
+    # CLAP headers + GUI globals when the server runs outside the app bundle.
+    add_custom_command(TARGET cloudes-mcp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${clap_gen_SOURCE_DIR}/include"
+            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/clap/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${clap_helpers_SOURCE_DIR}/include"
+            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/clap-helpers/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp"
+            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/"
+        VERBATIM)
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
