@@ -192,6 +192,8 @@ target_sources(Cloudes PRIVATE
     src/ai/MixingEngine.cpp
     src/ai/MixApplyEngine.cpp
     src/ai/MixDataLogger.cpp
+    src/ai/AiAgentBridge.cpp
+    src/ui/aistudio/AiStudioPanel.cpp
     src/generator/PluginGenerator.cpp
     src/generator/FaustCompiler.cpp
     src/generator/PluginSpec.cpp
@@ -402,6 +404,16 @@ if(CLOUDES_HAVE_GENERATOR)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp"
             "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/"
+        VERBATIM)
+
+    # Bundle cloudes-mcp into the app so the in-app KI-Studio can spawn it (the app's own
+    # Resources/GeneratorToolchain — bundled above — serves as its toolchain). cloudes-mcp
+    # builds first (dependency); the copy runs in the app's POST_BUILD, after the bundle exists.
+    add_dependencies(Cloudes cloudes-mcp)
+    add_custom_command(TARGET Cloudes POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:cloudes-mcp>"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/cloudes-mcp"
         VERBATIM)
 endif()
 

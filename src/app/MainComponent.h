@@ -297,6 +297,7 @@ private:
         SongAddMarker     = 403,
         SongMixAI         = 404,   // KI-Mix (Phase 4 — heuristic mixing co-pilot)
         SongGeneratePlugin = 405,  // Plugin generieren (Phase 4 — Faust→CLAP generator)
+        SongAiStudio      = 406,   // KI-Studio: in-app chat agent (Claude/Codex) — Phase 4 flagship
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,
@@ -400,6 +401,10 @@ private:
     };
     GeneratedLibraryWatcher generatedLibraryWatcher;
     int lastGeneratedClapCount = -1;
+
+    // KI-Studio (Phase 4 flagship): in-app chat that drives the user's Claude/Codex CLI.
+    void openAiStudio();
+    std::unique_ptr<juce::DocumentWindow> aiStudioWindow;
 
     // Returns the path to the cached plugin list XML file
     // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)

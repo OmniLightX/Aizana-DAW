@@ -4,6 +4,7 @@
 #include "generator/FaustEmitter.h"
 #include "generator/LocalComposer.h"
 #include "generator/FaustCompiler.h"
+#include "ui/aistudio/AiStudioPanel.h"
 
 namespace te = tracktion::engine;
 
@@ -676,6 +677,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           juce::String::fromUTF8 ("KI-Mix (Heuristik)…"), hasEdit);
             menu.addItem (SongGeneratePlugin,
                           juce::String::fromUTF8 ("Plugin generieren…"), hasEdit);
+            menu.addItem (SongAiStudio,
+                          juce::String::fromUTF8 ("KI-Studio (Chat: Plugins bauen lassen)…"));
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -792,6 +795,9 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
         case SongGeneratePlugin:
             startRuntimeGenerator();
+            break;
+        case SongAiStudio:
+            openAiStudio();
             break;
 
         case SongRefAnalyze:
@@ -1867,6 +1873,44 @@ void MainComponent::pollGeneratedLibrary()
 
     if (pluginScanner.registerGeneratedPlugins (dir) > 0)
         syncScannedPluginsToEngine();      // a NEW plugin appeared — mirror it to the engine
+}
+
+namespace
+{
+    // DocumentWindow that notifies on close (so MainComponent can drop its handle).
+    struct AiStudioWindow : public juce::DocumentWindow
+    {
+        std::function<void()> onClose;
+        AiStudioWindow()
+            : juce::DocumentWindow (juce::String::fromUTF8 ("Cloudes KI-Studio"),
+                                    juce::Colour (0xff1a1a1a),
+                                    juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton)
+        {}
+        void closeButtonPressed() override { if (onClose) onClose(); }
+    };
+}
+
+void MainComponent::openAiStudio()
+{
+    if (aiStudioWindow != nullptr)
+    {
+        aiStudioWindow->toFront (true);
+        return;
+    }
+
+    auto win = std::make_unique<AiStudioWindow>();
+    win->setUsingNativeTitleBar (true);
+    win->setContentOwned (new AiStudioPanel(), true);
+    win->setResizable (true, true);
+    win->centreWithSize (480, 560);
+    win->setVisible (true);
+    win->onClose = [safe = juce::Component::SafePointer<MainComponent> (this)]
+    {
+        if (safe != nullptr)
+            juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->aiStudioWindow.reset(); });
+    };
+
+    aiStudioWindow = std::move (win);
 }
 
 juce::File MainComponent::getPluginListCacheFile()
