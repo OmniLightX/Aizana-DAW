@@ -193,6 +193,8 @@ target_sources(Cloudes PRIVATE
     src/ai/MixApplyEngine.cpp
     src/ai/MixDataLogger.cpp
     src/ai/AiAgentBridge.cpp
+    src/ai/AiLiveProtocol.cpp
+    src/ai/AiStudioLiveServer.cpp
     src/ui/aistudio/AiStudioPanel.cpp
     src/generator/PluginGenerator.cpp
     src/generator/FaustCompiler.cpp
@@ -380,6 +382,7 @@ if(CLOUDES_HAVE_GENERATOR)
     juce_add_console_app(cloudes-mcp PRODUCT_NAME "cloudes-mcp")
     target_sources(cloudes-mcp PRIVATE
         src/mcp/CloudesMcpServer.cpp
+        src/ai/AiLiveProtocol.cpp
         src/generator/FaustCompiler.cpp
         src/generator/FaustEmitter.cpp
         src/generator/LocalComposer.cpp

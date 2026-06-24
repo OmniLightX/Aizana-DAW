@@ -142,7 +142,9 @@ namespace cloudes
         // Pre-approve the Cloudes MCP tools so the agent can act without interactive prompts.
         args.add ("--allowedTools");
         args.add ("mcp__cloudes__faust_reference,mcp__cloudes__compose_plugin,"
-                  "mcp__cloudes__compile_plugin,mcp__cloudes__list_plugins");
+                  "mcp__cloudes__compile_plugin,mcp__cloudes__list_plugins,"
+                  "mcp__cloudes__list_tracks,mcp__cloudes__set_track_volume,"
+                  "mcp__cloudes__set_track_pan");
 
         if (firstTurn)
         {

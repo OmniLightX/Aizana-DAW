@@ -25,7 +25,9 @@
 #include "generator/FaustEmitter.h"
 #include "generator/LocalComposer.h"
 #include "generator/PluginSpec.h"
+#include "ai/AiLiveProtocol.h"
 
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -207,6 +209,69 @@ namespace
         return textResult (id, out);
     }
 
+    //==============================================================================
+    // Live mixing tools (Slice 2) — proxy to the RUNNING Cloudes session.
+    //
+    // Unlike the generator tools (which write .clap files to disk), these steer the live
+    // Edit: cloudes-mcp connects to the app's loopback bridge (discovery file → port+token)
+    // and forwards one AiLiveProtocol request. The app applies the move via AICommandBridge
+    // (one undo step) and replies. If Cloudes isn't running, we return a clear, actionable
+    // message rather than failing silently.
+    //==============================================================================
+
+    juce::String callLiveBridge (const juce::String& tool, const juce::var& args, bool& ok)
+    {
+        ok = false;
+
+        const auto disco = AiLiveProtocol::readDiscovery (AiLiveProtocol::liveBridgeFile());
+        if (! disco.valid)
+            return "Cloudes is not running, or its live bridge is off. Ask the user to open "
+                   "Cloudes and click the \"KI-Studio\" button, then try again.";
+
+        juce::StreamingSocket sock;
+        if (! sock.connect ("127.0.0.1", disco.port, 3000))
+            return "could not reach the running Cloudes session (loopback port "
+                   + juce::String (disco.port) + ").";
+
+        const auto reqLine = AiLiveProtocol::makeRequest (disco.token, tool, args) + "\n";
+        const auto utf8 = reqLine.toRawUTF8();
+        const int  len  = (int) std::strlen (utf8);
+        if (sock.write (utf8, len) != len)
+            return "failed to send the request to Cloudes.";
+
+        std::string buf;
+        while (buf.size() < (1u << 20))
+        {
+            if (sock.waitUntilReady (true, 6000) != 1)
+                break;
+
+            char tmp[1024];
+            const int n = sock.read (tmp, (int) sizeof tmp, false);
+            if (n <= 0)
+                break;
+
+            buf.append (tmp, (size_t) n);
+            const auto nl = buf.find ('\n');
+            if (nl != std::string::npos) { buf.resize (nl); break; }
+        }
+
+        const auto resp = AiLiveProtocol::parseResponse (
+            juce::String::fromUTF8 (buf.c_str(), (int) buf.size()));
+
+        if (! resp.valid) return "got an unreadable reply from Cloudes.";
+        if (! resp.ok)    return resp.error;
+
+        ok = true;
+        return resp.text;
+    }
+
+    juce::var toolLive (const juce::var& id, const juce::String& tool, const juce::var& args)
+    {
+        bool ok = false;
+        const auto text = callLiveBridge (tool, args, ok);
+        return textResult (id, ok ? text : juce::String ("error: " + text), ! ok);
+    }
+
     juce::var toolsListResult (const juce::var& id)
     {
         const auto tool = [] (const char* name, const char* description, const char* schemaJson)
@@ -238,6 +303,23 @@ namespace
             "List the plugins already generated into the user's Cloudes library.",
             R"({"type":"object","properties":{},"additionalProperties":false})"));
 
+        // --- Live mixing tools (act on the RUNNING Cloudes session) ---------------
+        tools.add (tool ("list_tracks",
+            "List the audio tracks in the user's CURRENTLY OPEN Cloudes session, with each "
+            "track's name, volume (dB) and pan. Call this FIRST before changing the mix so you "
+            "use exact track names. Requires Cloudes to be running with the KI-Studio open.",
+            R"({"type":"object","properties":{},"additionalProperties":false})"));
+
+        tools.add (tool ("set_track_volume",
+            "Set the volume (in dB) of one track in the live Cloudes session. Applies "
+            "immediately as a single undo step. Use list_tracks first for the exact track name.",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name, as returned by list_tracks."},"db":{"type":"number","description":"Target volume in dB (e.g. -3.0). Clamped to [-60, +12]."}},"required":["track","db"],"additionalProperties":false})"));
+
+        tools.add (tool ("set_track_pan",
+            "Set the stereo pan of one track in the live Cloudes session. Applies immediately "
+            "as a single undo step. Use list_tracks first for the exact track name.",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name, as returned by list_tracks."},"pan":{"type":"number","description":"Pan position: -1.0 = hard left, 0 = centre, +1.0 = hard right."}},"required":["track","pan"],"additionalProperties":false})"));
+
         return makeResult (id, makeObject ({ { "tools", juce::var (tools) } }));
     }
 
@@ -246,10 +328,15 @@ namespace
         const auto name = params.getProperty ("name", {}).toString();
         const auto args = params.getProperty ("arguments", juce::var());
 
-        if (name == "faust_reference") return textResult (id, faustReference());
-        if (name == "compose_plugin")  return toolComposePlugin (id, args);
-        if (name == "compile_plugin")  return toolCompilePlugin (id, args);
-        if (name == "list_plugins")    return toolListPlugins (id);
+        if (name == "faust_reference")  return textResult (id, faustReference());
+        if (name == "compose_plugin")   return toolComposePlugin (id, args);
+        if (name == "compile_plugin")   return toolCompilePlugin (id, args);
+        if (name == "list_plugins")     return toolListPlugins (id);
+
+        // Live mixing — proxy to the running Cloudes session.
+        if (name == "list_tracks")      return toolLive (id, "list_tracks", args);
+        if (name == "set_track_volume") return toolLive (id, "set_track_volume", args);
+        if (name == "set_track_pan")    return toolLive (id, "set_track_pan", args);
 
         return makeError (id, -32602, "Unknown tool: " + name);
     }

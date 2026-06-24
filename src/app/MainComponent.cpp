@@ -112,6 +112,10 @@ MainComponent::MainComponent (ApplicationState& appState_)
     transportBar.onMixRequested   = [this] { startMix(); };
     transportBar.onAiStudioRequested = [this] { openAiStudio(); };
 
+    // KI-Studio live bridge (Phase 4, Slice 2): host the loopback socket so the in-app
+    // agent's cloudes-mcp can read tracks + mix the running session. Non-fatal if no port.
+    aiLiveServer.start();
+
     // Inspector (left dock) — pulls the arrangement selection via providers
     inspectorPanel.trackProvider = [this] { return arrangementView.getSelectedTrack(); };
     inspectorPanel.clipProvider  = [this] { return arrangementView.getPrimarySelectedClip(); };
@@ -213,6 +217,10 @@ void MainComponent::handleReopenOnboarding()
 
 MainComponent::~MainComponent()
 {
+    // Stop the live bridge first: closes the loopback socket, joins its thread, and
+    // removes the discovery file so no stale port is advertised after shutdown.
+    aiLiveServer.stop();
+
     // Stop listening to the Dial before teardown (uiState outlives this component).
     appState.uiState.removeChangeListener (this);
 
