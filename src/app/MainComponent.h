@@ -124,7 +124,7 @@ private:
     // KI-Studio (Phase 4, flagship, Slice 2): hosts the loopback live bridge so the in-app
     // agent's cloudes-mcp can read tracks + change the mix on the RUNNING session. Started in
     // the constructor, stopped on destruction. Mutations route through mixApplyEngine (1 undo).
-    cloudes::AiStudioLiveServer aiLiveServer { appState.editManager, mixApplyEngine };
+    cloudes::AiStudioLiveServer aiLiveServer { appState.editManager, mixApplyEngine, appState.aiCommandBridge };
 
     // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
     // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.

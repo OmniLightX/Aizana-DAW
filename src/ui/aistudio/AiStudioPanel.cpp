@@ -96,7 +96,7 @@ AiStudioPanel::AiStudioPanel()
 {
     sessionId = juce::Uuid().toDashedString();
 
-    header.setText (juce::String::fromUTF8 ("KI-Studio \xe2\x80\x94 beschreibe ein Plugin, die KI baut es"),
+    header.setText (juce::String::fromUTF8 ("KI-Studio \xe2\x80\x94 Plugins bauen und deinen Mix steuern"),
                     juce::dontSendNotification);
     header.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
     header.setColour (juce::Label::textColourId, juce::Colours::white);
@@ -114,7 +114,7 @@ AiStudioPanel::AiStudioPanel()
 
     input.setMultiLine (true, false);
     input.setReturnKeyStartsNewLine (false);   // Return sends
-    input.setTextToShowWhenEmpty (juce::String::fromUTF8 ("z. B. \xe2\x80\x9emach mir ein cremiges Tape-Delay-Plugin\xe2\x80\x9c"),
+    input.setTextToShowWhenEmpty (juce::String::fromUTF8 ("z. B. \xe2\x80\x9emach mir ein Tape-Delay-Plugin\xe2\x80\x9c oder \xe2\x80\x9emach die Drums lauter und die Stimme klarer\xe2\x80\x9c"),
                                   juce::Colours::grey);
     input.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff1e1e1e));
     input.setColour (juce::TextEditor::textColourId, juce::Colours::white);

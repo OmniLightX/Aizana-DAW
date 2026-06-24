@@ -144,7 +144,9 @@ namespace cloudes
         args.add ("mcp__cloudes__faust_reference,mcp__cloudes__compose_plugin,"
                   "mcp__cloudes__compile_plugin,mcp__cloudes__list_plugins,"
                   "mcp__cloudes__list_tracks,mcp__cloudes__set_track_volume,"
-                  "mcp__cloudes__set_track_pan");
+                  "mcp__cloudes__set_track_pan,mcp__cloudes__mute_track,"
+                  "mcp__cloudes__solo_track,mcp__cloudes__set_track_eq,"
+                  "mcp__cloudes__add_compressor,mcp__cloudes__add_deesser");
 
         if (firstTurn)
         {

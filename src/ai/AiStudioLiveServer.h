@@ -5,6 +5,7 @@
 
 class EditManager;
 class MixApplyEngine;
+class AICommandBridge;
 
 namespace cloudes
 {
@@ -24,13 +25,17 @@ namespace cloudes
             one undo step (same path as the KI-Mix button). The server never mutates directly.
 
         Read tools  : list_tracks
-        Write tools : set_track_volume {track, db}, set_track_pan {track, pan}
-        (More moves — mute/solo/EQ/compress — slot in via the same dispatch in a follow-up.)
+        Write tools : set_track_volume {track, db}, set_track_pan {track, pan},
+                      mute_track {track, muted}, solo_track {track, soloed},
+                      set_track_eq {track, bands[]}, add_compressor {track, ...},
+                      add_deesser {track, ...}.
+        Volume/pan/EQ/compress/de-ess go through MixApplyEngine (MixAction vocabulary);
+        mute/solo are not MixActions and go through the bridge directly (still one undo step).
     */
     class AiStudioLiveServer : private juce::Thread
     {
     public:
-        AiStudioLiveServer (EditManager& editManager, MixApplyEngine& mixApply);
+        AiStudioLiveServer (EditManager& editManager, MixApplyEngine& mixApply, AICommandBridge& bridge);
         ~AiStudioLiveServer() override;
 
         /** Bind a loopback port, mint a token, write the discovery file, start listening.
@@ -48,8 +53,9 @@ namespace cloudes
         void handleConnection (juce::StreamingSocket& sock);   // one request/response
         LiveResponse dispatch (const LiveRequest& req);        // message thread
 
-        EditManager&    editManager;
-        MixApplyEngine& mixApply;
+        EditManager&     editManager;
+        MixApplyEngine&  mixApply;
+        AICommandBridge& commandBridge;
 
         std::unique_ptr<juce::StreamingSocket> listener;
         juce::String token;

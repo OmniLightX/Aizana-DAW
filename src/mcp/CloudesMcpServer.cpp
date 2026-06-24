@@ -320,6 +320,30 @@ namespace
             "as a single undo step. Use list_tracks first for the exact track name.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name, as returned by list_tracks."},"pan":{"type":"number","description":"Pan position: -1.0 = hard left, 0 = centre, +1.0 = hard right."}},"required":["track","pan"],"additionalProperties":false})"));
 
+        tools.add (tool ("mute_track",
+            "Mute or un-mute one track in the live Cloudes session (one undo step).",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"muted":{"type":"boolean","description":"true = mute, false = un-mute."}},"required":["track","muted"],"additionalProperties":false})"));
+
+        tools.add (tool ("solo_track",
+            "Solo or un-solo one track in the live Cloudes session (one undo step).",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"soloed":{"type":"boolean","description":"true = solo, false = un-solo."}},"required":["track","soloed"],"additionalProperties":false})"));
+
+        tools.add (tool ("set_track_eq",
+            "Add a parametric EQ to one track in the live Cloudes session (one EQ instance per "
+            "call, up to 8 bands). Each band: type (high_pass | low_shelf | high_shelf | bell), "
+            "freq in Hz, gain in dB (ignored for high_pass), optional q. One undo step.",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"bands":{"type":"array","items":{"type":"object","properties":{"type":{"type":"string","enum":["high_pass","low_shelf","high_shelf","bell"]},"freq":{"type":"number","description":"Centre/corner frequency in Hz."},"gain":{"type":"number","description":"Gain in dB (bell/shelf). Ignored for high_pass."},"q":{"type":"number","description":"Bandwidth (default 0.7)."}},"required":["type","freq"]},"description":"1-8 EQ bands."}},"required":["track","bands"],"additionalProperties":false})"));
+
+        tools.add (tool ("add_compressor",
+            "Insert a built-in compressor on one track in the live Cloudes session (one undo "
+            "step). Sensible defaults if a parameter is omitted (ratio 2:1, threshold -18 dB).",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"threshold_db":{"type":"number","description":"Threshold in dB (default -18)."},"ratio":{"type":"number","description":"Compression ratio, e.g. 2 for 2:1 (default 2)."},"makeup_db":{"type":"number","description":"Make-up gain in dB (default 0)."}},"required":["track"],"additionalProperties":false})"));
+
+        tools.add (tool ("add_deesser",
+            "Insert a built-in de-esser on one track (tames sibilance) in the live Cloudes "
+            "session (one undo step). Defaults to ~5.5 kHz if omitted.",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"freq_hz":{"type":"number","description":"Sibilance frequency in Hz (default 5500)."},"threshold_db":{"type":"number","description":"Threshold in dB (default -20)."},"ratio":{"type":"number","description":"Ratio (default 4)."}},"required":["track"],"additionalProperties":false})"));
+
         return makeResult (id, makeObject ({ { "tools", juce::var (tools) } }));
     }
 
@@ -337,6 +361,11 @@ namespace
         if (name == "list_tracks")      return toolLive (id, "list_tracks", args);
         if (name == "set_track_volume") return toolLive (id, "set_track_volume", args);
         if (name == "set_track_pan")    return toolLive (id, "set_track_pan", args);
+        if (name == "mute_track")       return toolLive (id, "mute_track", args);
+        if (name == "solo_track")       return toolLive (id, "solo_track", args);
+        if (name == "set_track_eq")     return toolLive (id, "set_track_eq", args);
+        if (name == "add_compressor")   return toolLive (id, "add_compressor", args);
+        if (name == "add_deesser")      return toolLive (id, "add_deesser", args);
 
         return makeError (id, -32602, "Unknown tool: " + name);
     }
