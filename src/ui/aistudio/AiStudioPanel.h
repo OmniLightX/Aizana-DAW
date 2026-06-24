@@ -26,6 +26,8 @@ private:
     struct AgentRunThread;
 
     void send();
+    void refreshBackends();                 // detect CLIs → fill the chooser + status
+    void onBackendChanged();
     void onAgentText (const juce::String& text);
     void onAgentDone (int exitCode);
     void appendLine (const juce::String& text);
@@ -39,6 +41,12 @@ private:
     juce::TextButton sendButton { "Senden" };
     juce::Label      header;
     juce::Label      status;
+
+    // Connect row: pick which assistant backs the chat + re-detect.
+    juce::Label      backendLabel { {}, "KI:" };
+    juce::ComboBox   backendBox;
+    juce::TextButton reconnectButton { juce::String::fromUTF8 ("Neu verbinden") };
+    juce::Array<cloudes::AiCliInfo> clis;
 
     cloudes::AiCliInfo cli;
     juce::String       sessionId;     // dashed UUID, stable per panel

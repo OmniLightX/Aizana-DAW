@@ -36,6 +36,10 @@ namespace cloudes
         /** Testable variant: search the given directories for `claude` then `codex`. */
         static AiCliInfo detectCli (const juce::StringArray& candidateDirs);
 
+        /** All installed agent CLIs (for a backend chooser), Claude Code first. */
+        static juce::Array<AiCliInfo> detectClis();
+        static juce::Array<AiCliInfo> detectClis (const juce::StringArray& candidateDirs);
+
         /** Write an MCP config JSON registering the bundled `cloudes-mcp` (stdio) server so
             the spawned CLI can call Cloudes' plugin tools. Returns the file written. */
         static juce::File writeClaudeMcpConfig (const juce::File& configFile,
@@ -49,6 +53,14 @@ namespace cloudes
                                                   const juce::String& sessionId,
                                                   bool firstTurn,
                                                   const juce::File& mcpConfig);
+
+        /** Build the Codex `exec` argv for one turn, registering the cloudes MCP server via
+            -c config overrides (no global config change). Codex prints plain text → stream raw
+            (no stream-json parsing). */
+        static juce::StringArray buildCodexArgs (const juce::File& codexExe,
+                                                 const juce::String& prompt,
+                                                 const juce::File& cloudesMcpBinary,
+                                                 const juce::File& toolchainDir);
 
         /** Wrap an argv in a login shell so the child inherits the user's PATH (node etc.)
             while still passing our args verbatim (no shell re-quoting → injection-safe):

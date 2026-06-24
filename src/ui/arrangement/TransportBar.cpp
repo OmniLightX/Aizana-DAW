@@ -173,6 +173,13 @@ TransportBar::TransportBar (ApplicationState& appState_)
         "KI-Mix — automatischer Mix-Vorschlag (Einsteiger: sofort · Pro: Vorschau)"));
     kiMixButton.onClick = [this] { if (onMixRequested) onMixRequested(); };
 
+    // KI-Studio — purple accent (the in-app AI assistant: chat + generate plugins).
+    kiStudioButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff7c5cff));
+    kiStudioButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    kiStudioButton.setTooltip (juce::String::fromUTF8 (
+        "KI-Studio — Chat mit Claude/Codex: Plugins bauen lassen (mixen folgt)"));
+    kiStudioButton.onClick = [this] { if (onAiStudioRequested) onAiStudioRequested(); };
+
     addAndMakeVisible (rewindButton);
     addAndMakeVisible (playButton);
     addAndMakeVisible (stopButton);
@@ -185,6 +192,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     addAndMakeVisible (modeButton);
     addAndMakeVisible (assistButton);
     addAndMakeVisible (kiMixButton);
+    addAndMakeVisible (kiStudioButton);
     addAndMakeVisible (editViewButton);
     addAndMakeVisible (mixViewButton);
     addAndMakeVisible (positionLabel);
@@ -233,6 +241,8 @@ void TransportBar::resized()
     area.removeFromRight (4);
     assistButton.setBounds (area.removeFromRight (62).withHeight (buttonH));
     area.removeFromRight (10);
+    kiStudioButton.setBounds (area.removeFromRight (78).withHeight (buttonH));
+    area.removeFromRight (6);
     kiMixButton.setBounds  (area.removeFromRight (66).withHeight (buttonH));
     area.removeFromRight (10);
     mixViewButton.setBounds  (area.removeFromRight (46).withHeight (buttonH));

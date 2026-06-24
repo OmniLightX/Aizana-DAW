@@ -49,6 +49,37 @@ TEST_CASE ("AiAgentBridge: detectCli prefers claude, falls back to codex", "[ai]
     dir.deleteRecursively();
 }
 
+TEST_CASE ("AiAgentBridge: detectClis lists all installed CLIs, Claude first", "[ai][aistudio]")
+{
+    auto dir = makeTempDir ("cloudes_clis_test");
+    dir.getChildFile ("codex").create();
+    dir.getChildFile ("claude").create();
+
+    const auto all = AiAgentBridge::detectClis ({ dir.getFullPathName() });
+    REQUIRE (all.size() == 2);
+    CHECK (all.getReference (0).type == AiCli::ClaudeCode);   // preferred first
+    CHECK (all.getReference (1).type == AiCli::Codex);
+
+    dir.deleteRecursively();
+}
+
+TEST_CASE ("AiAgentBridge: buildCodexArgs runs `exec` and registers the MCP server via -c", "[ai][aistudio]")
+{
+    const juce::File exe ("/opt/homebrew/bin/codex");
+    const juce::File bin ("/tmp/cloudes-mcp");
+    const juce::File tc  ("/tmp/GeneratorToolchain");
+
+    const auto args = AiAgentBridge::buildCodexArgs (exe, "make a reverb", bin, tc);
+    CHECK (args[0] == exe.getFullPathName());
+    CHECK (args.contains ("exec"));
+    CHECK (args.contains ("make a reverb"));
+    bool hasServerOverride = false;
+    for (const auto& a : args)
+        if (a.contains ("mcp_servers.cloudes.command") && a.contains (bin.getFullPathName()))
+            hasServerOverride = true;
+    CHECK (hasServerOverride);
+}
+
 TEST_CASE ("AiAgentBridge: writeClaudeMcpConfig registers the cloudes server", "[ai][aistudio]")
 {
     auto dir = makeTempDir ("cloudes_mcpcfg_test");

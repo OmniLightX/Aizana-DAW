@@ -110,6 +110,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     transportBar.onSelectViewMode = [this] (bool mixFocus) { setViewFocus (mixFocus); };
     transportBar.isMixerShown     = [this] { return mixerVisible; };
     transportBar.onMixRequested   = [this] { startMix(); };
+    transportBar.onAiStudioRequested = [this] { openAiStudio(); };
 
     // Inspector (left dock) — pulls the arrangement selection via providers
     inspectorPanel.trackProvider = [this] { return arrangementView.getSelectedTrack(); };

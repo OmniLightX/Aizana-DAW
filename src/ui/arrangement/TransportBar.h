@@ -37,6 +37,9 @@ public:
      *  (Beginner = instant, Pro = preview dialog). */
     std::function<void()> onMixRequested;
 
+    /** KI-Studio — opens the in-app AI assistant chat (wired by MainComponent to openAiStudio()). */
+    std::function<void()> onAiStudioRequested;
+
 private:
     void showSampleRateMenu();
     ApplicationState& appState;
@@ -84,6 +87,9 @@ private:
 
     /** KI-Mix co-pilot — heuristic mix in one click (see onMixRequested). */
     juce::TextButton kiMixButton { juce::String::fromUTF8 ("KI-Mix") };
+
+    /** KI-Studio — opens the in-app AI assistant chat (see onAiStudioRequested). */
+    juce::TextButton kiStudioButton { juce::String::fromUTF8 ("KI-Studio") };
 
     // Tap tempo state — last 4 tap timestamps (juce::Time::getMillisecondCounterHiRes)
     juce::Array<double> tapTimes;

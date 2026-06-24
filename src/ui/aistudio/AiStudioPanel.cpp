@@ -8,10 +8,11 @@ using namespace cloudes;
 
 struct AiStudioPanel::AgentRunThread : public juce::Thread
 {
-    AgentRunThread (AiStudioPanel& ownerPanel, juce::StringArray spawnArgs)
+    AgentRunThread (AiStudioPanel& ownerPanel, juce::StringArray spawnArgs, bool parseAsJson)
         : juce::Thread ("cloudes-ai-agent")
         , owner (ownerPanel)
         , args  (std::move (spawnArgs))
+        , parseJson (parseAsJson)
     {}
 
     ~AgentRunThread() override
@@ -45,15 +46,19 @@ struct AiStudioPanel::AgentRunThread : public juce::Thread
             {
                 const auto line = acc.substring (0, nl);
                 acc = acc.substring (nl + 1);
-                const auto text = AiAgentBridge::renderStreamJsonLine (line);
+                const auto text = parseJson ? AiAgentBridge::renderStreamJsonLine (line)
+                                            : (line.trim().isNotEmpty() ? line + "\n" : juce::String());
                 if (text.isNotEmpty())
                     post (text);
             }
         }
 
         if (acc.isNotEmpty())
-            if (const auto t = AiAgentBridge::renderStreamJsonLine (acc); t.isNotEmpty())
+        {
+            const auto t = parseJson ? AiAgentBridge::renderStreamJsonLine (acc) : acc;
+            if (t.isNotEmpty())
                 post (t);
+        }
 
         proc.waitForProcessToFinish (2000);
         finish (proc.getExitCode());
@@ -81,6 +86,7 @@ struct AiStudioPanel::AgentRunThread : public juce::Thread
 
     AiStudioPanel&    owner;
     juce::StringArray args;
+    bool              parseJson = true;
     juce::ChildProcess proc;
 };
 
@@ -122,23 +128,20 @@ AiStudioPanel::AiStudioPanel()
     status.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
     addAndMakeVisible (status);
 
-    // Detect the user's CLI up front so we can tell them what's wired.
-    cli = AiAgentBridge::detectCli();
-    if (cli.isValid())
-    {
-        status.setText (cli.displayName + juce::String::fromUTF8 (" verbunden \xe2\x80\xa2 generierte Plugins erscheinen in der \xe2\x80\x9e" "Cloudes\xe2\x80\x9c-Rubrik"),
-                        juce::dontSendNotification);
-        appendLine (juce::String::fromUTF8 ("Verbunden mit ") + cli.displayName
-                    + juce::String::fromUTF8 (". Beschreibe ein Plugin \xe2\x80\x94 es wird gebaut und landet in deiner Cloudes-Library.\n"));
-    }
-    else
-    {
-        status.setText (juce::String::fromUTF8 ("Keine KI-CLI gefunden \xe2\x80\x94 installiere Claude Code oder Codex"),
-                        juce::dontSendNotification);
-        appendLine (juce::String::fromUTF8 ("Keine KI-CLI (claude/codex) gefunden. Installiere Claude Code, dann \xc3\xb6" "ffne dieses Panel erneut.\n"));
-        sendButton.setEnabled (false);
-        input.setEnabled (false);
-    }
+    // Connect row: choose which assistant backs the chat + a re-detect button.
+    backendLabel.setColour (juce::Label::textColourId, juce::Colour (0xff999999));
+    backendLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+    addAndMakeVisible (backendLabel);
+
+    backendBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff262626));
+    backendBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+    backendBox.onChange = [this] { onBackendChanged(); };
+    addAndMakeVisible (backendBox);
+
+    reconnectButton.onClick = [this] { refreshBackends(); };
+    addAndMakeVisible (reconnectButton);
+
+    refreshBackends();
 
     setSize (480, 560);
 }
@@ -148,11 +151,58 @@ AiStudioPanel::~AiStudioPanel()
     runThread.reset();   // joins + kills the child process
 }
 
+void AiStudioPanel::refreshBackends()
+{
+    clis = AiAgentBridge::detectClis();
+    backendBox.clear (juce::dontSendNotification);
+    for (int i = 0; i < clis.size(); ++i)
+        backendBox.addItem (clis.getReference (i).displayName, i + 1);
+
+    if (clis.isEmpty())
+    {
+        cli = {};
+        backendBox.setTextWhenNoChoicesAvailable (juce::String::fromUTF8 ("keine gefunden"));
+        status.setText (juce::String::fromUTF8 ("Keine KI-CLI gefunden \xe2\x80\x94 installiere Claude Code oder Codex, dann \xe2\x80\x9e" "Neu verbinden\xe2\x80\x9c"),
+                        juce::dontSendNotification);
+        sendButton.setEnabled (false);
+        input.setEnabled (false);
+        return;
+    }
+
+    backendBox.setSelectedId (1, juce::dontSendNotification);   // first = preferred (Claude Code)
+    cli = clis.getReference (0);
+    sendButton.setEnabled (true);
+    input.setEnabled (true);
+    sessionId = juce::Uuid().toDashedString();
+    firstTurn = true;
+    status.setText (cli.displayName + juce::String::fromUTF8 (" verbunden \xe2\x80\xa2 generierte Plugins \xe2\x86\x92 \xe2\x80\x9e" "Cloudes\xe2\x80\x9c-Rubrik"),
+                    juce::dontSendNotification);
+}
+
+void AiStudioPanel::onBackendChanged()
+{
+    const int idx = backendBox.getSelectedId() - 1;
+    if (idx < 0 || idx >= clis.size())
+        return;
+    cli = clis.getReference (idx);
+    sessionId = juce::Uuid().toDashedString();
+    firstTurn = true;
+    status.setText (cli.displayName + juce::String::fromUTF8 (" verbunden"), juce::dontSendNotification);
+}
+
 void AiStudioPanel::resized()
 {
     auto r = getLocalBounds().reduced (10);
     header.setBounds (r.removeFromTop (24));
-    r.removeFromTop (4);
+    r.removeFromTop (6);
+
+    auto connectRow = r.removeFromTop (26);
+    backendLabel.setBounds (connectRow.removeFromLeft (28));
+    reconnectButton.setBounds (connectRow.removeFromRight (110));
+    connectRow.removeFromRight (6);
+    backendBox.setBounds (connectRow.removeFromLeft (180));
+    r.removeFromTop (6);
+
     status.setBounds (r.removeFromBottom (18));
 
     auto inputRow = r.removeFromBottom (64);
@@ -193,29 +243,34 @@ void AiStudioPanel::send()
         return;
     }
 
-    // Currently only the Claude Code argument shape is implemented; Codex follows the same seam.
-    if (cli.type != AiCli::ClaudeCode)
-    {
-        appendLine (juce::String::fromUTF8 ("\n[!] Aktuell ist nur Claude Code angebunden (Codex folgt).\n"));
-        return;
-    }
-
     input.clear();
     appendLine (juce::String::fromUTF8 ("\n\xe2\x96\xb6 Du: ") + prompt + "\n");
 
-    const auto mcpConfig = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                               .getChildFile ("cloudes_ai_studio_mcp.json");
-    AiAgentBridge::writeClaudeMcpConfig (mcpConfig, mcpBin, toolchain);
+    juce::StringArray argv;
+    bool parseJson = true;
 
-    const auto argv    = AiAgentBridge::buildClaudeArgs (cli.executable, prompt, sessionId, firstTurn, mcpConfig);
-    const auto spawn   = AiAgentBridge::wrapInLoginShell (argv);
+    if (cli.type == AiCli::ClaudeCode)
+    {
+        const auto mcpConfig = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                   .getChildFile ("cloudes_ai_studio_mcp.json");
+        AiAgentBridge::writeClaudeMcpConfig (mcpConfig, mcpBin, toolchain);
+        argv      = AiAgentBridge::buildClaudeArgs (cli.executable, prompt, sessionId, firstTurn, mcpConfig);
+        parseJson = true;   // claude --output-format stream-json
+    }
+    else // Codex
+    {
+        argv      = AiAgentBridge::buildCodexArgs (cli.executable, prompt, mcpBin, toolchain);
+        parseJson = false;  // codex exec prints plain text
+    }
     firstTurn = false;
+
+    const auto spawn = AiAgentBridge::wrapInLoginShell (argv);
 
     busy = true;
     sendButton.setEnabled (false);
-    status.setText (juce::String::fromUTF8 ("KI arbeitet\xe2\x80\xa6"), juce::dontSendNotification);
+    status.setText (cli.displayName + juce::String::fromUTF8 (" arbeitet\xe2\x80\xa6"), juce::dontSendNotification);
 
-    runThread = std::make_unique<AgentRunThread> (*this, spawn);
+    runThread = std::make_unique<AgentRunThread> (*this, spawn, parseJson);
     runThread->startThread();
 }
 

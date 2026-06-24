@@ -67,6 +67,41 @@ namespace cloudes
         return {};
     }
 
+    juce::Array<AiCliInfo> AiAgentBridge::detectClis()
+    {
+        juce::Array<AiCliInfo> out;
+        if (const auto c = whichTool ("claude"); c.isNotEmpty())
+            out.add ({ AiCli::ClaudeCode, juce::File (c), "Claude Code" });
+        if (const auto c = whichTool ("codex"); c.isNotEmpty())
+            out.add ({ AiCli::Codex, juce::File (c), "Codex" });
+
+        // Fill any gaps from the common dirs (covers the Finder-launched no-PATH case).
+        const auto fromDirs = detectClis (commonCliDirs());
+        for (const auto& info : fromDirs)
+        {
+            bool have = false;
+            for (const auto& e : out) if (e.type == info.type) have = true;
+            if (! have) out.add (info);
+        }
+        return out;
+    }
+
+    juce::Array<AiCliInfo> AiAgentBridge::detectClis (const juce::StringArray& candidateDirs)
+    {
+        juce::Array<AiCliInfo> out;
+        for (const auto& d : candidateDirs)
+        {
+            const auto exe = juce::File (d).getChildFile ("claude");
+            if (exe.existsAsFile()) { out.add ({ AiCli::ClaudeCode, exe, "Claude Code" }); break; }
+        }
+        for (const auto& d : candidateDirs)
+        {
+            const auto exe = juce::File (d).getChildFile ("codex");
+            if (exe.existsAsFile()) { out.add ({ AiCli::Codex, exe, "Codex" }); break; }
+        }
+        return out;
+    }
+
     juce::File AiAgentBridge::writeClaudeMcpConfig (const juce::File& configFile,
                                                    const juce::File& cloudesMcpBinary,
                                                    const juce::File& toolchainDir)
@@ -119,6 +154,27 @@ namespace cloudes
             args.add ("--resume");
             args.add (sessionId);
         }
+        return args;
+    }
+
+    juce::StringArray AiAgentBridge::buildCodexArgs (const juce::File& codexExe,
+                                                    const juce::String& prompt,
+                                                    const juce::File& cloudesMcpBinary,
+                                                    const juce::File& toolchainDir)
+    {
+        // Register the cloudes MCP server via -c TOML overrides (no change to ~/.codex/config.toml).
+        // The quotes are part of the TOML value string codex parses; passed as one argv element each.
+        juce::StringArray args;
+        args.add (codexExe.getFullPathName());
+        args.add ("exec");
+        args.add ("-c");
+        args.add ("mcp_servers.cloudes.command=\"" + cloudesMcpBinary.getFullPathName() + "\"");
+        if (toolchainDir != juce::File())
+        {
+            args.add ("-c");
+            args.add ("mcp_servers.cloudes.env.CLOUDES_TOOLCHAIN_DIR=\"" + toolchainDir.getFullPathName() + "\"");
+        }
+        args.add (prompt);
         return args;
     }
 
