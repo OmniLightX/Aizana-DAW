@@ -424,6 +424,24 @@ namespace cloudes
             return ok ("Added a " + what + " to \"" + track->getName() + "\".");
         }
 
+        // Reverb — a send to a shared "Reverb" FX bus (pro pattern), not a per-track insert.
+        if (req.tool == "add_reverb")
+        {
+            const auto name = req.args.getProperty ("track", {}).toString();
+            if (name.isEmpty())
+                return fail ("'track' (string) is required");
+
+            auto* track = resolveTrack (*edit, name);
+            if (track == nullptr)
+                return fail ("no audio track named \"" + name + "\" — call list_tracks for exact names");
+
+            const float amount = juce::jlimit (0.0f, 1.0f, argNum (req.args, "amount", 0.3f));
+            mixApply.addReverbSend (track->itemID, amount);
+            commandBridge.applyPendingCommands();   // apply now → reply is accurate
+            return ok ("Sent \"" + track->getName() + "\" to the shared Reverb bus ("
+                       + juce::String (juce::roundToInt (amount * 100.0f)) + "%).");
+        }
+
         return fail ("unknown tool: " + req.tool);
     }
 }

@@ -60,6 +60,11 @@ public:
     /** Synchronous core — message thread, inside the bridge's open transaction. */
     void applyMixNow (const cloudes::MixPlan& plan, juce::UndoManager& um);
 
+    /** KI-Studio live tool: route a track to a shared "Reverb" FX bus (created once with a
+        100%-wet Cloudes Reverb on the return) via an aux send. amountNorm 0..1 sets the send
+        level. Enqueued as one AI batch = one undo step. Any thread. */
+    void addReverbSend (tracktion::engine::EditItemID trackId, float amountNorm);
+
 private:
     EditManager&     editManager;
     MixerEngine&     mixerEngine;

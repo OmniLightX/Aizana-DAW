@@ -344,6 +344,12 @@ namespace
             "session (one undo step). Defaults to ~5.5 kHz if omitted.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"freq_hz":{"type":"number","description":"Sibilance frequency in Hz (default 5500)."},"threshold_db":{"type":"number","description":"Threshold in dB (default -20)."},"ratio":{"type":"number","description":"Ratio (default 4)."}},"required":["track"],"additionalProperties":false})"));
 
+        tools.add (tool ("add_reverb",
+            "Add reverb to one track in the live Cloudes session the way pros do it: a send to a "
+            "shared \"Reverb\" FX bus (created once with a 100%-wet reverb), not a per-track "
+            "insert. Call again on other tracks to share the same space. One undo step.",
+            R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"amount":{"type":"number","description":"How much reverb: 0 = none .. 1 = full send level (default 0.3)."}},"required":["track"],"additionalProperties":false})"));
+
         return makeResult (id, makeObject ({ { "tools", juce::var (tools) } }));
     }
 
@@ -366,6 +372,7 @@ namespace
         if (name == "set_track_eq")     return toolLive (id, "set_track_eq", args);
         if (name == "add_compressor")   return toolLive (id, "add_compressor", args);
         if (name == "add_deesser")      return toolLive (id, "add_deesser", args);
+        if (name == "add_reverb")       return toolLive (id, "add_reverb", args);
 
         return makeError (id, -32602, "Unknown tool: " + name);
     }

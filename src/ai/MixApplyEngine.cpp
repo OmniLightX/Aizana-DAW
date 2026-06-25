@@ -405,3 +405,41 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
         }
     }
 }
+
+//==============================================================================
+void MixApplyEngine::addReverbSend (te::EditItemID trackId, float amountNorm)
+{
+    commandBridge.enqueue ("KI-Studio: Reverb-Send", [this, trackId, amountNorm] (juce::UndoManager&)
+    {
+        auto* edit = editManager.getEdit();
+        if (edit == nullptr)
+            return;
+
+        te::AudioTrack* track = nullptr;
+        for (auto* t : te::getAudioTracks (*edit))
+            if (t->itemID == trackId) { track = t; break; }
+        if (track == nullptr)
+            return;
+
+        // Shared "Reverb" FX bus — created once with a 100%-wet Cloudes Reverb on the
+        // return, reused on later sends (the way pros bus reverb instead of per-track inserts).
+        te::AudioTrack* fx = nullptr;
+        for (auto* f : mixerEngine.getFXChannels())
+            if (f->getName() == "Reverb") { fx = f; break; }
+
+        if (fx == nullptr)
+        {
+            fx = mixerEngine.createFXChannel ("Reverb");
+            if (fx != nullptr)
+                insertBuiltIn (*edit, fx->pluginList, "Cloudes Reverb",
+                               [] (juce::AudioPluginInstance& inst) { setHostParam (inst, "wet", 1.0f); });
+        }
+        if (fx == nullptr)
+            return;
+
+        // amount 0..1 → send level in dB (1.0 = unity, 0.3 ≈ -10 dB).
+        const float dB = juce::jlimit (-40.0f, 0.0f,
+                                       juce::Decibels::gainToDecibels (juce::jlimit (0.001f, 1.0f, amountNorm)));
+        mixerEngine.createFXSend (*track, *fx, dB);
+    });
+}
