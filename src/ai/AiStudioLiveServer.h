@@ -3,6 +3,9 @@
 #include <juce_core/juce_core.h>
 #include "AiLiveProtocol.h"
 
+#include <atomic>
+#include <memory>
+
 class EditManager;
 class MixApplyEngine;
 class AICommandBridge;
@@ -61,6 +64,10 @@ namespace cloudes
         juce::String token;
         int          boundPort = 0;
         bool         running   = false;
+
+        // Set false in stop() BEFORE the thread is joined. A queued message-thread job that
+        // outlives the server checks this and bails instead of dereferencing a dead `this`.
+        std::shared_ptr<std::atomic<bool>> alive { std::make_shared<std::atomic<bool>> (true) };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AiStudioLiveServer)
     };

@@ -126,12 +126,13 @@ namespace cloudes
             return;
 
         running = false;
-        signalThreadShouldExit();
+        alive->store (false);         // any queued message-thread job now bails early
+        signalThreadShouldExit();     // unblocks the connection wait loops
 
         if (listener != nullptr)
             listener->close();        // unblocks waitForNextConnection()
 
-        stopThread (3000);
+        stopThread (4000);            // > the per-iteration waits below → no force-kill
         listener.reset();
 
         AiLiveProtocol::liveBridgeFile().deleteFile();
@@ -160,7 +161,7 @@ namespace cloudes
         bool gotLine = false;
         while (buf.size() < (1u << 16) && ! threadShouldExit())
         {
-            if (sock.waitUntilReady (true, 4000) != 1)
+            if (sock.waitUntilReady (true, 1000) != 1)   // short → loop stays responsive to stop()
                 break;
 
             char tmp[512];
@@ -184,28 +185,34 @@ namespace cloudes
             resp = fail ("malformed request");
         else if (req.token != token)
             resp = fail ("unauthorised (token mismatch)");
+        else if (juce::MessageManager::existsAndIsCurrentThread())
+        {
+            resp = dispatch (req);
+        }
         else
         {
-            // Marshal Edit access to the message thread. Capture by value into a shared
-            // holder so a timeout can't leave the async job writing to dead stack.
+            // Marshal Edit access to the message thread. Capture into a shared holder so a
+            // timeout/shutdown can't leave the async job writing to dead stack; the `alive`
+            // guard lets a job that outlives the server bail before touching `this`.
             struct Pending { LiveResponse out; juce::WaitableEvent done; };
             auto pending = std::make_shared<Pending>();
+            auto guard   = alive;
 
-            if (juce::MessageManager::existsAndIsCurrentThread())
+            juce::MessageManager::callAsync ([this, req, pending, guard]
             {
-                resp = dispatch (req);
-            }
-            else
-            {
-                juce::MessageManager::callAsync ([this, req, pending]
+                pending->out = guard->load() ? dispatch (req) : fail ("Cloudes is shutting down");
+                pending->done.signal();
+            });
+
+            // Poll so stop() (which sets threadShouldExit on the message thread) can never
+            // deadlock against our wait — otherwise message thread ↔ this thread block forever.
+            resp = fail ("timed out applying the move");
+            while (! threadShouldExit())
+                if (pending->done.wait (100))
                 {
-                    pending->out = dispatch (req);
-                    pending->done.signal();
-                });
-
-                resp = pending->done.wait (8000) ? pending->out
-                                                 : fail ("timed out applying the move");
-            }
+                    resp = pending->out;
+                    break;
+                }
         }
 
         const auto line = (resp.ok ? AiLiveProtocol::makeResponseOk (resp.text)
@@ -237,8 +244,12 @@ namespace cloudes
                     pan    = vp->pan.get();
                 }
 
+                juce::String flags;
+                if (t->isMuted (false)) flags << ", muted";
+                if (t->isSolo  (false)) flags << ", soloed";
+
                 body << "  - \"" << t->getName() << "\"  [vol "
-                     << juce::String (gainDb, 1) << " dB, pan " << panText (pan) << "]\n";
+                     << juce::String (gainDb, 1) << " dB, pan " << panText (pan) << flags << "]\n";
                 ++n;
             }
 
@@ -275,7 +286,7 @@ namespace cloudes
                 a.gainDb      = db;
                 plan.summary  = "KI-Studio: " + track->getName() + " Pegel " + juce::String (db, 1) + " dB";
                 plan.add (a);
-                mixApply.applyPlan (plan);
+                mixApply.applyPlan (plan); commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
                 return ok ("Set \"" + track->getName() + "\" volume to " + juce::String (db, 1) + " dB.");
             }
 
@@ -292,7 +303,7 @@ namespace cloudes
             a.pan         = pan;
             plan.summary  = "KI-Studio: " + track->getName() + " Pan";
             plan.add (a);
-            mixApply.applyPlan (plan);
+            mixApply.applyPlan (plan); commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
             return ok ("Set \"" + track->getName() + "\" pan to " + panText (pan) + ".");
         }
 
@@ -335,6 +346,7 @@ namespace cloudes
                         return;
                     }
             });
+            commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
 
             const juce::String verb = isMute ? (value ? "Muted" : "Un-muted")
                                              : (value ? "Soloed" : "Un-soloed");
@@ -367,7 +379,7 @@ namespace cloudes
                 return fail ("no valid EQ bands — each band needs a positive 'freq'");
 
             plan.summary = "KI-Studio: " + track->getName() + " EQ";
-            mixApply.applyPlan (plan);
+            mixApply.applyPlan (plan); commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
             return ok ("Added a " + juce::String (plan.size()) + "-band EQ to \"" + track->getName() + "\".");
         }
 
@@ -408,7 +420,7 @@ namespace cloudes
             MixPlan plan;
             plan.summary = "KI-Studio: " + track->getName() + " " + (req.tool == "add_compressor" ? "Comp" : "De-Ess");
             plan.add (a);
-            mixApply.applyPlan (plan);
+            mixApply.applyPlan (plan); commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
             return ok ("Added a " + what + " to \"" + track->getName() + "\".");
         }
 

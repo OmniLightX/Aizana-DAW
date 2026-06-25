@@ -43,6 +43,25 @@ TEST_CASE ("AiLiveProtocol: missing tool / malformed line is invalid", "[aistudi
     CHECK       (AiLiveProtocol::parseRequest (R"({"tool":"list_tracks"})").valid);
 }
 
+TEST_CASE ("AiLiveProtocol: nested array args (EQ bands) survive the round-trip", "[aistudio][live]")
+{
+    juce::Array<juce::var> bands;
+    bands.add (obj ({ { "type", "high_pass" }, { "freq", 80.0 } }));
+    bands.add (obj ({ { "type", "bell" }, { "freq", 3000.0 }, { "gain", -2.5 }, { "q", 1.2 } }));
+    const auto args = obj ({ { "track", "Vox" }, { "bands", juce::var (bands) } });
+
+    const auto r = AiLiveProtocol::parseRequest (
+        AiLiveProtocol::makeRequest ("t", "set_track_eq", args));
+    REQUIRE (r.valid);
+
+    auto* arr = r.args.getProperty ("bands", {}).getArray();
+    REQUIRE (arr != nullptr);
+    REQUIRE (arr->size() == 2);
+    CHECK ((*arr)[0].getProperty ("type", {}).toString() == "high_pass");
+    CHECK (juce::approximatelyEqual ((double) (*arr)[1].getProperty ("gain", 0.0), -2.5));
+    CHECK (juce::approximatelyEqual ((double) (*arr)[1].getProperty ("q", 0.0), 1.2));
+}
+
 TEST_CASE ("AiLiveProtocol: empty args default to an object", "[aistudio][live]")
 {
     const auto line = AiLiveProtocol::makeRequest ("t", "list_tracks", juce::var());
