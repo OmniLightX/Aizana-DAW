@@ -100,5 +100,14 @@ namespace cloudes
         static constexpr float kGlueRatio   = 2.0f;
         static constexpr float kGlueThreshDb = -12.0f;
         static constexpr float kGlueMakeupDb = 1.0f;
+
+        // REF-03 — style matching: gentle master tonal tilt toward the reference's
+        // low/high balance (the per-track moves already carry most of it, so this is a
+        // light finishing touch). REF-04: a guideline, clamped, never enforced.
+        static constexpr double kRefMasterTiltScale = 0.5;     // reference dB → master shelf dB
+        static constexpr double kRefMasterTiltMaxDb = 2.0;     // hard clamp on the tilt
+        static constexpr double kRefMasterTiltMinDb = 0.5;     // below: skip (no audible move)
+        static constexpr float  kRefMasterLowHz     = 100.0f;
+        static constexpr float  kRefMasterHighHz    = 10000.0f;
     };
 }

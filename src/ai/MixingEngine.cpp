@@ -480,6 +480,41 @@ namespace cloudes
         }
 
         //----------------------------------------------------------------------
+        // 4) REF-03 — style match: tilt the master toward the reference's tonal balance.
+        //    A gentle finishing shelf pair (the per-track moves already do the heavy lifting),
+        //    clamped to kRefMasterTiltMaxDb. REF-04: a guideline read from the reference, not
+        //    an enforced target. targetName = master marker so MixApplyEngine routes it to the
+        //    master plugin list (same convention as the glue compressor).
+        if (reference != nullptr && reference->isValid())
+        {
+            auto masterShelf = [&] (MixActionType type, double refDb, float hz, const char* reasonUp, const char* reasonDown)
+            {
+                const double db = juce::jlimit (-MixingEngine::kRefMasterTiltMaxDb,
+                                                 MixingEngine::kRefMasterTiltMaxDb,
+                                                 refDb * MixingEngine::kRefMasterTiltScale);
+                if (std::abs (db) < MixingEngine::kRefMasterTiltMinDb)
+                    return;
+
+                MixAction a;
+                a.type        = type;
+                a.targetTrack = options.masterId;
+                a.targetName  = options.masterName;
+                a.freqHz      = hz;
+                a.gainDb      = (float) db;
+                a.q           = 0.7f;
+                a.reason      = juce::String::fromUTF8 (db >= 0.0 ? reasonUp : reasonDown);
+                plan.add (a);
+            };
+
+            masterShelf (MixActionType::HighShelf, highRef, MixingEngine::kRefMasterHighHz,
+                         "Etwas mehr Glanz oben \xe2\x80\x94 n\xc3\xa4her an deiner Referenz",
+                         "Etwas weniger H\xc3\xb6hen \xe2\x80\x94 n\xc3\xa4her an deiner Referenz");
+            masterShelf (MixActionType::LowShelf, lowRef, MixingEngine::kRefMasterLowHz,
+                         "Etwas mehr Fundament unten \xe2\x80\x94 n\xc3\xa4her an deiner Referenz",
+                         "Etwas weniger Bass \xe2\x80\x94 n\xc3\xa4her an deiner Referenz");
+        }
+
+        //----------------------------------------------------------------------
         juce::String genre = (reference && reference->isValid()) ? reference->name : juce::String();
         plan.summary = "Mix-Vorschlag: " + juce::String (plan.size())
                      + juce::String::fromUTF8 (" Schritte über ")

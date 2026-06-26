@@ -232,3 +232,33 @@ TEST_CASE ("MixApplyEngine: empty plan is a no-op", "[mixapply]")
 
     CHECK (bridge.getPendingBatchCount() == 0);
 }
+
+TEST_CASE ("MixApplyEngine: REF-03 master EQ folds onto the master plugin list, one undo", "[mixapply][ref]")
+{
+    EditManager em; em.createNewEdit();
+    MixerEngine mixer (em);
+    AICommandBridge bridge (em);
+    MixApplyEngine applyEngine (em, mixer, bridge);
+    auto& edit = *em.getEdit();
+
+    const int eqBefore = countBuiltIn (edit.getMasterPluginList(), "EQProcessor");
+
+    // Two master-targeted shelves (the REF-03 style tilt) must fold into ONE master EQ.
+    MixPlan plan;
+    cloudes::MixAction hi;
+    hi.type = cloudes::MixActionType::HighShelf;
+    hi.targetName = "Master";  hi.freqHz = 10000.0f; hi.gainDb = 1.5f; hi.q = 0.7f;
+    plan.add (hi);
+    cloudes::MixAction lo;
+    lo.type = cloudes::MixActionType::LowShelf;
+    lo.targetName = "Master";  lo.freqHz = 100.0f;   lo.gainDb = 1.0f; lo.q = 0.7f;
+    plan.add (lo);
+    plan.summary = "REF-03 master tilt";
+
+    applyEngine.applyPlan (plan);
+    bridge.applyPendingCommands();
+    CHECK (countBuiltIn (edit.getMasterPluginList(), "EQProcessor") == eqBefore + 1);
+
+    em.getUndoManager().undo();
+    CHECK (countBuiltIn (edit.getMasterPluginList(), "EQProcessor") == eqBefore);
+}

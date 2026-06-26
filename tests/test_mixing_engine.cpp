@@ -249,6 +249,59 @@ TEST_CASE ("MixingEngine: reference nudges stay clamped (REF-04)", "[mixing]")
     REQUIRE (mud != nullptr);
     REQUIRE (mud->gainDb >= -4.0f);         // mud carve clamp
     REQUIRE (mud->gainDb <  0.0f);          // it's a cut
+
+    // REF-03: the master tonal tilt is clamped too (extreme high/low must not blow up the bus).
+    const auto* mHi = find (plan, MixActionType::HighShelf, "Master");
+    REQUIRE (mHi != nullptr);
+    REQUIRE (mHi->gainDb <= (float) MixingEngine::kRefMasterTiltMaxDb);
+    const auto* mLo = find (plan, MixActionType::LowShelf, "Master");
+    REQUIRE (mLo != nullptr);
+    REQUIRE (mLo->gainDb <= (float) MixingEngine::kRefMasterTiltMaxDb);
+}
+
+TEST_CASE ("MixingEngine: REF-03 tilts the master toward the reference's tonal balance", "[mixing][ref]")
+{
+    std::vector<TrackMixProfile> tracks {
+        track ("Lead Vox", "Vocals", -18.0, true),
+        track ("Bass",     "Bass",   -18.0),
+        track ("Drums",    "Drums",  -18.0),
+    };
+
+    SECTION ("no reference → no master tilt")
+    {
+        const auto plan = MixingEngine::mix (tracks);   // nullptr reference
+        CHECK_FALSE (has (plan, MixActionType::HighShelf, "Master"));
+        CHECK_FALSE (has (plan, MixActionType::LowShelf,  "Master"));
+    }
+
+    SECTION ("bright, bass-heavy reference → gentle master high + low shelves")
+    {
+        ReferenceProfile bright;
+        bright.name   = "Trap / Phonk";
+        bright.highDb = 2.0;   // → +1.0 dB (scale 0.5)
+        bright.lowDb  = 3.0;   // → +1.5 dB
+        const auto plan = MixingEngine::mix (tracks, &bright);
+
+        const auto* hi = find (plan, MixActionType::HighShelf, "Master");
+        REQUIRE (hi != nullptr);
+        CHECK (hi->gainDb > 0.0f);
+        CHECK (hi->gainDb <= (float) MixingEngine::kRefMasterTiltMaxDb);
+
+        const auto* lo = find (plan, MixActionType::LowShelf, "Master");
+        REQUIRE (lo != nullptr);
+        CHECK (lo->gainDb > 0.0f);
+    }
+
+    SECTION ("near-neutral reference → tilt below threshold → skipped")
+    {
+        ReferenceProfile flat;
+        flat.name   = "Rock";
+        flat.highDb = 0.5;   // → 0.25 dB < kRefMasterTiltMinDb
+        flat.lowDb  = 0.0;
+        const auto plan = MixingEngine::mix (tracks, &flat);
+        CHECK_FALSE (has (plan, MixActionType::HighShelf, "Master"));
+        CHECK_FALSE (has (plan, MixActionType::LowShelf,  "Master"));
+    }
 }
 
 //==============================================================================

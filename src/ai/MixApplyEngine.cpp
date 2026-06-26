@@ -283,11 +283,18 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
     };
 
     // 1) Collect EQ moves per track → ONE Cloudes EQ per track (bands in plan order).
+    //    EQ moves targeting the master (REF-03 style tilt) fold into ONE master EQ — same
+    //    master-name convention the glue compressor uses.
     std::map<te::AudioTrack*, std::vector<EQBand>> eqByTrack;
+    std::vector<EQBand> masterEqBands;
     for (const auto& a : plan.actions)
         if (isEqAction (a.type))
-            if (auto* t = findTrack (a.targetTrack))
+        {
+            if (a.targetName == kMasterTarget)
+                masterEqBands.push_back (toEqBand (a));
+            else if (auto* t = findTrack (a.targetTrack))
                 eqByTrack[t].push_back (toEqBand (a));
+        }
 
     for (auto& [track, bands] : eqByTrack)
     {
@@ -297,6 +304,17 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
             if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
                 for (int i = 0; i < (int) bands.size() && i < EQProcessor::NumBands; ++i)
                     eq->setBand (i, bands[(size_t) i]);
+        });
+    }
+
+    if (! masterEqBands.empty())
+    {
+        insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes EQ",
+                       [&masterEqBands] (juce::AudioPluginInstance& inst)
+        {
+            if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
+                for (int i = 0; i < (int) masterEqBands.size() && i < EQProcessor::NumBands; ++i)
+                    eq->setBand (i, masterEqBands[(size_t) i]);
         });
     }
 
