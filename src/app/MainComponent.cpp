@@ -5,6 +5,7 @@
 #include "generator/LocalComposer.h"
 #include "generator/FaustCompiler.h"
 #include "ui/aistudio/AiStudioPanel.h"
+#include "ui/pluginbrowser/GeneratedPluginsPanel.h"
 
 namespace te = tracktion::engine;
 
@@ -688,6 +689,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           juce::String::fromUTF8 ("Plugin generieren…"), hasEdit);
             menu.addItem (SongAiStudio,
                           juce::String::fromUTF8 ("KI-Studio (Chat: Plugins bauen lassen)…"));
+            menu.addItem (SongManagePlugins,
+                          juce::String::fromUTF8 ("Cloudes-Plugins verwalten…"));
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -805,6 +808,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
         case SongGeneratePlugin:
             startRuntimeGenerator();
             break;
+        case SongManagePlugins:
+            openGeneratedPluginsManager();
+            break;
+
         case SongAiStudio:
             openAiStudio();
             break;
@@ -1920,6 +1927,40 @@ void MainComponent::openAiStudio()
     };
 
     aiStudioWindow = std::move (win);
+}
+
+void MainComponent::openGeneratedPluginsManager()
+{
+    if (generatedPluginsWindow != nullptr)
+    {
+        generatedPluginsWindow->toFront (true);
+        return;
+    }
+
+    // After a rename/delete: re-persist the plugin cache so the change survives restart
+    // (a deleted plugin must not resurrect from the XML cache), and refresh the live engine.
+    auto onChanged = [safe = juce::Component::SafePointer<MainComponent> (this)]
+    {
+        if (safe == nullptr)
+            return;
+        safe->pluginScanner.savePluginList (safe->getPluginListCacheFile());
+        safe->syncScannedPluginsToEngine();
+    };
+
+    auto win = std::make_unique<AiStudioWindow>();   // reuse the close-notifying DocumentWindow
+    win->setName (juce::String::fromUTF8 ("Cloudes-Plugins verwalten"));
+    win->setUsingNativeTitleBar (true);
+    win->setContentOwned (new GeneratedPluginsPanel (pluginScanner, std::move (onChanged)), true);
+    win->setResizable (true, true);
+    win->centreWithSize (460, 480);
+    win->setVisible (true);
+    win->onClose = [safe = juce::Component::SafePointer<MainComponent> (this)]
+    {
+        if (safe != nullptr)
+            juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->generatedPluginsWindow.reset(); });
+    };
+
+    generatedPluginsWindow = std::move (win);
 }
 
 juce::File MainComponent::getPluginListCacheFile()

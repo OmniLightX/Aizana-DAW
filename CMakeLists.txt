@@ -263,6 +263,7 @@ target_sources(Cloudes PRIVATE
     src/ui/prefs/AudioPreferencesDialog.cpp
     # Plugin browser popup (plan 01-15: PLUG-01/02/03/04 UI entry point)
     src/ui/pluginbrowser/PluginBrowserPopup.cpp
+    src/ui/pluginbrowser/GeneratedPluginsPanel.cpp
     # Export dialog (plan 01-16: EXP-01, EXP-02, EXP-04)
     src/ui/export/ExportDialog.cpp
     # Audio I/O Setup dialog (GAP-31: recording input assignment)

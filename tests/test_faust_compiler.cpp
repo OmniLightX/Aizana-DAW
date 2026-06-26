@@ -191,5 +191,38 @@ TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap t
     // Idempotent: re-registering the same directory adds nothing (de-duped by identifier).
     CHECK (scanner.registerGeneratedPlugins (dir) == 0);
 
+    // G5b — rename: the override shows in the live list and survives a re-register.
+    REQUIRE (scanner.renameGeneratedPlugin (r.clapFile, "My Renamed Gain"));
+    auto nameInList = [&] (const juce::String& path) -> juce::String
+    {
+        for (const auto& t : scanner.getKnownPlugins().getTypes())
+            if (t.fileOrIdentifier == path)
+                return t.name;
+        return {};
+    };
+    CHECK (nameInList (r.clapFile.getFullPathName()) == "My Renamed Gain");
+    CHECK (PluginScanner::generatedDisplayName (r.clapFile) == "My Renamed Gain");
+
+    // A fresh scanner picks up the override from the sidecar (persists across restarts).
+    {
+        PluginScanner reopened;
+        reopened.registerGeneratedPlugins (dir);
+        bool foundRenamed = false;
+        for (const auto& t : reopened.getKnownPlugins().getTypes())
+            if (t.fileOrIdentifier == r.clapFile.getFullPathName() && t.name == "My Renamed Gain")
+                foundRenamed = true;
+        CHECK (foundRenamed);
+    }
+
+    // Blank name is rejected.
+    CHECK_FALSE (scanner.renameGeneratedPlugin (r.clapFile, "   "));
+
+    // G5b — delete: removed from the list and the file is gone.
+    const int countBeforeDelete = scanner.getKnownPlugins().getTypes().size();
+    REQUIRE (scanner.deleteGeneratedPlugin (r.clapFile));
+    CHECK_FALSE (r.clapFile.existsAsFile());
+    CHECK (scanner.getKnownPlugins().getTypes().size() < countBeforeDelete);
+    CHECK (nameInList (r.clapFile.getFullPathName()).isEmpty());
+
     dir.deleteRecursively();
 }

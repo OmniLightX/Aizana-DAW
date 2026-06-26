@@ -203,6 +203,30 @@ void PluginScanner::cancelScan()
 // Generated plugin library
 // ---------------------------------------------------------------------------
 
+namespace
+{
+    // Sidecar mapping a generated .clap's file name → user display-name override (G5b rename).
+    juce::File generatedNamesSidecar (const juce::File& dir)
+    {
+        return dir.getChildFile (".cloudes-names.json");
+    }
+
+    juce::var readGeneratedNames (const juce::File& dir)
+    {
+        const auto f = generatedNamesSidecar (dir);
+        if (f.existsAsFile())
+            if (auto v = juce::JSON::parse (f.loadFileAsString()); v.isObject())
+                return v;
+        return juce::var (new juce::DynamicObject());
+    }
+
+    void writeGeneratedNames (const juce::File& dir, const juce::var& v)
+    {
+        dir.createDirectory();
+        generatedNamesSidecar (dir).replaceWithText (juce::JSON::toString (v));
+    }
+}
+
 int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
 {
     if (! dir.isDirectory())
@@ -211,6 +235,7 @@ int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
     // A local format instance is enough to read the descriptions — findAllTypesForFile
     // dlopens/scans/dlcloses each .clap on its own (no dependency on formatManager state).
     ClapPluginFormat clap;
+    const auto names = readGeneratedNames (dir);   // display-name overrides (G5b)
     int added = 0;
 
     for (const auto& file : dir.findChildFiles (juce::File::findFiles, false, "*.clap"))
@@ -221,12 +246,70 @@ int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
         for (auto* d : descs)
         {
             d->manufacturerName = "Cloudes";   // group as the Cloudes plugin library
+
+            // Apply a user rename if one exists (the baked-in name can't change without recompiling).
+            if (const auto custom = names.getProperty (file.getFileName(), {}).toString(); custom.isNotEmpty())
+                d->name = custom;
+
             if (knownPlugins.addType (*d))     // de-dupes by identifier (file path)
                 ++added;
         }
     }
 
     return added;
+}
+
+bool PluginScanner::renameGeneratedPlugin (const juce::File& clapFile, const juce::String& newDisplayName)
+{
+    const auto trimmed = newDisplayName.trim();
+    if (trimmed.isEmpty() || ! clapFile.existsAsFile())
+        return false;
+
+    const auto dir  = clapFile.getParentDirectory();
+    const auto path = clapFile.getFullPathName();
+
+    // Persist the override.
+    auto names = readGeneratedNames (dir);
+    if (auto* o = names.getDynamicObject())
+        o->setProperty (clapFile.getFileName(), trimmed);
+    writeGeneratedNames (dir, names);
+
+    // Replace the live registration so the new name shows immediately (addType de-dupes by
+    // identifier, so the name won't update unless we remove the old entry first).
+    for (const auto& d : knownPlugins.getTypes())
+        if (d.fileOrIdentifier == path)
+            knownPlugins.removeType (d);
+
+    registerGeneratedPlugins (dir);   // re-adds this file with the override applied
+    return true;
+}
+
+bool PluginScanner::deleteGeneratedPlugin (const juce::File& clapFile)
+{
+    const auto path = clapFile.getFullPathName();
+
+    for (const auto& d : knownPlugins.getTypes())
+        if (d.fileOrIdentifier == path)
+            knownPlugins.removeType (d);
+
+    // Drop any name override for this file.
+    const auto dir = clapFile.getParentDirectory();
+    auto names = readGeneratedNames (dir);
+    if (auto* o = names.getDynamicObject())
+    {
+        o->removeProperty (clapFile.getFileName());
+        writeGeneratedNames (dir, names);
+    }
+
+    return clapFile.existsAsFile() ? clapFile.moveToTrash() : true;
+}
+
+juce::String PluginScanner::generatedDisplayName (const juce::File& clapFile)
+{
+    const auto names = readGeneratedNames (clapFile.getParentDirectory());
+    if (const auto custom = names.getProperty (clapFile.getFileName(), {}).toString(); custom.isNotEmpty())
+        return custom;
+    return clapFile.getFileNameWithoutExtension();
 }
 
 // ---------------------------------------------------------------------------

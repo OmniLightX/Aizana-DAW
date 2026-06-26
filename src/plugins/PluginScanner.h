@@ -101,6 +101,26 @@ public:
      */
     int registerGeneratedPlugins (const juce::File& generatedPluginsDir);
 
+    /**
+     * Rename a generated plugin's DISPLAY name (G5b — library management). The real name
+     * is baked into the .clap by Faust, so the new name is stored in a sidecar
+     * (.cloudes-names.json) in the generated dir and re-applied by registerGeneratedPlugins()
+     * on every startup. Also updates the live KnownPluginList immediately so the browser
+     * reflects it. Returns false if newDisplayName is blank or the .clap doesn't exist.
+     */
+    bool renameGeneratedPlugin (const juce::File& clapFile, const juce::String& newDisplayName);
+
+    /**
+     * Delete a generated plugin (G5b): remove it from the KnownPluginList, drop any name
+     * override, and move its .clap to the Trash (recoverable). Returns false if the file
+     * could not be removed.
+     */
+    bool deleteGeneratedPlugin (const juce::File& clapFile);
+
+    /** The current display name for a generated .clap — its override if set, else the
+     *  file name without extension (which is the plugin's name as compiled). */
+    static juce::String generatedDisplayName (const juce::File& clapFile);
+
     // ---------------------------------------------------------------------------
     // Persistence — serialize/deserialize KnownPluginList to/from XML file
     // ---------------------------------------------------------------------------
