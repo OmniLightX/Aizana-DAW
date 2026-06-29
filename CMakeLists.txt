@@ -222,6 +222,7 @@ target_sources(Cloudes PRIVATE
     # Out-of-process plugin hosting transport (E5 — plugin-hang hardening)
     src/plugins/oop/SharedAudioRing.cpp
     src/plugins/oop/PluginHostBridge.cpp
+    src/plugins/oop/OobAudioMarshal.cpp
     # DSP effects (FX-01 through FX-04)
     src/fx/EQProcessor.cpp
     src/fx/CompressorProcessor.cpp
