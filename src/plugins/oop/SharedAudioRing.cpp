@@ -226,7 +226,11 @@ void SharedAudioRing::runChildLoop (const std::function<void (float*, uint32_t, 
 
     hdr->childAlive.store (1, std::memory_order_release);
 
-    uint32_t lastSeq = hdr->doneSeq.load (std::memory_order_relaxed);
+    // Sync to the CURRENT request, not doneSeq: if the host published a request before this
+    // child attached (and got childGone), that block's audio may be mid-overwrite by the host's
+    // next roundTrip. Skip it and wait for the next request — the host re-syncs on the seq it
+    // waits for, so nothing is lost.
+    uint32_t lastSeq = hdr->reqSeq.load (std::memory_order_acquire);
     int idleSpins = 0;
 
     while (! shouldExit())

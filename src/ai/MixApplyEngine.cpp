@@ -290,10 +290,14 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
     for (const auto& a : plan.actions)
         if (isEqAction (a.type))
         {
-            if (a.targetName == kMasterTarget)
-                masterEqBands.push_back (toEqBand (a));
-            else if (auto* t = findTrack (a.targetTrack))
+            // A real track ALWAYS wins over the "Master" sentinel: otherwise a user track
+            // literally named "Master" would have its EQ hijacked onto the master bus. The
+            // MixingEngine's own master tilt sets targetTrack=masterId, which is NOT in
+            // getAudioTracks → findTrack returns nullptr → it correctly falls to the master.
+            if (auto* t = findTrack (a.targetTrack))
                 eqByTrack[t].push_back (toEqBand (a));
+            else if (a.targetName == kMasterTarget)
+                masterEqBands.push_back (toEqBand (a));
         }
 
     for (auto& [track, bands] : eqByTrack)
@@ -324,22 +328,21 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
         if (isEqAction (a.type))
             continue;   // already folded into the per-track EQ
 
-        // Master-bus glue: a Compress targeting "Master" → master plugin list.
-        if (a.type == MixActionType::Compress && a.targetName == kMasterTarget)
-        {
-            insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
-                           [&a] (juce::AudioPluginInstance& inst)
-            {
-                setHostParam (inst, "ratio",     a.ratio);
-                setHostParam (inst, "threshold", a.thresholdDb);
-                setHostParam (inst, "makeup",    a.makeupGainDb);
-            });
-            continue;
-        }
-
+        // A real track wins over the "Master" sentinel (see EQ note above). Only when no
+        // real track resolves does a Compress aimed at "Master" become master-bus glue.
         auto* track = findTrack (a.targetTrack);
         if (track == nullptr)
+        {
+            if (a.type == MixActionType::Compress && a.targetName == kMasterTarget)
+                insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
+                               [&a] (juce::AudioPluginInstance& inst)
+                {
+                    setHostParam (inst, "ratio",     a.ratio);
+                    setHostParam (inst, "threshold", a.thresholdDb);
+                    setHostParam (inst, "makeup",    a.makeupGainDb);
+                });
             continue;
+        }
 
         switch (a.type)
         {

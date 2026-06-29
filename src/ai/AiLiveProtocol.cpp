@@ -1,5 +1,7 @@
 #include "AiLiveProtocol.h"
 
+#include <sys/stat.h>
+
 namespace cloudes
 {
     namespace
@@ -91,6 +93,11 @@ namespace cloudes
 
         file.getParentDirectory().createDirectory();
         file.replaceWithText (toLine (juce::var (o)));
+
+        // The token grants control of the running mix session. Restrict the discovery file to
+        // the owner (0600) so another local user can't read it and drive the live bridge. The
+        // app and the cloudes-mcp child run as the same user, so owner-only read is sufficient.
+        ::chmod (file.getFullPathName().toRawUTF8(), S_IRUSR | S_IWUSR);
         return file;
     }
 

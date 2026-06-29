@@ -262,3 +262,46 @@ TEST_CASE ("MixApplyEngine: REF-03 master EQ folds onto the master plugin list, 
     em.getUndoManager().undo();
     CHECK (countBuiltIn (edit.getMasterPluginList(), "EQProcessor") == eqBefore);
 }
+
+TEST_CASE ("MixApplyEngine: a user track literally named \"Master\" keeps its OWN EQ/comp (not the master bus)", "[mixapply][ref]")
+{
+    // Regression for the documented \"Master\"-name collision: a real track must win over the
+    // master-target sentinel, or its EQ/compressor would be hijacked onto the master bus.
+    EditManager em; em.createNewEdit();
+    MixerEngine mixer (em);
+    AICommandBridge bridge (em);
+    MixApplyEngine applyEngine (em, mixer, bridge);
+    auto& edit = *em.getEdit();
+
+    auto track = edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+    REQUIRE (track != nullptr);
+    track->setName ("Master");   // the collision: same string the glue/tilt sentinel uses
+
+    const int masterEqBefore   = countBuiltIn (edit.getMasterPluginList(), "EQProcessor");
+    const int masterCompBefore = countBuiltIn (edit.getMasterPluginList(), "CompressorProcessor");
+
+    MixPlan plan;
+    cloudes::MixAction eq;
+    eq.type = cloudes::MixActionType::HighShelf;
+    eq.targetTrack = track->itemID;   // a REAL track id present in getAudioTracks
+    eq.targetName  = "Master";
+    eq.freqHz = 8000.0f; eq.gainDb = 2.0f; eq.q = 0.7f;
+    plan.add (eq);
+
+    cloudes::MixAction comp;
+    comp.type = cloudes::MixActionType::Compress;
+    comp.targetTrack = track->itemID;
+    comp.targetName  = "Master";
+    comp.ratio = 2.0f; comp.thresholdDb = -18.0f; comp.makeupGainDb = 0.0f;
+    plan.add (comp);
+    plan.summary = "track-named-Master collision";
+
+    applyEngine.applyPlan (plan);
+    bridge.applyPendingCommands();
+
+    // Both land on the TRACK; the master bus is untouched.
+    CHECK (countBuiltIn (track->pluginList, "EQProcessor")         == 1);
+    CHECK (countBuiltIn (track->pluginList, "CompressorProcessor") == 1);
+    CHECK (countBuiltIn (edit.getMasterPluginList(), "EQProcessor")         == masterEqBefore);
+    CHECK (countBuiltIn (edit.getMasterPluginList(), "CompressorProcessor") == masterCompBefore);
+}
