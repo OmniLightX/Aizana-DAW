@@ -58,6 +58,7 @@ target_sources(engine_tests PRIVATE
     test_au_scan.cpp
     test_clap_host.cpp
     test_plugin_chain_order.cpp
+    test_oop_audio_ring.cpp
     # DSP effects tests (FX-01 through FX-04) — require juce::dsp
     test_eq_dsp.cpp
     test_compressor_dsp.cpp
@@ -106,6 +107,7 @@ target_sources(engine_tests PRIVATE
     ../src/plugins/PluginScanner.cpp
     ../src/plugins/OutOfProcessPluginScanner.cpp
     ../src/plugins/PluginManager.cpp
+    ../src/plugins/oop/SharedAudioRing.cpp
     # UI components required by FX processors in test context
     ../src/ui/eq/EQComponent.cpp
     ../src/ui/eq/SpectrumAnalyzer.cpp
