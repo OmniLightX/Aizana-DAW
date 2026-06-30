@@ -180,3 +180,28 @@ endif()
 include(CTest)
 include(Catch)
 catch_discover_tests(engine_tests)
+
+# ---------------------------------------------------------------------------
+# oop_host_smoke — Phase 5 E5.3b end-to-end cross-process test (real spawn).
+# Dual-role binary: re-launches itself as the plugin-host worker, round-trips audio
+# through a stub plugin over the SharedAudioRing, and checks the result. This covers the
+# spawn + IPC + shm path that can't run inside engine_tests (no worker entry there).
+# ---------------------------------------------------------------------------
+juce_add_console_app(oop_host_smoke PRODUCT_NAME "oop_host_smoke")
+target_sources(oop_host_smoke PRIVATE
+    oop_host_smoke.cpp
+    ../src/plugins/oop/SharedAudioRing.cpp
+    ../src/plugins/oop/PluginHostBridge.cpp
+    ../src/plugins/oop/OobAudioMarshal.cpp
+    ../src/plugins/oop/OutOfProcessPluginInstance.cpp)
+target_include_directories(oop_host_smoke PRIVATE ../src)
+target_compile_definitions(oop_host_smoke PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_APPLICATION_NAME_STRING="oop_host_smoke"
+    JUCE_APPLICATION_VERSION_STRING="0.1.0")
+target_link_libraries(oop_host_smoke PRIVATE
+    juce::juce_audio_processors
+    juce::juce_gui_extra)
+add_test(NAME oop_host_smoke COMMAND oop_host_smoke)

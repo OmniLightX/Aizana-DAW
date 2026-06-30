@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "MicrophonePermission.h"
 #include "plugins/OutOfProcessPluginScanner.h"
+#include "plugins/oop/OutOfProcessPluginInstance.h"
 
 //==============================================================================
 /**
@@ -23,7 +24,9 @@ public:
     // launch must be allowed through the single-instance lock, or scanning deadlocks.
     bool moreThanOneInstanceAllowed() override
     {
-        return getCommandLineParameters().contains (kScannerProcessUID);
+        const auto cmd = getCommandLineParameters();
+        return cmd.contains (kScannerProcessUID)
+            || cmd.contains (cloudes::kPluginHostProcessUID);   // out-of-process plugin host worker
     }
 
     void initialise (const juce::String& commandLine) override
@@ -33,6 +36,22 @@ public:
         if (auto worker = startScannerSubprocessIfRequested (commandLine))
         {
             scannerWorker = std::move (worker);
+            return;
+        }
+
+        // Out-of-process plugin host worker (E5.3b): this process hosts ONE real plugin for the
+        // main app and pumps its audio over a SharedAudioRing. Load via a fresh format manager
+        // (CLAP/VST3/AU/Built-in). Like the scanner worker: no window, no engine, no mic prompt.
+        if (auto host = cloudes::startPluginHostWorkerIfRequested (commandLine,
+                [] (const juce::PluginDescription& d, double rate, int block, juce::String& err)
+                    -> std::unique_ptr<juce::AudioProcessor>
+                {
+                    juce::AudioPluginFormatManager fm;
+                    registerScannableFormats (fm);
+                    return fm.createPluginInstance (d, rate, block, err);
+                }))
+        {
+            pluginHostWorker = std::move (host);
             return;
         }
 
@@ -61,7 +80,8 @@ public:
 
 private:
     std::unique_ptr<MainWindow> mainWindow;
-    std::shared_ptr<void>       scannerWorker;   // alive only in the scan-worker subprocess
+    std::shared_ptr<void>       scannerWorker;      // alive only in the scan-worker subprocess
+    std::shared_ptr<cloudes::PluginHostWorkerHandle> pluginHostWorker;   // alive only in a plugin-host worker
 };
 
 //==============================================================================
