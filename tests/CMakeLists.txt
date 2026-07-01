@@ -112,6 +112,7 @@ target_sources(engine_tests PRIVATE
     ../src/plugins/oop/SharedAudioRing.cpp
     ../src/plugins/oop/PluginHostBridge.cpp
     ../src/plugins/oop/OobAudioMarshal.cpp
+    ../src/plugins/oop/OutOfProcessPluginInstance.cpp
     # UI components required by FX processors in test context
     ../src/ui/eq/EQComponent.cpp
     ../src/ui/eq/SpectrumAnalyzer.cpp

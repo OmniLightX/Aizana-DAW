@@ -1,5 +1,25 @@
 #include "PluginManager.h"
 #include "PluginLoadLog.h"
+#include "oop/OutOfProcessPluginInstance.h"
+
+namespace
+{
+    // E5.3c: with CLOUDES_OOP_PLUGINS=1, route Cloudes-generated CLAP plugins through the
+    // out-of-process host by rewriting the format name (TE then picks OutOfProcessPluginFormat).
+    // Flag OFF (default) → returns the description unchanged, so the shipping path is untouched.
+    juce::PluginDescription maybeRouteOutOfProcess (const juce::PluginDescription& desc)
+    {
+        if (cloudes::oopHostingEnabled()
+            && desc.manufacturerName == "Cloudes"
+            && desc.pluginFormatName == "CLAP")
+        {
+            auto d = desc;
+            d.pluginFormatName = cloudes::kOopFormatName;
+            return d;
+        }
+        return desc;
+    }
+}
 
 PluginManager::PluginManager (PluginScanner& scanner, EditManager& editManager)
     : scanner     (scanner)
@@ -11,12 +31,14 @@ PluginManager::PluginManager (PluginScanner& scanner, EditManager& editManager)
 // ---------------------------------------------------------------------------
 
 te::Plugin* PluginManager::insertPlugin (te::Track& track,
-                                          const juce::PluginDescription& desc,
+                                          const juce::PluginDescription& descIn,
                                           int insertIndex)
 {
     auto* edit = editManager.getEdit();
     if (edit == nullptr)
         return nullptr;
+
+    const auto desc = maybeRouteOutOfProcess (descIn);
 
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Insert plugin");

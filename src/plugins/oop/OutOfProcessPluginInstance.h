@@ -29,6 +29,13 @@ namespace cloudes
     using PluginLoader = std::function<std::unique_ptr<juce::AudioProcessor> (
         const juce::PluginDescription&, double sampleRate, int blockSize, juce::String& error)>;
 
+    // Descriptions whose pluginFormatName equals this route through OutOfProcessPluginFormat.
+    inline constexpr const char* kOopFormatName = "Cloudes OOP";
+
+    /** True when out-of-process plugin hosting is enabled (env CLOUDES_OOP_PLUGINS=1).
+        Default OFF — in-process hosting stays the shipping path until E5 is complete. */
+    bool oopHostingEnabled();
+
     struct PluginHostWorkerHandle
     {
         virtual ~PluginHostWorkerHandle() = default;
@@ -83,5 +90,39 @@ namespace cloudes
         uint32_t                         timeoutMicros { 8000 };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutOfProcessPluginInstance)
+    };
+
+    //==============================================================================
+    /**
+        OutOfProcessPluginFormat — a hosting-only AudioPluginFormat registered in the TE engine's
+        format manager. It never scans (descriptions are injected with pluginFormatName ==
+        kOopFormatName by the app when the flag is on); createPluginInstance returns an
+        OutOfProcessPluginInstance so TE hosts the plugin in a child process transparently.
+    */
+    class OutOfProcessPluginFormat : public juce::AudioPluginFormat
+    {
+    public:
+        OutOfProcessPluginFormat() = default;
+
+        juce::String getName() const override { return kOopFormatName; }
+        bool canScanForPlugins() const override { return false; }
+        bool isTrivialToScan() const override { return true; }
+        juce::FileSearchPath getDefaultLocationsToSearch() override { return {}; }
+        bool fileMightContainThisPluginType (const juce::String&) override { return false; }
+        juce::String getNameOfPluginFromIdentifier (const juce::String& id) override { return id; }
+        bool pluginNeedsRescanning (const juce::PluginDescription&) override { return false; }
+        bool doesPluginStillExist (const juce::PluginDescription& d) override
+        {
+            return juce::File::isAbsolutePath (d.fileOrIdentifier) && juce::File (d.fileOrIdentifier).exists();
+        }
+        juce::StringArray searchPathsForPlugins (const juce::FileSearchPath&, bool, bool) override { return {}; }
+        void findAllTypesForFile (juce::OwnedArray<juce::PluginDescription>&, const juce::String&) override {}
+        bool requiresUnblockedMessageThreadDuringCreation (const juce::PluginDescription&) const noexcept override { return false; }
+
+        void createPluginInstance (const juce::PluginDescription& desc, double initialSampleRate,
+                                   int initialBufferSize, PluginCreationCallback callback) override;
+
+    private:
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutOfProcessPluginFormat)
     };
 }

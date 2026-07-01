@@ -256,4 +256,17 @@ namespace cloudes
             impl->coordinator.reset();   // drops the worker connection → worker exits cleanly
         ring.reset();
     }
+
+    //==============================================================================
+    bool oopHostingEnabled()
+    {
+        return juce::SystemStats::getEnvironmentVariable ("CLOUDES_OOP_PLUGINS", "0").trim() == "1";
+    }
+
+    void OutOfProcessPluginFormat::createPluginInstance (const juce::PluginDescription& desc,
+                                                         double, int, PluginCreationCallback callback)
+    {
+        if (callback)
+            callback (std::make_unique<OutOfProcessPluginInstance> (desc, 2), {});
+    }
 }

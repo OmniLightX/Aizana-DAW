@@ -48,7 +48,22 @@ public:
                 {
                     juce::AudioPluginFormatManager fm;
                     registerScannableFormats (fm);
-                    return fm.createPluginInstance (d, rate, block, err);
+
+                    if (auto inst = fm.createPluginInstance (d, rate, block, err))
+                        return inst;
+
+                    // The description may be OOP-wrapped (pluginFormatName == kOopFormatName),
+                    // which fm doesn't know. Resolve the REAL plugin by its file path instead.
+                    for (auto* f : fm.getFormats())
+                        if (f != nullptr && f->fileMightContainThisPluginType (d.fileOrIdentifier))
+                        {
+                            juce::OwnedArray<juce::PluginDescription> found;
+                            f->findAllTypesForFile (found, d.fileOrIdentifier);
+                            if (! found.isEmpty())
+                                if (auto inst = fm.createPluginInstance (*found.getFirst(), rate, block, err))
+                                    return inst;
+                        }
+                    return nullptr;
                 }))
         {
             pluginHostWorker = std::move (host);

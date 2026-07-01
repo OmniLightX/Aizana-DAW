@@ -6,6 +6,7 @@
 #include "generator/FaustCompiler.h"
 #include "ui/aistudio/AiStudioPanel.h"
 #include "ui/pluginbrowser/GeneratedPluginsPanel.h"
+#include "plugins/oop/OutOfProcessPluginInstance.h"
 
 namespace te = tracktion::engine;
 
@@ -60,6 +61,12 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Crash-isolate plugin scanning: a broken plugin blacklists only itself instead of
     // taking down the whole scan/app (Fix 4). Must precede any scanForPlugins() call.
     pluginScanner.enableCrashIsolatedScanning();
+
+    // Register the out-of-process hosting format in the ENGINE's format manager (E5.3c). It is
+    // inert unless a description routes to it (pluginFormatName == kOopFormatName), which only
+    // happens for generated CLAP plugins when CLOUDES_OOP_PLUGINS=1 (see syncScannedPluginsToEngine).
+    appState.editManager.getEngine().getPluginManager().pluginFormatManager
+        .addFormat (new cloudes::OutOfProcessPluginFormat());
 
     // Cache file for incremental, crash-safe persistence DURING a scan. With this set,
     // the scanner writes the partial list periodically + at every format boundary, so a
@@ -1873,8 +1880,23 @@ void MainComponent::syncScannedPluginsToEngine()
     // can create real instances — otherwise third-party plugins are inert shells with no
     // editor and no audio. addType() de-dupes by identifier, so repeat calls are safe.
     auto& engineList = appState.editManager.getEngine().getPluginManager().knownPluginList;
+    const bool oop = cloudes::oopHostingEnabled();
     for (const auto& type : pluginScanner.getKnownPlugins().getTypes())
-        engineList.addType (type);
+    {
+        // E5.3c: with CLOUDES_OOP_PLUGINS=1, route Cloudes-generated CLAP plugins through the
+        // out-of-process host (rewrite the format name so TE picks OutOfProcessPluginFormat).
+        // Everything else — and the whole default (flag OFF) path — is unchanged.
+        if (oop && type.manufacturerName == "Cloudes" && type.pluginFormatName == "CLAP")
+        {
+            auto oopType = type;
+            oopType.pluginFormatName = cloudes::kOopFormatName;
+            engineList.addType (oopType);
+        }
+        else
+        {
+            engineList.addType (type);
+        }
+    }
 }
 
 void MainComponent::pollGeneratedLibrary()
