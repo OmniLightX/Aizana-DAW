@@ -73,7 +73,8 @@ void BusFXStrip::InsertSlotPanel::SlotButton::paint (juce::Graphics& g)
                            : juce::Colour (0xff444444));
     g.drawRect (getLocalBounds(), 1);
 
-    g.setFont (juce::FontOptions (8.0f));
+    // 11pt — plugin names must be readable at a glance (Studio One size); 8pt was too small
+    g.setFont (juce::FontOptions (11.0f));
 
     if (occupied)
     {
@@ -113,6 +114,29 @@ void BusFXStrip::InsertSlotPanel::SlotButton::mouseDown (const juce::MouseEvent&
 
     if (onClick)
         onClick();
+}
+
+void BusFXStrip::InsertSlotPanel::SlotButton::mouseDrag (const juce::MouseEvent& e)
+{
+    if (plugin == nullptr)
+        return;   // empty "+" slot cannot be dragged
+
+    if (! dragging && e.getDistanceFromDragStart() < 5)
+        return;
+
+    dragging = true;
+    if (onDragMove)
+        onDragMove (e);
+}
+
+void BusFXStrip::InsertSlotPanel::SlotButton::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragging)
+    {
+        dragging = false;
+        if (onDragEnd)
+            onDragEnd (e);
+    }
 }
 
 void BusFXStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::MouseEvent&)
@@ -156,6 +180,33 @@ void BusFXStrip::InsertSlotPanel::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff181818));
 }
 
+void BusFXStrip::InsertSlotPanel::paintOverChildren (juce::Graphics& g)
+{
+    // Insertion indicator while drag-reordering: accent line at the target slot's top edge
+    if (dragTargetSlot < 0)
+        return;
+
+    const auto topInContent = juce::Point<int> (0, dragTargetSlot * kSlotHeight);
+    const auto topInPanel   = getLocalPoint (&slotsContent, topInContent);
+
+    g.setColour (juce::Colour (0xff44aaff));
+    g.fillRect (0, topInPanel.y - 1, getWidth(), 2);
+}
+
+int BusFXStrip::InsertSlotPanel::slotIndexForEvent (const juce::MouseEvent& e)
+{
+    const auto pos = e.getEventRelativeTo (&slotsContent).getPosition();
+    return juce::jlimit (0, juce::jmax (0, slots.size() - 1), pos.y / kSlotHeight);
+}
+
+void BusFXStrip::InsertSlotPanel::commitSlotDrag (int fromSlot, int toSlot)
+{
+    if (fromSlot != toSlot)
+        pluginManager.moveUserPluginToSlot (track, fromSlot, toSlot);
+
+    refresh();
+}
+
 void BusFXStrip::InsertSlotPanel::refresh()
 {
     slots.clear();
@@ -196,6 +247,30 @@ void BusFXStrip::InsertSlotPanel::refresh()
                 showRemovePluginMenu (slots[slotIndex]->plugin);
         };
 
+        // Drag-reorder: track the hovered slot while dragging, commit on release.
+        slot->onDragMove = [this] (const juce::MouseEvent& e)
+        {
+            dragTargetSlot = slotIndexForEvent (e);
+            repaint();
+        };
+        slot->onDragEnd = [this, slotIndex] (const juce::MouseEvent& e)
+        {
+            const int target = slotIndexForEvent (e);
+            dragTargetSlot = -1;
+            repaint();
+
+            // Deferred: commitSlotDrag() → moveUserPluginToSlot() → ValueTree
+            // listener → refresh() destroys the SlotButton whose mouseUp is
+            // still on the stack. callAsync + SafePointer avoids the UAF.
+            juce::Component::SafePointer<InsertSlotPanel> safe (this);
+            juce::MessageManager::callAsync ([safe, slotIndex, target]
+            {
+                if (safe == nullptr)
+                    return;
+                safe->commitSlotDrag (slotIndex, target);
+            });
+        };
+
         slot->setBounds (0, i * kSlotHeight, contentW, kSlotHeight);
         slotsContent.addAndMakeVisible (slot);
     }
@@ -206,22 +281,11 @@ void BusFXStrip::InsertSlotPanel::refresh()
 
 void BusFXStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
 {
-    // Map user-visible slotIndex to actual plugin chain index.
-    // FX channels have AuxReturnPlugin at chain index 0 (before user inserts).
-    // The visible slot list hides auxreturn/auxsend, so slot 0 must map to
-    // chain index 1 on FX channels.  Count prefix system plugins
-    // (auxreturn, auxsend) at the start of the chain.
-    const auto fullChain = pluginManager.getPluginChain (track);
-    int prefixCount = 0;
-    for (auto* p : fullChain)
-    {
-        const juce::String t = p->getPluginType();
-        if (t == "auxreturn" || t == "auxsend")
-            ++prefixCount;
-        else if (t != "volume" && t != "level")
-            break;  // reached first user plugin — stop counting prefix
-    }
-    const int actualIndex = prefixCount + slotIndex;
+    // Map the user-visible slot index to the raw chain index. Internal TE
+    // plugins (volume/level/auxreturn/auxsend) can sit anywhere in the raw
+    // chain — a simple prefix offset placed new plugins between existing user
+    // plugins (live-test finding M3). PluginManager owns the correct mapping.
+    const int actualIndex = pluginManager.chainInsertIndexForUserSlot (track, slotIndex);
 
     juce::PopupMenu menu;
     menu.addSectionHeader ("Built-in FX");
@@ -343,6 +407,19 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     trackNameLabel.setJustificationType (juce::Justification::centred);
     trackNameLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     trackNameLabel.setFont (juce::FontOptions (10.0f));
+    // Double-click to rename — bus/FX channels must be renameable from the
+    // mixer too (live-test finding M2); same pattern as TrackHeader/ChannelStrip.
+    trackNameLabel.setEditable (false, true, false);
+    trackNameLabel.onTextChange = [this]
+    {
+        const auto newName = trackNameLabel.getText().trim();
+        if (newName.isEmpty() || newName == track.getName())
+        {
+            trackNameLabel.setText (track.getName(), juce::dontSendNotification);
+            return;
+        }
+        track.setName (newName);
+    };
 
     addAndMakeVisible (volumeFader);
     addAndMakeVisible (meterDisplay);
@@ -427,6 +504,11 @@ void BusFXStrip::refresh()
 {
     soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
     muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
+
+    // Sync name (renamed elsewhere / undo) — skip while the inline editor is open
+    if (! trackNameLabel.isBeingEdited())
+        trackNameLabel.setText (track.getName(), juce::dontSendNotification);
+
     repaint();
 }
 
@@ -462,6 +544,17 @@ void BusFXStrip::valueTreePropertyChanged (juce::ValueTree& /*tree*/,
         const float dB = mixerEngine.getVolume (track);
         volumeFader.setValue (dB, juce::dontSendNotification);
     }
+    // Sync name label when the track is renamed elsewhere (arrangement, undo).
+    // May fire off the message thread → defer via callAsync (same as `enabled`).
+    else if (property == te::IDs::name)
+    {
+        juce::Component::SafePointer<BusFXStrip> safeThis (this);
+        juce::MessageManager::callAsync ([safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->refresh();
+        });
+    }
     // Live-sync insert-slot bypass LEDs when a plugin's enabled state changes
     // externally (e.g. toggled from its floating editor window). Property changes
     // propagate up from the PLUGIN child node to this listener on the track state.
@@ -487,4 +580,18 @@ void BusFXStrip::valueTreeChildRemoved (juce::ValueTree& /*parent*/, juce::Value
 {
     if (child.hasType (juce::Identifier ("PLUGIN")))
         insertSlotPanel.refresh();
+}
+
+void BusFXStrip::valueTreeChildOrderChanged (juce::ValueTree& parent, int, int)
+{
+    // Refresh insert slots when the chain is reordered (drag-reorder, undo/redo).
+    // Only react if the reordered node actually contains PLUGIN children.
+    for (int i = 0; i < parent.getNumChildren(); ++i)
+    {
+        if (parent.getChild (i).hasType (juce::Identifier ("PLUGIN")))
+        {
+            insertSlotPanel.refresh();
+            return;
+        }
+    }
 }

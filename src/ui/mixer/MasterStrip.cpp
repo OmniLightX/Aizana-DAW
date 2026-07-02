@@ -111,7 +111,8 @@ void MasterStrip::MasterInsertSlotPanel::SlotButton::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff333333));
     g.drawRect (getLocalBounds(), 1);
 
-    g.setFont (juce::FontOptions (9.0f));
+    // 11pt — plugin names must be readable at a glance (Studio One size)
+    g.setFont (juce::FontOptions (11.0f));
     g.setColour (occupied ? (bypassed ? juce::Colour (0xff777777) : juce::Colour (0xff88ee88))
                           : juce::Colour (0xff555555));
     g.drawText (occupied ? plugin->getName() : "+",

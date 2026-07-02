@@ -17,6 +17,13 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
 
     channelStripContainer.onRightClick = [this] (const juce::MouseEvent& e) { showContextMenu (e); };
 
+    // Visible Add-Channel entry point — same menu as the background right-click
+    addChannelButton.setTooltip ("Bus-, FX- oder VCA-Channel hinzuf\xc3\xbcgen");
+    addChannelButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2e2e2e));
+    addChannelButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+    addChannelButton.onClick = [this] { showAddChannelMenu (&addChannelButton); };
+    addAndMakeVisible (addChannelButton);
+
     // Register ValueTree listener so we rebuild on track add/remove
     if (auto* edit = appState.editManager.getEdit())
         edit->state.addListener (this);
@@ -59,6 +66,10 @@ void MixerView::resized()
     // viewport) so it stays visible regardless of how many tracks exist.
     if (masterStrip != nullptr)
         masterStrip->setBounds (area.removeFromRight (kMasterStripWidth));
+
+    // Narrow fixed column on the left for the Add-Channel button
+    auto addColumn = area.removeFromLeft (kAddColumnWidth);
+    addChannelButton.setBounds (addColumn.removeFromTop (kAddColumnWidth).reduced (3));
 
     channelStripViewport.setBounds (area);
 
@@ -117,6 +128,11 @@ void MixerView::mouseDown (const juce::MouseEvent& e)
 
 void MixerView::showContextMenu (const juce::MouseEvent& /*e*/)
 {
+    showAddChannelMenu (this);
+}
+
+void MixerView::showAddChannelMenu (juce::Component* target)
+{
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
         return;
@@ -127,7 +143,7 @@ void MixerView::showContextMenu (const juce::MouseEvent& /*e*/)
     menu.addItem (2, "Add FX Channel");
     menu.addItem (3, "Add VCA Channel");
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target),
         [this] (int result)
         {
             if (result == 1)

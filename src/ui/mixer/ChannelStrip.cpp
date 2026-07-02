@@ -251,7 +251,8 @@ void ChannelStrip::InsertSlotPanel::SlotButton::paint (juce::Graphics& g)
         g.drawRect (getLocalBounds(), 1);
     }
 
-    g.setFont (juce::FontOptions (8.0f));
+    // 11pt — plugin names must be readable at a glance (Studio One size); 8pt was too small
+    g.setFont (juce::FontOptions (11.0f));
 
     if (occupied)
     {
@@ -295,6 +296,29 @@ void ChannelStrip::InsertSlotPanel::SlotButton::mouseDown (const juce::MouseEven
 
     if (onClick)
         onClick();
+}
+
+void ChannelStrip::InsertSlotPanel::SlotButton::mouseDrag (const juce::MouseEvent& e)
+{
+    if (plugin == nullptr)
+        return;   // empty "+" slot cannot be dragged
+
+    if (! dragging && e.getDistanceFromDragStart() < 5)
+        return;   // click/bypass gesture, not a drag yet
+
+    dragging = true;
+    if (onDragMove)
+        onDragMove (e);
+}
+
+void ChannelStrip::InsertSlotPanel::SlotButton::mouseUp (const juce::MouseEvent& e)
+{
+    if (dragging)
+    {
+        dragging = false;
+        if (onDragEnd)
+            onDragEnd (e);
+    }
 }
 
 void ChannelStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::MouseEvent& /*e*/)
@@ -341,6 +365,33 @@ void ChannelStrip::InsertSlotPanel::paint (juce::Graphics& g)
 {
     // Subtle background for the insert panel area
     g.fillAll (juce::Colour (0xff181818));
+}
+
+void ChannelStrip::InsertSlotPanel::paintOverChildren (juce::Graphics& g)
+{
+    // Insertion indicator while drag-reordering: accent line at the target slot's top edge
+    if (dragTargetSlot < 0)
+        return;
+
+    const auto topInContent = juce::Point<int> (0, dragTargetSlot * kSlotHeight);
+    const auto topInPanel   = getLocalPoint (&slotsContent, topInContent);
+
+    g.setColour (juce::Colour (0xff44aaff));
+    g.fillRect (0, topInPanel.y - 1, getWidth(), 2);
+}
+
+int ChannelStrip::InsertSlotPanel::slotIndexForEvent (const juce::MouseEvent& e)
+{
+    const auto pos = e.getEventRelativeTo (&slotsContent).getPosition();
+    return juce::jlimit (0, juce::jmax (0, slots.size() - 1), pos.y / kSlotHeight);
+}
+
+void ChannelStrip::InsertSlotPanel::commitSlotDrag (int fromSlot, int toSlot)
+{
+    if (fromSlot != toSlot)
+        pluginManager.moveUserPluginToSlot (track, fromSlot, toSlot);
+
+    refresh();
 }
 
 void ChannelStrip::InsertSlotPanel::refresh()
@@ -390,6 +441,31 @@ void ChannelStrip::InsertSlotPanel::refresh()
                 showRemovePluginMenu (slots[slotIndex]->plugin);
         };
 
+        // Drag-reorder: track the hovered slot while dragging, commit on release.
+        slot->onDragMove = [this, slotIndex] (const juce::MouseEvent& e)
+        {
+            juce::ignoreUnused (slotIndex);
+            dragTargetSlot = slotIndexForEvent (e);
+            repaint();
+        };
+        slot->onDragEnd = [this, slotIndex] (const juce::MouseEvent& e)
+        {
+            const int target = slotIndexForEvent (e);
+            dragTargetSlot = -1;
+            repaint();
+
+            // Deferred: commitSlotDrag() → moveUserPluginToSlot() → ValueTree
+            // listener → refresh() destroys the SlotButton whose mouseUp is
+            // still on the stack. callAsync + SafePointer avoids the UAF.
+            juce::Component::SafePointer<InsertSlotPanel> safe (this);
+            juce::MessageManager::callAsync ([safe, slotIndex, target]
+            {
+                if (safe == nullptr)
+                    return;
+                safe->commitSlotDrag (slotIndex, target);
+            });
+        };
+
         slot->setBounds (0, i * kSlotHeight, contentW, kSlotHeight);
         slotsContent.addAndMakeVisible (slot);
     }
@@ -402,22 +478,11 @@ void ChannelStrip::InsertSlotPanel::refresh()
 
 void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
 {
-    // Map user-visible slotIndex to actual plugin chain index.
-    // On FX channels, AuxReturnPlugin sits at chain index 0 (before user inserts).
-    // The user-visible slot list hides auxreturn/auxsend, so slot 0 must map to
-    // chain index 1 on FX channels, not 0.  Count how many prefix system plugins
-    // (auxreturn, auxsend) appear before the first user plugin in the actual chain.
-    const auto fullChain = pluginManager.getPluginChain (track);
-    int prefixCount = 0;
-    for (auto* p : fullChain)
-    {
-        const juce::String t = p->getPluginType();
-        if (t == "auxreturn" || t == "auxsend")
-            ++prefixCount;
-        else if (t != "volume" && t != "level")
-            break;  // reached first user plugin — stop counting prefix
-    }
-    const int actualIndex = prefixCount + slotIndex;
+    // Map the user-visible slot index to the raw chain index. Internal TE
+    // plugins (volume/level/auxreturn/auxsend) can sit anywhere in the raw
+    // chain — a simple prefix offset placed new plugins between existing user
+    // plugins (live-test finding M3). PluginManager owns the correct mapping.
+    const int actualIndex = pluginManager.chainInsertIndexForUserSlot (track, slotIndex);
 
     juce::PopupMenu menu;
 
@@ -592,6 +657,19 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     trackNameLabel.setJustificationType (juce::Justification::centred);
     trackNameLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     trackNameLabel.setFont (juce::FontOptions (12.0f));
+    // Double-click to rename — same pattern as the arrangement's TrackHeader,
+    // so tracks are renameable from the mixer too (live-test finding M2).
+    trackNameLabel.setEditable (false, true, false);
+    trackNameLabel.onTextChange = [this]
+    {
+        const auto newName = trackNameLabel.getText().trim();
+        if (newName.isEmpty() || newName == track.getName())
+        {
+            trackNameLabel.setText (track.getName(), juce::dontSendNotification);
+            return;
+        }
+        track.setName (newName);
+    };
     // Route trackNameLabel clicks to ChannelStrip::mouseDown() so clicking the name
     // selects this strip even though child components cover all other strip surfaces.
     trackNameLabel.addMouseListener (this, false);
@@ -766,6 +844,10 @@ void ChannelStrip::refresh()
     soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
     muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
 
+    // Sync name (renamed in arrangement / undo) — skip while the inline editor is open
+    if (! trackNameLabel.isBeingEdited())
+        trackNameLabel.setText (track.getName(), juce::dontSendNotification);
+
     refreshOutputButton();
     repaint();
 }
@@ -903,4 +985,19 @@ void ChannelStrip::valueTreeChildRemoved (juce::ValueTree& /*parent*/, juce::Val
     // Refresh insert slots when a plugin is removed from the track
     if (child.hasType (juce::Identifier ("PLUGIN")))
         insertSlotPanel.refresh();
+}
+
+void ChannelStrip::valueTreeChildOrderChanged (juce::ValueTree& parent, int, int)
+{
+    // Refresh insert slots when the chain is reordered (drag-reorder, undo/redo).
+    // Only react if the reordered node actually contains PLUGIN children — the
+    // listener sees the whole track subtree (clips etc. reorder too).
+    for (int i = 0; i < parent.getNumChildren(); ++i)
+    {
+        if (parent.getChild (i).hasType (juce::Identifier ("PLUGIN")))
+        {
+            insertSlotPanel.refresh();
+            return;
+        }
+    }
 }

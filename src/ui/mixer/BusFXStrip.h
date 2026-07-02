@@ -91,16 +91,22 @@ private:
     // ---- Insert slot panel (shared logic, thin wrapper) ----
     struct InsertSlotPanel : public juce::Component
     {
-        static constexpr int kSlotHeight    = 16;
+        static constexpr int kSlotHeight    = 18;
         static constexpr int kVisibleSlots  = 6;
 
         struct SlotButton : public juce::Component
         {
             te::Plugin* plugin = nullptr;
             std::function<void()> onClick, onDoubleClick, onRightClick;
+            std::function<void (const juce::MouseEvent&)> onDragMove, onDragEnd;
             void paint (juce::Graphics& g) override;
             void mouseDown (const juce::MouseEvent& e) override;
+            void mouseDrag (const juce::MouseEvent& e) override;
+            void mouseUp   (const juce::MouseEvent& e) override;
             void mouseDoubleClick (const juce::MouseEvent&) override;
+
+        private:
+            bool dragging = false;
         };
 
         InsertSlotPanel (te::AudioTrack& track_,
@@ -110,6 +116,7 @@ private:
 
         void resized() override;
         void paint (juce::Graphics& g) override;
+        void paintOverChildren (juce::Graphics& g) override;  // drag-reorder insertion line
         void refresh();
 
     private:
@@ -122,8 +129,12 @@ private:
         juce::Component         slotsContent;
         juce::OwnedArray<SlotButton> slots;
 
+        int dragTargetSlot = -1;   // visible slot the drag currently hovers (-1 = no drag)
+
         void showAddPluginMenu (int slotIndex);
         void showRemovePluginMenu (te::Plugin* plugin);
+        int  slotIndexForEvent (const juce::MouseEvent& e);
+        void commitSlotDrag (int fromSlot, int toSlot);
     };
 
     InsertSlotPanel insertSlotPanel;
@@ -132,7 +143,7 @@ private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeChildAdded   (juce::ValueTree&, juce::ValueTree& child) override;
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree& child, int) override;
-    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override;
     void valueTreeParentChanged     (juce::ValueTree&) override {}
 
     void volumeChanged();

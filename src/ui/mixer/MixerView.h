@@ -72,6 +72,11 @@ private:
 
     juce::Viewport channelStripViewport;
 
+    // Visible "+" button (top-left) — opens the Add-Channel menu. The context
+    // menu alone was undiscoverable (live-test finding M1: users could not
+    // create a Bus Channel because right-click was the only entry point).
+    juce::TextButton addChannelButton { "+" };
+
     // Custom container that forwards right-clicks to the MixerView context menu.
     // A plain juce::Component would swallow mouseDown before it bubbles to MixerView.
     struct StripContainer : public juce::Component
@@ -114,6 +119,7 @@ private:
     std::map<te::AudioTrack*, TrackInputLevelClient> inputLevelClients;
 
     static constexpr int kStripWidth       = 120;  // Audio track and Bus/FX channel strips
+    static constexpr int kAddColumnWidth   = 26;   // Left column hosting the "+" Add-Channel button
     static constexpr int kMasterStripWidth = 140;  // Master strip wider to avoid label truncation
     int cachedStripHeight = 200;  // Never go below 200px; updated on valid resized() calls
 
@@ -150,6 +156,7 @@ private:
 
     /** Show right-click context menu for adding Bus/FX channels. */
     void showContextMenu (const juce::MouseEvent& e);
+    void showAddChannelMenu (juce::Component* target);   // shared by "+" button and right-click
 
     /** Call refresh() on all selected ChannelStrips and BusFXStrips so visuals reflect engine state. */
     void refreshAllSelectedStrips();

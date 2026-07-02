@@ -58,7 +58,7 @@ public:
         void refresh();
 
         static constexpr int kVisibleSlots = 6;
-        static constexpr int kSlotHeight   = 16;
+        static constexpr int kSlotHeight   = 18;
 
     private:
         te::Edit&            edit;

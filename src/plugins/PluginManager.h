@@ -82,6 +82,22 @@ public:
      */
     void removePlugin (te::Track& track, te::Plugin& plugin);
 
+    /**
+     * Move a plugin between USER-VISIBLE slot positions (mixer insert slots).
+     *
+     * Slots index only user plugins — internal TE plugins (volume, level,
+     * auxreturn, auxsend) are hidden from the slot list but present in the raw
+     * chain, possibly interleaved with user plugins. This computes the correct
+     * raw ValueTree target index so the plugin lands at visible position
+     * `toSlot` regardless of where the internal plugins sit.
+     *
+     * toSlot is clamped to the user-plugin range; passing the trailing "+"
+     * slot index moves the plugin to the end of the user block.
+     *
+     * Records one undo step (via movePlugin).
+     */
+    void moveUserPluginToSlot (te::Track& track, int fromSlot, int toSlot);
+
     // ---------------------------------------------------------------------------
     // Chain query
     // ---------------------------------------------------------------------------
@@ -91,6 +107,23 @@ public:
      * Order matches ValueTree child order (Tracktion Engine guarantee).
      */
     juce::Array<te::Plugin*> getPluginChain (te::Track& track) const;
+
+    /**
+     * Map a user-visible insert-slot index to the raw chain index for insertPlugin().
+     *
+     * The mixer's slot list hides internal TE plugins (volume, level, auxreturn,
+     * auxsend), but those can sit ANYWHERE in the raw chain — e.g. a default track
+     * is [volume, level] and appended user plugins follow them, so slot N is NOT
+     * raw index N. Inserting at `prefix + slotIndex` (the old scheme) placed new
+     * plugins between existing user plugins whenever internals preceded them.
+     *
+     * Returns the raw index of the user plugin currently occupying `userSlot`
+     * (insert lands before it = takes that visible position). For the trailing
+     * "+" slot it returns the index just after the last user plugin. With no
+     * user plugins it returns the index after any leading auxreturn/auxsend
+     * prefix (FX-channel behaviour preserved).
+     */
+    int chainInsertIndexForUserSlot (te::Track& track, int userSlot) const;
 
 private:
     PluginScanner& scanner;

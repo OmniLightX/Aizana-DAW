@@ -113,21 +113,91 @@ void PluginManager::movePlugin (te::Track& track, te::Plugin& plugin, int newInd
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Move plugin in chain");
 
-    // Plugin chain order == ValueTree child order.
+    // Plugin chain order == relative order of the PLUGIN child nodes.
     // Moving the plugin's state node in the ValueTree is the correct way to
     // reorder — PluginList does not have a movePlugin() method; it rebuilds
     // its object list from the ValueTree on every change.
+    //
+    // CAUTION: pluginList.state also holds non-PLUGIN children, so PluginList
+    // indices and raw ValueTree child indices do NOT map 1:1 — newIndex (a
+    // PluginList index) must be translated to a tree index first. (Found via
+    // the M4 reorder test: passing the list index moved plugins to the wrong
+    // spot whenever non-PLUGIN nodes preceded the PLUGIN block.)
     auto& listState = track.pluginList.state;
 
-    const int currentTreeIndex = listState.indexOf (plugin.state);
-    if (currentTreeIndex < 0)
+    // Tree indices of all PLUGIN children, in chain order
+    juce::Array<int> pluginTreeIdx;
+    for (int i = 0; i < listState.getNumChildren(); ++i)
+        if (listState.getChild (i).hasType (te::IDs::PLUGIN))
+            pluginTreeIdx.add (i);
+
+    const int fromTree = listState.indexOf (plugin.state);
+    const int fromList = pluginTreeIdx.indexOf (fromTree);
+    if (fromList < 0)
         return; // Plugin not found in this track's list
 
-    // Compute the ValueTree index that corresponds to PluginList index newIndex.
-    // PluginList indices and ValueTree child indices may differ if there are
-    // non-PLUGIN child nodes in the track state. In practice for a track's
-    // pluginList.state the children are all PLUGIN nodes, so they map 1:1.
-    listState.moveChild (currentTreeIndex, newIndex, &undoManager);
+    // Tree indices of the remaining PLUGIN nodes as they will be after the
+    // removal — ValueTree::moveChild() uses post-removal indices.
+    juce::Array<int> reduced;
+    for (int i = 0; i < pluginTreeIdx.size(); ++i)
+    {
+        if (i == fromList)
+            continue;
+        const int t = pluginTreeIdx[i];
+        reduced.add (t > fromTree ? t - 1 : t);
+    }
+
+    newIndex = juce::jlimit (0, reduced.size(), newIndex);
+    const int toTree = newIndex < reduced.size()
+                           ? reduced[newIndex]
+                           : (reduced.isEmpty() ? fromTree : reduced.getLast() + 1);
+
+    listState.moveChild (fromTree, toTree, &undoManager);
+}
+
+void PluginManager::moveUserPluginToSlot (te::Track& track, int fromSlot, int toSlot)
+{
+    // Collect user plugins with their raw chain indices (same filter as the
+    // mixer slot list — internals stay where they are).
+    const auto chain = getPluginChain (track);
+    juce::Array<te::Plugin*> user;
+    juce::Array<int>         rawIdx;
+
+    for (int i = 0; i < chain.size(); ++i)
+    {
+        const juce::String t = chain[i]->getPluginType();
+        if (t != "volume" && t != "level" && t != "auxreturn" && t != "auxsend")
+        {
+            user.add (chain[i]);
+            rawIdx.add (i);
+        }
+    }
+
+    if (fromSlot < 0 || fromSlot >= user.size())
+        return;
+
+    toSlot = juce::jlimit (0, user.size() - 1, toSlot);
+    if (toSlot == fromSlot)
+        return;
+
+    const int rawFrom = rawIdx[fromSlot];
+
+    // Raw indices of the remaining user plugins as they will be AFTER the moved
+    // plugin's removal — ValueTree::moveChild() uses post-removal indices.
+    juce::Array<int> rawReduced;
+    for (int i = 0; i < user.size(); ++i)
+    {
+        if (i == fromSlot)
+            continue;
+        const int r = rawIdx[i];
+        rawReduced.add (r > rawFrom ? r - 1 : r);
+    }
+
+    const int to = toSlot < rawReduced.size()
+                       ? rawReduced[toSlot]
+                       : (rawReduced.isEmpty() ? rawFrom : rawReduced.getLast() + 1);
+
+    movePlugin (track, *user[fromSlot], to);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,4 +233,41 @@ juce::Array<te::Plugin*> PluginManager::getPluginChain (te::Track& track) const
         chain.add (plugin);
 
     return chain;
+}
+
+int PluginManager::chainInsertIndexForUserSlot (te::Track& track, int userSlot) const
+{
+    const auto chain = getPluginChain (track);
+
+    int  userSeen        = 0;
+    int  afterLastUser   = -1;
+    int  auxPrefixEnd    = 0;
+    bool inLeadingPrefix = true;
+
+    for (int i = 0; i < chain.size(); ++i)
+    {
+        const juce::String t = chain[i]->getPluginType();
+
+        if (t == "auxreturn" || t == "auxsend")
+        {
+            if (inLeadingPrefix)
+                auxPrefixEnd = i + 1;
+            continue;
+        }
+
+        if (t == "volume" || t == "level")
+            continue;   // internal — invisible to slots, skip wherever it sits
+
+        inLeadingPrefix = false;
+
+        if (userSeen == userSlot)
+            return i;   // insert before the plugin occupying this slot
+
+        ++userSeen;
+        afterLastUser = i + 1;
+    }
+
+    // Trailing "+" slot (or slot beyond the last user plugin): append after the
+    // user block; with no user plugins, land after the aux prefix (FX channels).
+    return afterLastUser >= 0 ? afterLastUser : auxPrefixEnd;
 }

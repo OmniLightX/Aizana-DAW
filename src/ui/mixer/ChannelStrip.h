@@ -165,13 +165,14 @@ public:
 
         void resized() override;
         void paint (juce::Graphics& g) override;
+        void paintOverChildren (juce::Graphics& g) override;  // drag-reorder insertion line
 
         /** Rebuild slot display from track's current plugin chain. */
         void refresh();
 
         /** Number of slots visible without scrolling (used for fixed height in strip layout). */
         static constexpr int kVisibleSlots = 6;
-        static constexpr int kSlotHeight   = 16;
+        static constexpr int kSlotHeight   = 18;
 
     private:
         te::Track&           track;
@@ -185,10 +186,17 @@ public:
             std::function<void()> onClick;
             std::function<void()> onDoubleClick;
             std::function<void()> onRightClick;
+            std::function<void (const juce::MouseEvent&)> onDragMove;  // reorder drag in progress
+            std::function<void (const juce::MouseEvent&)> onDragEnd;   // reorder drag released
 
             void paint (juce::Graphics& g) override;
             void mouseDown (const juce::MouseEvent& e) override;
+            void mouseDrag (const juce::MouseEvent& e) override;
+            void mouseUp   (const juce::MouseEvent& e) override;
             void mouseDoubleClick (const juce::MouseEvent& e) override;
+
+        private:
+            bool dragging = false;
         };
 
         // Scrollable container for unlimited slots
@@ -197,8 +205,13 @@ public:
 
         juce::OwnedArray<SlotButton> slots;
 
+        // Drag-reorder state: visible slot the drag currently hovers (-1 = no drag)
+        int dragTargetSlot = -1;
+
         void showAddPluginMenu (int slotIndex);
         void showRemovePluginMenu (te::Plugin* plugin);
+        int  slotIndexForEvent (const juce::MouseEvent& e);
+        void commitSlotDrag (int fromSlot, int toSlot);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InsertSlotPanel)
     };
@@ -240,7 +253,7 @@ private:
                                    const juce::Identifier& property) override;
     void valueTreeChildAdded       (juce::ValueTree& parent, juce::ValueTree& child) override;
     void valueTreeChildRemoved     (juce::ValueTree& parent, juce::ValueTree& child, int) override;
-    void valueTreeChildOrderChanged(juce::ValueTree&, int, int) override {}
+    void valueTreeChildOrderChanged(juce::ValueTree&, int, int) override;
     void valueTreeParentChanged    (juce::ValueTree&) override {}
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
