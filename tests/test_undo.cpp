@@ -232,3 +232,67 @@ TEST_CASE ("EditManager: saveEdit/loadEdit round-trip preserves tracks and clips
 
     tempFile.deleteFile();
 }
+
+// ---------------------------------------------------------------------------
+// Test 6 — Edit-swap safety (live-test crash 2026-07-02: reopening a session
+// destroyed the old Edit while UI views still referenced it).
+//   a) onEditWillChange fires BEFORE the old Edit dies, with the OLD Edit
+//      still installed — this is the window where views must detach.
+//   b) loadEdit() on an unreadable file returns false and keeps the current
+//      Edit fully intact (no crash, no null edit).
+// ---------------------------------------------------------------------------
+TEST_CASE ("EditManager: edit swap fires onEditWillChange while the old Edit is alive", "[undo][editswap]")
+{
+    auto tempFile = juce::File::createTempFile (".tracktion");
+
+    EditManager em;
+    em.createNewEdit();
+
+    auto* oldEdit = em.getEdit();
+    REQUIRE (oldEdit != nullptr);
+    em.saveEdit (tempFile);
+
+    bool willChangeFired = false;
+    bool oldEditWasAliveAndCurrent = false;
+    em.onEditWillChange = [&]
+    {
+        willChangeFired = true;
+        // The OLD edit must still be installed and alive here — views detach now.
+        oldEditWasAliveAndCurrent = (em.getEdit() == oldEdit)
+                                     && ! te::getAudioTracks (*em.getEdit()).isEmpty();
+    };
+
+    bool changedFired = false;
+    em.onEditChanged = [&] { changedFired = true; };
+
+    REQUIRE (em.loadEdit (tempFile));
+
+    CHECK (willChangeFired);
+    CHECK (oldEditWasAliveAndCurrent);
+    CHECK (changedFired);
+    CHECK (em.getEdit() != nullptr);
+    CHECK (em.getEdit() != oldEdit);
+
+    tempFile.deleteFile();
+}
+
+TEST_CASE ("EditManager: loadEdit on an unreadable file fails gracefully and keeps the session", "[undo][editswap]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* editBefore = em.getEdit();
+    REQUIRE (editBefore != nullptr);
+
+    // Garbage file — not a tracktion edit
+    auto bogus = juce::File::createTempFile (".tracktion");
+    bogus.replaceWithText ("this is not XML at all { ] <<<");
+
+    bool willChangeFired = false;
+    em.onEditWillChange = [&] { willChangeFired = true; };
+
+    CHECK_FALSE (em.loadEdit (bogus));
+    CHECK_FALSE (willChangeFired);            // nothing was torn down
+    CHECK (em.getEdit() == editBefore);       // current session untouched
+
+    bogus.deleteFile();
+}

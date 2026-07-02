@@ -130,6 +130,22 @@ void PluginWindowManager::unpinPlugin_msgThread (te::Plugin& plugin)
     floatingWindows[&plugin] = std::make_unique<FloatingPluginWindow> (plugin, *this);
 }
 
+void PluginWindowManager::closeAllWindows()
+{
+    jassert (juce::MessageManager::getInstance()->isThisTheMessageThread());
+
+    floatingWindows.clear();
+
+    // Copy — DockedPluginPanel::removePlugin must not invalidate our iteration
+    const auto docked = dockedPlugins;
+    for (auto* p : docked)
+        dockedPanel.removePlugin (*p);
+    dockedPlugins.clear();
+
+    if (auto* parent = dockedPanel.getParentComponent())
+        parent->resized();
+}
+
 void PluginWindowManager::closeWindow_msgThread (te::Plugin& plugin)
 {
     jassert (juce::MessageManager::getInstance()->isThisTheMessageThread());

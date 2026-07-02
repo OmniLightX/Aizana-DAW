@@ -86,6 +86,12 @@ public:
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;
 
+    /** Edit-swap support (File>New/Open). detachFromEdit() MUST run while the
+        old Edit is still alive — removes the state listener and destroys all
+        track/clip-bound children. attachToEdit() re-binds to the new Edit. */
+    void detachFromEdit();
+    void attachToEdit();
+
     /** The currently selected track (or nullptr if none) — used as the target for the
         Pro-Assist palette/rail. TrackHeader is fully included above, so this is inline. */
     te::AudioTrack* getSelectedTrack() const noexcept

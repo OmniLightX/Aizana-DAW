@@ -30,8 +30,10 @@ public:
     /** Create a fresh Edit with one audio track. Transport is stopped. */
     void createNewEdit();
 
-    /** Load Edit from a .tracktion ValueTree XML file. */
-    void loadEdit (const juce::File& file);
+    /** Load Edit from a .tracktion ValueTree XML file.
+        Returns false (keeping the current Edit) if the file cannot be parsed —
+        the caller should surface an error to the user instead of crashing. */
+    bool loadEdit (const juce::File& file);
 
     /** Flush and save Edit state to a .tracktion ValueTree XML file. */
     void saveEdit (const juce::File& file);
@@ -63,6 +65,16 @@ public:
      * Not fired by the startup createNewEdit() in ApplicationState (set after).
      */
     std::function<void()> onEditChanged;
+
+    /**
+     * Fired BEFORE the current Edit is destroyed on an Edit swap
+     * (createNewEdit() / loadEdit()), while the old Edit is still fully alive.
+     * UI owners MUST drop every reference into the old Edit here — remove
+     * ValueTree listeners, destroy track/clip-bound components, close plugin
+     * windows. Without this, the swap destroys tracks/plugins that views and
+     * timers still reference → use-after-free (live-test crash on File>Open).
+     */
+    std::function<void()> onEditWillChange;
 
     // --- AI-aware undo (AUDIO-05) ---
 

@@ -37,9 +37,18 @@ namespace cloudes
 
         te::AudioTrack* resolveTrack (te::Edit& edit, const juce::String& name)
         {
+            // Plain audio channels first; then Bus/FX channels — buses are regular
+            // AudioTracks and pros process them directly ("glue comp on the drum
+            // bus"). The Master bus stays unreachable (not in getAudioTracks).
             for (auto* t : te::getAudioTracks (edit))
                 if (MixerEngine::isAudioChannel (*t) && t->getName().equalsIgnoreCase (name))
                     return t;
+
+            for (auto* t : te::getAudioTracks (edit))
+                if ((MixerEngine::isBusChannel (*t) || MixerEngine::isFXChannel (*t))
+                    && t->getName().equalsIgnoreCase (name))
+                    return t;
+
             return nullptr;
         }
 
@@ -234,8 +243,10 @@ namespace cloudes
             int n = 0;
             for (auto* t : te::getAudioTracks (*edit))
             {
-                if (! MixerEngine::isAudioChannel (*t))
-                    continue;
+                const bool isBus = MixerEngine::isBusChannel (*t);
+                const bool isFx  = MixerEngine::isFXChannel  (*t);
+                if (! MixerEngine::isAudioChannel (*t) && ! isBus && ! isFx)
+                    continue;   // VCA etc.
 
                 float gainDb = 0.0f, pan = 0.0f;
                 if (auto* vp = t->getVolumePlugin())
@@ -245,6 +256,8 @@ namespace cloudes
                 }
 
                 juce::String flags;
+                if (isBus)              flags << ", BUS";
+                if (isFx)               flags << ", FX bus";
                 if (t->isMuted (false)) flags << ", muted";
                 if (t->isSolo  (false)) flags << ", soloed";
 
@@ -256,8 +269,10 @@ namespace cloudes
             if (n == 0)
                 return ok ("The live session has no audio tracks yet.");
 
-            return ok (juce::String (n) + " audio track(s) in the live session:\n" + body
-                       + "\nUse set_track_volume / set_track_pan with the exact track name.");
+            return ok (juce::String (n) + " channel(s) in the live session:\n" + body
+                       + "\nUse the exact name with the other tools. Entries marked BUS are bus "
+                         "channels — you can EQ/compress them directly or route tracks to them "
+                         "via create_bus_channel.");
         }
 
         if (req.tool == "set_track_volume" || req.tool == "set_track_pan")
@@ -440,6 +455,47 @@ namespace cloudes
             commandBridge.applyPendingCommands();   // apply now → reply is accurate
             return ok ("Sent \"" + track->getName() + "\" to the shared Reverb bus ("
                        + juce::String (juce::roundToInt (amount * 100.0f)) + "%).");
+        }
+
+        // Bus channel — create (or reuse) a named bus and optionally route tracks to it.
+        // Live-test finding 2026-07-02: the agent had no way to build bus routing.
+        if (req.tool == "create_bus_channel")
+        {
+            const auto busName = req.args.getProperty ("name", {}).toString().trim();
+            if (busName.isEmpty())
+                return fail ("'name' (string) is required — the bus channel's display name");
+
+            std::vector<te::EditItemID> ids;
+            juce::StringArray routed, unknown;
+
+            if (auto* arr = req.args.getProperty ("tracks", {}).getArray())
+            {
+                for (const auto& v : *arr)
+                {
+                    const auto tname = v.toString();
+                    if (auto* track = resolveTrack (*edit, tname))
+                    {
+                        ids.push_back (track->itemID);
+                        routed.add (track->getName());
+                    }
+                    else
+                        unknown.add (tname);
+                }
+
+                if (! unknown.isEmpty())
+                    return fail ("no audio track named " + unknown.joinIntoString (", ")
+                                 + " — call list_tracks for exact names (no bus was created)");
+            }
+
+            mixApply.createBusAndRoute (busName, ids);
+            commandBridge.applyPendingCommands();   // apply now → reply + later list_tracks are accurate
+
+            juce::String msg = "Created (or reused) bus channel \"" + busName + "\".";
+            if (! routed.isEmpty())
+                msg += " Routed: " + routed.joinIntoString (", ") + ".";
+            return ok (msg + " You can now process the bus itself (set_track_eq / add_compressor "
+                       "with the bus name) or route more tracks by calling create_bus_channel "
+                       "again with the same name.");
         }
 
         return fail ("unknown tool: " + req.tool);

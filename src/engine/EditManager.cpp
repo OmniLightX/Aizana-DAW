@@ -37,7 +37,19 @@ void EditManager::createNewEdit()
     // Create a fresh Edit with a single audio track.
     // The engine owns the Edit's UndoManager — all subsequent mutations route
     // through edit->getUndoManager() (the SINGLE shared undo manager per CONTEXT.md).
-    edit = te::Edit::createSingleTrackEdit (engine);
+    auto newEdit = te::Edit::createSingleTrackEdit (engine);
+
+    // Let UI owners drop every reference into the old Edit WHILE IT IS STILL
+    // ALIVE (listeners, track-bound components, plugin windows) — destroying
+    // it first left views pointing at freed tracks → crash on File>New/Open.
+    if (edit != nullptr)
+    {
+        edit->getTransport().stop (false, false);
+        if (onEditWillChange)
+            onEditWillChange();
+    }
+
+    edit = std::move (newEdit);
 
     // Tracktion's WaveInputDevice records to "%projectdir%" and falls back to
     // juce::File::getCurrentWorkingDirectory() if an Edit has no file/project.
@@ -113,18 +125,29 @@ void EditManager::createNewEdit()
 }
 
 //==============================================================================
-void EditManager::loadEdit (const juce::File& file)
+bool EditManager::loadEdit (const juce::File& file)
 {
     // Use the Tracktion Engine helper that handles legacy format conversion.
     // loadEditFromFile() parses the XML, updates legacy state if needed, and
     // returns a fully constructed Edit ready for editing.
-    edit = te::loadEditFromFile (engine, file, te::Edit::forEditing);
+    //
+    // Load into a LOCAL first: on failure the current Edit must stay intact
+    // (returning with edit == nullptr would strand the whole UI), and on
+    // success the old Edit must only die AFTER onEditWillChange let the UI
+    // detach from it.
+    auto newEdit = te::loadEditFromFile (engine, file, te::Edit::forEditing);
 
-    if (edit == nullptr)
+    if (newEdit == nullptr)
+        return false;   // file missing/invalid — caller shows the error
+
+    if (edit != nullptr)
     {
-        jassertfalse; // File missing, invalid, or engine failed to construct Edit
-        return;
+        edit->getTransport().stop (false, false);
+        if (onEditWillChange)
+            onEditWillChange();
     }
+
+    edit = std::move (newEdit);
 
     // Same as createNewEdit: allocate context so input devices are immediately accessible.
     edit->getTransport().ensureContextAllocated();
@@ -148,6 +171,8 @@ void EditManager::loadEdit (const juce::File& file)
 
     if (onEditChanged)
         onEditChanged();
+
+    return true;
 }
 
 //==============================================================================

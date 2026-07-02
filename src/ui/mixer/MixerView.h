@@ -63,6 +63,12 @@ public:
      */
     MeterProcessor* getMeterProcessorForTrack (const te::AudioTrack& track);
 
+    /** Edit-swap support (File>New/Open). detachFromEdit() MUST run while the
+        old Edit is still alive — it removes the state listener and destroys all
+        track-bound strips/meter clients. attachToEdit() re-binds to the new Edit. */
+    void detachFromEdit();
+    void attachToEdit();
+
 private:
     ApplicationState& appState;
     MixerEngine&      mixerEngine;
@@ -137,6 +143,7 @@ private:
     juce::Array<BusFXStrip*>     selectedBusFXStrips;
 
     void rebuildStrips();
+    void clearStrips();   // selection + level clients + all strips (tracks must still be alive)
 
     // Select a track strip; Cmd held = add/remove from multi-selection.
     void setMixerSelectedTrack (te::AudioTrack* t);

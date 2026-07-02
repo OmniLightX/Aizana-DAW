@@ -581,6 +581,36 @@ ArrangementView::~ArrangementView()
         edit->state.removeListener (this);
 }
 
+void ArrangementView::detachFromEdit()
+{
+    // Called BEFORE the old Edit is destroyed (File>New/Open): drop every
+    // reference into it while it is still alive. TrackHeaders/ClipComponents
+    // remove their own track/clip listeners in their destructors — that only
+    // works while the old tracks exist, hence the strict ordering.
+    if (auto* edit = appState.editManager.getEdit())
+        edit->state.removeListener (this);
+
+    selectedClips.clear();
+    selectedTrackHeader = nullptr;
+    ghostDragActive = false;
+    ghostSourceComp = nullptr;
+    isInterTrackDragActive = false;
+
+    headerContainer.removeAllChildren();
+    timelineContainer.removeAllChildren();
+    trackHeaders.clear();
+    trackRows.clear();
+}
+
+void ArrangementView::attachToEdit()
+{
+    // Called after the new Edit is fully constructed.
+    if (auto* edit = appState.editManager.getEdit())
+        edit->state.addListener (this);
+
+    rebuildTrackRows();
+}
+
 void ArrangementView::resized()
 {
     auto area = getLocalBounds();

@@ -167,7 +167,7 @@ MeterProcessor* MixerView::getMeterProcessorForTrack (const te::AudioTrack& trac
     return (it != meterProcessors.end()) ? it->second.get() : nullptr;
 }
 
-void MixerView::rebuildStrips()
+void MixerView::clearStrips()
 {
     // Clear selection — strip pointers are about to be destroyed.
     // All selection arrays must be cleared before strips.clear() to prevent dangling access.
@@ -175,7 +175,9 @@ void MixerView::rebuildStrips()
     selectedStrips.clear();
     selectedBusFXStrips.clear();
 
-    // Unregister level clients before clearing
+    // Unregister level clients before clearing — the referenced tracks must
+    // still be alive here (on an Edit swap this runs from detachFromEdit()
+    // BEFORE the old Edit is destroyed).
     for (auto& [track, client] : levelClients)
         if (auto* lp = track->getLevelMeterPlugin())
             lp->measurer.removeClient (*client);
@@ -188,6 +190,30 @@ void MixerView::rebuildStrips()
     vcaStrips.clear();
     masterStrip.reset();
     meterProcessors.clear();
+}
+
+void MixerView::detachFromEdit()
+{
+    // Called BEFORE the old Edit is destroyed (File>New/Open): drop every
+    // reference into it — the state listener and all track-bound strips.
+    if (auto* edit = appState.editManager.getEdit())
+        edit->state.removeListener (this);
+
+    clearStrips();
+}
+
+void MixerView::attachToEdit()
+{
+    // Called after the new Edit is fully constructed.
+    if (auto* edit = appState.editManager.getEdit())
+        edit->state.addListener (this);
+
+    rebuildStrips();
+}
+
+void MixerView::rebuildStrips()
+{
+    clearStrips();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)

@@ -464,3 +464,34 @@ void MixApplyEngine::addReverbSend (te::EditItemID trackId, float amountNorm)
         mixerEngine.createFXSend (*track, *fx, dB);
     });
 }
+
+void MixApplyEngine::createBusAndRoute (const juce::String& busName,
+                                        const std::vector<te::EditItemID>& tracksToRoute)
+{
+    commandBridge.enqueue ("KI-Studio: Bus \"" + busName + "\"",
+        [this, busName, tracksToRoute] (juce::UndoManager&)
+    {
+        auto* edit = editManager.getEdit();
+        if (edit == nullptr || busName.trim().isEmpty())
+            return;
+
+        // Reuse an existing bus of that name (case-insensitive) — the agent may
+        // call this repeatedly ("route X to the drum bus") without stacking buses.
+        te::AudioTrack* bus = nullptr;
+        for (auto* b : mixerEngine.getBusChannels())
+            if (b->getName().equalsIgnoreCase (busName.trim())) { bus = b; break; }
+
+        if (bus == nullptr)
+            bus = mixerEngine.createBusChannel (busName.trim());
+        if (bus == nullptr)
+            return;
+
+        for (const auto id : tracksToRoute)
+            for (auto* t : te::getAudioTracks (*edit))
+                if (t->itemID == id && MixerEngine::isAudioChannel (*t))
+                {
+                    mixerEngine.routeTrackToBus (*t, *bus);
+                    break;
+                }
+    });
+}

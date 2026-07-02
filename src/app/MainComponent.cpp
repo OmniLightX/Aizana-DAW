@@ -20,12 +20,28 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // File>Open). A fresh or loaded Edit does not inherit the previous Edit's
     // <INPUTBUSES> tree, so seed defaults when none exist and push every bus
     // name onto its WaveInputDevice alias (the hybrid binding step).
+    // Fired BEFORE the old Edit is destroyed: every UI owner drops its
+    // references while the old tracks/plugins are still alive. Without this,
+    // File>Open/New destroyed the Edit under live views → use-after-free crash
+    // (live-test finding 2026-07-02: app crashed when reopening a session).
+    appState.editManager.onEditWillChange = [this]
+    {
+        pluginWindowManager.closeAllWindows();   // windows hold te::Plugin& into the old Edit
+        hidePianoRoll();                         // PianoRollView holds a te::MidiClip&
+        hideCompingEditor();                     // comping editor targets an old clip
+        clipEditor.clearClipboard();             // raw te::Clip* into the old Edit
+        arrangementView.detachFromEdit();
+        mixerView.detachFromEdit();
+    };
+
     appState.editManager.onEditChanged = [this]
     {
         inputBusManager.initialiseDefaultBuses();
         inputBusManager.applyToEngine();
-        hideCompingEditor();                 // editor of the old edit's clip is stale
         compingEngine.attachToEdit();        // re-render active comps of the new edit
+        arrangementView.attachToEdit();
+        mixerView.attachToEdit();
+        resized();
     };
 
     // The startup Edit was created by ApplicationState before this component (and
@@ -236,7 +252,8 @@ MainComponent::~MainComponent()
     // InputBusManager member) is destroyed. editManager lives in ApplicationState,
     // which outlives MainComponent — without this, a later createNewEdit()/loadEdit()
     // (e.g. during shutdown) would invoke a lambda capturing a dangling `this`.
-    appState.editManager.onEditChanged = nullptr;
+    appState.editManager.onEditChanged    = nullptr;
+    appState.editManager.onEditWillChange = nullptr;
 }
 
 void MainComponent::resized()
@@ -886,10 +903,12 @@ void MainComponent::handleFileNew()
 void MainComponent::handleFileOpen()
 {
     // JUCE 8: async FileChooser — store chooser as member to keep it alive
+    // Accept .tracktionedit too — autosaves and unsaved sessions use that
+    // extension; filtering them out looked like "file type not recognised".
     fileChooser = std::make_unique<juce::FileChooser> (
         "Open Session",
         juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
-        "*.tracktion");
+        "*.tracktion;*.tracktionedit");
 
     fileChooser->launchAsync (
         juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
@@ -898,9 +917,21 @@ void MainComponent::handleFileOpen()
             const auto result = fc.getResult();
             if (result.existsAsFile())
             {
-                appState.editManager.loadEdit (result);
-                appState.editManager.setCurrentFile (result);
-                menuItemsChanged();
+                if (appState.editManager.loadEdit (result))
+                {
+                    appState.editManager.setCurrentFile (result);
+                    menuItemsChanged();
+                }
+                else
+                {
+                    // Parse failure keeps the current session intact — tell the
+                    // user instead of silently doing nothing (or crashing).
+                    juce::AlertWindow::showMessageBoxAsync (
+                        juce::MessageBoxIconType::WarningIcon,
+                        "Open Session",
+                        juce::String::fromUTF8 ("Die Datei konnte nicht als Cloudes-Session gelesen werden:\n")
+                            + result.getFullPathName());
+                }
             }
             fileChooser.reset();
         });

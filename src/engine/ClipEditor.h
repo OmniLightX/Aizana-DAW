@@ -99,6 +99,16 @@ public:
     /** True if the clipboard holds a clip reference. */
     bool hasClipboardContents() const noexcept { return clipboardClip != nullptr; }
 
+    /** Drop the clipboard reference. MUST be called on an Edit swap (File>New/Open) —
+        clipboardClip is a raw pointer into the old Edit; pasting it after the swap
+        would dereference a destroyed clip. */
+    void clearClipboard() noexcept
+    {
+        clipboardClip        = nullptr;
+        clipboardSourceTrack = nullptr;
+        clipboardState       = {};
+    }
+
     /**
      * Move a clip to a different track, preserving its start time.
      * Uses te::Clip::moveTo() which handles all clip types (audio + MIDI).

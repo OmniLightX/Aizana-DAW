@@ -65,6 +65,13 @@ public:
         level. Enqueued as one AI batch = one undo step. Any thread. */
     void addReverbSend (tracktion::engine::EditItemID trackId, float amountNorm);
 
+    /** KI-Studio live tool: create a named Bus Channel (or reuse an existing one
+        with that name, case-insensitive) and route the given tracks to it.
+        tracksToRoute may be empty (bus only). Enqueued as one AI batch = one
+        undo step. Any thread. */
+    void createBusAndRoute (const juce::String& busName,
+                            const std::vector<tracktion::engine::EditItemID>& tracksToRoute);
+
 private:
     EditManager&     editManager;
     MixerEngine&     mixerEngine;

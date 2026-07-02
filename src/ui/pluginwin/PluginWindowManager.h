@@ -80,6 +80,13 @@ public:
      */
     bool isPluginWindowOpen (const te::Plugin& plugin) const;
 
+    /**
+     * Closes ALL plugin windows (floating + docked). MUST be called on an Edit
+     * swap (File>New/Open) while the old Edit is still alive — every window
+     * holds a te::Plugin& into the old Edit. Call from message thread only.
+     */
+    void closeAllWindows();
+
     // -------------------------------------------------------------------------
     // Panel access
     // -------------------------------------------------------------------------

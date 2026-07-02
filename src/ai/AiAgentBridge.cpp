@@ -147,7 +147,7 @@ namespace cloudes
                   "mcp__cloudes__set_track_pan,mcp__cloudes__mute_track,"
                   "mcp__cloudes__solo_track,mcp__cloudes__set_track_eq,"
                   "mcp__cloudes__add_compressor,mcp__cloudes__add_deesser,"
-                  "mcp__cloudes__add_reverb");
+                  "mcp__cloudes__add_reverb,mcp__cloudes__create_bus_channel");
 
         if (firstTurn)
         {

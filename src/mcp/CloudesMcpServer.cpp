@@ -350,6 +350,14 @@ namespace
             "insert. Call again on other tracks to share the same space. One undo step.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"amount":{"type":"number","description":"How much reverb: 0 = none .. 1 = full send level (default 0.3)."}},"required":["track"],"additionalProperties":false})"));
 
+        tools.add (tool ("create_bus_channel",
+            "Create a named bus channel in the live Cloudes session (or reuse an existing bus of "
+            "that name) and optionally route tracks to it. The bus is a regular mixer channel: "
+            "afterwards you can EQ/compress it directly with set_track_eq / add_compressor using "
+            "the bus name (e.g. drum bus glue). Call again with the same name to route more "
+            "tracks. One undo step.",
+            R"({"type":"object","properties":{"name":{"type":"string","description":"Bus display name, e.g. 'Drum Bus'."},"tracks":{"type":"array","items":{"type":"string"},"description":"Optional: exact track names to route to this bus (list_tracks for names)."}},"required":["name"],"additionalProperties":false})"));
+
         return makeResult (id, makeObject ({ { "tools", juce::var (tools) } }));
     }
 
@@ -373,6 +381,7 @@ namespace
         if (name == "add_compressor")   return toolLive (id, "add_compressor", args);
         if (name == "add_deesser")      return toolLive (id, "add_deesser", args);
         if (name == "add_reverb")       return toolLive (id, "add_reverb", args);
+        if (name == "create_bus_channel") return toolLive (id, "create_bus_channel", args);
 
         return makeError (id, -32602, "Unknown tool: " + name);
     }
