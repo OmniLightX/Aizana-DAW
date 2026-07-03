@@ -450,6 +450,11 @@ namespace cloudes
             if (track == nullptr)
                 return fail ("no audio track named \"" + name + "\" — call list_tracks for exact names");
 
+            // Sending the shared Reverb return to itself would be a feedback loop.
+            if (MixerEngine::isFXChannel (*track) && track->getName().equalsIgnoreCase ("Reverb"))
+                return fail ("\"Reverb\" IS the shared reverb return — sending it to itself would "
+                             "feed back. Send other tracks/buses to it instead.");
+
             const float amount = juce::jlimit (0.0f, 1.0f, argNum (req.args, "amount", 0.3f));
             mixApply.addReverbSend (track->itemID, amount);
             commandBridge.applyPendingCommands();   // apply now → reply is accurate

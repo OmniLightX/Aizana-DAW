@@ -263,3 +263,46 @@ TEST_CASE ("Bus routing: createSend inserts AuxSendPlugin on source track", "[mi
             found = true;
     CHECK (found);
 }
+
+// ---------------------------------------------------------------------------
+// Bus→bus sends (Studio One pattern, live-test request 2026-07-03):
+// a Bus Channel (e.g. "Vocal Bus") or another FX bus (e.g. "Delay") can send
+// into a shared FX bus ("Reverb"); a channel must never send to itself.
+// ---------------------------------------------------------------------------
+TEST_CASE ("MixerEngine: bus and FX channels can send to another FX bus, never to themselves",
+           "[mixer][sends][busbus]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    REQUIRE (edit != nullptr);
+    MixerEngine mixer (em);
+
+    auto* reverbFx = mixer.createFXChannel ("Reverb");
+    auto* delayFx  = mixer.createFXChannel ("Delay");
+    auto* vocalBus = mixer.createBusChannel ("Vocal Bus");
+    REQUIRE (reverbFx != nullptr);
+    REQUIRE (delayFx  != nullptr);
+    REQUIRE (vocalBus != nullptr);
+
+    // Vocal Bus → Reverb (bus → FX bus)
+    auto* s1 = mixer.createFXSend (*vocalBus, *reverbFx, -6.0f);
+    REQUIRE (s1 != nullptr);
+    bool onVocalBus = false;
+    for (auto* p : vocalBus->pluginList.getPlugins())
+        if (dynamic_cast<te::AuxSendPlugin*> (p) == s1)
+            onVocalBus = true;
+    CHECK (onVocalBus);
+
+    // Delay → Reverb (FX bus → FX bus: the delay gets a reverb tail)
+    auto* s2 = mixer.createFXSend (*delayFx, *reverbFx, -9.0f);
+    REQUIRE (s2 != nullptr);
+    bool onDelay = false;
+    for (auto* p : delayFx->pluginList.getPlugins())
+        if (dynamic_cast<te::AuxSendPlugin*> (p) == s2)
+            onDelay = true;
+    CHECK (onDelay);
+
+    // Reverb → Reverb (self-send = direct feedback) must be refused
+    CHECK (mixer.createFXSend (*reverbFx, *reverbFx, -6.0f) == nullptr);
+}

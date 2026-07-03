@@ -32,6 +32,20 @@ namespace cloudes
             dirs.add (home.getChildFile (".claude/local").getFullPathName());   // claude native installer
             dirs.add (home.getChildFile (".bun/bin").getFullPathName());
             dirs.add (home.getChildFile (".npm-global/bin").getFullPathName());
+
+            // nvm installs npm globals per node version (~/.nvm/versions/node/vX.Y.Z/bin) —
+            // codex typically lives there. Probe every installed version, newest first
+            // (live-test finding 2026-07-03: Codex was invisible to the Finder-launched app).
+            {
+                const auto nvmNode = home.getChildFile (".nvm/versions/node");
+                juce::Array<juce::File> versions = nvmNode.findChildFiles (juce::File::findDirectories, false);
+                versions.sort();
+                for (int i = versions.size(); --i >= 0;)   // reverse = newest version first
+                    dirs.add (versions[i].getChildFile ("bin").getFullPathName());
+            }
+            dirs.add (home.getChildFile (".volta/bin").getFullPathName());
+            dirs.add (home.getChildFile (".asdf/shims").getFullPathName());
+
             dirs.add ("/usr/bin");
             dirs.removeEmptyStrings();
             dirs.removeDuplicates (false);
@@ -187,7 +201,13 @@ namespace cloudes
     {
         // exec "$0" "$@" → run argv[0] with the remaining args, no shell re-parsing of our
         // values (injection-safe), while -l loads the user's PATH so node/claude resolve.
-        juce::StringArray out { "/bin/zsh", "-lc", "exec \"$0\" \"$@\"" };
+        //
+        // ${0:h} (dirname of the exe) is prepended to PATH first: nvm-installed CLIs like
+        // codex are `#!/usr/bin/env node` scripts whose node lives NEXT TO them in the nvm
+        // bin dir — a login (non-interactive) shell does not source .zshrc, so nvm's PATH
+        // is absent and env would not find node otherwise. No user data in the script.
+        juce::StringArray out { "/bin/zsh", "-lc",
+                                "export PATH=\"${0:h}:$PATH\"; exec \"$0\" \"$@\"" };
         out.addArray (argv);
         return out;
     }

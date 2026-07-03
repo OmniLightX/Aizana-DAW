@@ -7,6 +7,7 @@
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "ui/pluginwin/PluginWindowManager.h"
+#include "SendSlotPanel.h"
 
 namespace te = tracktion::engine;
 
@@ -57,6 +58,14 @@ public:
     /** Callbacks fired after solo/mute button clicks — MixerView wires these for bus-group propagation. */
     std::function<void()> onSoloClicked;
     std::function<void()> onMuteClicked;
+
+    /**
+     * Rebuild send rows from the current FX channel list (Studio One pattern:
+     * bus→bus sends — e.g. vocal bus → reverb bus, delay bus → reverb bus).
+     * This strip's own track is filtered out (no self-send/feedback).
+     * Called by MixerView after creating/removing an FX Channel.
+     */
+    void rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels);
 
 private:
     te::AudioTrack&       track;
@@ -138,6 +147,7 @@ private:
     };
 
     InsertSlotPanel insertSlotPanel;
+    SendSlotPanel   sendSlotPanel;
 
     // ---- ValueTree listener ----
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;

@@ -376,6 +376,7 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner (pluginScanner_)
     , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
+    , sendSlotPanel (track_, mixerEngine_)
 {
     juce::ignoreUnused (meterProcessor_);  // meter values pushed via setMeterValues()
 
@@ -426,6 +427,7 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     addAndMakeVisible (soloButton);
     addAndMakeVisible (muteButton);
     addAndMakeVisible (insertSlotPanel);
+    addAndMakeVisible (sendSlotPanel);   // bus→bus sends (rows appear once FX channels exist)
     addAndMakeVisible (trackNameLabel);
 
     track.state.addListener (this);
@@ -443,6 +445,9 @@ void BusFXStrip::resized()
     const int kNameH = 18;
     const int kBtnH  = 22;
     const int kSlotH = InsertSlotPanel::kVisibleSlots * InsertSlotPanel::kSlotHeight;
+    const int kSendH = sendSlotPanel.getNumRows() > 0
+                          ? SendSlotPanel::kVisibleRows * SendSlotPanel::kRowHeight
+                          : 0;
 
     trackNameLabel.setBounds (area.removeFromBottom (kNameH));
 
@@ -451,6 +456,7 @@ void BusFXStrip::resized()
     muteButton.setBounds (btnArea.reduced (1));
 
     insertSlotPanel.setBounds (area.removeFromBottom (juce::jmax (0, kSlotH)));
+    sendSlotPanel.setBounds   (area.removeFromBottom (juce::jmax (0, kSendH)));
 
     const int kMeterW = 22;
     meterDisplay.setBounds (area.removeFromRight (juce::jmax (0, kMeterW)));
@@ -498,6 +504,19 @@ void BusFXStrip::setSelected (bool s)
 void BusFXStrip::setMeterValues (float peakDB, float /*rmsDB*/, float /*lufsM*/, float /*lufsI*/)
 {
     meterDisplay.setValues (peakDB);
+}
+
+void BusFXStrip::rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels)
+{
+    // A channel must never send to itself (direct feedback on the FX return) —
+    // filter this strip's own track out of its send targets.
+    juce::Array<te::AudioTrack*> targets;
+    for (auto* fx : fxChannels)
+        if (fx != &track)
+            targets.add (fx);
+
+    sendSlotPanel.rebuild (targets);
+    resized();   // send rows appear/disappear → re-layout
 }
 
 void BusFXStrip::refresh()

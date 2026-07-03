@@ -342,6 +342,11 @@ void MixerView::rebuildAllSends()
     const auto fxChannels = mixerEngine.getFXChannels();
     for (auto* strip : strips)
         strip->rebuildSends (fxChannels);
+
+    // Bus/FX strips get sends too (Studio One: vocal bus → reverb bus,
+    // delay bus → reverb bus); each strip filters its own track out.
+    for (auto* strip : busFXStrips)
+        strip->rebuildSends (fxChannels);
 }
 
 //==============================================================================

@@ -337,6 +337,12 @@ te::AuxSendPlugin* MixerEngine::createAuxSend (te::AudioTrack& sourceTrack,
                                                 te::AudioTrack& returnTrack,
                                                 float sendLeveldB)
 {
+    // Bus→bus sends are allowed (Studio One pattern: vocal bus → reverb bus,
+    // delay bus → reverb bus), but a track must never send to ITSELF — that
+    // would be a direct feedback loop on the FX return.
+    if (&sourceTrack == &returnTrack)
+        return nullptr;
+
     const int busNumber = getBusNumberForReturnTrack (returnTrack);
     if (busNumber < 0)
         return nullptr;
