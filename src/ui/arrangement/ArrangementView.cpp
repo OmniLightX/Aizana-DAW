@@ -1986,6 +1986,20 @@ void ArrangementView::rebuildTrackRows()
             expandedTrackIDs.insert (row->getTrack().itemID);
     }
 
+    // Capture selection identity — the ClipComponents/TrackHeaders below are
+    // about to be destroyed, so the raw pointers must be dropped NOW and
+    // re-resolved after the rebuild. Without this, selectedClips held dangling
+    // pointers across every rebuild (latent UAF; the docked editor polls
+    // getPrimarySelectedClip(), which made it acute).
+    std::set<tracktion::engine::EditItemID> selectedClipIDs;
+    for (auto* cc : selectedClips)
+        selectedClipIDs.insert (cc->getClip().itemID);
+    tracktion::engine::EditItemID selectedTrackID;
+    if (selectedTrackHeader != nullptr)
+        selectedTrackID = selectedTrackHeader->getTrack().itemID;
+    selectedClips.clear();
+    selectedTrackHeader = nullptr;
+
     // Clear existing children
     headerContainer.removeAllChildren();
     timelineContainer.removeAllChildren();
@@ -2152,6 +2166,27 @@ void ArrangementView::rebuildTrackRows()
         if (expandedTrackIDs.count (row->getTrack().itemID) > 0)
             row->setExpanded (true);
     }
+
+    // Re-resolve the selection captured above onto the freshly built components
+    // (selection survives splits/rebuilds; deleted clips simply drop out).
+    if (selectedTrackID.isValid())
+        for (auto* header : trackHeaders)
+            if (header->getTrack().itemID == selectedTrackID)
+            {
+                selectedTrackHeader = header;
+                header->setSelected (true);
+                break;
+            }
+
+    if (! selectedClipIDs.empty())
+        for (auto* row : trackRows)
+            for (int i = 0; i < row->getClipArea().getNumChildComponents(); ++i)
+                if (auto* cc = dynamic_cast<ClipComponent*> (row->getClipArea().getChildComponent (i)))
+                    if (selectedClipIDs.count (cc->getClip().itemID) > 0)
+                    {
+                        cc->setSelected (true);
+                        selectedClips.add (cc);
+                    }
 
     // Trigger layout
     resized();

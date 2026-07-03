@@ -32,6 +32,8 @@ public:
     /** Polled by the timer to highlight the active segment (Cmd+M / divider
      *  can change the state without going through the buttons). */
     std::function<bool()> isMixerShown;
+    /** Polled alongside isMixerShown — true when the docked editor is open. */
+    std::function<bool()> isEditorShown;
 
     /** KI-Mix co-pilot trigger — wired by MainComponent to startMix()
      *  (Beginner = instant, Pro = preview dialog). */

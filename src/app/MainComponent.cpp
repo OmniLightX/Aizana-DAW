@@ -6,6 +6,7 @@
 #include "generator/FaustCompiler.h"
 #include "ui/aistudio/AiStudioPanel.h"
 #include "ui/pluginbrowser/GeneratedPluginsPanel.h"
+#include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
 
 namespace te = tracktion::engine;
@@ -27,7 +28,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     appState.editManager.onEditWillChange = [this]
     {
         pluginWindowManager.closeAllWindows();   // windows hold te::Plugin& into the old Edit
-        hidePianoRoll();                         // PianoRollView holds a te::MidiClip&
+        dockedEditorPanel.clear();               // editor holds clip refs into the old Edit
         hideCompingEditor();                     // comping editor targets an old clip
         clipEditor.clearClipboard();             // raw te::Clip* into the old Edit
         arrangementView.detachFromEdit();
@@ -67,12 +68,17 @@ MainComponent::MainComponent (ApplicationState& appState_)
     addAndMakeVisible (transportBar);
     addAndMakeVisible (arrangementView);
     addAndMakeVisible (mixerView);
+    addAndMakeVisible (dockedEditorPanel);
 
     // DockedPluginPanel from PluginWindowManager — right-side panel
     addAndMakeVisible (pluginWindowManager.getDockedPanel());
 
-    // Mixer visible by default (CONTEXT.md: mixing-first design)
+    // Bottom dock: restore last state (default = Mix, CONTEXT.md mixing-first)
+    loadBottomDockState();
+    mixerVisible = (activeBottomDock == BottomDock::Mix);
     mixerView.setVisible (mixerVisible);
+    dockedEditorPanel.setVisible (activeBottomDock == BottomDock::Edit);
+    dockedEditorPanel.setDockActive (activeBottomDock == BottomDock::Edit);
 
     // Crash-isolate plugin scanning: a broken plugin blacklists only itself instead of
     // taking down the whole scan/app (Fix 4). Must precede any scanForPlugins() call.
@@ -133,6 +139,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Edit/Mix view switcher in the TransportBar (Studio One pattern)
     transportBar.onSelectViewMode = [this] (bool mixFocus) { setViewFocus (mixFocus); };
     transportBar.isMixerShown     = [this] { return mixerVisible; };
+    transportBar.isEditorShown    = [this] { return activeBottomDock == BottomDock::Edit; };
     transportBar.onMixRequested   = [this] { startMix(); };
     transportBar.onAiStudioRequested = [this] { openAiStudio(); };
 
@@ -145,14 +152,25 @@ MainComponent::MainComponent (ApplicationState& appState_)
     inspectorPanel.clipProvider  = [this] { return arrangementView.getPrimarySelectedClip(); };
     addChildComponent (inspectorPanel);   // hidden by default
 
-    // Mixer divider bar — click to toggle, drag to resize (Studio One style)
-    mixerDivider.onToggleClick = [this] { toggleMixer(); menuItemsChanged(); };
+    // Bottom bar — Edit/Mix/Browse buttons (Studio One), click empty area to
+    // toggle the current dock, drag to resize; height persists across launches.
+    mixerDivider.onEditClick   = [this] { setBottomDock (BottomDock::Edit); };
+    mixerDivider.onMixClick    = [this] { setBottomDock (BottomDock::Mix); };
+    mixerDivider.onBrowseClick = [this] { showBrowsePopup(); };
+    mixerDivider.onToggleClick = [this]
+    {
+        // Short click on the empty bar: collapse if open, else reopen the mixer
+        setBottomDock (activeBottomDock == BottomDock::None ? BottomDock::Mix
+                                                            : activeBottomDock);
+        menuItemsChanged();
+    };
     mixerDivider.onDragDelta   = [this] (int dy)
     {
-        // dy > 0 = dragged down → mixer shrinks; dy < 0 = dragged up → mixer grows
+        // dy > 0 = dragged down → dock shrinks; dy < 0 = dragged up → dock grows
         mixerHeightPx -= dy;
         resized();
     };
+    mixerDivider.onDragEnd = [this] { persistBottomDockState(); };
     updateMixerDivider();
     addAndMakeVisible (mixerDivider);
 
@@ -172,9 +190,6 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
-
-    addChildComponent (pianoRollCloseButton);  // hidden by default
-    pianoRollCloseButton.onClick = [this] { hidePianoRoll(); };
 
     addChildComponent (compingCloseButton);    // hidden by default
     compingCloseButton.onClick = [this] { hideCompingEditor(); };
@@ -311,35 +326,33 @@ void MainComponent::resized()
     if (proAssistRail.isVisible())
         proAssistRail.setBounds (area.removeFromRight (kAssistRailWidth));
 
-    if (pianoRollVisible && pianoRollView != nullptr)
-    {
-        auto pianoRollArea = area.removeFromBottom (kPianoRollHeight);
-        // Close button in top-right corner of piano roll area (20x20)
-        pianoRollCloseButton.setBounds (pianoRollArea.getRight() - 24, pianoRollArea.getY() + 4, 20, 20);
-        pianoRollView->setBounds (pianoRollArea);
-    }
-
-    // Comping editor — same bottom dock slot as the Piano Roll (mutually exclusive)
+    // Comping editor — its own slot above the bottom dock
     if (compingVisible && compingView != nullptr)
     {
-        auto compingArea = area.removeFromBottom (kPianoRollHeight);
+        auto compingArea = area.removeFromBottom (250);
         compingCloseButton.setBounds (compingArea.getRight() - 24, compingArea.getY() + 4, 20, 20);
         compingView->setBounds (compingArea);
     }
 
-    // Divider bar — always visible; sits between ArrangementView and MixerView
+    // Bottom bar — always visible; hosts the Edit/Mix/Browse buttons
     mixerDivider.setBounds (area.removeFromBottom (kMixerToggleBarHeight));
 
-    // MixerView — height is user-draggable; initialized to 50% of available area on first call
-    if (mixerVisible)
+    // Bottom dock — ONE slot shared by the Docked Editor (Edit) and the Mixer
+    // (Mix); height is user-draggable and persisted.
+    if (activeBottomDock != BottomDock::None)
     {
         const int totalAvail = area.getHeight();
         if (mixerHeightPx == 0)
             mixerHeightPx = (int)(totalAvail * 0.50f);
 
-        const int maxMixerHeight = juce::jmax (kMixerMinHeight, totalAvail - kArrangementMinHeight);
-        mixerHeightPx = juce::jlimit (kMixerMinHeight, maxMixerHeight, mixerHeightPx);
-        mixerView.setBounds (area.removeFromBottom (mixerHeightPx));
+        const int maxDockHeight = juce::jmax (kMixerMinHeight, totalAvail - kArrangementMinHeight);
+        mixerHeightPx = juce::jlimit (kMixerMinHeight, maxDockHeight, mixerHeightPx);
+        auto dockArea = area.removeFromBottom (mixerHeightPx);
+
+        if (activeBottomDock == BottomDock::Mix)
+            mixerView.setBounds (dockArea);
+        else
+            dockedEditorPanel.setBounds (dockArea);
     }
 
     // ArrangementView takes remaining upper area
@@ -430,8 +443,8 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
-    // Escape: hide Piano Roll if visible
-    if (key == juce::KeyPress::escapeKey && pianoRollVisible)
+    // Escape: close the docked editor if open
+    if (key == juce::KeyPress::escapeKey && activeBottomDock == BottomDock::Edit)
     {
         hidePianoRoll();
         return true;
@@ -490,10 +503,85 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
 
 void MainComponent::toggleMixer()
 {
-    mixerVisible = !mixerVisible;
-    mixerView.setVisible (mixerVisible);
+    setBottomDock (BottomDock::Mix);   // toggle semantics: closes if already open
+}
+
+//==============================================================================
+// Bottom dock (Studio One "Edit | Mix | Browse")
+//==============================================================================
+
+void MainComponent::setBottomDock (BottomDock requested)
+{
+    // Clicking the active button closes the dock (Studio One behaviour)
+    openBottomDock (requested == activeBottomDock ? BottomDock::None : requested);
+}
+
+void MainComponent::openBottomDock (BottomDock next)
+{
+    activeBottomDock = next;
+    mixerVisible = (next == BottomDock::Mix);
+
+    const bool beginner = appState.uiState.getMode() == UIStateManager::UIMode::Beginner;
+    mixerView.setVisible (! beginner && mixerVisible);
+    dockedEditorPanel.setVisible (! beginner && next == BottomDock::Edit);
+    dockedEditorPanel.setDockActive (next == BottomDock::Edit);
+
     updateMixerDivider();
-    resized();   // Re-layout so ArrangementView expands/collapses accordingly
+    persistBottomDockState();
+    resized();
+    menuItemsChanged();
+}
+
+void MainComponent::persistBottomDockState()
+{
+    auto& props = appState.editManager.getEngine().getPropertyStorage().getPropertiesFile();
+    props.setValue ("bottomDock", activeBottomDock == BottomDock::Edit ? "edit"
+                                : activeBottomDock == BottomDock::Mix  ? "mix" : "none");
+    if (mixerHeightPx > 0)
+        props.setValue ("bottomDockHeight", mixerHeightPx);
+    props.saveIfNeeded();
+}
+
+void MainComponent::loadBottomDockState()
+{
+    auto& props = appState.editManager.getEngine().getPropertyStorage().getPropertiesFile();
+    const auto s = props.getValue ("bottomDock", "mix");
+    activeBottomDock = (s == "edit") ? BottomDock::Edit
+                     : (s == "none") ? BottomDock::None
+                                     : BottomDock::Mix;
+    mixerHeightPx = props.getIntValue ("bottomDockHeight", 0);
+}
+
+void MainComponent::showBrowsePopup()
+{
+    // "Browse" — the existing plugin browser. Picking a plugin inserts it at
+    // the end of the selected track's chain (like clicking its last "+" slot).
+    auto* track = arrangementView.getSelectedTrack();
+    if (track == nullptr)
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "Browse",
+            juce::String::fromUTF8 ("W\xc3\xa4hle zuerst eine Spur aus, um Plugins aus dem Browser einzuf\xc3\xbcgen."));
+        return;
+    }
+
+    PluginBrowserPopup::showForComponent (
+        mixerDivider,
+        pluginScanner.getKnownPlugins(),
+        [this, trackId = track->itemID] (const juce::PluginDescription& desc)
+        {
+            auto* edit = appState.editManager.getEdit();
+            if (edit == nullptr)
+                return;
+            for (auto* t : te::getAudioTracks (*edit))
+                if (t->itemID == trackId)
+                {
+                    const int idx = pluginManager.chainInsertIndexForUserSlot (*t, 1 << 20);
+                    if (auto* p = pluginManager.insertPlugin (*t, desc, idx))
+                        pluginWindowManager.openPluginWindow (*p);
+                    return;
+                }
+        });
 }
 
 void MainComponent::toggleInspector()
@@ -507,21 +595,15 @@ void MainComponent::toggleInspector()
 
 void MainComponent::setViewFocus (bool mixFocus)
 {
-    // Edit/Mix switcher (TransportBar): Edit = arrangement only, Mix = mixer
-    // shown large. mixerHeightPx = 0 lets resized() re-derive the default; we
-    // bump it to ~60% so "Mix" actually means a console-focused layout.
-    mixerVisible = mixFocus;
-    mixerView.setVisible (mixerVisible);
-    if (mixFocus)
-        mixerHeightPx = juce::jmax (mixerHeightPx, (int) (getHeight() * 0.55f));
-    updateMixerDivider();
-    resized();
-    menuItemsChanged();   // View menu tick follows
+    // TransportBar Edit/Mix — same dock semantics as the bottom-bar buttons
+    setBottomDock (mixFocus ? BottomDock::Mix : BottomDock::Edit);
 }
 
 void MainComponent::updateMixerDivider()
 {
-    mixerDivider.mixerExpanded = mixerVisible;
+    mixerDivider.mixerExpanded = (activeBottomDock != BottomDock::None);
+    mixerDivider.setActiveDock (activeBottomDock == BottomDock::Edit ? 1
+                              : activeBottomDock == BottomDock::Mix  ? 2 : 0);
     mixerDivider.repaint();
 }
 
@@ -546,9 +628,7 @@ void MainComponent::applyUIMode()
     // assist flag — Pro default is off). Its own visibilityChanged() starts/stops the
     // observations timer.
     proAssistRail.setVisible (! beginner && appState.uiState.isAssistEnabled());
-    if (pianoRollView != nullptr)
-        pianoRollView->setVisible (! beginner && pianoRollVisible);
-    pianoRollCloseButton.setVisible (! beginner && pianoRollVisible);
+    dockedEditorPanel.setVisible (! beginner && activeBottomDock == BottomDock::Edit);
     if (compingView != nullptr)
         compingView->setVisible (! beginner && compingVisible);
     compingCloseButton.setVisible (! beginner && compingVisible);
@@ -571,26 +651,17 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 
 void MainComponent::showPianoRoll (te::MidiClip& midiClip)
 {
-    // Destroy any existing piano roll, then create new one for this clip
-    pianoRollView.reset();
-    pianoRollView = std::make_unique<PianoRollView> (midiClip, appState.editManager);
-    addAndMakeVisible (*pianoRollView);
-    pianoRollVisible = true;
-    pianoRollCloseButton.setVisible (true);
-    pianoRollCloseButton.toFront (false);
-    resized();
+    // MIDI editing lives in the bottom Docked Editor now (Studio One "Edit"):
+    // open the dock and show this clip immediately (selection follows anyway).
+    openBottomDock (BottomDock::Edit);
+    dockedEditorPanel.showClip (&midiClip);
 }
 
 void MainComponent::hidePianoRoll()
 {
-    pianoRollVisible = false;
-    pianoRollCloseButton.setVisible (false);
-    if (pianoRollView != nullptr)
-    {
-        removeChildComponent (pianoRollView.get());
-        pianoRollView.reset();
-    }
-    resized();
+    // Legacy entry point (Esc, comping editor opening): close the editor dock.
+    if (activeBottomDock == BottomDock::Edit)
+        openBottomDock (BottomDock::None);
 }
 
 void MainComponent::showCompingEditor (te::WaveAudioClip& clip)

@@ -30,6 +30,7 @@
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/pianoroll/PianoRollView.h"
 #include "ui/comping/CompingView.h"
+#include "ui/dockeditor/DockedEditorPanel.h"
 #include "ui/inspector/InspectorPanel.h"
 #include "ui/beginner/BeginnerView.h"
 #include "ui/onboarding/OnboardingWizard.h"
@@ -162,34 +163,81 @@ private:
     bool inspectorVisible = false;
     void toggleInspector();
 
-    bool mixerVisible = true;   // CONTEXT.md: mixer visible by default
+    // Docked Editor (Studio One "Edit" view) — bottom dock, driven by the
+    // GLOBAL arrangement selection (no separate editor selection/data).
+    DockedEditorPanel dockedEditorPanel { appState.editManager,
+        [this]() -> te::Clip* { return arrangementView.getPrimarySelectedClip(); } };
 
-    // ---- Mixer divider — click to toggle, drag to resize (Studio One style) ----
-    // Replaces the former juce::TextButton mixerToggleButton.
-    // The component handles both a click (< 5px movement = toggle) and a
-    // vertical drag (adjusts mixerHeightPx).
+    bool mixerVisible = true;   // derived: activeBottomDock == Mix (kept for menu/beginner paths)
+
+    // ---- Bottom dock (Studio One "Edit | Mix | Browse") -------------------
+    // ONE bottom slot shared by the Docked Editor ("Edit") and the Mixer
+    // ("Mix"); clicking the active button closes the slot. "Browse" opens the
+    // plugin browser. State + height are persisted across launches.
+    enum class BottomDock { None, Edit, Mix };
+    BottomDock activeBottomDock = BottomDock::Mix;   // mixing-first default
+
+    void openBottomDock (BottomDock d);              // non-toggling (force open/close)
+    void setBottomDock  (BottomDock requested);      // toggle semantics (button clicks)
+    void persistBottomDockState();
+    void loadBottomDockState();
+    void showBrowsePopup();
+
+    // ---- Bottom bar — drag to resize, hosts the Edit/Mix/Browse buttons ----
     class MixerDivider : public juce::Component
     {
     public:
-        MixerDivider() = default;
+        MixerDivider()
+        {
+            for (auto* b : { &editButton, &mixButton, &browseButton })
+            {
+                b->setClickingTogglesState (false);
+                b->setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff262626));
+                b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2266aa));
+                b->setColour (juce::TextButton::textColourOffId,  juce::Colour (0xffbbbbbb));
+                b->setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
+                addAndMakeVisible (*b);
+            }
+            editButton.onClick   = [this] { if (onEditClick)   onEditClick(); };
+            mixButton.onClick    = [this] { if (onMixClick)    onMixClick(); };
+            browseButton.onClick = [this] { if (onBrowseClick) onBrowseClick(); };
+        }
 
-        std::function<void()>    onToggleClick;   // fired on short click
+        std::function<void()>    onEditClick, onMixClick, onBrowseClick;
         std::function<void(int)> onDragDelta;     // fired during drag: delta Y in screen pixels
-        bool mixerExpanded = true;                // controls arrow direction in paint()
+        std::function<void()>    onDragEnd;       // persist height after a resize drag
+        std::function<void()>    onToggleClick;   // short click on empty bar area
+        bool mixerExpanded = true;                // any dock open? (arrow direction)
+
+        /** Highlight the active dock button (0 = none, 1 = edit, 2 = mix). */
+        void setActiveDock (int which)
+        {
+            editButton.setToggleState (which == 1, juce::dontSendNotification);
+            mixButton .setToggleState (which == 2, juce::dontSendNotification);
+        }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (2);
+            browseButton.setBounds (r.removeFromRight (64));
+            r.removeFromRight (4);
+            mixButton.setBounds  (r.removeFromRight (54));
+            r.removeFromRight (2);
+            editButton.setBounds (r.removeFromRight (54));
+        }
 
         void paint (juce::Graphics& g) override
         {
             g.fillAll (juce::Colour (0xff1a1a1a));
-            // Subtle top/bottom border lines
             g.setColour (juce::Colour (0xff444444));
             g.drawHorizontalLine (0, 0.0f, (float)getWidth());
             g.drawHorizontalLine (getHeight() - 1, 0.0f, (float)getWidth());
-            // Arrow + label
             const juce::juce_wchar arrow = mixerExpanded ? 0x25BC : 0x25B2;
-            const juce::String text = juce::String::charToString (arrow) + "  Mixer";
             g.setColour (juce::Colour (0xff888888));
             g.setFont (juce::FontOptions (11.0f));
-            g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+            g.drawText (juce::String::charToString (arrow),
+                        getLocalBounds().withTrimmedLeft (8),
+                        juce::Justification::centredLeft, false);
         }
 
         void mouseDown (const juce::MouseEvent& e) override
@@ -212,9 +260,13 @@ private:
 
         void mouseUp (const juce::MouseEvent& e) override
         {
-            // Treat as click only when the mouse barely moved (< 5px)
-            if (e.getDistanceFromDragStart() < 5 && onToggleClick)
-                onToggleClick();
+            if (e.getDistanceFromDragStart() < 5)
+            {
+                if (onToggleClick)
+                    onToggleClick();
+            }
+            else if (onDragEnd)
+                onDragEnd();
         }
 
         juce::MouseCursor getMouseCursor() override
@@ -223,23 +275,21 @@ private:
         }
 
     private:
+        juce::TextButton editButton   { "Edit" };
+        juce::TextButton mixButton    { "Mix" };
+        juce::TextButton browseButton { "Browse" };
         int dragStartScreenY = 0;
         int dragDeltaAccum   = 0;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerDivider)
     };
 
     MixerDivider      mixerDivider;
-    int               mixerHeightPx       = 0;   // 0 = unset; initialised on first resized()
-    static constexpr int kMixerToggleBarHeight  = 18;
-    static constexpr int kMixerMinHeight        = 120; // minimum mixer panel height (px)
+    int               mixerHeightPx       = 0;   // bottom dock height; 0 = unset (default on first resized())
+    static constexpr int kMixerToggleBarHeight  = 24;
+    static constexpr int kMixerMinHeight        = 120; // minimum bottom dock height (px)
     static constexpr int kArrangementMinHeight  = 60;  // minimum arrangement panel height (px)
 
     void updateMixerDivider();
-
-    bool pianoRollVisible = false;
-    std::unique_ptr<PianoRollView> pianoRollView;  // current docked Piano Roll (nullptr when hidden)
-    juce::TextButton pianoRollCloseButton { "X" };  // close button in piano roll header
-    static constexpr int kPianoRollHeight = 250;  // default docked height
 
     // Comping editor — shares the bottom dock slot with the Piano Roll
     bool compingVisible = false;

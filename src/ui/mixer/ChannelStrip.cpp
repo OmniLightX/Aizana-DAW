@@ -730,9 +730,7 @@ void ChannelStrip::resized()
     const int kNameH   = 24;
     const int kOutputH = 16;  // output routing button row
     const int kSlotH   = InsertSlotPanel::kVisibleSlots * InsertSlotPanel::kSlotHeight; // 96
-    const int kSendH   = sendSlotPanel.getNumRows() > 0
-                            ? SendSlotPanel::kVisibleRows * SendSlotPanel::kRowHeight
-                            : 0;
+    const int kSendH   = sendSlotPanel.getPreferredHeight();   // sends + "+ Send" row
     const int kBtnH    = 22;
 
     auto nameArea    = area.removeFromBottom (kNameH);

@@ -296,11 +296,12 @@ void TransportBar::timerCallback()
     // Keep the Dial's assist toggle in sync (assist can change from the Beginner view too)
     assistButton.setToggleState (appState.uiState.isAssistEnabled(), juce::dontSendNotification);
 
-    // Edit/Mix segment highlight follows the actual mixer state (Cmd+M, divider)
+    // Edit/Mix segment highlight follows the bottom dock state (buttons, Cmd+M, Esc)
     if (isMixerShown)
     {
-        const bool mix = isMixerShown();
-        editViewButton.setToggleState (! mix, juce::dontSendNotification);
+        const bool mix  = isMixerShown();
+        const bool edit = isEditorShown ? isEditorShown() : ! mix;
+        editViewButton.setToggleState (edit, juce::dontSendNotification);
         mixViewButton.setToggleState (mix, juce::dontSendNotification);
     }
 

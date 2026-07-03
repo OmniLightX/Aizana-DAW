@@ -250,6 +250,9 @@ target_sources(Cloudes PRIVATE
     src/ui/comping/CompingView.cpp
     # Inspector dock (Phase 2+, Studio One inspector)
     src/ui/inspector/InspectorPanel.cpp
+    # Docked bottom editor (Studio One "Edit" view)
+    src/ui/dockeditor/DockedEditorPanel.cpp
+    src/ui/dockeditor/AudioClipEditor.cpp
     # Piano Roll editor (plan 01-09)
     src/ui/pianoroll/PianoRollView.cpp
     src/ui/pianoroll/NoteComponent.cpp

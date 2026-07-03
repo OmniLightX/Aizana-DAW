@@ -445,9 +445,7 @@ void BusFXStrip::resized()
     const int kNameH = 18;
     const int kBtnH  = 22;
     const int kSlotH = InsertSlotPanel::kVisibleSlots * InsertSlotPanel::kSlotHeight;
-    const int kSendH = sendSlotPanel.getNumRows() > 0
-                          ? SendSlotPanel::kVisibleRows * SendSlotPanel::kRowHeight
-                          : 0;
+    const int kSendH = sendSlotPanel.getPreferredHeight();   // sends + "+ Send" row
 
     trackNameLabel.setBounds (area.removeFromBottom (kNameH));
 
