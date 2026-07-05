@@ -180,6 +180,7 @@ target_sources(Aizana PRIVATE
     src/app/MainComponent.cpp
     src/app/ApplicationState.cpp
     src/app/UIStateManager.cpp
+    src/app/LegacyMigration.cpp
     src/ai/StemAnalyzer.cpp
     src/ai/SessionPlanner.cpp
     src/ai/StemImportEngine.cpp

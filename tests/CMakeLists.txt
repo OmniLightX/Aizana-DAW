@@ -71,8 +71,11 @@ target_sources(engine_tests PRIVATE
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
     test_export_wav.cpp
+    # Rename-Migration (Cloudes → Aizana, 2026-07-05)
+    test_legacy_migration.cpp
     # Source files
     ../src/app/UIStateManager.cpp
+    ../src/app/LegacyMigration.cpp
     ../src/ai/StemAnalyzer.cpp
     ../src/ai/SessionPlanner.cpp
     ../src/ai/MixingEngine.cpp
@@ -194,7 +197,8 @@ target_sources(oop_host_smoke PRIVATE
     ../src/plugins/oop/SharedAudioRing.cpp
     ../src/plugins/oop/PluginHostBridge.cpp
     ../src/plugins/oop/OobAudioMarshal.cpp
-    ../src/plugins/oop/OutOfProcessPluginInstance.cpp)
+    ../src/plugins/oop/OutOfProcessPluginInstance.cpp
+    ../src/app/LegacyMigration.cpp)
 target_include_directories(oop_host_smoke PRIVATE ../src)
 target_compile_definitions(oop_host_smoke PRIVATE
     JUCE_WEB_BROWSER=0

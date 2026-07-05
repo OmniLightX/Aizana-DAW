@@ -1,6 +1,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "MainWindow.h"
 #include "MicrophonePermission.h"
+#include "LegacyMigration.h"
 #include "plugins/OutOfProcessPluginScanner.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
 
@@ -69,6 +70,12 @@ public:
             pluginHostWorker = std::move (host);
             return;
         }
+
+        // Rename-Migration Cloudes→Aizana: MUST run before MainWindow constructs the
+        // te::Engine — the engine creates ~/Library/Aizana on construction, and the
+        // merge-move of ~/Library/Cloudes (settings, plugin library, models, training)
+        // has to happen first. Idempotent no-op once migrated.
+        aizana::legacy::migrateAppData();
 
         // Defer permission request to the first run-loop tick so NSApplication
         // is fully active before AVCaptureDevice shows the system dialog.

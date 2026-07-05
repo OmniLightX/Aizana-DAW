@@ -9,8 +9,9 @@ namespace
     // Flag OFF (default) → returns the description unchanged, so the shipping path is untouched.
     juce::PluginDescription maybeRouteOutOfProcess (const juce::PluginDescription& desc)
     {
+        // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
         if (aizana::oopHostingEnabled()
-            && desc.manufacturerName == "Aizana"
+            && (desc.manufacturerName == "Aizana" || desc.manufacturerName == "Cloudes")
             && desc.pluginFormatName == "CLAP")
         {
             auto d = desc;

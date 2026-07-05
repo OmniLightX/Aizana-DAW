@@ -1,6 +1,7 @@
 #include "PluginScanner.h"
 #include "BuiltInPluginFormat.h"
 #include "OutOfProcessPluginScanner.h"
+#include "app/LegacyMigration.h"
 
 // ---------------------------------------------------------------------------
 // Background scan thread (multi-format, self-contained)
@@ -232,6 +233,10 @@ int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
     if (! dir.isDirectory())
         return 0;
 
+    // Rename-Migration: pre-rename installs keep display-name overrides in
+    // ".cloudes-names.json" — carry them over before reading. Idempotent.
+    aizana::legacy::migrateNamesSidecar (dir);
+
     // A local format instance is enough to read the descriptions — findAllTypesForFile
     // dlopens/scans/dlcloses each .clap on its own (no dependency on formatManager state).
     ClapPluginFormat clap;
@@ -338,8 +343,12 @@ void PluginScanner::loadPluginList (const juce::File& file)
     {
         knownPlugins.recreateFromXml (*xml);
         // Legacy caches without the marker are treated as complete to avoid a
-        // surprise full re-scan for existing users.
-        scanWasComplete.store (xml->getBoolAttribute ("aizanaScanComplete", true));
+        // surprise full re-scan for existing users. Pre-rename caches carry the
+        // marker under its old "cloudes" name (Klasse C — intentional literal).
+        const bool complete = xml->hasAttribute ("aizanaScanComplete")
+                                  ? xml->getBoolAttribute ("aizanaScanComplete", true)
+                                  : xml->getBoolAttribute ("cloudesScanComplete", true);
+        scanWasComplete.store (complete);
     }
 }
 

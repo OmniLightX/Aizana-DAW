@@ -1,6 +1,7 @@
 #include "OutOfProcessPluginInstance.h"
 #include "PluginHostBridge.h"
 #include "OobAudioMarshal.h"
+#include "app/LegacyMigration.h"
 
 #include <atomic>
 #include <thread>
@@ -260,7 +261,9 @@ namespace aizana
     //==============================================================================
     bool oopHostingEnabled()
     {
-        return juce::SystemStats::getEnvironmentVariable ("AIZANA_OOP_PLUGINS", "0").trim() == "1";
+        // Pre-rename flag honoured as fallback (Klasse C: scripts/docs/muscle-memory).
+        return legacy::envWithLegacyFallback ("AIZANA_OOP_PLUGINS", "CLOUDES_OOP_PLUGINS", "0")
+                   .trim() == "1";
     }
 
     void OutOfProcessPluginFormat::createPluginInstance (const juce::PluginDescription& desc,

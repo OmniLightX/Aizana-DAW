@@ -1,4 +1,5 @@
 #include "EditManager.h"
+#include "app/LegacyMigration.h"
 #include "plugins/BuiltInPluginFormat.h"
 #include "plugins/ClapPluginFormat.h"
 
@@ -127,6 +128,12 @@ void EditManager::createNewEdit()
 //==============================================================================
 bool EditManager::loadEdit (const juce::File& file)
 {
+    // Rename-Migration Cloudes→Aizana: upgrade pre-rename sessions in place BEFORE
+    // TE parses them — old files carry cloudes* track properties, built-in plugin
+    // identifiers whose uniqueId hash changed with the rename, and absolute paths
+    // into ~/Library/Cloudes. Atomic write, no-op for post-rename sessions.
+    aizana::legacy::migrateEditFile (file);
+
     // Use the Tracktion Engine helper that handles legacy format conversion.
     // loadEditFromFile() parses the XML, updates legacy state if needed, and
     // returns a fully constructed Edit ready for editing.

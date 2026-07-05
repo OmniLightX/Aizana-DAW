@@ -1988,7 +1988,9 @@ void MainComponent::syncScannedPluginsToEngine()
         // E5.3c: with AIZANA_OOP_PLUGINS=1, route Aizana-generated CLAP plugins through the
         // out-of-process host (rewrite the format name so TE picks OutOfProcessPluginFormat).
         // Everything else — and the whole default (flag OFF) path — is unchanged.
-        if (oop && type.manufacturerName == "Aizana" && type.pluginFormatName == "CLAP")
+        // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
+        if (oop && (type.manufacturerName == "Aizana" || type.manufacturerName == "Cloudes")
+                && type.pluginFormatName == "CLAP")
         {
             auto oopType = type;
             oopType.pluginFormatName = aizana::kOopFormatName;
