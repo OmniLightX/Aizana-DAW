@@ -15,12 +15,21 @@ ClipEditor::ClipEditor (EditManager& em)
 //==============================================================================
 te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTimeSecs)
 {
-    auto* edit = editManager.getEdit();
-    if (edit == nullptr)
+    if (editManager.getEdit() == nullptr)
+        return nullptr;
+
+    editManager.getUndoManager().beginNewTransaction ("Cut clip");
+    return cutClipCore (clip, splitTimeSecs);
+}
+
+// Transaction-free core (house pattern: cores never beginNewTransaction themselves,
+// so composite gestures like removeRangeFromClip stay ONE undo step).
+te::WaveAudioClip* ClipEditor::cutClipCore (te::WaveAudioClip& clip, double splitTimeSecs)
+{
+    if (editManager.getEdit() == nullptr)
         return nullptr;
 
     auto& undoManager = editManager.getUndoManager();
-    undoManager.beginNewTransaction ("Cut clip");
 
     // Capture original clip bounds
     auto origStart  = clip.getPosition().getStart().inSeconds();
@@ -135,13 +144,15 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
 //==============================================================================
 void ClipEditor::trimClip (te::Clip& clip, double newStartTimeSecs, double newEndTimeSecs)
 {
-    auto* edit = editManager.getEdit();
-    if (edit == nullptr)
+    if (editManager.getEdit() == nullptr)
         return;
 
-    auto& undoManager = editManager.getUndoManager();
-    undoManager.beginNewTransaction ("Trim clip");
+    editManager.getUndoManager().beginNewTransaction ("Trim clip");
+    trimClipCore (clip, newStartTimeSecs, newEndTimeSecs);
+}
 
+void ClipEditor::trimClipCore (te::Clip& clip, double newStartTimeSecs, double newEndTimeSecs)
+{
     // Compute how much the start moved to calculate the new offset
     double originalStartSecs = clip.getPosition().getStart().inSeconds();
     double originalOffsetSecs = clip.getPosition().getOffset().inSeconds();
@@ -153,6 +164,53 @@ void ClipEditor::trimClip (te::Clip& clip, double newStartTimeSecs, double newEn
     auto newEnd   = TimePos::fromSeconds (newEndTimeSecs);
     clip.setPosition ({ TimeRng (newStart, newEnd),
                         TimeDur::fromSeconds (newOffsetSecs) });
+}
+
+//==============================================================================
+te::WaveAudioClip* ClipEditor::removeRangeFromClip (te::WaveAudioClip& clip,
+                                                    double rangeStartSecs, double rangeEndSecs)
+{
+    if (editManager.getEdit() == nullptr)
+        return nullptr;
+
+    const double cStart = clip.getPosition().getStart().inSeconds();
+    const double cEnd   = clip.getPosition().getEnd().inSeconds();
+    const double rStart = juce::jmax (cStart, juce::jmin (rangeStartSecs, rangeEndSecs));
+    const double rEnd   = juce::jmin (cEnd,   juce::jmax (rangeStartSecs, rangeEndSecs));
+
+    if (rEnd <= rStart)
+        return nullptr;   // no overlap with the clip — nothing to remove
+
+    // Range covers the whole clip → plain delete (single transaction of its own).
+    if (rStart <= cStart && rEnd >= cEnd)
+    {
+        deleteClips ({ &clip });
+        return nullptr;
+    }
+
+    // ONE transaction for the whole gesture (the S1 breath-edit workflow:
+    // mark range → remove → gap stays, source sync preserved → single Cmd+Z).
+    editManager.getUndoManager().beginNewTransaction ("Remove Range");
+
+    if (rStart > cStart && rEnd < cEnd)
+    {
+        // Hole inside the clip: split at rStart (right piece spans [rStart, cEnd],
+        // fades transfer correctly in the core), then trim the right piece's start
+        // to rEnd — trimClipCore advances the offset, so the audio stays in sync.
+        if (auto* right = cutClipCore (clip, rStart))
+        {
+            trimClipCore (*right, rEnd, cEnd);
+            return right;
+        }
+        return nullptr;
+    }
+
+    if (rStart <= cStart)
+        trimClipCore (clip, rEnd, cEnd);      // range cuts off the clip head
+    else
+        trimClipCore (clip, cStart, rStart);  // range cuts off the clip tail
+
+    return nullptr;
 }
 
 //==============================================================================
@@ -310,13 +368,40 @@ void ClipEditor::moveClipToTrack (te::Clip& clip, te::AudioTrack& destTrack)
 
 void ClipEditor::deleteClip (te::Clip& clip)
 {
+    deleteClips ({ &clip });
+}
+
+void ClipEditor::deleteClips (const juce::Array<te::Clip*>& clips)
+{
+    if (clips.isEmpty())
+        return;
+
+    // Keep every clip alive across the whole loop: removing a sibling's state
+    // re-syncs the track's clip list, and a raw pointer into that list must not
+    // dangle mid-batch.
+    juce::Array<te::Clip::Ptr> keepAlive;
+    for (auto* c : clips)
+        if (c != nullptr)
+            keepAlive.add (c);
+
+    if (keepAlive.isEmpty())
+        return;
+
+    // ONE transaction for the whole batch — deleting a multi-selection must be a
+    // single Cmd+Z step (Studio One behaviour), not one step per clip.
     auto& undoManager = editManager.getUndoManager();
-    undoManager.beginNewTransaction ("Delete clip");
-    // Remove the clip's ValueTree node from its parent (track state tree).
-    // This is the canonical TE way to delete a clip — no TE API call needed.
-    juce::ValueTree parent = clip.state.getParent();
-    if (parent.isValid())
-        parent.removeChild (clip.state, &undoManager);
+    undoManager.beginNewTransaction (keepAlive.size() == 1
+                                        ? juce::String ("Delete clip")
+                                        : "Delete " + juce::String (keepAlive.size()) + " clips");
+
+    for (auto& clip : keepAlive)
+    {
+        // Remove the clip's ValueTree node from its parent (track state tree).
+        // This is the canonical TE way to delete a clip — no TE API call needed.
+        juce::ValueTree parent = clip->state.getParent();
+        if (parent.isValid())
+            parent.removeChild (clip->state, &undoManager);
+    }
 }
 
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)

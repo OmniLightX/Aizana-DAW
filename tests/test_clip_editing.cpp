@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "engine/EditManager.h"
 #include "engine/ClipEditor.h"
@@ -236,4 +237,140 @@ TEST_CASE ("ClipEditor: setActiveTake selects the correct take on a MidiClip", "
     // Set back to take 0
     editor.setActiveTake (*midiClip, 0);
     REQUIRE (editor.getActiveTake (*midiClip) == 0);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-selection delete (User-Befund 2026-07-05: Rechtsklick→Delete löschte
+// nur EINEN von mehreren selektierten Schnipseln; Delete-Taste ging gar nicht)
+// ---------------------------------------------------------------------------
+
+TEST_CASE ("ClipEditor: deleteClips removes a whole batch in ONE undo step", "[clip][delete]")
+{
+    EditManager em;
+    em.createNewEdit();
+
+    auto* track = getFirstAudioTrack (*em.getEdit());
+    REQUIRE (track != nullptr);
+
+    auto* a = insertDummyAudioClip (*track, 0.0, 2.0);
+    auto* b = insertDummyAudioClip (*track, 3.0, 2.0);
+    auto* c = insertDummyAudioClip (*track, 6.0, 2.0);
+    REQUIRE (a != nullptr);
+    REQUIRE (b != nullptr);
+    REQUIRE (c != nullptr);
+    REQUIRE (track->getClips().size() == 3);
+
+    ClipEditor editor (em);
+    editor.deleteClips ({ a, b, c });
+
+    CHECK (track->getClips().size() == 0);
+
+    // The whole batch must be ONE Cmd+Z step: a single undo restores all three.
+    em.undoLastAction();
+    CHECK (track->getClips().size() == 3);
+}
+
+TEST_CASE ("ClipEditor: deleteClips skips null entries and empty batches safely", "[clip][delete]")
+{
+    EditManager em;
+    em.createNewEdit();
+
+    auto* track = getFirstAudioTrack (*em.getEdit());
+    REQUIRE (track != nullptr);
+
+    auto* a = insertDummyAudioClip (*track, 0.0, 2.0);
+    REQUIRE (a != nullptr);
+
+    ClipEditor editor (em);
+    editor.deleteClips ({});                       // no-op
+    CHECK (track->getClips().size() == 1);
+
+    editor.deleteClips ({ nullptr, a, nullptr }); // nulls skipped, a deleted
+    CHECK (track->getClips().size() == 0);
+}
+
+// ---------------------------------------------------------------------------
+// removeRangeFromClip — der S1-Atmer-Workflow im Docked Editor (E2):
+// Bereich markieren → Delete → Lücke bleibt, Audio bleibt quellsynchron, 1 Undo.
+// ---------------------------------------------------------------------------
+
+TEST_CASE ("ClipEditor: removeRangeFromClip cuts a hole in ONE undo step, source-synced", "[clip][range]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* track = getFirstAudioTrack (*em.getEdit());
+    REQUIRE (track != nullptr);
+
+    // Clip [1.0 .. 9.0], Offset 0.5 in die Quelldatei
+    auto* clip = insertDummyAudioClip (*track, 1.0, 8.0);
+    REQUIRE (clip != nullptr);
+    clip->setPosition ({ TimeRng (TimePos::fromSeconds (1.0), TimePos::fromSeconds (9.0)),
+                         TimeDur::fromSeconds (0.5) });
+    REQUIRE (track->getClips().size() == 1);
+
+    ClipEditor editor (em);
+    auto* right = editor.removeRangeFromClip (*clip, 3.0, 5.0);   // Loch [3..5]
+
+    REQUIRE (right != nullptr);
+    REQUIRE (track->getClips().size() == 2);
+
+    // Links: [1.0 .. 3.0], Offset unverändert
+    CHECK (clip->getPosition().getStart().inSeconds() == Catch::Approx (1.0));
+    CHECK (clip->getPosition().getEnd().inSeconds()   == Catch::Approx (3.0));
+    CHECK (clip->getPosition().getOffset().inSeconds() == Catch::Approx (0.5));
+
+    // Rechts: [5.0 .. 9.0] — Offset = 0.5 + (5.0 - 1.0) = 4.5 → Audio bleibt synchron
+    CHECK (right->getPosition().getStart().inSeconds() == Catch::Approx (5.0));
+    CHECK (right->getPosition().getEnd().inSeconds()   == Catch::Approx (9.0));
+    CHECK (right->getPosition().getOffset().inSeconds() == Catch::Approx (4.5));
+
+    // EIN Undo stellt den Originalzustand her (eine Geste = ein Cmd+Z)
+    em.undoLastAction();
+    REQUIRE (track->getClips().size() == 1);
+    auto* restored = track->getClips().getFirst();
+    CHECK (restored->getPosition().getStart().inSeconds() == Catch::Approx (1.0));
+    CHECK (restored->getPosition().getEnd().inSeconds()   == Catch::Approx (9.0));
+}
+
+TEST_CASE ("ClipEditor: removeRangeFromClip edge overlaps trim, full cover deletes", "[clip][range]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* track = getFirstAudioTrack (*em.getEdit());
+    REQUIRE (track != nullptr);
+
+    ClipEditor editor (em);
+
+    SECTION ("Range über den Clip-Anfang → Kopf wird getrimmt (Offset rückt nach)")
+    {
+        auto* clip = insertDummyAudioClip (*track, 2.0, 4.0);   // [2..6]
+        REQUIRE (editor.removeRangeFromClip (*clip, 0.0, 3.0) == nullptr);
+        CHECK (clip->getPosition().getStart().inSeconds() == Catch::Approx (3.0));
+        CHECK (clip->getPosition().getEnd().inSeconds()   == Catch::Approx (6.0));
+        CHECK (clip->getPosition().getOffset().inSeconds() == Catch::Approx (1.0));
+    }
+
+    SECTION ("Range über das Clip-Ende → Schwanz wird getrimmt")
+    {
+        auto* clip = insertDummyAudioClip (*track, 2.0, 4.0);   // [2..6]
+        REQUIRE (editor.removeRangeFromClip (*clip, 5.0, 8.0) == nullptr);
+        CHECK (clip->getPosition().getStart().inSeconds() == Catch::Approx (2.0));
+        CHECK (clip->getPosition().getEnd().inSeconds()   == Catch::Approx (5.0));
+    }
+
+    SECTION ("Range deckt den ganzen Clip → Clip wird gelöscht")
+    {
+        auto* clip = insertDummyAudioClip (*track, 2.0, 4.0);
+        const int before = track->getClips().size();
+        editor.removeRangeFromClip (*clip, 1.0, 7.0);
+        CHECK (track->getClips().size() == before - 1);
+    }
+
+    SECTION ("Keine Überlappung → No-op")
+    {
+        auto* clip = insertDummyAudioClip (*track, 2.0, 4.0);
+        REQUIRE (editor.removeRangeFromClip (*clip, 8.0, 9.0) == nullptr);
+        CHECK (clip->getPosition().getStart().inSeconds() == Catch::Approx (2.0));
+        CHECK (clip->getPosition().getEnd().inSeconds()   == Catch::Approx (6.0));
+    }
 }

@@ -126,6 +126,23 @@ public:
         return selectedClips.isEmpty() ? nullptr : &selectedClips.getFirst()->getClip();
     }
 
+    /** Number of clips in the current selection. */
+    int getNumSelectedClips() const noexcept { return selectedClips.size(); }
+
+    /** True if this clip component is part of the current selection. */
+    bool isClipSelected (const ClipComponent* cc) const noexcept
+    {
+        return selectedClips.contains (const_cast<ClipComponent*> (cc));
+    }
+
+    /** Deletes ALL selected clips in one undo step (multi-selection delete). */
+    void deleteSelectedClips();
+
+    /** Selection-aware delete (Delete/Backspace, also forwarded from MainComponent):
+        active time-range > selected clips > selected track. Returns true if it
+        deleted something. */
+    bool deleteSelection();
+
     /** Plugin services — used by ClipComponent for the Event-FX menu. */
     PluginManager&       getPluginManager() noexcept       { return pluginManager; }
     PluginWindowManager& getPluginWindowManager() noexcept { return pluginWindowManager; }

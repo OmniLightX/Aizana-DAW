@@ -147,6 +147,28 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // agent's aizana-mcp can read tracks + mix the running session. Non-fatal if no port.
     aiLiveServer.start();
 
+    // M13-Diagnose: XRun-Logger — jeder hörbare Aussetzer landet mit Zeitstempel,
+    // Buffer/CPU und App-Kontext in ~/Library/Aizana/logs/dropouts.log, damit die
+    // Dropout-Ursache (Verdacht: Streaming von externem Volume) beweisbar wird.
+    dropoutMonitor = std::make_unique<DropoutMonitor> (
+        appState.audioEngine.getDeviceManager(),
+        [this]() -> juce::String
+        {
+            juce::String s;
+            if (auto* edit = appState.editManager.getEdit())
+            {
+                auto& t = edit->getTransport();
+                s << (t.isPlaying() ? "playing" : "stopped")
+                  << " pos=" << juce::String (t.getPosition().inSeconds(), 2) << "s"
+                  << (((bool) t.looping) ? " loop" : "");
+            }
+            const auto session = appState.editManager.getCurrentFile();
+            s << " session=" << session.getFullPathName();
+            if (session.getFullPathName().startsWith ("/Volumes/"))
+                s << " [EXTERNES VOLUME — Streaming-Verdacht M12/M13]";
+            return s;
+        });
+
     // Inspector (left dock) — pulls the arrangement selection via providers
     inspectorPanel.trackProvider = [this] { return arrangementView.getSelectedTrack(); };
     inspectorPanel.clipProvider  = [this] { return arrangementView.getPrimarySelectedClip(); };
@@ -470,6 +492,14 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         if (k == 'c' || k == 'C' || k == 'd' || k == 'D' || k == 'v' || k == 'V')
             return arrangementView.keyPressed (key);
     }
+
+    // Delete/Backspace — same global forward. MacBook keyboards send BACKSPACE for
+    // their "Delete" key, and focus is often on the mixer/dock when the user hits it;
+    // without this forward the key silently did nothing outside the arrangement.
+    // (Text fields never reach here — a focused TextEditor consumes its keys first.)
+    if (key.getKeyCode() == juce::KeyPress::deleteKey
+        || key.getKeyCode() == juce::KeyPress::backspaceKey)
+        return arrangementView.deleteSelection();
 
     // Spacebar: global play/stop — double-tap within 400ms rewinds to start.
     if (key == juce::KeyPress::spaceKey)
