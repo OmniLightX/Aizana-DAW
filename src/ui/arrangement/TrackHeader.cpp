@@ -156,6 +156,18 @@ void TrackHeader::timerCallback()
     {
         meterDb = next;
     }
+
+    // ---- Fader/dB folgen der Automation beim Playback (S1/Logic-Verhalten).
+    // Automations-Playback setzt nur den Parameter-currentValue, nie das
+    // ValueTree — der te::IDs::volume-Listener sieht davon nichts.
+    // Reiner Anzeige-Sync: dontSendNotification + Drag-Guard, nie zurückschreiben.
+    if (! volumeSlider.isMouseButtonDown()
+        && track.edit.getTransport().isPlaying())
+    {
+        const float liveDb = mixerEngine.getLiveVolumeDb (track);
+        if (std::abs ((float) volumeSlider.getValue() - liveDb) > 0.05f)
+            volumeSlider.setValue (liveDb, juce::dontSendNotification);
+    }
 }
 
 void TrackHeader::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier& id)

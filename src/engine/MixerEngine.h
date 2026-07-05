@@ -75,6 +75,20 @@ public:
     /** Return track pan from VolumeAndPanPlugin CachedValue (-1.0 to +1.0). */
     float getPan (const te::AudioTrack& track) const;
 
+    /**
+     * LIVE-Werte für die Automations-Anzeige (Fader folgt der Kurve beim
+     * Playback, wie in Studio One/Logic).
+     *
+     * Bewusste I-02-AUSNAHME: getVolume()/getPan() lesen die CachedValues
+     * (= vom User gesetzter Wert, korrekt nach Undo). Automation-Playback
+     * schreibt aber NIE ins ValueTree — sie setzt nur den currentValue des
+     * AutomatableParameter. Für die Anzeige WÄHREND des Playbacks ist deshalb
+     * currentValue die einzige richtige Quelle. NIEMALS mit diesen Werten
+     * zurückschreiben (kein setVolume/setPan aus einem Anzeige-Sync!).
+     */
+    float getLiveVolumeDb (const te::AudioTrack& track) const;
+    float getLivePan      (const te::AudioTrack& track) const;
+
     /** Solo this track (mutes all other non-solo-isolated tracks). Undoable. */
     void setSolo (te::AudioTrack& track, bool solo);
 

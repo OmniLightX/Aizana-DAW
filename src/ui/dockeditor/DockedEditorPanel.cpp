@@ -1,3 +1,4 @@
+#include <optional>
 #include "DockedEditorPanel.h"
 
 DockedEditorPanel::DockedEditorPanel (EditManager& em,
@@ -50,6 +51,13 @@ void DockedEditorPanel::rebuildFor (te::Clip* clip)
     if (clip == currentClip)
         return;
 
+    // S1-Anker: beim Wechsel Audio-Clip → Audio-Clip übernimmt der neue Editor
+    // Zeitachse + Werkzeug-Zustand des alten — die Edit-View springt nicht,
+    // wenn nach einem Split/Cut das andere Teilstück selektiert wird.
+    std::optional<AudioClipEditor::ViewHandover> handover;
+    if (audioEditor != nullptr && dynamic_cast<te::WaveAudioClip*> (clip) != nullptr)
+        handover = audioEditor->getViewHandover();
+
     audioEditor.reset();
     pianoRoll.reset();
     currentClip = clip;
@@ -74,6 +82,11 @@ void DockedEditorPanel::rebuildFor (te::Clip* clip)
     }
 
     resized();
+
+    // Handover NACH resized() anwenden — das Lane-Mapping braucht gültige Bounds
+    if (audioEditor != nullptr && handover.has_value())
+        audioEditor->applyViewHandover (*handover);
+
     repaint();
 }
 

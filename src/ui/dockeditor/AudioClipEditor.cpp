@@ -156,16 +156,24 @@ float AudioClipEditor::localSecsToX (double t) const
 
 void AudioClipEditor::clampView()
 {
+    // S1-Anker: das Fenster schnappt NICHT auf die Clip-Grenzen zusammen —
+    // nach Split/Range-Delete bleibt die Zeitachse stehen (Überhang erlaubt),
+    // es muss den Clip nur noch SCHNEIDEN (sonst Fit, s. EditorViewState.h).
     const double len = clipLenSecs();
-    viewLenSecs   = juce::jlimit (0.02, len, viewLenSecs <= 0.0 ? len : viewLenSecs);
-    viewStartSecs = juce::jlimit (0.0, juce::jmax (0.0, len - viewLenSecs), viewStartSecs);
+    if (viewLenSecs <= 0.0)
+    {
+        viewStartSecs = 0.0;
+        viewLenSecs   = len;
+    }
+    const auto w  = editorview::ensureUsable ({ viewStartSecs, viewLenSecs }, len);
+    viewStartSecs = w.startLocal;
+    viewLenSecs   = w.len;
 }
 
 void AudioClipEditor::zoomAround (double factor, float pivotX)
 {
     const double pivotSecs = xToLocalSecs (pivotX);
-    viewLenSecs *= factor;
-    clampView();
+    viewLenSecs = editorview::clampZoomLen (viewLenSecs * factor, clipLenSecs(), viewLenSecs);
     // Keep the time under the cursor stationary
     const auto wa = waveArea();
     const double frac = wa.getWidth() > 0 ? ((double) pivotX - wa.getX()) / wa.getWidth() : 0.5;
@@ -178,7 +186,11 @@ void AudioClipEditor::zoomAround (double factor, float pivotX)
 
 void AudioClipEditor::syncScrollBar()
 {
-    hScroll.setRangeLimits ({ 0.0, clipLenSecs() }, juce::dontSendNotification);
+    // Scroll-Raum umfasst Clip UND aktuelles Fenster (Überhang nach Edits)
+    const double len = clipLenSecs();
+    const double lo  = juce::jmin (0.0, viewStartSecs);
+    const double hi  = juce::jmax (len, viewStartSecs + viewLenSecs);
+    hScroll.setRangeLimits ({ lo, hi }, juce::dontSendNotification);
     hScroll.setCurrentRange ({ viewStartSecs, viewLenSecs }, juce::dontSendNotification);
 }
 
@@ -326,6 +338,10 @@ void AudioClipEditor::toggleAutomationLane()
     updateLaneMapping();
     autoLane = std::make_unique<AutomationLane> (*audioTrack, "volume", automationEngine,
                                                  lanePixelsPerSecond, laneScrollSeconds);
+    // Viewport-Konvention: die Lane ist hier viewport-groß, x=0 = laneScrollSeconds.
+    // Ohne das Flag landen Punkte um (Clip-Start + View-Scroll) zu FRÜH im Song
+    // (der Automation-ist-unhörbar-Bug) und die Header-Controls wandern aus dem Bild.
+    autoLane->setViewportTimeMapping (true);
     addAndMakeVisible (*autoLane);
     automationVisible = true;
     updateToolbarState();
@@ -344,6 +360,103 @@ void AudioClipEditor::updateLaneMapping()
     {
         autoLane->updateScrollOffset();
         autoLane->repaint();
+    }
+}
+
+//==============================================================================
+// S1-Anker: Handover von Zeitachse + Werkzeug-Zustand über Selektionswechsel
+//==============================================================================
+AudioClipEditor::ViewHandover AudioClipEditor::getViewHandover() const
+{
+    return { clipStartAbsSecs() + viewStartSecs, viewLenSecs,
+             (int) activeTool, snapEnabled, automationVisible };
+}
+
+void AudioClipEditor::applyViewHandover (const ViewHandover& h)
+{
+    if (h.len > 0.0)
+    {
+        // Absolute Fensterlage in die Lokalzeit DIESES Clips umrechnen —
+        // schneidet das Fenster den Clip nicht, macht clampView() einen Fit.
+        const auto w  = editorview::rebase ({ 0.0, h.len }, h.absStart, clipStartAbsSecs());
+        viewStartSecs = w.startLocal;
+        viewLenSecs   = w.len;
+        clampView();
+    }
+
+    snapEnabled = h.snap;
+    if (h.tool >= 0 && h.tool <= (int) Tool::range)
+        activeTool = (Tool) h.tool;
+    if (h.automationLaneOpen && ! automationVisible && autoBtn.isEnabled())
+        toggleAutomationLane();
+
+    updateToolbarState();
+    syncScrollBar();
+    updateLaneMapping();
+    repaint();
+}
+
+//==============================================================================
+// Nachbar-Clips derselben Spur — gedimmt im Zeitkontext (S1-Edit-View-Look)
+//==============================================================================
+juce::AudioThumbnail* AudioClipEditor::neighbourThumbFor (const juce::File& sourceFile)
+{
+    if (! sourceFile.existsAsFile())
+        return nullptr;
+
+    auto& slot = neighbourThumbs[sourceFile.getFullPathName()];
+    if (slot == nullptr)
+    {
+        // App-weiter Pool-Cache (I: NIE ein Cache pro Component) — der Thumbnail
+        // ist nur der Zeichen-Proxy, die gelesenen Daten teilt der Pool.
+        slot = std::make_unique<juce::AudioThumbnail> (512, thumbnailPool->formatManager,
+                                                       thumbnailPool->cache);
+        slot->setSource (new juce::FileInputSource (sourceFile));
+    }
+    return slot.get();
+}
+
+void AudioClipEditor::paintNeighbourClips (juce::Graphics& g, const juce::Rectangle<int>& wa)
+{
+    auto* track = dynamic_cast<te::ClipTrack*> (clip.getTrack());
+    if (track == nullptr)
+        return;
+
+    const double viewEnd = viewStartSecs + viewLenSecs;
+
+    for (auto* c : track->getClips())
+    {
+        if (c == &clip)
+            continue;
+        auto* wave = dynamic_cast<te::WaveAudioClip*> (c);
+        if (wave == nullptr)
+            continue;
+
+        // Nachbar in Lokalzeit DIESES Clips
+        const double nStart = wave->getPosition().getStart().inSeconds() - clipStartAbsSecs();
+        const double nEnd   = wave->getPosition().getEnd().inSeconds()   - clipStartAbsSecs();
+        const double a = juce::jmax (nStart, viewStartSecs);
+        const double b = juce::jmin (nEnd,   viewEnd);
+        if (b <= a)
+            continue;
+
+        const int x0 = (int) std::floor (localSecsToX (a));
+        const int x1 = (int) std::ceil  (localSecsToX (b));
+        const juce::Rectangle<int> r (x0, wa.getY(), juce::jmax (1, x1 - x0), wa.getHeight());
+
+        g.setColour (juce::Colours::white.withAlpha (0.05f));
+        g.fillRect (r);
+
+        if (auto* thumb = neighbourThumbFor (wave->getSourceFileReference().getFile()))
+            if (thumb->getTotalLength() > 0.0)
+            {
+                const double nOffset = wave->getPosition().getOffset().inSeconds();
+                g.setColour (juce::Colours::white.withAlpha (0.28f));
+                thumb->drawChannels (g, r,
+                                     nOffset + (a - nStart),
+                                     nOffset + (b - nStart),
+                                     1.0f);
+            }
     }
 }
 
@@ -406,31 +519,48 @@ void AudioClipEditor::paint (juce::Graphics& g)
         viewLenSecs   = clipLenSecs();
     }
 
-    // ---- Waveform (big, track-coloured background wash) ----
-    g.setColour (clip.getTrack() != nullptr
-                     ? clip.getTrack()->getColour().withAlpha (0.14f)
-                     : juce::Colour (0xff26262e));
-    g.fillRect (wa);
+    // ---- Nachbar-Clips derselben Spur (gedimmt, S1: Spur-Kontext bleibt sichtbar) ----
+    paintNeighbourClips (g, wa);
+
+    // ---- Waveform — NUR über der Clip-Region. Das Fenster darf über die
+    // Clip-Grenzen hinausragen (S1-Anker nach Split/Range-Delete); außerhalb
+    // bleibt der dunkle Spur-Hintergrund (Lücke) bzw. die Nachbar-Clips. ----
+    const double len  = clipLenSecs();
+    const double visA = juce::jmax (0.0, viewStartSecs);
+    const double visB = juce::jmin (len, viewStartSecs + viewLenSecs);
 
     const bool muted = isClipMuted();
-
     const double offset = clip.getPosition().getOffset().inSeconds();
-    if (thumbnail.getTotalLength() > 0.0)
-    {
-        const float gainDb  = (float) (double) clip.state.getProperty (te::IDs::gain, 0.0);
-        const float gainLin = juce::jlimit (0.0f, 4.0f, juce::Decibels::decibelsToGain (gainDb));
 
-        g.setColour (juce::Colours::white.withAlpha (muted ? 0.25f : 0.85f));
-        thumbnail.drawChannels (g, wa,
-                                offset + viewStartSecs,
-                                offset + viewStartSecs + viewLenSecs,
-                                gainLin);
-    }
-    else
+    if (visB > visA)
     {
-        g.setColour (juce::Colour (0xff777777));
-        g.drawText (juce::String::fromUTF8 ("Keine Audiodatei gefunden — Waveform nicht verf\xc3\xbcgbar"),
-                    wa, juce::Justification::centred, false);
+        const int x0 = (int) std::floor (localSecsToX (visA));
+        const int x1 = (int) std::ceil  (localSecsToX (visB));
+        const juce::Rectangle<int> clipRect (x0, wa.getY(),
+                                             juce::jmax (1, x1 - x0), wa.getHeight());
+
+        g.setColour (clip.getTrack() != nullptr
+                         ? clip.getTrack()->getColour().withAlpha (0.14f)
+                         : juce::Colour (0xff26262e));
+        g.fillRect (clipRect);
+
+        if (thumbnail.getTotalLength() > 0.0)
+        {
+            const float gainDb  = (float) (double) clip.state.getProperty (te::IDs::gain, 0.0);
+            const float gainLin = juce::jlimit (0.0f, 4.0f, juce::Decibels::decibelsToGain (gainDb));
+
+            g.setColour (juce::Colours::white.withAlpha (muted ? 0.25f : 0.85f));
+            thumbnail.drawChannels (g, clipRect,
+                                    offset + visA,
+                                    offset + visB,
+                                    gainLin);
+        }
+        else
+        {
+            g.setColour (juce::Colour (0xff777777));
+            g.drawText (juce::String::fromUTF8 ("Keine Audiodatei gefunden — Waveform nicht verf\xc3\xbcgbar"),
+                        clipRect, juce::Justification::centred, false);
+        }
     }
 
     if (muted)
@@ -462,7 +592,6 @@ void AudioClipEditor::paint (juce::Graphics& g)
     if (fadeOut > 0.0)
     {
         juce::Path p;
-        const double len = clipLenSecs();
         const float x0 = localSecsToX (len - fadeOut), x1 = localSecsToX (len);
         p.startNewSubPath (x1, (float) wa.getY());
         p.lineTo (x0, (float) wa.getY());
@@ -473,15 +602,18 @@ void AudioClipEditor::paint (juce::Graphics& g)
 
     // Fade handles (top corners at the fade boundary)
     g.setColour (kAccent);
-    g.fillEllipse (localSecsToX (fadeIn) - 5.0f,               (float) wa.getY() + 3.0f, 10.0f, 10.0f);
-    g.fillEllipse (localSecsToX (clipLenSecs() - fadeOut) - 5.0f, (float) wa.getY() + 3.0f, 10.0f, 10.0f);
+    g.fillEllipse (localSecsToX (fadeIn) - 5.0f,          (float) wa.getY() + 3.0f, 10.0f, 10.0f);
+    g.fillEllipse (localSecsToX (len - fadeOut) - 5.0f,   (float) wa.getY() + 3.0f, 10.0f, 10.0f);
 
-    // ---- Trim edge zones (visible when the clip edge is inside the view) ----
+    // ---- Trim edges: an den ECHTEN Clip-Grenzen (die durch den S1-Anker
+    // jetzt mitten im Fenster liegen können), nicht am Fensterrand ----
     g.setColour (juce::Colours::white.withAlpha (0.25f));
-    if (viewStartSecs <= 0.001)
-        g.fillRect (wa.getX(), wa.getY(), 3, wa.getHeight());
-    if (viewStartSecs + viewLenSecs >= clipLenSecs() - 0.001)
-        g.fillRect (wa.getRight() - 3, wa.getY(), 3, wa.getHeight());
+    const float xEdgeL = localSecsToX (0.0);
+    const float xEdgeR = localSecsToX (len);
+    if (xEdgeL >= wa.getX() && xEdgeL <= wa.getRight())
+        g.fillRect ((int) xEdgeL, wa.getY(), 3, wa.getHeight());
+    if (xEdgeR >= wa.getX() && xEdgeR <= wa.getRight())
+        g.fillRect ((int) xEdgeR - 3, wa.getY(), 3, wa.getHeight());
 
     // ---- Playhead ----
     if (auto* edit = editManager.getEdit())
@@ -537,8 +669,11 @@ void AudioClipEditor::mouseMove (const juce::MouseEvent& e)
         return;
     }
 
-    const bool nearLeft  = e.x <= wa.getX() + kEdgeZone     && viewStartSecs <= 0.001;
-    const bool nearRight = e.x >= wa.getRight() - kEdgeZone && viewStartSecs + viewLenSecs >= clipLenSecs() - 0.001;
+    // Trim-Zonen liegen an den ECHTEN Clip-Kanten (können mitten im Fenster sein)
+    const float xEdgeL = localSecsToX (0.0);
+    const float xEdgeR = localSecsToX (clipLenSecs());
+    const bool nearLeft  = std::abs ((float) e.x - xEdgeL) <= (float) kEdgeZone;
+    const bool nearRight = std::abs ((float) e.x - xEdgeR) <= (float) kEdgeZone;
     setMouseCursor ((nearLeft || nearRight) ? juce::MouseCursor::LeftRightResizeCursor
                                             : juce::MouseCursor::IBeamCursor);
 }
@@ -606,15 +741,16 @@ void AudioClipEditor::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    // Trim zones (only when the actual clip edge is visible)
-    if (e.x <= wa.getX() + kEdgeZone && viewStartSecs <= 0.001)
+    // Trim zones — an den echten Clip-Kanten (S1-Anker: Kante kann im Fenster liegen)
+    dragStartViewAbs = dragStartClipStart + viewStartSecs;
+    if (std::abs ((float) e.x - localSecsToX (0.0)) <= (float) kEdgeZone)
     {
         activeDrag = Drag::trimLeft;
         trimMaxExtendLeft = dragStartClipStart - dragStartOffset;   // can't reveal before source start
         editManager.getUndoManager().beginNewTransaction ("Trim clip");
         return;
     }
-    if (e.x >= wa.getRight() - kEdgeZone && viewStartSecs + viewLenSecs >= len - 0.001)
+    if (std::abs ((float) e.x - localSecsToX (len)) <= (float) kEdgeZone)
     {
         activeDrag = Drag::trimRight;
         trimMaxExtendRight = dragStartClipStart + (sourceLenSecs() - dragStartOffset);
@@ -622,11 +758,12 @@ void AudioClipEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Plain click = seek transport to that position
+    // Plain click = seek transport to that position (auch außerhalb des Clips —
+    // die Zeitachse ist absolut, S1-Verhalten)
     if (auto* edit = editManager.getEdit())
     {
-        const double local = juce::jlimit (0.0, len, xToLocalSecs ((float) e.x));
-        edit->getTransport().setPosition (TimePos::fromSeconds (dragStartClipStart + local));
+        const double absSecs = juce::jmax (0.0, dragStartClipStart + xToLocalSecs ((float) e.x));
+        edit->getTransport().setPosition (TimePos::fromSeconds (absSecs));
         repaint();
     }
 }
@@ -683,8 +820,10 @@ void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
         clip.setPosition ({ TimeRng (TimePos::fromSeconds (newStart),
                                      TimePos::fromSeconds (dragStartClipEnd)),
                             TimeDur::fromSeconds (newOffset) });
-        viewStartSecs = 0.0;
-        viewLenSecs   = clipLenSecs();
+        // S1-Anker: der Clip-URSPRUNG wandert beim Left-Trim — Lokalzeit so
+        // nachführen, dass die absolute Fensterlage (und damit das Bild) steht.
+        viewStartSecs = dragStartViewAbs - newStart;
+        clampView();
         syncScrollBar();
         updateLaneMapping();
         repaint();
@@ -698,8 +837,8 @@ void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
         clip.setPosition ({ TimeRng (TimePos::fromSeconds (dragStartClipStart),
                                      TimePos::fromSeconds (newEnd)),
                             TimeDur::fromSeconds (dragStartOffset) });
-        viewStartSecs = 0.0;
-        viewLenSecs   = clipLenSecs();
+        // Ursprung unverändert — Fenster steht von selbst (kein Fit-Reset mehr)
+        clampView();
         syncScrollBar();
         updateLaneMapping();
         repaint();

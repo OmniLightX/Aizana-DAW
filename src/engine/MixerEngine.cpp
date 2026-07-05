@@ -56,6 +56,23 @@ float MixerEngine::getPan (const te::AudioTrack& track) const
     return 0.0f;
 }
 
+float MixerEngine::getLiveVolumeDb (const te::AudioTrack& track) const
+{
+    // currentValue-basiert (s. Header): folgt der Automations-Kurve beim Playback
+    if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
+        return vp->getVolumeDb();
+
+    return 0.0f;
+}
+
+float MixerEngine::getLivePan (const te::AudioTrack& track) const
+{
+    if (auto* vp = const_cast<te::AudioTrack&> (track).getVolumePlugin())
+        return vp->getPan();
+
+    return 0.0f;
+}
+
 void MixerEngine::setSolo (te::AudioTrack& track, bool solo)
 {
     auto* edit = editManager.getEdit();

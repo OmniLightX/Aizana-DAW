@@ -618,6 +618,14 @@ void MixerView::timerCallback()
 
     for (auto* strip : busFXStrips)
         updateStrip (strip->getTrack(), strip);
+
+    // ---- Fader folgen der Automation (S1/Logic): nur bei laufendem Transport.
+    // Automations-Playback setzt nur den Parameter-currentValue, nie das
+    // ValueTree — der normale refresh()-Pfad sieht davon nichts. ----
+    if (auto* edit = appState.editManager.getEdit())
+        if (edit->getTransport().isPlaying())
+            for (auto* strip : strips)
+                strip->followAutomation();
 }
 
 void MixerView::detachInputLevelClients()

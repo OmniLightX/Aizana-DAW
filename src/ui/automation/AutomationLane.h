@@ -42,6 +42,32 @@ public:
     void updateScrollOffset();
     bool isDrawMode() const noexcept { return drawMode; }
 
+    /**
+     * Viewport-Zeitmapping (Docked Editor):
+     *
+     * Arrangement-Konvention (default, false): die Lane ist ein VOLLE-BREITE-Kind
+     * im gescrollten timelineContainer — lokales x=0 entspricht physisch t=0,
+     * scrollPositionSeconds verschiebt nur die Header-Controls in den Sichtbereich.
+     *
+     * Viewport-Konvention (true): die Lane ist viewport-groß (Docked Editor) —
+     * lokales x=0 entspricht t=scrollPositionSeconds. Ohne dieses Flag landen
+     * Punkte um scrollPositionSeconds ZU FRÜH (Silent Failure: Automation liegt
+     * am Songanfang statt unter der Waveform und ist am Clip unhörbar).
+     */
+    void setViewportTimeMapping (bool useViewportMapping);
+
+    /** Pure Mapping-Helfer (golden-testbar, keine Component nötig).
+     *  originSeconds = Zeit bei lokalem x=0 (Arrangement: 0, Viewport: Scroll). */
+    static double laneXToTime (float x, double pixelsPerSecond, double originSeconds) noexcept
+    {
+        return originSeconds + (pixelsPerSecond > 0.0 ? (double) x / pixelsPerSecond : 0.0);
+    }
+
+    static float laneTimeToX (double timeSeconds, double pixelsPerSecond, double originSeconds) noexcept
+    {
+        return (float) ((timeSeconds - originSeconds) * pixelsPerSecond);
+    }
+
     void paint           (juce::Graphics& g)                  override;
     void resized         ()                                    override;
     void mouseDown       (const juce::MouseEvent& e)           override;
@@ -82,6 +108,7 @@ private:
     float  segmentRightStartValue = 0.0f; // right point value at drag start
 
     bool drawMode = false;
+    bool viewportTimeMapping = false;          // s. setViewportTimeMapping()
     juce::TextButton drawModeButton { "P" };   // Pencil toggle in the lane header
 
     // Parameter selector (Volume / Pan)
