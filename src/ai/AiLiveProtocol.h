@@ -2,17 +2,17 @@
 
 #include <juce_core/juce_core.h>
 
-namespace cloudes
+namespace aizana
 {
     /**
-        AiLiveProtocol — Phase 4 flagship "Cloudes AI Studio", Slice 2 (live mixing).
+        AiLiveProtocol — Phase 4 flagship "Aizana AI Studio", Slice 2 (live mixing).
 
         Slice 1 lets the in-app agent author plugins by WRITING FILES (the standalone
-        `cloudes-mcp` process compiles .clap into the user's library). Mixing is different:
+        `aizana-mcp` process compiles .clap into the user's library). Mixing is different:
         the agent must steer the RUNNING session, not the disk. This is the shared, pure,
         golden-testable seam for that:
 
-          running Cloudes app            cloudes-mcp (spawned by the CLI)
+          running Aizana app            aizana-mcp (spawned by the CLI)
           ───────────────────            ───────────────────────────────
           AiStudioLiveServer  ◀── localhost TCP (one JSON line each way) ── live mix tool
           (hosts a loopback socket,       (reads the discovery file, connects,
@@ -20,7 +20,7 @@ namespace cloudes
 
         Both ends speak the same one-line JSON request/response and find each other through
         a small discovery file the app writes on startup. This layer is juce_core ONLY (no
-        Tracktion, no GUI) so it links into `cloudes-mcp` and is unit-testable; the live
+        Tracktion, no GUI) so it links into `aizana-mcp` and is unit-testable; the live
         track resolution + Edit mutation live in AiStudioLiveServer (app side, TE-aware).
 
         Wire format (newline-delimited, one message per connection):
@@ -53,8 +53,8 @@ namespace cloudes
     class AiLiveProtocol
     {
     public:
-        /** The discovery file the running app writes and `cloudes-mcp` reads:
-            ~/Library/Cloudes/aistudio/live.json
+        /** The discovery file the running app writes and `aizana-mcp` reads:
+            ~/Library/Aizana/aistudio/live.json
             (JUCE userApplicationDataDirectory on macOS is ~/Library, NOT
             ~/Library/Application Support — keep docs/debugging pointed there). */
         static juce::File liveBridgeFile();

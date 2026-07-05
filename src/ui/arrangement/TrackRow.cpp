@@ -176,7 +176,7 @@ void TrackRow::paint (juce::Graphics& g)
     // (Sketch 005 P1). The clipArea child is transparent, so this shows through
     // wherever a clip isn't drawn; clips themselves use the same colour.
     const int clipAreaH = expanded ? getHeight() - kAutomationLaneHeight : getHeight();
-    g.setColour (CloudesTrackColours::displayColour (track).withAlpha (0.10f));
+    g.setColour (AizanaTrackColours::displayColour (track).withAlpha (0.10f));
     g.fillRect (0, 0, getWidth(), clipAreaH);
 
     // Separator line at the bottom of the row

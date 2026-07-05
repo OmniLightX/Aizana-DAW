@@ -9,9 +9,9 @@
 #include "ai/StemImportEngine.h"
 #include "engine/EditManager.h"
 
-using cloudes::MixingEngine;
-using cloudes::MixPlan;
-using cloudes::TrackMixProfile;
+using aizana::MixingEngine;
+using aizana::MixPlan;
+using aizana::TrackMixProfile;
 
 namespace
 {
@@ -20,7 +20,7 @@ namespace
     juce::File makeTempDir()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                       .getChildFile ("cloudes_mixapply_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
+                       .getChildFile ("aizana_mixapply_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
         REQUIRE (dir.createDirectory());
         return dir;
     }
@@ -53,7 +53,7 @@ namespace
         return nullptr;
     }
 
-    // Count Cloudes built-in FX in a plugin list by the wrapped processor's name.
+    // Count Aizana built-in FX in a plugin list by the wrapped processor's name.
     int countBuiltIn (te::PluginList& list, const juce::String& procName)
     {
         int n = 0;
@@ -245,12 +245,12 @@ TEST_CASE ("MixApplyEngine: REF-03 master EQ folds onto the master plugin list, 
 
     // Two master-targeted shelves (the REF-03 style tilt) must fold into ONE master EQ.
     MixPlan plan;
-    cloudes::MixAction hi;
-    hi.type = cloudes::MixActionType::HighShelf;
+    aizana::MixAction hi;
+    hi.type = aizana::MixActionType::HighShelf;
     hi.targetName = "Master";  hi.freqHz = 10000.0f; hi.gainDb = 1.5f; hi.q = 0.7f;
     plan.add (hi);
-    cloudes::MixAction lo;
-    lo.type = cloudes::MixActionType::LowShelf;
+    aizana::MixAction lo;
+    lo.type = aizana::MixActionType::LowShelf;
     lo.targetName = "Master";  lo.freqHz = 100.0f;   lo.gainDb = 1.0f; lo.q = 0.7f;
     plan.add (lo);
     plan.summary = "REF-03 master tilt";
@@ -281,15 +281,15 @@ TEST_CASE ("MixApplyEngine: a user track literally named \"Master\" keeps its OW
     const int masterCompBefore = countBuiltIn (edit.getMasterPluginList(), "CompressorProcessor");
 
     MixPlan plan;
-    cloudes::MixAction eq;
-    eq.type = cloudes::MixActionType::HighShelf;
+    aizana::MixAction eq;
+    eq.type = aizana::MixActionType::HighShelf;
     eq.targetTrack = track->itemID;   // a REAL track id present in getAudioTracks
     eq.targetName  = "Master";
     eq.freqHz = 8000.0f; eq.gainDb = 2.0f; eq.q = 0.7f;
     plan.add (eq);
 
-    cloudes::MixAction comp;
-    comp.type = cloudes::MixActionType::Compress;
+    aizana::MixAction comp;
+    comp.type = aizana::MixActionType::Compress;
     comp.targetTrack = track->itemID;
     comp.targetName  = "Master";
     comp.ratio = 2.0f; comp.thresholdDb = -18.0f; comp.makeupGainDb = 0.0f;

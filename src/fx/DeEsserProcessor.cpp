@@ -154,7 +154,7 @@ void DeEsserProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void DeEsserProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
-    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes De-Esser");
+    desc = BuiltInPluginFormat::getDescriptionFor ("Aizana De-Esser");
 }
 
 juce::AudioProcessorEditor* DeEsserProcessor::createEditor()

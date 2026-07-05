@@ -1,6 +1,6 @@
 #include "FaustEmitter.h"
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -195,7 +195,7 @@ namespace cloudes
 
         juce::String out;
         out << "declare name \"" << name << "\";\n"
-            << "declare author \"Cloudes\";\n"
+            << "declare author \"Aizana\";\n"
             << "import(\"stdfaust.lib\");\n\n";
 
         if (spec.chain.empty())

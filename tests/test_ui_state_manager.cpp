@@ -19,10 +19,10 @@
 namespace
 {
     // Must mirror UIStateManager's private PropertiesFile keys.
-    constexpr const char* kModeKey   = "cloudes_ui_mode";
-    constexpr const char* kAssistKey = "cloudes_assist_enabled";
+    constexpr const char* kModeKey   = "aizana_ui_mode";
+    constexpr const char* kAssistKey = "aizana_assist_enabled";
 
-    // The PropertiesFile is process/user-global (app "CloudesEngineTests"), so clear
+    // The PropertiesFile is process/user-global (app "AizanaEngineTests"), so clear
     // the keys before tests that assert on un-persisted defaults — otherwise a prior
     // test run's persisted values would leak in and make this order-dependent.
     void clearPersistedDial (te::Engine& engine)

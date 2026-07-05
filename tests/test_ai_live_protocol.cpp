@@ -1,13 +1,13 @@
-// test_ai_live_protocol.cpp — Phase 4 flagship "Cloudes AI Studio", Slice 2 (live mixing).
+// test_ai_live_protocol.cpp — Phase 4 flagship "Aizana AI Studio", Slice 2 (live mixing).
 // Golden tests for the pure wire-format seam shared by the running app (AiStudioLiveServer)
-// and the spawned cloudes-mcp. The socket round-trip + TE mutation are user-tested.
+// and the spawned aizana-mcp. The socket round-trip + TE mutation are user-tested.
 
 #include <catch2/catch_test_macros.hpp>
 #include <juce_core/juce_core.h>
 
 #include "ai/AiLiveProtocol.h"
 
-using namespace cloudes;
+using namespace aizana;
 
 namespace
 {
@@ -98,7 +98,7 @@ TEST_CASE ("AiLiveProtocol: malformed response is invalid", "[aistudio][live]")
 TEST_CASE ("AiLiveProtocol: discovery file round-trips", "[aistudio][live]")
 {
     auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                    .getChildFile ("cloudes_live_test").getChildFile ("live.json");
+                    .getChildFile ("aizana_live_test").getChildFile ("live.json");
     file.deleteFile();
 
     SECTION ("missing file → invalid")
@@ -127,10 +127,10 @@ TEST_CASE ("AiLiveProtocol: discovery file round-trips", "[aistudio][live]")
     file.getParentDirectory().deleteRecursively();
 }
 
-TEST_CASE ("AiLiveProtocol: bridge file lives under Cloudes/aistudio", "[aistudio][live]")
+TEST_CASE ("AiLiveProtocol: bridge file lives under Aizana/aistudio", "[aistudio][live]")
 {
     const auto f = AiLiveProtocol::liveBridgeFile();
     CHECK (f.getFileName() == "live.json");
     CHECK (f.getParentDirectory().getFileName() == "aistudio");
-    CHECK (f.getFullPathName().contains ("Cloudes"));
+    CHECK (f.getFullPathName().contains ("Aizana"));
 }

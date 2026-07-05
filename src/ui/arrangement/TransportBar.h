@@ -25,7 +25,7 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    /** Edit/Mix view switcher (Studio One style, adapted to Cloudes' stacked
+    /** Edit/Mix view switcher (Studio One style, adapted to Aizana' stacked
      *  layout): Edit = arrangement only, Mix = mixer shown large. Wired by
      *  MainComponent, which owns the mixer visibility. */
     std::function<void (bool mixFocus)> onSelectViewMode;
@@ -47,29 +47,29 @@ private:
     ApplicationState& appState;
 
     // Transport controls — vector-icon buttons (Sketch 005 Pro-UI polish; no text labels).
-    IconButton rewindButton    { CloudesIcon::Rewind };     // Return to start (|◀)
-    IconButton playButton      { CloudesIcon::Play };
-    IconButton stopButton      { CloudesIcon::Stop };
-    IconButton recordButton    { CloudesIcon::Record };
+    IconButton rewindButton    { AizanaIcon::Rewind };     // Return to start (|◀)
+    IconButton playButton      { AizanaIcon::Play };
+    IconButton stopButton      { AizanaIcon::Stop };
+    IconButton recordButton    { AizanaIcon::Record };
 
     /** Enables/disables the metronome click track. */
-    IconButton metronomeButton { CloudesIcon::Metronome };
+    IconButton metronomeButton { AizanaIcon::Metronome };
 
     /** Enables/disables loop playback; lit when transport.looping is true. */
-    IconButton loopButton { CloudesIcon::Loop };
+    IconButton loopButton { AizanaIcon::Loop };
 
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
-    IconButton tapTempoButton { CloudesIcon::Tap };
+    IconButton tapTempoButton { AizanaIcon::Tap };
 
     /** Metronome settings ▾ — opens a popover bundling Vorzähler (count-in),
      *  Pre-Roll, Downbeat accent and click level (Sketch 006 A, Studio One pattern).
      *  Sits right of the metronome toggle as a split-button affordance. */
-    IconButton metroMenuButton { CloudesIcon::Chevron };
+    IconButton metroMenuButton { AizanaIcon::Chevron };
     void showMetronomeMenu();
 
     /** Auto-Punch — icon toggle; recording only happens within the Loop In/Out
      *  markers (te::Edit::recordingPunchInOut, persisted). Red when armed. */
-    IconButton autoPunchButton { CloudesIcon::Punch };
+    IconButton autoPunchButton { AizanaIcon::Punch };
     void toggleAutoPunch();
     void updateAutoPunchButton();
 

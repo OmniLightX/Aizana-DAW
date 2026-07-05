@@ -16,7 +16,7 @@ static juce::PluginDescription makeDesc (const juce::String& name,
     juce::PluginDescription desc;
     desc.name             = name;
     desc.pluginFormatName = "Built-in";
-    desc.manufacturerName = "Cloudes";
+    desc.manufacturerName = "Aizana";
     desc.category         = category;
     desc.fileOrIdentifier = identifier;
     desc.uniqueId         = identifier.hashCode();
@@ -33,20 +33,20 @@ static juce::PluginDescription makeDesc (const juce::String& name,
 
 void BuiltInPluginFormat::getBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results)
 {
-    results.add (new juce::PluginDescription (makeDesc ("Cloudes EQ",         "EQ",       "cloudes.eq")));
-    results.add (new juce::PluginDescription (makeDesc ("Cloudes Compressor", "Dynamics", "cloudes.compressor")));
-    results.add (new juce::PluginDescription (makeDesc ("Cloudes Reverb",     "Reverb",   "cloudes.reverb")));
-    results.add (new juce::PluginDescription (makeDesc ("Cloudes Limiter",    "Dynamics", "cloudes.limiter")));
-    results.add (new juce::PluginDescription (makeDesc ("Cloudes De-Esser",   "Dynamics", "cloudes.deesser")));
+    results.add (new juce::PluginDescription (makeDesc ("Aizana EQ",         "EQ",       "aizana.eq")));
+    results.add (new juce::PluginDescription (makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor")));
+    results.add (new juce::PluginDescription (makeDesc ("Aizana Reverb",     "Reverb",   "aizana.reverb")));
+    results.add (new juce::PluginDescription (makeDesc ("Aizana Limiter",    "Dynamics", "aizana.limiter")));
+    results.add (new juce::PluginDescription (makeDesc ("Aizana De-Esser",   "Dynamics", "aizana.deesser")));
 }
 
 juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::String& fxName)
 {
-    if (fxName == "Cloudes EQ")         return makeDesc ("Cloudes EQ",         "EQ",       "cloudes.eq");
-    if (fxName == "Cloudes Compressor") return makeDesc ("Cloudes Compressor", "Dynamics", "cloudes.compressor");
-    if (fxName == "Cloudes Reverb")     return makeDesc ("Cloudes Reverb",     "Reverb",   "cloudes.reverb");
-    if (fxName == "Cloudes Limiter")    return makeDesc ("Cloudes Limiter",    "Dynamics", "cloudes.limiter");
-    if (fxName == "Cloudes De-Esser")   return makeDesc ("Cloudes De-Esser",   "Dynamics", "cloudes.deesser");
+    if (fxName == "Aizana EQ")         return makeDesc ("Aizana EQ",         "EQ",       "aizana.eq");
+    if (fxName == "Aizana Compressor") return makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor");
+    if (fxName == "Aizana Reverb")     return makeDesc ("Aizana Reverb",     "Reverb",   "aizana.reverb");
+    if (fxName == "Aizana Limiter")    return makeDesc ("Aizana Limiter",    "Dynamics", "aizana.limiter");
+    if (fxName == "Aizana De-Esser")   return makeDesc ("Aizana De-Esser",   "Dynamics", "aizana.deesser");
 
     jassertfalse;  // Unknown built-in FX name
     return {};
@@ -59,26 +59,26 @@ juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::Stri
 void BuiltInPluginFormat::findAllTypesForFile (juce::OwnedArray<juce::PluginDescription>& results,
                                                 const juce::String& fileOrIdentifier)
 {
-    if (fileOrIdentifier == "cloudes.eq")
-        results.add (new juce::PluginDescription (makeDesc ("Cloudes EQ", "EQ", "cloudes.eq")));
-    else if (fileOrIdentifier == "cloudes.compressor")
-        results.add (new juce::PluginDescription (makeDesc ("Cloudes Compressor", "Dynamics", "cloudes.compressor")));
-    else if (fileOrIdentifier == "cloudes.reverb")
-        results.add (new juce::PluginDescription (makeDesc ("Cloudes Reverb", "Reverb", "cloudes.reverb")));
-    else if (fileOrIdentifier == "cloudes.limiter")
-        results.add (new juce::PluginDescription (makeDesc ("Cloudes Limiter", "Dynamics", "cloudes.limiter")));
-    else if (fileOrIdentifier == "cloudes.deesser")
-        results.add (new juce::PluginDescription (makeDesc ("Cloudes De-Esser", "Dynamics", "cloudes.deesser")));
+    if (fileOrIdentifier == "aizana.eq")
+        results.add (new juce::PluginDescription (makeDesc ("Aizana EQ", "EQ", "aizana.eq")));
+    else if (fileOrIdentifier == "aizana.compressor")
+        results.add (new juce::PluginDescription (makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor")));
+    else if (fileOrIdentifier == "aizana.reverb")
+        results.add (new juce::PluginDescription (makeDesc ("Aizana Reverb", "Reverb", "aizana.reverb")));
+    else if (fileOrIdentifier == "aizana.limiter")
+        results.add (new juce::PluginDescription (makeDesc ("Aizana Limiter", "Dynamics", "aizana.limiter")));
+    else if (fileOrIdentifier == "aizana.deesser")
+        results.add (new juce::PluginDescription (makeDesc ("Aizana De-Esser", "Dynamics", "aizana.deesser")));
 }
 
 bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fileOrIdentifier)
 {
-    return fileOrIdentifier.startsWith ("cloudes.");
+    return fileOrIdentifier.startsWith ("aizana.");
 }
 
 juce::StringArray BuiltInPluginFormat::searchPathsForPlugins (const juce::FileSearchPath&, bool, bool)
 {
-    return { "cloudes.eq", "cloudes.compressor", "cloudes.reverb", "cloudes.limiter", "cloudes.deesser" };
+    return { "aizana.eq", "aizana.compressor", "aizana.reverb", "aizana.limiter", "aizana.deesser" };
 }
 
 void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& desc,
@@ -88,15 +88,15 @@ void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& d
 {
     std::unique_ptr<juce::AudioPluginInstance> instance;
 
-    if (desc.fileOrIdentifier == "cloudes.eq")
+    if (desc.fileOrIdentifier == "aizana.eq")
         instance = std::make_unique<EQProcessor>();
-    else if (desc.fileOrIdentifier == "cloudes.compressor")
+    else if (desc.fileOrIdentifier == "aizana.compressor")
         instance = std::make_unique<CompressorProcessor>();
-    else if (desc.fileOrIdentifier == "cloudes.reverb")
+    else if (desc.fileOrIdentifier == "aizana.reverb")
         instance = std::make_unique<ReverbProcessor>();
-    else if (desc.fileOrIdentifier == "cloudes.limiter")
+    else if (desc.fileOrIdentifier == "aizana.limiter")
         instance = std::make_unique<LimiterProcessor>();
-    else if (desc.fileOrIdentifier == "cloudes.deesser")
+    else if (desc.fileOrIdentifier == "aizana.deesser")
         instance = std::make_unique<DeEsserProcessor>();
 
     if (instance != nullptr)

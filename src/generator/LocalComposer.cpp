@@ -1,6 +1,6 @@
 #include "LocalComposer.h"
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {

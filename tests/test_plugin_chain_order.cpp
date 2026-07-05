@@ -380,7 +380,7 @@ TEST_CASE ("PluginChain: moveUserPluginToSlot reorders user plugins around inter
 // ---------------------------------------------------------------------------
 // Regression: a third-party plugin must be registered with the ENGINE's knownPluginList
 // when inserted. TE's ExternalPlugin::findMatchingPlugin() resolves the real instance
-// from engine.getPluginManager().knownPluginList — NOT from Cloudes' scanner list. Before
+// from engine.getPluginManager().knownPluginList — NOT from Aizana' scanner list. Before
 // this fix, inserted VST3/AU plugins loaded as shells: getAudioPluginInstance() was null,
 // so the editor showed "No editor available" and no audio was processed.
 TEST_CASE ("PluginManager: insertPlugin registers the description with the engine", "[plugins][PLUG-04]")

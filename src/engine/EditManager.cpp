@@ -16,7 +16,7 @@ EditManager::EditManager()
 
     // Register CLAP with the ENGINE's format manager so ExternalPlugin (and thus
     // PluginManager::insertPlugin) can instantiate .clap plugins — both 3rd-party CLAPs
-    // and the Cloudes-generated ones (Phase 4 / Iteration B). The scanner has its own
+    // and the Aizana-generated ones (Phase 4 / Iteration B). The scanner has its own
     // ClapPluginFormat; the engine needs its own to host them.
     engine.getPluginManager().pluginFormatManager.addFormat (new ClapPluginFormat());
 
@@ -57,11 +57,11 @@ void EditManager::createNewEdit()
     // causing recording contexts to fail before any WaveAudioClip is created.
     // Give unsaved sessions a stable writable media root immediately.
     auto unsavedDir = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
-                          .getChildFile ("Cloudes")
+                          .getChildFile ("Aizana")
                           .getChildFile ("Unsaved Recordings");
     if (! unsavedDir.createDirectory())
         unsavedDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                         .getChildFile ("Cloudes Unsaved Recordings");
+                         .getChildFile ("Aizana Unsaved Recordings");
     unsavedDir.createDirectory();
 
     currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
@@ -107,7 +107,7 @@ void EditManager::createNewEdit()
     // Ensure transport is stopped (it is by default, but be explicit)
     edit->getTransport().stop (false, false);
 
-    // Disable TE's built-in click track. Cloudes uses MetronomeGenerator instead —
+    // Disable TE's built-in click track. Aizana uses MetronomeGenerator instead —
     // a custom synthesiser that runs in AudioEngine::audioDeviceIOCallbackWithContext.
     // TE's click track defaults to false for fresh edits, but saved edit state or
     // future TE defaults could enable it, resulting in two simultaneous click generators.

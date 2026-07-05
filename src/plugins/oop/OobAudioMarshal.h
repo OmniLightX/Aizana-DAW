@@ -16,7 +16,7 @@
  * Audio-thread safe: only memcpy + the ring's lock-free round trip. No allocation, no lock.
  * Planar layout matches PluginHostBridge: channel c at ring.audioData() + c * maxBlockSamples().
  */
-namespace cloudes
+namespace aizana
 {
     struct OobAudioMarshal
     {

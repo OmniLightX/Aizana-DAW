@@ -1,4 +1,4 @@
-declare name "CloudesCompressor";
+declare name "AizanaCompressor";
 declare description "Compressor — tames dynamics (threshold, ratio, attack, release, makeup)";
 import("stdfaust.lib");
 

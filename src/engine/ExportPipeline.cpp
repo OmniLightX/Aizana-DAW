@@ -128,7 +128,7 @@ juce::String ExportPipeline::exportMixdown(te::Edit& edit, const ExportOptions& 
     if (onProgress)
         onProgress(0.0f);
 
-    juce::File renderedFile = te::Renderer::renderToFile ("Cloudes Mixdown Export", params);
+    juce::File renderedFile = te::Renderer::renderToFile ("Aizana Mixdown Export", params);
 
     if (onProgress)
         onProgress(1.0f);

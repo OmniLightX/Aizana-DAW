@@ -37,7 +37,7 @@
  */
 
 /** ValueTree property name used to tag Bus and FX AudioTracks. */
-static const juce::Identifier kChannelTypeProp { "cloudesChannelType" };
+static const juce::Identifier kChannelTypeProp { "aizanaChannelType" };
 /** Property value for Bus Channel AudioTracks. */
 static const juce::String kChannelTypeBus { "bus" };
 /** Property value for FX Channel AudioTracks. */
@@ -46,13 +46,13 @@ static const juce::String kChannelTypeFX  { "fx" };
 static const juce::String kChannelTypeVCA { "vca" };
 
 /** Property stored on a member track: EditItemID string of its VCA channel. */
-static const juce::Identifier kVCAAssignmentProp { "cloudesVCA" };
+static const juce::Identifier kVCAAssignmentProp { "aizanaVCA" };
 
 /** Custom property stored on a source track when it is routed to a Bus Channel.
  *  Caches the bus name so the channel strip button can display it reliably even
  *  when TE's getDestinationTrack() is transiently unavailable during graph updates.
  *  Cleared by unrouteFromBus(). */
-static const juce::Identifier kOutputBusNameProp { "cloudesOutputBusName" };
+static const juce::Identifier kOutputBusNameProp { "aizanaOutputBusName" };
 
 class MixerEngine
 {
@@ -194,7 +194,7 @@ public:
     static bool isAudioChannel (const te::AudioTrack& track);
 
     // -------------------------------------------------------------------------
-    // VCA channels (group faders — Studio One pattern, Cloudes semantics:
+    // VCA channels (group faders — Studio One pattern, Aizana semantics:
     // the VCA fader moves its members' faders RELATIVELY; no audio routing).
     // -------------------------------------------------------------------------
 

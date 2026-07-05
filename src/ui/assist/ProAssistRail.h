@@ -119,7 +119,7 @@ public:
         g.drawText ("C", headerAv, juce::Justification::centred);
         g.setColour (juce::Colours::white);
         g.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
-        g.drawText ("Cloudes Assist", headerText, juce::Justification::centredLeft);
+        g.drawText ("Aizana Assist", headerText, juce::Justification::centredLeft);
 
         // scope
         g.setColour (juce::Colour (0xff888888));

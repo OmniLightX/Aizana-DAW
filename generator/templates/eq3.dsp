@@ -1,4 +1,4 @@
-declare name "CloudesEQ3";
+declare name "AizanaEQ3";
 declare description "3-band EQ — low shelf, sweepable mid bell, high shelf";
 import("stdfaust.lib");
 

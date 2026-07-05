@@ -127,7 +127,7 @@ void LimiterProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void LimiterProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
-    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Limiter");
+    desc = BuiltInPluginFormat::getDescriptionFor ("Aizana Limiter");
 }
 
 juce::AudioProcessorEditor* LimiterProcessor::createEditor()

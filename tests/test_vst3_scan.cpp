@@ -15,7 +15,7 @@
 static juce::File getTempPluginListFile()
 {
     return juce::File::getSpecialLocation (juce::File::tempDirectory)
-               .getChildFile ("cloudes_test_plugin_list.xml");
+               .getChildFile ("aizana_test_plugin_list.xml");
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ TEST_CASE ("VST3Scan: scan-complete marker round-trips (drives auto-resume)",
            "[plugins][PLUG-01]")
 {
     const auto listFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                              .getChildFile ("cloudes_test_scan_marker.xml");
+                              .getChildFile ("aizana_test_scan_marker.xml");
     listFile.deleteFile();
 
     // A fresh scanner defaults to "complete" (an empty/manual list needs no resume).

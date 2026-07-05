@@ -10,12 +10,12 @@
  * Runs an ONNX model through ONNX Runtime with the CoreML execution provider so
  * inference lands on the Apple Neural Engine when available (CPU fallback on
  * Intel / when CoreML can't take the graph). This is the concrete IInferenceBackend
- * the AIEngine owns; the rest of Cloudes never sees an ORT header — all of it is
+ * the AIEngine owns; the rest of Aizana never sees an ORT header — all of it is
  * hidden behind a PIMPL.
  *
  * Until a model is loaded, isAvailable() is false and run() is a defined passthrough
  * (identity) — we never fabricate inference output. If the build is configured with
- * -DCLOUDES_ENABLE_ONNX=OFF (no CLOUDES_HAVE_ONNXRUNTIME), this compiles as that same
+ * -DAIZANA_ENABLE_ONNX=OFF (no AIZANA_HAVE_ONNXRUNTIME), this compiles as that same
  * no-op stub, so callers behave identically whether or not ORT is linked.
  *
  * Threading: construct/load/run on a background thread only (AIEngine pool) — never

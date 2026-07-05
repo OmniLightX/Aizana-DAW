@@ -1,4 +1,4 @@
-// test_faust_compiler.cpp — Generator G1: prove Cloudes can compile a Faust DSP source
+// test_faust_compiler.cpp — Generator G1: prove Aizana can compile a Faust DSP source
 // produced at RUNTIME into a real .clap (the heart of "generate completely new plugins").
 #include <catch2/catch_test_macros.hpp>
 #include <juce_core/juce_core.h>
@@ -8,15 +8,15 @@
 #include "../src/plugins/ClapPluginFormat.h"
 #include "../src/plugins/PluginScanner.h"
 
-#ifndef CLOUDES_TEST_BUILD_DIR
- #define CLOUDES_TEST_BUILD_DIR "."
+#ifndef AIZANA_TEST_BUILD_DIR
+ #define AIZANA_TEST_BUILD_DIR "."
 #endif
-#ifndef CLOUDES_TEST_SOURCE_DIR
- #define CLOUDES_TEST_SOURCE_DIR "."
+#ifndef AIZANA_TEST_SOURCE_DIR
+ #define AIZANA_TEST_SOURCE_DIR "."
 #endif
 
-using cloudes::FaustCompiler;
-using cloudes::FaustToolchain;
+using aizana::FaustCompiler;
+using aizana::FaustToolchain;
 
 TEST_CASE ("FaustCompiler: sanitiseId", "[faustgen]")
 {
@@ -30,9 +30,9 @@ TEST_CASE ("FaustCompiler: compiles a runtime DSP into a real .clap", "[faustgen
 {
     auto tc = FaustToolchain::resolve();   // faust + archdir + faustInclude from the install
     // Dev toolchain headers (the app bundles these; tests use the fetched/source copies):
-    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
-    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
-    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+    tc.clapInclude        = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (AIZANA_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
 
     if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
         SKIP ("Faust toolchain not available in this environment");
@@ -47,7 +47,7 @@ TEST_CASE ("FaustCompiler: compiles a runtime DSP into a real .clap", "[faustgen
         "process = par(i, 2, _ * lfo);\n";
 
     const auto outDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                            .getChildFile ("cloudes_faustgen_test");
+                            .getChildFile ("aizana_faustgen_test");
     outDir.deleteRecursively();
 
     const auto r = FaustCompiler::compile (dsp, "Runtime Tremolo", tc, outDir);
@@ -66,9 +66,9 @@ TEST_CASE ("FaustCompiler: compiles a runtime DSP into a real .clap", "[faustgen
 TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue changes audio", "[faustgen][plugins]")
 {
     auto tc = FaustToolchain::resolve();
-    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
-    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
-    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+    tc.clapInclude        = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (AIZANA_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
 
     if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
         SKIP ("Faust toolchain not available in this environment");
@@ -82,7 +82,7 @@ TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue chang
         "process = par(i, 2, _ * g);\n";
 
     const auto outDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                            .getChildFile ("cloudes_faustgen_param_test");
+                            .getChildFile ("aizana_faustgen_param_test");
     outDir.deleteRecursively();
 
     const auto r = FaustCompiler::compile (dsp, "Runtime Gain", tc, outDir);
@@ -147,9 +147,9 @@ TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue chang
 TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap to the KnownPluginList", "[faustgen][plugins][library]")
 {
     auto tc = FaustToolchain::resolve();
-    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
-    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
-    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+    tc.clapInclude        = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (AIZANA_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
 
     if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
         SKIP ("Faust toolchain not available in this environment");
@@ -161,7 +161,7 @@ TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap t
         "process = par(i, 2, _ * g);\n";
 
     const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                         .getChildFile ("cloudes_genlib_test");
+                         .getChildFile ("aizana_genlib_test");
     dir.deleteRecursively();
     dir.createDirectory();
 
@@ -177,14 +177,14 @@ TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap t
     CHECK (added >= 1);
     CHECK (scanner.getKnownPlugins().getTypes().size() == before + added);
 
-    // The new entry is a CLAP plugin grouped under the "Cloudes" manufacturer.
+    // The new entry is a CLAP plugin grouped under the "Aizana" manufacturer.
     bool found = false;
     for (const auto& t : scanner.getKnownPlugins().getTypes())
         if (t.fileOrIdentifier == r.clapFile.getFullPathName())
         {
             found = true;
             CHECK (t.pluginFormatName == "CLAP");
-            CHECK (t.manufacturerName == "Cloudes");
+            CHECK (t.manufacturerName == "Aizana");
         }
     CHECK (found);
 

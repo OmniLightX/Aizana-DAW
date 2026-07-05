@@ -1,6 +1,6 @@
 #include "PluginGenerator.h"
 
-namespace cloudes
+namespace aizana
 {
     const std::vector<GeneratorTemplate>& PluginGenerator::templates()
     {

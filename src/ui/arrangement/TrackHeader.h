@@ -94,7 +94,7 @@ public:
     std::function<void (TrackHeader*)> onSelectionRequest;
 
     /** Called after the track colour changes so ArrangementView can repaint the
-     *  row wash + clips (which read the same colour via CloudesTrackColours). */
+     *  row wash + clips (which read the same colour via AizanaTrackColours). */
     std::function<void ()> onColourChanged;
 
 private:
@@ -107,7 +107,7 @@ private:
         te::Track&            track;
         std::function<void()> onClick;
         explicit ColourBar (te::Track& t) : track (t) { setTooltip (juce::String::fromUTF8 ("Track-Farbe w\xc3\xa4hlen (Klick)")); }
-        void paint (juce::Graphics& g) override { g.fillAll (CloudesTrackColours::displayColour (track)); }
+        void paint (juce::Graphics& g) override { g.fillAll (AizanaTrackColours::displayColour (track)); }
         void mouseDown (const juce::MouseEvent& e) override
         {
             if (! e.mods.isPopupMenu() && onClick) onClick();

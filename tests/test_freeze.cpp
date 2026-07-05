@@ -3,9 +3,9 @@
 // The freeze ACTION is a thin call to TE's native AudioTrack::setFrozen
 // (individualFreeze), which renders the track through its plugin chain to a
 // freeze file — too integration-heavy (needs a playback graph + UIBehaviour) to
-// exercise headless. What Cloudes OWNS is the guard that decides whether Freeze
+// exercise headless. What Aizana OWNS is the guard that decides whether Freeze
 // is offered: TE refuses to individually-freeze a track routed into another
-// track (a bus), so cloudes::canFreezeIndividually must agree, and an attempted
+// track (a bus), so aizana::canFreezeIndividually must agree, and an attempted
 // freeze on a routed track must be a no-op (and must NOT trigger a render).
 
 #include <catch2/catch_test_macros.hpp>
@@ -30,7 +30,7 @@ TEST_CASE ("Freeze: a master-routed track is individually freezable", "[freeze]"
     REQUIRE (track != nullptr);
 
     // A fresh track outputs to the device (master) → individually freezable.
-    REQUIRE (cloudes::canFreezeIndividually (*track));
+    REQUIRE (aizana::canFreezeIndividually (*track));
 }
 
 TEST_CASE ("Freeze: a bus-routed track is NOT individually freezable", "[freeze]")
@@ -44,11 +44,11 @@ TEST_CASE ("Freeze: a bus-routed track is NOT individually freezable", "[freeze]
     REQUIRE (src != nullptr);
     REQUIRE (bus != nullptr);
 
-    // Route src into bus — the Cloudes group-bus pattern.
+    // Route src into bus — the Aizana group-bus pattern.
     src->getOutput().setOutputToTrack (bus);
 
-    REQUIRE_FALSE (cloudes::canFreezeIndividually (*src));
-    REQUIRE (cloudes::canFreezeIndividually (*bus));   // bus → master, freezable
+    REQUIRE_FALSE (aizana::canFreezeIndividually (*src));
+    REQUIRE (aizana::canFreezeIndividually (*bus));   // bus → master, freezable
 
     // TE must refuse the freeze on a routed track (no render triggered):
     // isFrozen stays false.

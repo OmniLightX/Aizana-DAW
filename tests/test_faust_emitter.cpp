@@ -10,14 +10,14 @@
 #include "generator/LocalComposer.h"
 #include "generator/FaustCompiler.h"
 
-#ifndef CLOUDES_TEST_BUILD_DIR
- #define CLOUDES_TEST_BUILD_DIR "."
+#ifndef AIZANA_TEST_BUILD_DIR
+ #define AIZANA_TEST_BUILD_DIR "."
 #endif
-#ifndef CLOUDES_TEST_SOURCE_DIR
- #define CLOUDES_TEST_SOURCE_DIR "."
+#ifndef AIZANA_TEST_SOURCE_DIR
+ #define AIZANA_TEST_SOURCE_DIR "."
 #endif
 
-using namespace cloudes;
+using namespace aizana;
 
 TEST_CASE ("FaustEmitter: empty chain → stereo passthrough", "[faustgen][g2]")
 {
@@ -37,7 +37,7 @@ TEST_CASE ("FaustEmitter: deterministic golden output", "[faustgen][g2]")
 
     const juce::String expected =
         "declare name \"Test Chain\";\n"
-        "declare author \"Cloudes\";\n"
+        "declare author \"Aizana\";\n"
         "import(\"stdfaust.lib\");\n"
         "\n"
         "stage0 = par(i, 2, fi.lowpass(2, fc)) with {\n"
@@ -128,9 +128,9 @@ TEST_CASE ("LocalComposer: generic vocal prompt → usable vocal chain, not bare
 TEST_CASE ("FaustEmitter: all voice blocks compile to a real .clap", "[faustgen][g2]")
 {
     auto tc = FaustToolchain::resolve();
-    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
-    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
-    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+    tc.clapInclude        = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (AIZANA_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
 
     if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
         SKIP ("Faust toolchain not available in this environment");
@@ -142,7 +142,7 @@ TEST_CASE ("FaustEmitter: all voice blocks compile to a real .clap", "[faustgen]
     const auto src = FaustEmitter::emit (spec);
 
     const auto outDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                            .getChildFile ("cloudes_voice_test");
+                            .getChildFile ("aizana_voice_test");
     outDir.deleteRecursively();
 
     const auto r = FaustCompiler::compile (src, spec.name, tc, outDir);
@@ -158,9 +158,9 @@ TEST_CASE ("FaustEmitter: all voice blocks compile to a real .clap", "[faustgen]
 TEST_CASE ("LocalComposer → FaustEmitter → FaustCompiler produces a .clap", "[faustgen][g2]")
 {
     auto tc = FaustToolchain::resolve();
-    tc.clapInclude        = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
-    tc.clapHelpersInclude = juce::File (CLOUDES_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
-    tc.guiGlobals         = juce::File (CLOUDES_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
+    tc.clapInclude        = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_gen-src/include");
+    tc.clapHelpersInclude = juce::File (AIZANA_TEST_BUILD_DIR).getChildFile ("_deps/clap_helpers-src/include");
+    tc.guiGlobals         = juce::File (AIZANA_TEST_SOURCE_DIR).getChildFile ("generator/faust_gui_globals.cpp");
 
     if (! tc.faust.existsAsFile() || ! tc.clapInclude.isDirectory() || ! tc.guiGlobals.existsAsFile())
         SKIP ("Faust toolchain not available in this environment");
@@ -169,7 +169,7 @@ TEST_CASE ("LocalComposer → FaustEmitter → FaustCompiler produces a .clap", 
     const auto src  = FaustEmitter::emit (spec);
 
     const auto outDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                            .getChildFile ("cloudes_g2_test");
+                            .getChildFile ("aizana_g2_test");
     outDir.deleteRecursively();
 
     const auto r = FaustCompiler::compile (src, spec.name, tc, outDir);

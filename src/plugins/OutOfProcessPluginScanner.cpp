@@ -41,7 +41,7 @@ void registerScannableFormats (juce::AudioPluginFormatManager& fm)
 {
     fm.addDefaultFormats();                     // VST3 (+ AudioUnit on macOS)
     fm.addFormat (new ClapPluginFormat());      // CLAP via the direct C API
-    fm.addFormat (new BuiltInPluginFormat());   // Cloudes' own FX (synthetic — never crashes)
+    fm.addFormat (new BuiltInPluginFormat());   // Aizana' own FX (synthetic — never crashes)
 }
 
 // ===========================================================================
@@ -267,7 +267,7 @@ public:
                              juce::OwnedArray<juce::PluginDescription>& result,
                              const juce::String& fileOrIdentifier) override
     {
-        // Built-in Cloudes FX are synthetic descriptions (no binary to load, can't hang).
+        // Built-in Aizana FX are synthetic descriptions (no binary to load, can't hang).
         if (format.getName() == "Built-in")
         {
             format.findAllTypesForFile (result, fileOrIdentifier);

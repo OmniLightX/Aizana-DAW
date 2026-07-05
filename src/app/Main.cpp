@@ -6,17 +6,17 @@
 
 //==============================================================================
 /**
- * CloudesApplication — JUCE application entry point for the Cloudes DAW.
+ * AizanaApplication — JUCE application entry point for the Aizana DAW.
  *
  * Phase 1 skeleton. Tracktion Engine initialisation, audio device setup,
  * and session management are added in plan 01-02 (Engine Core).
  */
-class CloudesApplication : public juce::JUCEApplication
+class AizanaApplication : public juce::JUCEApplication
 {
 public:
-    CloudesApplication() = default;
+    AizanaApplication() = default;
 
-    const juce::String getApplicationName() override       { return "Cloudes"; }
+    const juce::String getApplicationName() override       { return "Aizana"; }
     const juce::String getApplicationVersion() override    { return "0.1.0"; }
 
     // Normally single-instance — but the out-of-process plugin scanner relaunches this
@@ -26,7 +26,7 @@ public:
     {
         const auto cmd = getCommandLineParameters();
         return cmd.contains (kScannerProcessUID)
-            || cmd.contains (cloudes::kPluginHostProcessUID);   // out-of-process plugin host worker
+            || cmd.contains (aizana::kPluginHostProcessUID);   // out-of-process plugin host worker
     }
 
     void initialise (const juce::String& commandLine) override
@@ -42,7 +42,7 @@ public:
         // Out-of-process plugin host worker (E5.3b): this process hosts ONE real plugin for the
         // main app and pumps its audio over a SharedAudioRing. Load via a fresh format manager
         // (CLAP/VST3/AU/Built-in). Like the scanner worker: no window, no engine, no mic prompt.
-        if (auto host = cloudes::startPluginHostWorkerIfRequested (commandLine,
+        if (auto host = aizana::startPluginHostWorkerIfRequested (commandLine,
                 [] (const juce::PluginDescription& d, double rate, int block, juce::String& err)
                     -> std::unique_ptr<juce::AudioProcessor>
                 {
@@ -96,9 +96,9 @@ public:
 private:
     std::unique_ptr<MainWindow> mainWindow;
     std::shared_ptr<void>       scannerWorker;      // alive only in the scan-worker subprocess
-    std::shared_ptr<cloudes::PluginHostWorkerHandle> pluginHostWorker;   // alive only in a plugin-host worker
+    std::shared_ptr<aizana::PluginHostWorkerHandle> pluginHostWorker;   // alive only in a plugin-host worker
 };
 
 //==============================================================================
 // JUCE application entry point macro
-START_JUCE_APPLICATION (CloudesApplication)
+START_JUCE_APPLICATION (AizanaApplication)

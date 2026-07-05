@@ -1,6 +1,6 @@
 #include "PluginSpec.h"
 
-namespace cloudes
+namespace aizana
 {
     juce::String SpecBlock::displayName() const
     {

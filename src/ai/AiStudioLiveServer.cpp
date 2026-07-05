@@ -10,7 +10,7 @@
 
 namespace te = tracktion::engine;
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -60,14 +60,14 @@ namespace cloudes
         // One EQ band JSON ({type,freq,gain,q}) → a MixAction. type ∈ high_pass / low_shelf /
         // high_shelf / bell (bell picks carve vs. boost by gain sign). Returns false if freq <= 0.
         bool buildEqAction (const juce::var& band, tracktion::engine::EditItemID id,
-                            const juce::String& name, cloudes::MixAction& out)
+                            const juce::String& name, aizana::MixAction& out)
         {
             const auto type = band.getProperty ("type", {}).toString().toLowerCase();
             const float freq = (float) (double) band.getProperty ("freq", 0.0);
             if (freq <= 0.0f)
                 return false;
 
-            out = cloudes::MixAction{};
+            out = aizana::MixAction{};
             out.targetTrack = id;
             out.targetName  = name;
             out.freqHz      = freq;
@@ -75,21 +75,21 @@ namespace cloudes
             out.q           = argNum (band, "q", 0.7f);
 
             if (type == "high_pass" || type == "highpass" || type == "hpf")
-                out.type = cloudes::MixActionType::HighPassFilter;
+                out.type = aizana::MixActionType::HighPassFilter;
             else if (type == "low_shelf" || type == "lowshelf")
-                out.type = cloudes::MixActionType::LowShelf;
+                out.type = aizana::MixActionType::LowShelf;
             else if (type == "high_shelf" || type == "highshelf")
-                out.type = cloudes::MixActionType::HighShelf;
+                out.type = aizana::MixActionType::HighShelf;
             else
-                out.type = (out.gainDb < 0.0f) ? cloudes::MixActionType::CarveBand
-                                               : cloudes::MixActionType::BoostBand;   // bell
+                out.type = (out.gainDb < 0.0f) ? aizana::MixActionType::CarveBand
+                                               : aizana::MixActionType::BoostBand;   // bell
             return true;
         }
     }
 
     //==============================================================================
     AiStudioLiveServer::AiStudioLiveServer (EditManager& em, MixApplyEngine& ma, AICommandBridge& br)
-        : juce::Thread ("cloudes-live-bridge"), editManager (em), mixApply (ma), commandBridge (br)
+        : juce::Thread ("aizana-live-bridge"), editManager (em), mixApply (ma), commandBridge (br)
     {
     }
 
@@ -209,7 +209,7 @@ namespace cloudes
 
             juce::MessageManager::callAsync ([this, req, pending, guard]
             {
-                pending->out = guard->load() ? dispatch (req) : fail ("Cloudes is shutting down");
+                pending->out = guard->load() ? dispatch (req) : fail ("Aizana is shutting down");
                 pending->done.signal();
             });
 
@@ -235,7 +235,7 @@ namespace cloudes
     {
         auto* edit = editManager.getEdit();
         if (edit == nullptr)
-            return fail ("no session is open in Cloudes");
+            return fail ("no session is open in Aizana");
 
         if (req.tool == "list_tracks")
         {
@@ -368,7 +368,7 @@ namespace cloudes
             return ok (verb + " \"" + tname + "\".");
         }
 
-        // EQ — one Cloudes EQ per call (bands fold into a single plugin instance).
+        // EQ — one Aizana EQ per call (bands fold into a single plugin instance).
         if (req.tool == "set_track_eq")
         {
             const auto name = req.args.getProperty ("track", {}).toString();

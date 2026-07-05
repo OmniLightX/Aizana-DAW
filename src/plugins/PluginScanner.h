@@ -85,16 +85,16 @@ public:
     juce::KnownPluginList& getKnownPlugins()              { return knownPlugins; }
 
     // ---------------------------------------------------------------------------
-    // Generated plugin library (Cloudes-generated CLAP plugins)
+    // Generated plugin library (Aizana-generated CLAP plugins)
     // ---------------------------------------------------------------------------
 
     /**
-     * Scan a directory of Cloudes-generated .clap plugins and add them to the
+     * Scan a directory of Aizana-generated .clap plugins and add them to the
      * KnownPluginList, so they appear in the plugin browser / insert menu like any
      * other plugin AND survive restarts (the .clap files on disk are the source of
      * truth — call this at startup and after each generation, not the XML cache).
      *
-     * Generated plugins are grouped under the "Cloudes" manufacturer. addType()
+     * Generated plugins are grouped under the "Aizana" manufacturer. addType()
      * de-dupes by identifier, so repeat calls are safe and idempotent.
      *
      * @return number of NEW plugins added (0 if all were already known).
@@ -104,7 +104,7 @@ public:
     /**
      * Rename a generated plugin's DISPLAY name (G5b — library management). The real name
      * is baked into the .clap by Faust, so the new name is stored in a sidecar
-     * (.cloudes-names.json) in the generated dir and re-applied by registerGeneratedPlugins()
+     * (.aizana-names.json) in the generated dir and re-applied by registerGeneratedPlugins()
      * on every startup. Also updates the live KnownPluginList immediately so the browser
      * reflects it. Returns false if newDisplayName is blank or the .clap doesn't exist.
      */

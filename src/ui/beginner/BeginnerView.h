@@ -19,7 +19,7 @@ class MixerEngine;
  *             tracks = children; plain tracks atomic; FX hidden).
  *   Slice 3 — the synthesis A+B: a dockable Coach rail (shown when assist is on)
  *             with proactive feedback cards + 1-click intents + a command bar, and
- *             "The Reveal" overlay (what Cloudes did + "Zeig's mir" jumps to Pro).
+ *             "The Reveal" overlay (what Aizana did + "Zeig's mir" jumps to Pro).
  *             The feedback/intents are static previews here; Block B wires the real
  *             HeuristicFeedbackEngine + IntentEngine behind the same surface.
  */

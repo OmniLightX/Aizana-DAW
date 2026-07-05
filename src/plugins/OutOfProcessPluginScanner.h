@@ -14,7 +14,7 @@
  * Previously the scan ran in-process, so one bad plugin killed the app and the user
  * could never finish scanning their library.
  *
- * Two halves, both compiled into the Cloudes binary:
+ * Two halves, both compiled into the Aizana binary:
  *   - Coordinator: installOutOfProcessScanner() registers a KnownPluginList::CustomScanner.
  *     The existing PluginDirectoryScanner loop then routes every probe through a subprocess
  *     automatically (KnownPluginList::scanAndAddFile blacklists on a false return).
@@ -25,7 +25,7 @@
 
 // Shared handshake token between coordinator and worker. Also used to let the worker
 // process through the app's single-instance lock (its command line contains this id).
-inline constexpr const char* kScannerProcessUID = "cloudes_plugin_scan";
+inline constexpr const char* kScannerProcessUID = "aizana_plugin_scan";
 
 /** Register the disk-scannable plugin formats (VST3 / AU / CLAP / Built-in). Used on
  *  BOTH sides so the coordinator's format name always matches a worker format. */

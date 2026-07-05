@@ -1,7 +1,7 @@
 #include "AiStudioPanel.h"
 #include "generator/FaustCompiler.h"
 
-using namespace cloudes;
+using namespace aizana;
 
 //==============================================================================
 // Background thread: runs the agent CLI and streams its stdout into the panel.
@@ -9,7 +9,7 @@ using namespace cloudes;
 struct AiStudioPanel::AgentRunThread : public juce::Thread
 {
     AgentRunThread (AiStudioPanel& ownerPanel, juce::StringArray spawnArgs, bool parseAsJson)
-        : juce::Thread ("cloudes-ai-agent")
+        : juce::Thread ("aizana-ai-agent")
         , owner (ownerPanel)
         , args  (std::move (spawnArgs))
         , parseJson (parseAsJson)
@@ -175,7 +175,7 @@ void AiStudioPanel::refreshBackends()
     input.setEnabled (true);
     sessionId = juce::Uuid().toDashedString();
     firstTurn = true;
-    status.setText (cli.displayName + juce::String::fromUTF8 (" verbunden \xe2\x80\xa2 generierte Plugins \xe2\x86\x92 \xe2\x80\x9e" "Cloudes\xe2\x80\x9c-Rubrik"),
+    status.setText (cli.displayName + juce::String::fromUTF8 (" verbunden \xe2\x80\xa2 generierte Plugins \xe2\x86\x92 \xe2\x80\x9e" "Aizana\xe2\x80\x9c-Rubrik"),
                     juce::dontSendNotification);
 }
 
@@ -235,11 +235,11 @@ void AiStudioPanel::send()
     if (prompt.isEmpty())
         return;
 
-    const auto mcpBin    = resolveCloudesMcp();
+    const auto mcpBin    = resolveAizanaMcp();
     const auto toolchain = resolveToolchain();
     if (! mcpBin.existsAsFile())
     {
-        appendLine (juce::String::fromUTF8 ("\n[!] cloudes-mcp nicht gefunden \xe2\x80\x94 bitte das Target bauen (cloudes-mcp).\n"));
+        appendLine (juce::String::fromUTF8 ("\n[!] aizana-mcp nicht gefunden \xe2\x80\x94 bitte das Target bauen (aizana-mcp).\n"));
         return;
     }
 
@@ -252,7 +252,7 @@ void AiStudioPanel::send()
     if (cli.type == AiCli::ClaudeCode)
     {
         const auto mcpConfig = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                   .getChildFile ("cloudes_ai_studio_mcp.json");
+                                   .getChildFile ("aizana_ai_studio_mcp.json");
         AiAgentBridge::writeClaudeMcpConfig (mcpConfig, mcpBin, toolchain);
         argv      = AiAgentBridge::buildClaudeArgs (cli.executable, prompt, sessionId, firstTurn, mcpConfig);
         parseJson = true;   // claude --output-format stream-json
@@ -291,25 +291,25 @@ void AiStudioPanel::onAgentDone (int exitCode)
 
 //==============================================================================
 
-juce::File AiStudioPanel::resolveCloudesMcp()
+juce::File AiStudioPanel::resolveAizanaMcp()
 {
-    if (const auto env = juce::SystemStats::getEnvironmentVariable ("CLOUDES_MCP_BINARY", {});
+    if (const auto env = juce::SystemStats::getEnvironmentVariable ("AIZANA_MCP_BINARY", {});
         env.isNotEmpty() && juce::File (env).existsAsFile())
         return juce::File (env);
 
     const auto app = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
 
     // Bundled inside the app (release/normal run).
-    const auto bundled = app.getChildFile ("Contents/Resources/cloudes-mcp");
+    const auto bundled = app.getChildFile ("Contents/Resources/aizana-mcp");
     if (bundled.existsAsFile())
         return bundled;
 
-    // Dev fallback: build tree (.../build/Cloudes_artefacts/<cfg>/Cloudes.app → .../build/cloudes-mcp_artefacts/<cfg>/cloudes-mcp)
+    // Dev fallback: build tree (.../build/Aizana_artefacts/<cfg>/Aizana.app → .../build/aizana-mcp_artefacts/<cfg>/aizana-mcp)
     const auto cfgDir = app.getParentDirectory();                 // <cfg> (e.g. Release)
     const auto dev = cfgDir.getParentDirectory().getParentDirectory()  // build/
-                         .getChildFile ("cloudes-mcp_artefacts")
+                         .getChildFile ("aizana-mcp_artefacts")
                          .getChildFile (cfgDir.getFileName())
-                         .getChildFile ("cloudes-mcp");
+                         .getChildFile ("aizana-mcp");
     if (dev.existsAsFile())
         return dev;
 
@@ -322,6 +322,6 @@ juce::File AiStudioPanel::resolveToolchain()
     const auto bundled = app.getChildFile ("Contents/Resources/GeneratorToolchain");
     if (bundled.isDirectory())
         return bundled;
-    // Otherwise let cloudes-mcp resolve its own sibling toolchain (returns empty → no env set).
+    // Otherwise let aizana-mcp resolve its own sibling toolchain (returns empty → no env set).
     return {};
 }

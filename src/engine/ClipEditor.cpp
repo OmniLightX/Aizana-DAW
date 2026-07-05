@@ -335,7 +335,7 @@ void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
             // Direct-file take (project-less loop recording): TE's setCurrentTake
             // REMOVES a take whose ProjectItemID can't be resolved — switch the
             // clip's source string directly instead (the project-less equivalent).
-            // An active Cloudes comp would keep overriding the audio, so drop it.
+            // An active Aizana comp would keep overriding the audio, so drop it.
             auto compTree = wc->state.getChildWithName (CompingEngine::compType);
             if (compTree.isValid())
                 wc->state.removeChild (compTree, &undoManager);

@@ -18,7 +18,7 @@ namespace
     juce::File makeTempDir()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                       .getChildFile ("cloudes_autotempo_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
+                       .getChildFile ("aizana_autotempo_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
         REQUIRE (dir.createDirectory());
         return dir;
     }

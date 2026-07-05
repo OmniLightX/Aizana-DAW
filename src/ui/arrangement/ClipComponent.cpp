@@ -86,12 +86,12 @@ void ClipComponent::paint (juce::Graphics& g)
 
     // ---- Colour calculation ----
     // Use the shared track colour (user-set, or a stable palette default for
-    // uncoloured tracks — see CloudesTrackColours). Boost saturation + brightness
+    // uncoloured tracks — see AizanaTrackColours). Boost saturation + brightness
     // so clips stay vivid and legible on the dark background.
     juce::Colour baseColour = juce::Colour (0xff2a6aaa);  // Studio One default blue (fallback)
     if (auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack()))
     {
-        const juce::Colour trackColour = CloudesTrackColours::displayColour (*track);
+        const juce::Colour trackColour = AizanaTrackColours::displayColour (*track);
         baseColour = trackColour.withSaturation (juce::jmax (0.55f, trackColour.getSaturation()))
                                 .withBrightness  (juce::jmax (0.65f, trackColour.getBrightness()));
     }
@@ -133,7 +133,7 @@ void ClipComponent::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (11.0f));
 
     // Takes badge: "T2/3" shown right-aligned in header when clip has multiple takes;
-    // shows "C" while a Cloudes comp is active (audio is assembled from several takes).
+    // shows "C" while a Aizana comp is active (audio is assembled from several takes).
     int numTakes = 0;
     int currentTakeIdx = 0;
     bool compActive = false;

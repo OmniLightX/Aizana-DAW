@@ -5,7 +5,7 @@
 
 //==============================================================================
 /**
- * MainWindow — the top-level document window for the Cloudes DAW.
+ * MainWindow — the top-level document window for the Aizana DAW.
  *
  * Phase 1 skeleton: displays a blank gray content component. Full UI
  * (arrangement view, mixer, transport bar) is built in plans 01-03 through

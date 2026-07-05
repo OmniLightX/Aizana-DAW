@@ -51,7 +51,7 @@ int main (int argc, char* argv[])
     for (int i = 1; i < argc; ++i)
         commandLine << (i > 1 ? " " : "") << juce::String (argv[i]);
 
-    cloudes::PluginLoader loader =
+    aizana::PluginLoader loader =
         [] (const juce::PluginDescription&, double, int, juce::String&)
             -> std::unique_ptr<juce::AudioProcessor>
         {
@@ -59,7 +59,7 @@ int main (int argc, char* argv[])
         };
 
     // ---- Worker role ----
-    if (auto worker = cloudes::startPluginHostWorkerIfRequested (commandLine, loader))
+    if (auto worker = aizana::startPluginHostWorkerIfRequested (commandLine, loader))
     {
         auto* mm = juce::MessageManager::getInstance();
         for (int guard = 0; ! worker->isFinished() && guard < 400; ++guard)   // ~20s ceiling
@@ -73,7 +73,7 @@ int main (int argc, char* argv[])
     desc.pluginFormatName = "Test";
     desc.fileOrIdentifier = "smoke";
 
-    auto proxy = std::make_unique<cloudes::OutOfProcessPluginInstance> (desc, 2);
+    auto proxy = std::make_unique<aizana::OutOfProcessPluginInstance> (desc, 2);
     proxy->prepareToPlay (44100.0, 64);
 
     bool pass = proxy->isChildConnected();

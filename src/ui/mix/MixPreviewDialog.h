@@ -17,9 +17,9 @@
 class MixPreviewDialog : public juce::Component
 {
 public:
-    std::function<void (const cloudes::MixPlan&)> onApply;
+    std::function<void (const aizana::MixPlan&)> onApply;
 
-    explicit MixPreviewDialog (const cloudes::MixPlan& initialPlan)
+    explicit MixPreviewDialog (const aizana::MixPlan& initialPlan)
         : plan (initialPlan)
     {
         title.setText (juce::String::fromUTF8 ("KI-Mix — vorgeschlagene Schritte"),
@@ -46,7 +46,7 @@ public:
         applyButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2d6a2d));
         applyButton.onClick = [this]
         {
-            cloudes::MixPlan filtered;
+            aizana::MixPlan filtered;
             filtered.summary = plan.summary;
             for (int i = 0; i < rows.size(); ++i)
                 if (rows[i]->enabled.getToggleState())
@@ -67,8 +67,8 @@ public:
     }
 
     /** Shows the dialog asynchronously (no modal loop). */
-    static void show (juce::Component& parent, const cloudes::MixPlan& plan,
-                      std::function<void (const cloudes::MixPlan&)> onApply)
+    static void show (juce::Component& parent, const aizana::MixPlan& plan,
+                      std::function<void (const aizana::MixPlan&)> onApply)
     {
         auto* content = new MixPreviewDialog (plan);
         content->onApply = std::move (onApply);
@@ -109,7 +109,7 @@ private:
 
     struct Row : juce::Component
     {
-        explicit Row (const cloudes::MixAction& a)
+        explicit Row (const aizana::MixAction& a)
         {
             enabled.setToggleState (true, juce::dontSendNotification);
             addAndMakeVisible (enabled);
@@ -144,7 +144,7 @@ private:
             w->exitModalState (0);
     }
 
-    cloudes::MixPlan plan;
+    aizana::MixPlan plan;
     juce::Label title, subtitle;
     juce::Viewport rowViewport;
     juce::Component rowHolder;

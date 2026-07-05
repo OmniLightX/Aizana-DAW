@@ -7,7 +7,7 @@
 
 // Track channel-format flag (mono/stereo). Persisted on the track ValueTree and
 // fully decoupled from hardware input pairing — see TrackHeader::toggleTrackStereo().
-static const juce::Identifier kTrackStereoProp { "cloudesTrackStereo" };
+static const juce::Identifier kTrackStereoProp { "aizanaTrackStereo" };
 
 //==============================================================================
 
@@ -783,7 +783,7 @@ void TrackHeader::showContextMenu()
     menu.addItem (7,
                   isFrozen ? juce::String::fromUTF8 ("Auftauen (Unfreeze)")
                            : juce::String::fromUTF8 ("Spur einfrieren (Freeze)"),
-                  isFrozen || cloudes::canFreezeIndividually (track),
+                  isFrozen || aizana::canFreezeIndividually (track),
                   isFrozen);
     menu.addSeparator();
     menu.addSubMenu ("Track-Farbe", colourMenu);
@@ -793,9 +793,9 @@ void TrackHeader::showContextMenu()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
         [this] (int result)
         {
-            if (result >= 100 && result < 100 + CloudesTrackColours::paletteSize())
+            if (result >= 100 && result < 100 + AizanaTrackColours::paletteSize())
             {
-                handleSetTrackColour (CloudesTrackColours::palette (result - 100));
+                handleSetTrackColour (AizanaTrackColours::palette (result - 100));
                 return;
             }
 
@@ -808,10 +808,10 @@ void TrackHeader::showContextMenu()
                 case 7:  handleToggleFreeze();                         break;
                 case 4:  handleRenameTrack();                          break;
                 case 5:  handleDeleteTrack();                          break;
-                case 10: handleInsertBuiltInFX ("Cloudes EQ");         break;
-                case 11: handleInsertBuiltInFX ("Cloudes Compressor"); break;
-                case 12: handleInsertBuiltInFX ("Cloudes Reverb");     break;
-                case 13: handleInsertBuiltInFX ("Cloudes Limiter");    break;
+                case 10: handleInsertBuiltInFX ("Aizana EQ");         break;
+                case 11: handleInsertBuiltInFX ("Aizana Compressor"); break;
+                case 12: handleInsertBuiltInFX ("Aizana Reverb");     break;
+                case 13: handleInsertBuiltInFX ("Aizana Limiter");    break;
                 case 98: handleCustomColourPicker();                   break;
                 case 99: handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
                 default: break;
@@ -869,7 +869,7 @@ void TrackHeader::handleToggleFreeze()
     }
 
     // Flipping frozenIndividually triggers AudioTrack::freezeTrack() synchronously,
-    // which renders the track via the Renderer. CloudesUIBehaviour now PUMPS the
+    // which renders the track via the Renderer. AizanaUIBehaviour now PUMPS the
     // message loop during that render, so the render may itself dispatch events
     // (incl. a rebuildTrackRows that deletes THIS header). Therefore:
     //   - defer onto a clean tick (out of the popup-menu teardown), and
@@ -891,9 +891,9 @@ void TrackHeader::handleToggleFreeze()
 void TrackHeader::populateColourMenu (juce::PopupMenu& menu)
 {
     // IDs: 100..100+paletteSize() = swatches; 98 = custom picker; 99 = reset to auto.
-    for (int i = 0; i < CloudesTrackColours::paletteSize(); ++i)
-        menu.addColouredItem (100 + i, CloudesTrackColours::paletteName (i),
-                              CloudesTrackColours::palette (i).brighter (0.3f));
+    for (int i = 0; i < AizanaTrackColours::paletteSize(); ++i)
+        menu.addColouredItem (100 + i, AizanaTrackColours::paletteName (i),
+                              AizanaTrackColours::palette (i).brighter (0.3f));
     menu.addSeparator();
     menu.addItem (98, juce::String::fromUTF8 ("Custom\xe2\x80\xa6"));
     menu.addItem (99, "Standard (Auto)");
@@ -908,8 +908,8 @@ void TrackHeader::showTrackColourMenu()
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&colourBar),
         [this] (int result)
         {
-            if (result >= 100 && result < 100 + CloudesTrackColours::paletteSize())
-                handleSetTrackColour (CloudesTrackColours::palette (result - 100));
+            if (result >= 100 && result < 100 + AizanaTrackColours::paletteSize())
+                handleSetTrackColour (AizanaTrackColours::palette (result - 100));
             else if (result == 98) handleCustomColourPicker();
             else if (result == 99) handleSetTrackColour (juce::Colour());
         });
@@ -961,7 +961,7 @@ void TrackHeader::handleCustomColourPicker()
 
     track.edit.getUndoManager().beginNewTransaction ("Track Colour");
 
-    auto content = std::make_unique<ColourCallout> (CloudesTrackColours::displayColour (track));
+    auto content = std::make_unique<ColourCallout> (AizanaTrackColours::displayColour (track));
     juce::Component::SafePointer<TrackHeader> safe (this);
     content->onColour = [safe] (juce::Colour c)
     {

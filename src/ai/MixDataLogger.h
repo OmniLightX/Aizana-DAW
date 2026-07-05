@@ -4,7 +4,7 @@
 #include <juce_core/juce_core.h>
 #include <vector>
 
-namespace cloudes
+namespace aizana
 {
     /**
         MixDataLogger — Phase 4: the training-data flywheel (Slice „Daten aus Ergebnissen").
@@ -34,7 +34,7 @@ namespace cloudes
     class MixDataLogger
     {
     public:
-        /** Default corpus location: ~/Library/Cloudes/training/mix_decisions.jsonl */
+        /** Default corpus location: ~/Library/Aizana/training/mix_decisions.jsonl */
         static juce::File defaultLogFile();
 
         /** One JSONL line for a single (track, action, verdict). Pure — no I/O. */

@@ -14,7 +14,7 @@ FetchContent_MakeAvailable(Catch2)
 # Runs headless — no display or audio hardware required.
 # ---------------------------------------------------------------------------
 juce_add_console_app(engine_tests
-    PRODUCT_NAME "Cloudes Engine Tests"
+    PRODUCT_NAME "Aizana Engine Tests"
 )
 
 target_sources(engine_tests PRIVATE
@@ -135,12 +135,12 @@ target_include_directories(engine_tests PRIVATE
 target_compile_definitions(engine_tests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_APPLICATION_NAME_STRING="CloudesEngineTests"
+    JUCE_APPLICATION_NAME_STRING="AizanaEngineTests"
     JUCE_APPLICATION_VERSION_STRING="0.1.0"
     # Suppress unnecessary Tracktion Engine UI/device features in test context
     TRACKTION_ENABLE_AUTOMAP=0
     TRACKTION_ENABLE_REWIRE=0
-    # Timestretch backend — must match the Cloudes app target (Phase 3, Task 0)
+    # Timestretch backend — must match the Aizana app target (Phase 3, Task 0)
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
 )
 
@@ -156,7 +156,7 @@ target_link_libraries(engine_tests PRIVATE
     demucs_inference
 )
 
-# Expose CLAP include path (consistent with Cloudes app target)
+# Expose CLAP include path (consistent with Aizana app target)
 target_include_directories(engine_tests PRIVATE
     ${clap_api_SOURCE_DIR}/include
 )
@@ -169,13 +169,13 @@ target_include_directories(engine_tests PRIVATE
 # ONNX Runtime — same imported target as the app (declared GLOBAL in the root).
 # Resource dir exposes the dummy .onnx fixture used by test_onnx_backend.cpp.
 target_compile_definitions(engine_tests PRIVATE
-    CLOUDES_TEST_RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
-    CLOUDES_TEST_BUILD_DIR="${CMAKE_BINARY_DIR}"
-    CLOUDES_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-if(CLOUDES_ENABLE_ONNX)
+    AIZANA_TEST_RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    AIZANA_TEST_BUILD_DIR="${CMAKE_BINARY_DIR}"
+    AIZANA_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(AIZANA_ENABLE_ONNX)
     target_link_libraries(engine_tests PRIVATE onnxruntime)
-    target_compile_definitions(engine_tests PRIVATE CLOUDES_HAVE_ONNXRUNTIME=1)
-    set_target_properties(engine_tests PROPERTIES BUILD_RPATH "${CLOUDES_ORT_LIBDIR}")
+    target_compile_definitions(engine_tests PRIVATE AIZANA_HAVE_ONNXRUNTIME=1)
+    set_target_properties(engine_tests PROPERTIES BUILD_RPATH "${AIZANA_ORT_LIBDIR}")
 endif()
 
 include(CTest)

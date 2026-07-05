@@ -157,9 +157,9 @@ void OnboardingWizard::paint (juce::Graphics& g)
     if (step == 0)
     {
         g.setColour (kText); g.setFont (juce::FontOptions (26.0f, juce::Font::bold));
-        g.drawText ("Willkommen bei Cloudes", titleArea, juce::Justification::topLeft, false);
+        g.drawText ("Willkommen bei Aizana", titleArea, juce::Justification::topLeft, false);
         g.setColour (kTextMuted); g.setFont (subFont);
-        g.drawFittedText ("Sag, was du willst - Cloudes macht das echte Engineering und zeigt dir wie. "
+        g.drawFittedText ("Sag, was du willst - Aizana macht das echte Engineering und zeigt dir wie. "
                           "Lass uns deinen ersten Song aufsetzen.",
                           subArea, juce::Justification::topLeft, 3);
     }
@@ -196,7 +196,7 @@ void OnboardingWizard::paint (juce::Graphics& g)
         g.drawText (juce::String ("Lautheits-Ziel ") + gd.loudness,
                     juce::Rectangle<int> (in.getX(), in.getY() + 166, in.getWidth(), 24),
                     juce::Justification::topLeft, false);
-        g.drawFittedText ("Du landest in der Einsteiger-Welt - Cloudes hoert mit und schlaegt Schritte vor.",
+        g.drawFittedText ("Du landest in der Einsteiger-Welt - Aizana hoert mit und schlaegt Schritte vor.",
                           juce::Rectangle<int> (in.getX(), in.getY() + 198, in.getWidth(), 48),
                           juce::Justification::topLeft, 2);
     }

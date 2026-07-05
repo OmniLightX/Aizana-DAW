@@ -3,7 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <vector>
 
-namespace cloudes
+namespace aizana
 {
     /**
         PluginSpec — Phase 4 / Generator G2: the typed, serialisable vocabulary of DSP

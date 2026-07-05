@@ -58,7 +58,7 @@ TEST_CASE ("OobAudioMarshal round-trips a host buffer through a child plugin", "
         ScaleProcessor proc;
         proc.prepareToPlay (44100.0, (int) c->maxBlockSamples());
         attached.store (true);
-        cloudes::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
+        aizana::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
     });
 
     while (! attached.load()) std::this_thread::sleep_for (std::chrono::milliseconds (1));
@@ -67,7 +67,7 @@ TEST_CASE ("OobAudioMarshal round-trips a host buffer through a child plugin", "
     juce::AudioBuffer<float> buffer (2, 64);
     for (int i = 0; i < 64; ++i) { buffer.setSample (0, i, 1.0f); buffer.setSample (1, i, 1.0f); }
 
-    const auto st = cloudes::OobAudioMarshal::hostProcessBlock (*host, buffer, 200000 /* 200 ms */);
+    const auto st = aizana::OobAudioMarshal::hostProcessBlock (*host, buffer, 200000 /* 200 ms */);
     REQUIRE (st == SharedAudioRing::Status::ok);
 
     for (int i = 0; i < 64; ++i)
@@ -91,7 +91,7 @@ TEST_CASE ("OobAudioMarshal silences the buffer when no child is hosting", "[oop
         for (int i = 0; i < 64; ++i) buffer.setSample (ch, i, 0.9f);   // pre-fill with signal
 
     const auto t0 = juce::Time::getMillisecondCounterHiRes();
-    const auto st = cloudes::OobAudioMarshal::hostProcessBlock (*host, buffer, 500000);
+    const auto st = aizana::OobAudioMarshal::hostProcessBlock (*host, buffer, 500000);
     const auto elapsedMs = juce::Time::getMillisecondCounterHiRes() - t0;
 
     REQUIRE (st == SharedAudioRing::Status::childGone);

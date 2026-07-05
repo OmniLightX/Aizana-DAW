@@ -1,18 +1,18 @@
-# Cloudes License
+# Aizana License
 
-Copyright (C) 2026 Aizanagi (Cloudes DAW project).
+Copyright (C) 2026 Aizanagi (Aizana DAW project).
 <!-- PLACEHOLDER. Aizanagi intends to hold copyright via an entity/pseudonym — set the
      final legal holder (entity or pseudonym) before any commercial/relicensing step;
      the copyright holder must be unambiguous to ever dual-license or sell the work.
      Require a Contributor License Agreement (CLA) from any contributor for the same
      reason. -->
 
-Cloudes' own source code is free software: you can redistribute it and/or
+Aizana' own source code is free software: you can redistribute it and/or
 modify it under the terms of the GNU General Public License as published by the
 Free Software Foundation, either version 3 of the License, or (at your option)
 any later version.
 
-Cloudes is distributed in the hope that it will be useful, but WITHOUT ANY
+Aizana is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
@@ -24,18 +24,18 @@ see <https://www.gnu.org/licenses/gpl-3.0.txt>.
 
 ## Rationale: Copyleft Compatibility
 
-Cloudes uses JUCE 8 (https://github.com/juce-framework/JUCE), which is
+Aizana uses JUCE 8 (https://github.com/juce-framework/JUCE), which is
 dual-licensed under AGPLv3 and a commercial JUCE license.
 
-Cloudes also uses Tracktion Engine
+Aizana also uses Tracktion Engine
 (https://github.com/Tracktion/tracktion_engine), which is dual-licensed under
 GPL3-or-later and a commercial Tracktion Engine license.
 
-By distributing Cloudes publicly as open-source software and complying with the
+By distributing Aizana publicly as open-source software and complying with the
 applicable AGPLv3/GPL3 obligations, no commercial JUCE or Tracktion Engine
 license is required for the open-source release path.
 
-If a commercial (non-GPL) version of Cloudes is planned in the future, a
+If a commercial (non-GPL) version of Aizana is planned in the future, a
 commercial JUCE license and a Tracktion Engine Indie or Enterprise license must
 be obtained before distribution.
 

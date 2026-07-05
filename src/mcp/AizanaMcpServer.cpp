@@ -1,20 +1,20 @@
-// CloudesMcpServer — Phase 4 / Generator G4: a standalone MCP (Model Context Protocol)
+// AizanaMcpServer — Phase 4 / Generator G4: a standalone MCP (Model Context Protocol)
 // stdio server that lets Claude Code / Codex (or any MCP client) author brand-new audio
-// plugins for Cloudes from free text.
+// plugins for Aizana from free text.
 //
 // Design: lokal-first. The local composer (G2) stays the default in-app author; this
 // server is the OPT-IN path where an LLM writes arbitrary Faust DSP. It reuses the exact
 // same C++ generator code (FaustCompiler/FaustEmitter/LocalComposer) — single source of
 // truth, no logic duplicated in another language. Compiled plugins land in the user's
-// Cloudes library (~/Library/Cloudes/Generated Plugins); a running
-// Cloudes instance auto-discovers them (PluginScanner::registerGeneratedPlugins + the
+// Aizana library (~/Library/Aizana/Generated Plugins); a running
+// Aizana instance auto-discovers them (PluginScanner::registerGeneratedPlugins + the
 // browser's 1 Hz poll), so "describe -> plugin appears in the DAW" works end to end.
 //
 // Transport: newline-delimited JSON-RPC 2.0 over stdio (the MCP stdio transport).
 // stdout carries protocol messages ONLY; diagnostics go to stderr.
 //
 // Tools exposed:
-//   - faust_reference : the Faust idioms Cloudes supports (read this first to emit valid DSP)
+//   - faust_reference : the Faust idioms Aizana supports (read this first to emit valid DSP)
 //   - compose_plugin  : local baseline DSP for a prompt (a starting point to refine)
 //   - compile_plugin  : compile authored Faust DSP -> real .clap in the user's library
 //   - list_plugins    : list already-generated plugins
@@ -31,11 +31,11 @@
 #include <iostream>
 #include <string>
 
-using namespace cloudes;
+using namespace aizana;
 
 namespace
 {
-    constexpr const char* kServerName      = "cloudes";
+    constexpr const char* kServerName      = "aizana";
     constexpr const char* kServerVersion   = "0.1.0";
     constexpr const char* kProtocolVersion = "2024-11-05";
 
@@ -90,9 +90,9 @@ namespace
     juce::String faustReference()
     {
         return juce::String::fromUTF8 (
-            "Cloudes plugin authoring — Faust quick reference\n"
+            "Aizana plugin authoring — Faust quick reference\n"
             "================================================\n"
-            "You write a complete, self-contained Faust DSP program; Cloudes compiles it to a\n"
+            "You write a complete, self-contained Faust DSP program; Aizana compiles it to a\n"
             "universal CLAP plugin. Rules:\n"
             "\n"
             "1. Start with:   declare name \"My Plugin\";   import(\"stdfaust.lib\");\n"
@@ -124,8 +124,8 @@ namespace
             "  process = par(i, 2, ma.tanh(_ * drive)/ma.tanh(drive) : fi.lowpass(2, tone) : *(ba.db2linear(out)));\n"
             "\n"
             "Workflow: optionally call compose_plugin for a baseline, then compile_plugin with\n"
-            "your final DSP. On success the plugin is in the user's Cloudes library and shows up\n"
-            "in the plugin browser under the \"Cloudes\" manufacturer.");
+            "your final DSP. On success the plugin is in the user's Aizana library and shows up\n"
+            "in the plugin browser under the \"Aizana\" manufacturer.");
     }
 
     juce::var toolComposePlugin (const juce::var& id, const juce::var& args)
@@ -156,8 +156,8 @@ namespace
         if (! FaustCompiler::isAvailable())
             return textResult (id,
                 "error: the Faust toolchain is not available.\n"
-                "Install Faust (`brew install faust`) and make sure Cloudes.app is installed in "
-                "/Applications, or set the CLOUDES_TOOLCHAIN_DIR environment variable to a "
+                "Install Faust (`brew install faust`) and make sure Aizana.app is installed in "
+                "/Applications, or set the AIZANA_TOOLCHAIN_DIR environment variable to a "
                 "GeneratorToolchain directory (clap/clap-helpers headers + faust_gui_globals.cpp).",
                 true);
 
@@ -168,8 +168,8 @@ namespace
             juce::String out;
             out << "OK — compiled \"" << name << "\".\n"
                 << r.clapFile.getFullPathName() << "\n\n"
-                << "The plugin is now in the user's Cloudes library. A running Cloudes picks it up "
-                   "automatically (plugin browser, \"Cloudes\" group). Tell the user to insert it "
+                << "The plugin is now in the user's Aizana library. A running Aizana picks it up "
+                   "automatically (plugin browser, \"Aizana\" group). Tell the user to insert it "
                    "from the browser onto a track.";
             return textResult (id, out);
         }
@@ -200,7 +200,7 @@ namespace
             }
             else
             {
-                out << files.size() << " generated plugin(s) in the Cloudes library:\n";
+                out << files.size() << " generated plugin(s) in the Aizana library:\n";
                 for (const auto& f : files)
                     out << "  - " << f.getFileNameWithoutExtension()
                         << "   (" << f.getFullPathName() << ")\n";
@@ -210,12 +210,12 @@ namespace
     }
 
     //==============================================================================
-    // Live mixing tools (Slice 2) — proxy to the RUNNING Cloudes session.
+    // Live mixing tools (Slice 2) — proxy to the RUNNING Aizana session.
     //
     // Unlike the generator tools (which write .clap files to disk), these steer the live
-    // Edit: cloudes-mcp connects to the app's loopback bridge (discovery file → port+token)
+    // Edit: aizana-mcp connects to the app's loopback bridge (discovery file → port+token)
     // and forwards one AiLiveProtocol request. The app applies the move via AICommandBridge
-    // (one undo step) and replies. If Cloudes isn't running, we return a clear, actionable
+    // (one undo step) and replies. If Aizana isn't running, we return a clear, actionable
     // message rather than failing silently.
     //==============================================================================
 
@@ -225,19 +225,19 @@ namespace
 
         const auto disco = AiLiveProtocol::readDiscovery (AiLiveProtocol::liveBridgeFile());
         if (! disco.valid)
-            return "Cloudes is not running, or its live bridge is off. Ask the user to open "
-                   "Cloudes and click the \"KI-Studio\" button, then try again.";
+            return "Aizana is not running, or its live bridge is off. Ask the user to open "
+                   "Aizana and click the \"KI-Studio\" button, then try again.";
 
         juce::StreamingSocket sock;
         if (! sock.connect ("127.0.0.1", disco.port, 3000))
-            return "could not reach the running Cloudes session (loopback port "
+            return "could not reach the running Aizana session (loopback port "
                    + juce::String (disco.port) + ").";
 
         const auto reqLine = AiLiveProtocol::makeRequest (disco.token, tool, args) + "\n";
         const auto utf8 = reqLine.toRawUTF8();
         const int  len  = (int) std::strlen (utf8);
         if (sock.write (utf8, len) != len)
-            return "failed to send the request to Cloudes.";
+            return "failed to send the request to Aizana.";
 
         std::string buf;
         while (buf.size() < (1u << 20))
@@ -258,7 +258,7 @@ namespace
         const auto resp = AiLiveProtocol::parseResponse (
             juce::String::fromUTF8 (buf.c_str(), (int) buf.size()));
 
-        if (! resp.valid) return "got an unreadable reply from Cloudes.";
+        if (! resp.valid) return "got an unreadable reply from Aizana.";
         if (! resp.ok)    return resp.error;
 
         ok = true;
@@ -284,74 +284,74 @@ namespace
         juce::Array<juce::var> tools;
 
         tools.add (tool ("faust_reference",
-            "Return the Faust DSP idioms Cloudes supports. Call this FIRST before writing a "
+            "Return the Faust DSP idioms Aizana supports. Call this FIRST before writing a "
             "plugin so the DSP you author compiles cleanly.",
             R"({"type":"object","properties":{},"additionalProperties":false})"));
 
         tools.add (tool ("compose_plugin",
-            "Generate a local baseline Faust DSP for a free-text prompt using Cloudes' built-in "
+            "Generate a local baseline Faust DSP for a free-text prompt using Aizana' built-in "
             "composer. Use it as a starting point to refine, or compile it as-is.",
             R"({"type":"object","properties":{"prompt":{"type":"string","description":"Free-text description of the desired plugin, e.g. 'warm tape saturation with a touch of reverb'."}},"required":["prompt"],"additionalProperties":false})"));
 
         tools.add (tool ("compile_plugin",
             "Compile a complete Faust DSP program into a real CLAP plugin and add it to the user's "
-            "Cloudes library. `process` must be a 2-in/2-out stereo effect. Returns the .clap path "
+            "Aizana library. `process` must be a 2-in/2-out stereo effect. Returns the .clap path "
             "or the compiler error log.",
             R"({"type":"object","properties":{"name":{"type":"string","description":"Display name of the plugin, e.g. 'Warm Tape'."},"faust_dsp":{"type":"string","description":"The complete self-contained Faust program (declare name + import(\"stdfaust.lib\") + process)."}},"required":["name","faust_dsp"],"additionalProperties":false})"));
 
         tools.add (tool ("list_plugins",
-            "List the plugins already generated into the user's Cloudes library.",
+            "List the plugins already generated into the user's Aizana library.",
             R"({"type":"object","properties":{},"additionalProperties":false})"));
 
-        // --- Live mixing tools (act on the RUNNING Cloudes session) ---------------
+        // --- Live mixing tools (act on the RUNNING Aizana session) ---------------
         tools.add (tool ("list_tracks",
-            "List the audio tracks in the user's CURRENTLY OPEN Cloudes session, with each "
+            "List the audio tracks in the user's CURRENTLY OPEN Aizana session, with each "
             "track's name, volume (dB) and pan. Call this FIRST before changing the mix so you "
-            "use exact track names. Requires Cloudes to be running with the KI-Studio open.",
+            "use exact track names. Requires Aizana to be running with the KI-Studio open.",
             R"({"type":"object","properties":{},"additionalProperties":false})"));
 
         tools.add (tool ("set_track_volume",
-            "Set the volume (in dB) of one track in the live Cloudes session. Applies "
+            "Set the volume (in dB) of one track in the live Aizana session. Applies "
             "immediately as a single undo step. Use list_tracks first for the exact track name.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name, as returned by list_tracks."},"db":{"type":"number","description":"Target volume in dB (e.g. -3.0). Clamped to [-60, +12]."}},"required":["track","db"],"additionalProperties":false})"));
 
         tools.add (tool ("set_track_pan",
-            "Set the stereo pan of one track in the live Cloudes session. Applies immediately "
+            "Set the stereo pan of one track in the live Aizana session. Applies immediately "
             "as a single undo step. Use list_tracks first for the exact track name.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name, as returned by list_tracks."},"pan":{"type":"number","description":"Pan position: -1.0 = hard left, 0 = centre, +1.0 = hard right."}},"required":["track","pan"],"additionalProperties":false})"));
 
         tools.add (tool ("mute_track",
-            "Mute or un-mute one track in the live Cloudes session (one undo step).",
+            "Mute or un-mute one track in the live Aizana session (one undo step).",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"muted":{"type":"boolean","description":"true = mute, false = un-mute."}},"required":["track","muted"],"additionalProperties":false})"));
 
         tools.add (tool ("solo_track",
-            "Solo or un-solo one track in the live Cloudes session (one undo step).",
+            "Solo or un-solo one track in the live Aizana session (one undo step).",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"soloed":{"type":"boolean","description":"true = solo, false = un-solo."}},"required":["track","soloed"],"additionalProperties":false})"));
 
         tools.add (tool ("set_track_eq",
-            "Add a parametric EQ to one track in the live Cloudes session (one EQ instance per "
+            "Add a parametric EQ to one track in the live Aizana session (one EQ instance per "
             "call, up to 8 bands). Each band: type (high_pass | low_shelf | high_shelf | bell), "
             "freq in Hz, gain in dB (ignored for high_pass), optional q. One undo step.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"bands":{"type":"array","items":{"type":"object","properties":{"type":{"type":"string","enum":["high_pass","low_shelf","high_shelf","bell"]},"freq":{"type":"number","description":"Centre/corner frequency in Hz."},"gain":{"type":"number","description":"Gain in dB (bell/shelf). Ignored for high_pass."},"q":{"type":"number","description":"Bandwidth (default 0.7)."}},"required":["type","freq"]},"description":"1-8 EQ bands."}},"required":["track","bands"],"additionalProperties":false})"));
 
         tools.add (tool ("add_compressor",
-            "Insert a built-in compressor on one track in the live Cloudes session (one undo "
+            "Insert a built-in compressor on one track in the live Aizana session (one undo "
             "step). Sensible defaults if a parameter is omitted (ratio 2:1, threshold -18 dB).",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"threshold_db":{"type":"number","description":"Threshold in dB (default -18)."},"ratio":{"type":"number","description":"Compression ratio, e.g. 2 for 2:1 (default 2)."},"makeup_db":{"type":"number","description":"Make-up gain in dB (default 0)."}},"required":["track"],"additionalProperties":false})"));
 
         tools.add (tool ("add_deesser",
-            "Insert a built-in de-esser on one track (tames sibilance) in the live Cloudes "
+            "Insert a built-in de-esser on one track (tames sibilance) in the live Aizana "
             "session (one undo step). Defaults to ~5.5 kHz if omitted.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"freq_hz":{"type":"number","description":"Sibilance frequency in Hz (default 5500)."},"threshold_db":{"type":"number","description":"Threshold in dB (default -20)."},"ratio":{"type":"number","description":"Ratio (default 4)."}},"required":["track"],"additionalProperties":false})"));
 
         tools.add (tool ("add_reverb",
-            "Add reverb to one track in the live Cloudes session the way pros do it: a send to a "
+            "Add reverb to one track in the live Aizana session the way pros do it: a send to a "
             "shared \"Reverb\" FX bus (created once with a 100%-wet reverb), not a per-track "
             "insert. Call again on other tracks to share the same space. One undo step.",
             R"({"type":"object","properties":{"track":{"type":"string","description":"Exact track name."},"amount":{"type":"number","description":"How much reverb: 0 = none .. 1 = full send level (default 0.3)."}},"required":["track"],"additionalProperties":false})"));
 
         tools.add (tool ("create_bus_channel",
-            "Create a named bus channel in the live Cloudes session (or reuse an existing bus of "
+            "Create a named bus channel in the live Aizana session (or reuse an existing bus of "
             "that name) and optionally route tracks to it. The bus is a regular mixer channel: "
             "afterwards you can EQ/compress it directly with set_track_eq / add_compressor using "
             "the bus name (e.g. drum bus glue). Call again with the same name to route more "
@@ -371,7 +371,7 @@ namespace
         if (name == "compile_plugin")   return toolCompilePlugin (id, args);
         if (name == "list_plugins")     return toolListPlugins (id);
 
-        // Live mixing — proxy to the running Cloudes session.
+        // Live mixing — proxy to the running Aizana session.
         if (name == "list_tracks")      return toolLive (id, "list_tracks", args);
         if (name == "set_track_volume") return toolLive (id, "set_track_volume", args);
         if (name == "set_track_pan")    return toolLive (id, "set_track_pan", args);

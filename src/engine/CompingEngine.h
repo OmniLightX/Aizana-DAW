@@ -9,18 +9,18 @@ namespace te = tracktion::engine;
  * CompingEngine — project-less comping for WaveAudioClip loop takes.
  *
  * Why not te::WaveCompManager? TE's comp manager resolves take sources through
- * ProjectManager::findSourceFile (ProjectItemID) — but Cloudes records into
+ * ProjectManager::findSourceFile (ProjectItemID) — but Aizana records into
  * project-less edits, where loop takes are stored as DIRECT file references
  * (WaveAudioClip::addTake (const File&)). TE's comp render would silently
  * produce silence, and WaveAudioClip::setCurrentTake() even REMOVES a take
- * when its ProjectItemID can't be resolved. So Cloudes keeps its own comp
+ * when its ProjectItemID can't be resolved. So Aizana keeps its own comp
  * model and renderer that work purely on file paths.
  *
  * Model (persisted in the clip's ValueTree, all mutations undoable):
- *   <CLOUDESCOMP>                      child of the clip state
+ *   <AIZANACOMP>                      child of the clip state
  *     <SECTION takeIndex="0" endTime="3.5"/>   sections sorted by endTime;
  *     <SECTION takeIndex="2" endTime="8.0"/>   a section starts where the
- *   </CLOUDESCOMP>                             previous one ends (first at 0)
+ *   </AIZANACOMP>                             previous one ends (first at 0)
  *
  * Comp time domain: seconds 0..getCompLength() — identical to take-local time
  * (every loop take file is one pass starting at the loop start).
@@ -39,7 +39,7 @@ public:
     explicit CompingEngine (EditManager& em);
     ~CompingEngine() override;
 
-    static const juce::Identifier compType;       // "CLOUDESCOMP"
+    static const juce::Identifier compType;       // "AIZANACOMP"
     static const juce::Identifier sectionType;    // "SECTION"
     static const juce::Identifier takeIndexProp;  // "takeIndex"
     static const juce::Identifier endTimeProp;    // "endTime"

@@ -2,7 +2,7 @@
 
 #include "PluginSpec.h"
 
-namespace cloudes
+namespace aizana
 {
     /**
         FaustEmitter — Phase 4 / Generator G2: PluginSpec → Faust DSP source string.

@@ -172,7 +172,7 @@ void ExportDialog::startExport()
     auto options = buildOptions();
 
     // te::Renderer::renderToFile() MUST be called from the message thread.
-    // It delegates rendering to CloudesUIBehaviour::runTaskWithProgressBar(),
+    // It delegates rendering to AizanaUIBehaviour::runTaskWithProgressBar(),
     // which spawns a TaskRunner thread and pumps the message loop so the UI
     // stays responsive. Calling from a background thread caused the default
     // UIBehaviour jassertfalse stub to fire, silently producing no output.

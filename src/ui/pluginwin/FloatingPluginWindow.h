@@ -16,7 +16,7 @@ class PluginWindowManager;
  *
  * Fullscreen prevention: setFullScreen()/isFullScreen() are overridden so that
  * the plugin window never participates in macOS fullscreen transitions even when
- * the main Cloudes window enters fullscreen mode.
+ * the main Aizana window enters fullscreen mode.
  *
  * Zoom: a bottom bar inside BypassWrapper provides 80 / 100 / 120 / 150 % zoom
  * buttons.  applyZoom() resizes the window so the editor fills the new size.

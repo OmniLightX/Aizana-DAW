@@ -1,16 +1,16 @@
 #include "OnnxModelRunner.h"
 
-#if CLOUDES_HAVE_ONNXRUNTIME
+#if AIZANA_HAVE_ONNXRUNTIME
  #include <onnxruntime_cxx_api.h>
  #include <coreml_provider_factory.h>
 #endif
 
 //==============================================================================
-#if CLOUDES_HAVE_ONNXRUNTIME
+#if AIZANA_HAVE_ONNXRUNTIME
 
 struct OnnxModelRunner::Impl
 {
-    Ort::Env env { ORT_LOGGING_LEVEL_WARNING, "cloudes" };
+    Ort::Env env { ORT_LOGGING_LEVEL_WARNING, "aizana" };
     std::unique_ptr<Ort::Session> session;
 
     std::string          inputName, outputName;
@@ -145,7 +145,7 @@ int OnnxModelRunner::getExpectedInputSize() const noexcept
 bool OnnxModelRunner::isBackendCompiledIn() noexcept { return true; }
 
 //==============================================================================
-#else // !CLOUDES_HAVE_ONNXRUNTIME — no-op stub (build configured -DCLOUDES_ENABLE_ONNX=OFF)
+#else // !AIZANA_HAVE_ONNXRUNTIME — no-op stub (build configured -DAIZANA_ENABLE_ONNX=OFF)
 
 struct OnnxModelRunner::Impl {};
 

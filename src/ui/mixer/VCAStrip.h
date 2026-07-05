@@ -9,7 +9,7 @@ namespace te = tracktion::engine;
 /**
  * VCAStrip — mixer strip for a VCA channel (group fader, gold-amber accent).
  *
- * Cloudes VCA semantics: the strip's fader moves all member tracks' faders
+ * Aizana VCA semantics: the strip's fader moves all member tracks' faders
  * RELATIVELY (dB delta from the drag start, preserving balance) — the same
  * mechanic as the multi-select group fader, but with a persistent membership
  * stored on the member tracks (kVCAAssignmentProp). No audio flows through

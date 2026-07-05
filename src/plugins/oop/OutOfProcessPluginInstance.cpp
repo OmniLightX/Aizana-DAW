@@ -7,7 +7,7 @@
 #include <chrono>
 #include <cstring>
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -260,7 +260,7 @@ namespace cloudes
     //==============================================================================
     bool oopHostingEnabled()
     {
-        return juce::SystemStats::getEnvironmentVariable ("CLOUDES_OOP_PLUGINS", "0").trim() == "1";
+        return juce::SystemStats::getEnvironmentVariable ("AIZANA_OOP_PLUGINS", "0").trim() == "1";
     }
 
     void OutOfProcessPluginFormat::createPluginInstance (const juce::PluginDescription& desc,

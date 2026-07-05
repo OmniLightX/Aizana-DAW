@@ -196,10 +196,10 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     };
 
     // Stage 1: Try TE's Plugin::createEditor()
-    CloudesPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName()
+    AizanaPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName()
                              + "\"  -> plugin.createEditor()...");
     auto editorOwned = plugin.createEditor();
-    CloudesPluginLog::stage ("FloatingPluginWindow  createEditor() returned "
+    AizanaPluginLog::stage ("FloatingPluginWindow  createEditor() returned "
                              + juce::String (editorOwned != nullptr ? "editor" : "null"));
     if (editorOwned != nullptr)
     {
@@ -212,29 +212,29 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
 
         if (auto* externalPlugin = dynamic_cast<te::ExternalPlugin*> (&plugin))
         {
-            CloudesPluginLog::stage ("FloatingPluginWindow  externalPlugin->initialiseFully()...");
+            AizanaPluginLog::stage ("FloatingPluginWindow  externalPlugin->initialiseFully()...");
             // Force initialisation for plugins on tracks not yet in the render graph.
             // initialiseFully() is idempotent — the fullyInitialised flag prevents
             // double-init. For BuiltInPluginFormat this completes synchronously; for
             // async VST3/AU plugins the instance may still be null, in which case the
             // Stage 3 placeholder is the correct fallback.
             externalPlugin->initialiseFully();
-            CloudesPluginLog::stage ("FloatingPluginWindow  initialiseFully() done");
+            AizanaPluginLog::stage ("FloatingPluginWindow  initialiseFully() done");
 
             if (auto* pi = externalPlugin->getAudioPluginInstance())
             {
-                CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor()...");
+                AizanaPluginLog::stage ("FloatingPluginWindow  pi->createEditor()...");
                 apiEditor = pi->createEditor();
-                CloudesPluginLog::stage ("FloatingPluginWindow  pi->createEditor() done");
+                AizanaPluginLog::stage ("FloatingPluginWindow  pi->createEditor() done");
 
-                // Stage 2b: plugins without a native editor (e.g. Cloudes-generated
+                // Stage 2b: plugins without a native editor (e.g. Aizana-generated
                 // Faust/CLAP plugins, which expose params but no GUI) get a generic
                 // editor built from getParameters() — real, labelled, working sliders.
                 // Without this they fall through to the "No editor available" placeholder
                 // and are only usable at their baked-in defaults.
                 if (apiEditor == nullptr && pi->getParameters().size() > 0)
                 {
-                    CloudesPluginLog::stage ("FloatingPluginWindow  building GenericAudioProcessorEditor ("
+                    AizanaPluginLog::stage ("FloatingPluginWindow  building GenericAudioProcessorEditor ("
                                              + juce::String (pi->getParameters().size()) + " params)");
                     apiEditor = new juce::GenericAudioProcessorEditor (*pi);
                 }
@@ -266,7 +266,7 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
     // Make window visible
     setVisible (true);
     toFront (true);
-    CloudesPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName() + "\"  READY");
+    AizanaPluginLog::stage ("FloatingPluginWindow  \"" + plugin.getName() + "\"  READY");
 }
 
 FloatingPluginWindow::~FloatingPluginWindow()

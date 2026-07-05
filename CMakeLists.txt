@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Cloudes VERSION 0.1.0)
+project(Aizana VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,7 +20,7 @@ add_subdirectory(extern/JUCE)
 # The root CMakeLists.txt adds modules/juce (a submodule), which conflicts with
 # our JUCE submodule. By adding modules/ directly, we skip the duplicate JUCE
 # inclusion. JUCE is already available via the add_subdirectory(extern/JUCE) above.
-# GPL3/Commercial dual-license; Cloudes is GPL3 (see LICENSE.md).
+# GPL3/Commercial dual-license; Aizana is GPL3 (see LICENSE.md).
 add_subdirectory(extern/tracktion_engine/modules)
 
 # ---------------------------------------------------------------------------
@@ -79,11 +79,11 @@ target_compile_options(demucs_inference PRIVATE -O3 -DNDEBUG)
 # CoreML execution provider (Apple Neural Engine). Phase 4 / Slice 5a: the real
 # inference backend behind IInferenceBackend (OnnxModelRunner). We use Microsoft's
 # prebuilt binary — CoreML EP is compiled into the macOS build; we do NOT build
-# ORT from source. Toggle off with -DCLOUDES_ENABLE_ONNX=OFF to skip the download
+# ORT from source. Toggle off with -DAIZANA_ENABLE_ONNX=OFF to skip the download
 # (OnnxModelRunner then compiles as a defined no-op stub).
 # ---------------------------------------------------------------------------
-option(CLOUDES_ENABLE_ONNX "Build with the ONNX Runtime + CoreML inference backend" ON)
-if(CLOUDES_ENABLE_ONNX)
+option(AIZANA_ENABLE_ONNX "Build with the ONNX Runtime + CoreML inference backend" ON)
+if(AIZANA_ENABLE_ONNX)
     FetchContent_Declare(onnxruntime_prebuilt
         URL      https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-osx-universal2-1.20.1.tgz
         URL_HASH SHA256=da4349e01a7e997f5034563183c7183d069caadc1d95f499b560961787813efd)
@@ -98,8 +98,8 @@ if(CLOUDES_ENABLE_ONNX)
         IMPORTED_LOCATION             ${ORT_DYLIB}
         INTERFACE_INCLUDE_DIRECTORIES ${ORT_DIR}/include)
 
-    set(CLOUDES_ORT_DYLIB  ${ORT_DYLIB}    CACHE INTERNAL "ONNX Runtime dylib path")
-    set(CLOUDES_ORT_LIBDIR ${ORT_DIR}/lib  CACHE INTERNAL "ONNX Runtime lib dir (for RPATH)")
+    set(AIZANA_ORT_DYLIB  ${ORT_DYLIB}    CACHE INTERNAL "ONNX Runtime dylib path")
+    set(AIZANA_ORT_LIBDIR ${ORT_DIR}/lib  CACHE INTERNAL "ONNX Runtime lib dir (for RPATH)")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -107,15 +107,15 @@ endif()
 # Compiles curated Faust DSP templates (generator/templates/*.dsp) to self-contained
 # universal .clap at build time (recipe proven in Spike S2) and bundles them into the
 # app. Gated: needs the Faust compiler (brew install faust). Off / Faust missing →
-# generator feature compiles out (CLOUDES_HAVE_GENERATOR undefined), build stays green.
+# generator feature compiles out (AIZANA_HAVE_GENERATOR undefined), build stays green.
 # The generator's clap/clap-helpers are fetched at main, ISOLATED from the hosting
 # clap_api (1.2.0) — they meet only at the stable CLAP C-ABI when the .clap is loaded.
 # ---------------------------------------------------------------------------
-option(CLOUDES_BUILD_GENERATOR "Build the Faust→CLAP plugin generator templates" ON)
+option(AIZANA_BUILD_GENERATOR "Build the Faust→CLAP plugin generator templates" ON)
 find_program(FAUST_EXECUTABLE faust)
-set(CLOUDES_HAVE_GENERATOR 0)
+set(AIZANA_HAVE_GENERATOR 0)
 
-if(CLOUDES_BUILD_GENERATOR AND FAUST_EXECUTABLE)
+if(AIZANA_BUILD_GENERATOR AND FAUST_EXECUTABLE)
     execute_process(COMMAND ${FAUST_EXECUTABLE} --archdir
         OUTPUT_VARIABLE FAUST_ARCHDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
     get_filename_component(_faust_bin    ${FAUST_EXECUTABLE} DIRECTORY)
@@ -154,26 +154,26 @@ if(CLOUDES_BUILD_GENERATOR AND FAUST_EXECUTABLE)
         list(APPEND GEN_CLAPS ${_out})
     endforeach()
 
-    add_custom_target(cloudes_generator_templates ALL DEPENDS ${GEN_CLAPS})
-    set(CLOUDES_HAVE_GENERATOR 1)
-    message(STATUS "Cloudes: plugin generator ENABLED (Faust ${FAUST_EXECUTABLE})")
+    add_custom_target(aizana_generator_templates ALL DEPENDS ${GEN_CLAPS})
+    set(AIZANA_HAVE_GENERATOR 1)
+    message(STATUS "Aizana: plugin generator ENABLED (Faust ${FAUST_EXECUTABLE})")
 else()
-    message(STATUS "Cloudes: plugin generator disabled (Faust not found or CLOUDES_BUILD_GENERATOR=OFF)")
+    message(STATUS "Aizana: plugin generator disabled (Faust not found or AIZANA_BUILD_GENERATOR=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
-# Cloudes application target
+# Aizana application target
 # ---------------------------------------------------------------------------
 
-juce_add_gui_app(Cloudes
-    PRODUCT_NAME                    "Cloudes"
-    BUNDLE_ID                       "com.cloudes.daw"
+juce_add_gui_app(Aizana
+    PRODUCT_NAME                    "Aizana"
+    BUNDLE_ID                       "com.aizanagi.aizana"
     VERSION                         "0.1.0"
     MICROPHONE_PERMISSION_ENABLED   TRUE
-    MICROPHONE_PERMISSION_TEXT      "Cloudes needs microphone access to record audio tracks."
+    MICROPHONE_PERMISSION_TEXT      "Aizana needs microphone access to record audio tracks."
 )
 
-target_sources(Cloudes PRIVATE
+target_sources(Aizana PRIVATE
     src/app/Main.cpp
     src/app/MicrophonePermission.mm
     src/app/MainWindow.cpp
@@ -283,11 +283,11 @@ target_sources(Cloudes PRIVATE
     src/ui/onboarding/OnboardingWizard.cpp
 )
 
-target_include_directories(Cloudes PRIVATE
+target_include_directories(Aizana PRIVATE
     src
 )
 
-target_compile_definitions(Cloudes PRIVATE
+target_compile_definitions(Aizana PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_MODAL_LOOPS_PERMITTED=1
@@ -296,7 +296,7 @@ target_compile_definitions(Cloudes PRIVATE
     # Without a backend, setAutoTempo/setTimeStretchMode/WarpTimeManager are silent no-ops.
     # Elastique stays off (commercial licence). Must match the engine_tests definition.
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
-    # Enable VST3 + AU hosting in Cloudes' OWN juce_audio_processors compilation so the
+    # Enable VST3 + AU hosting in Aizana' OWN juce_audio_processors compilation so the
     # plugin-browser scanner (PluginScanner) can actually register and find them. Without
     # these, addDefaultFormats() adds nothing for the format and the user's library never
     # appears — independent of the in-process crash issue (Fix 4).
@@ -309,11 +309,11 @@ target_compile_definitions(Cloudes PRIVATE
     # first AU scan is still slow (Apple validates each component) but completes + caches.
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_AU=1
-    JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_PRODUCT_NAME>"
-    JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Cloudes,JUCE_VERSION>"
+    JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:Aizana,JUCE_PRODUCT_NAME>"
+    JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:Aizana,JUCE_VERSION>"
 )
 
-target_link_libraries(Cloudes PRIVATE
+target_link_libraries(Aizana PRIVATE
     juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_audio_formats
@@ -328,104 +328,104 @@ target_link_libraries(Cloudes PRIVATE
 
 # CLAP API is header-only; add include path so src/plugins can use clap/clap.h
 # libebur128 header — FetchContent puts it in build/_deps, add include path explicitly
-target_include_directories(Cloudes PRIVATE
+target_include_directories(Aizana PRIVATE
     ${clap_api_SOURCE_DIR}/include
     ${ebur128_SOURCE_DIR}/ebur128
 )
 
 # ONNX Runtime: link + bundle the dylib into the .app (install name is @rpath/...).
-if(CLOUDES_ENABLE_ONNX)
-    target_link_libraries(Cloudes PRIVATE onnxruntime)
-    target_compile_definitions(Cloudes PRIVATE CLOUDES_HAVE_ONNXRUNTIME=1)
-    set_target_properties(Cloudes PROPERTIES
-        BUILD_RPATH "${CLOUDES_ORT_LIBDIR};@executable_path/../Frameworks")
-    add_custom_command(TARGET Cloudes POST_BUILD
+if(AIZANA_ENABLE_ONNX)
+    target_link_libraries(Aizana PRIVATE onnxruntime)
+    target_compile_definitions(Aizana PRIVATE AIZANA_HAVE_ONNXRUNTIME=1)
+    set_target_properties(Aizana PROPERTIES
+        BUILD_RPATH "${AIZANA_ORT_LIBDIR};@executable_path/../Frameworks")
+    add_custom_command(TARGET Aizana POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Frameworks"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Frameworks"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CLOUDES_ORT_DYLIB}"
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Frameworks/"
+            "${AIZANA_ORT_DYLIB}"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Frameworks/"
         VERBATIM)
 endif()
 
 # Plugin generator: build the template .clap before the app, then bundle them into
 # Contents/Resources/Generator so the in-app generator can load them (Iteration B).
-if(CLOUDES_HAVE_GENERATOR)
-    add_dependencies(Cloudes cloudes_generator_templates)
-    target_compile_definitions(Cloudes PRIVATE CLOUDES_HAVE_GENERATOR=1)
-    add_custom_command(TARGET Cloudes POST_BUILD
+if(AIZANA_HAVE_GENERATOR)
+    add_dependencies(Aizana aizana_generator_templates)
+    target_compile_definitions(Aizana PRIVATE AIZANA_HAVE_GENERATOR=1)
+    add_custom_command(TARGET Aizana POST_BUILD
         # Clear first so removed/renamed templates don't linger in the bundle.
         COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Generator"
         COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Generator"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_CLAPS}
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/Generator/"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Generator/"
         VERBATIM)
 
     # Runtime-generator toolchain (G1): bundle the CLAP/clap-helpers headers + GUI globals
     # so FaustCompiler can compile user-/AI-authored DSP at runtime (system `faust` provides
     # the rest). clang comes from the Command Line Tools.
-    add_custom_command(TARGET Cloudes POST_BUILD
+    add_custom_command(TARGET Aizana POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/GeneratorToolchain"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${clap_gen_SOURCE_DIR}/include"
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/clap/include"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/GeneratorToolchain/clap/include"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${clap_helpers_SOURCE_DIR}/include"
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/clap-helpers/include"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/GeneratorToolchain/clap-helpers/include"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp"
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/GeneratorToolchain/"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/GeneratorToolchain/"
         VERBATIM)
 endif()
 
 # ---------------------------------------------------------------------------
-# cloudes-mcp — standalone MCP (stdio) server (Generator G4). Lets Claude Code /
-# Codex author brand-new plugins for Cloudes from free text, reusing the SAME C++
+# aizana-mcp — standalone MCP (stdio) server (Generator G4). Lets Claude Code /
+# Codex author brand-new plugins for Aizana from free text, reusing the SAME C++
 # generator code (single source of truth). Console app, juce_core only. Built only
 # when the generator toolchain is available (Faust present).
 # ---------------------------------------------------------------------------
-if(CLOUDES_HAVE_GENERATOR)
-    juce_add_console_app(cloudes-mcp PRODUCT_NAME "cloudes-mcp")
-    target_sources(cloudes-mcp PRIVATE
-        src/mcp/CloudesMcpServer.cpp
+if(AIZANA_HAVE_GENERATOR)
+    juce_add_console_app(aizana-mcp PRODUCT_NAME "aizana-mcp")
+    target_sources(aizana-mcp PRIVATE
+        src/mcp/AizanaMcpServer.cpp
         src/ai/AiLiveProtocol.cpp
         src/generator/FaustCompiler.cpp
         src/generator/FaustEmitter.cpp
         src/generator/LocalComposer.cpp
         src/generator/PluginSpec.cpp)
-    target_include_directories(cloudes-mcp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(cloudes-mcp PRIVATE
+    target_include_directories(aizana-mcp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(aizana-mcp PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0)
-    target_link_libraries(cloudes-mcp PRIVATE juce::juce_core)
+    target_link_libraries(aizana-mcp PRIVATE juce::juce_core)
 
     # Ship a GeneratorToolchain dir next to the binary so FaustToolchain::resolve() finds the
     # CLAP headers + GUI globals when the server runs outside the app bundle.
-    add_custom_command(TARGET cloudes-mcp POST_BUILD
+    add_custom_command(TARGET aizana-mcp POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain"
+            "$<TARGET_FILE_DIR:aizana-mcp>/GeneratorToolchain"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${clap_gen_SOURCE_DIR}/include"
-            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/clap/include"
+            "$<TARGET_FILE_DIR:aizana-mcp>/GeneratorToolchain/clap/include"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${clap_helpers_SOURCE_DIR}/include"
-            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/clap-helpers/include"
+            "$<TARGET_FILE_DIR:aizana-mcp>/GeneratorToolchain/clap-helpers/include"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/generator/faust_gui_globals.cpp"
-            "$<TARGET_FILE_DIR:cloudes-mcp>/GeneratorToolchain/"
+            "$<TARGET_FILE_DIR:aizana-mcp>/GeneratorToolchain/"
         VERBATIM)
 
-    # Bundle cloudes-mcp into the app so the in-app KI-Studio can spawn it (the app's own
-    # Resources/GeneratorToolchain — bundled above — serves as its toolchain). cloudes-mcp
+    # Bundle aizana-mcp into the app so the in-app KI-Studio can spawn it (the app's own
+    # Resources/GeneratorToolchain — bundled above — serves as its toolchain). aizana-mcp
     # builds first (dependency); the copy runs in the app's POST_BUILD, after the bundle exists.
-    add_dependencies(Cloudes cloudes-mcp)
-    add_custom_command(TARGET Cloudes POST_BUILD
+    add_dependencies(Aizana aizana-mcp)
+    add_custom_command(TARGET Aizana POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:cloudes-mcp>"
-            "$<TARGET_BUNDLE_CONTENT_DIR:Cloudes>/Resources/cloudes-mcp"
+            "$<TARGET_FILE:aizana-mcp>"
+            "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/aizana-mcp"
         VERBATIM)
 endif()
 

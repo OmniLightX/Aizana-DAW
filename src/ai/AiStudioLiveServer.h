@@ -10,13 +10,13 @@ class EditManager;
 class MixApplyEngine;
 class AICommandBridge;
 
-namespace cloudes
+namespace aizana
 {
     /**
-        AiStudioLiveServer — Phase 4 flagship "Cloudes AI Studio", Slice 2 (live mixing).
+        AiStudioLiveServer — Phase 4 flagship "Aizana AI Studio", Slice 2 (live mixing).
 
         The app side of the live bridge. While the app runs it hosts a loopback TCP socket
-        and writes a discovery file (port + random token) so the agent's `cloudes-mcp` child
+        and writes a discovery file (port + random token) so the agent's `aizana-mcp` child
         can reach the RUNNING session. Each connection carries one AiLiveProtocol request;
         the server validates the token, dispatches the tool, and writes one response line.
 
