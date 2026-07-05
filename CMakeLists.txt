@@ -212,6 +212,7 @@ target_sources(Aizana PRIVATE
     src/engine/AICommandBridge.cpp
     src/engine/AutomationEngine.cpp
     src/audio/AudioEngine.cpp
+    src/audio/DropoutMonitor.cpp
     src/audio/AudioRecorder.cpp
     src/audio/MetronomeGenerator.cpp
     # Plugin hosting (PLUG-01 through PLUG-04)

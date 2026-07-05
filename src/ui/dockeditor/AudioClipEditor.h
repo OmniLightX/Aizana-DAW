@@ -3,21 +3,28 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/EditManager.h"
+#include "engine/ClipEditor.h"
+#include "engine/AutomationEngine.h"
+#include "ui/automation/AutomationLane.h"
 #include "ui/common/AudioThumbnailPool.h"
 
 namespace te = tracktion::engine;
 
 /**
  * AudioClipEditor — large waveform editor for ONE WaveAudioClip, docked at the
- * bottom (Studio One "Edit" view). Operates directly on the live clip object:
+ * bottom (Studio One "Edit" view). Operates directly on the live clip object.
  *
- *   - Big waveform with its own horizontal zoom/scroll (independent of the
- *     arrangement zoom)
- *   - Edge trim (left/right 10px zones — same semantics as ClipComponent:
- *     left trim keeps source sync via offset, min length 50ms)
- *   - Fade handles (top corners, drag horizontally — te::IDs::fadeIn/fadeOut)
- *   - Clip gain slider in the header (te::IDs::gain, dB)
- *   - Click on the waveform = seek transport; playhead line follows playback
+ * S1-Parität (docs/EDITOR_PARITY_S1.md, E1–E5): the editor is a full WORKPLACE,
+ * not a display — same tool model as the arrangement:
+ *
+ *   - Tools: Pfeil (1) · Split (2/C) · Range (3, oder Cmd+Drag wie im Arrange)
+ *   - Split-Tool-Klick/Doppelklick = Schnitt an (gesnappter) Position
+ *   - Range aufziehen → Delete/Backspace entfernt den Bereich aus dem Clip in
+ *     EINEM Undo-Schritt (ClipEditor::removeRangeFromClip — der Atmer-Workflow)
+ *   - Snap an 1/16-Raster (Toggle "Snap" / Taste N, Alt = temporär aus)
+ *   - Clip-Mute-Toggle (I-03: ValueTree-Property über den UndoManager)
+ *   - Automation-Lane (Volume/Pan, AutomationLane-Reuse) unter der Waveform
+ *   - Edge-Trim, Fades, Clip-Gain, Zoom/Scroll wie gehabt (Pfeil-Werkzeug)
  *
  * All mutations go through the Edit's shared UndoManager — one transaction per
  * gesture. NO copied clip data: the arrangement shows every change immediately
@@ -35,18 +42,23 @@ public:
     te::Clip& getClip() noexcept { return clip; }
 
     void paint (juce::Graphics& g) override;
+    void paintOverChildren (juce::Graphics& g) override;   // I-05: Range-Overlay
     void resized() override;
 
     void mouseDown  (const juce::MouseEvent& e) override;
     void mouseDrag  (const juce::MouseEvent& e) override;
     void mouseUp    (const juce::MouseEvent& e) override;
     void mouseMove  (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     void mouseMagnify   (const juce::MouseEvent& e, float scaleFactor) override;
+    bool keyPressed (const juce::KeyPress& key) override;
 
 private:
     te::WaveAudioClip& clip;
     EditManager&       editManager;
+    ClipEditor         clipEditor;        // engine service (stateless over EditManager)
+    AutomationEngine   automationEngine;  // engine service for the automation lane
 
     // ---- Header widgets ----
     juce::Label  nameLabel;
@@ -55,6 +67,44 @@ private:
     juce::TextButton zoomInButton  { "+" };
     juce::TextButton zoomOutButton { "-" };
     juce::TextButton zoomFitButton { "Fit" };
+
+    // ---- Toolbar (S1-Muster: Werkzeuge + Snap + Aktionen) ----
+    enum class Tool { pointer, split, range };
+    Tool activeTool  = Tool::pointer;
+    bool snapEnabled = true;
+
+    juce::TextButton toolPointerBtn { juce::String::fromUTF8 ("Pfeil") };
+    juce::TextButton toolSplitBtn   { "Split" };
+    juce::TextButton toolRangeBtn   { "Range" };
+    juce::TextButton snapBtn        { "Snap" };
+    juce::TextButton muteBtn        { "Mute" };
+    juce::TextButton autoBtn        { "Auto" };
+    juce::TextButton rangeCutBtn    { juce::String::fromUTF8 ("\xe2\x88\x92 Bereich") };
+
+    void setTool (Tool t);
+    void updateToolbarState();
+
+    // ---- Range selection (clip-LOCAL seconds) ----
+    bool   rangeActive   = false;
+    bool   rangeDragging = false;
+    double rangeA = 0.0, rangeB = 0.0;
+
+    void applyRangeDelete();
+    void splitAt (double localSecs);
+
+    // Snap: 1/16-Raster über die TempoSequence; Alt = bypass.
+    double snapLocal (double localSecs, bool bypassSnap) const;
+
+    bool isClipMuted() const;
+    void toggleClipMute();
+
+    // ---- Automation lane (AutomationLane-Reuse, arrangement-style mapping) ----
+    bool automationVisible = false;
+    std::unique_ptr<AutomationLane> autoLane;
+    double lanePixelsPerSecond = 100.0;   // by-ref view mapping for AutomationLane
+    double laneScrollSeconds   = 0.0;     // absolute seconds at lane x=0
+    void toggleAutomationLane();
+    void updateLaneMapping();
 
     // ---- View state: window into the clip, in clip-LOCAL seconds [0, len] ----
     double viewStartSecs = 0.0;
@@ -76,6 +126,8 @@ private:
     double trimMaxExtendRight  = 0.0;
 
     static constexpr int kHeaderH   = 28;
+    static constexpr int kToolbarH  = 26;
+    static constexpr int kAutoLaneH = 96;
     static constexpr int kScrollH   = 12;
     static constexpr int kEdgeZone  = 10;   // px trim zones
     static constexpr int kFadeGrab  = 14;   // px fade handle hit size
@@ -83,6 +135,7 @@ private:
     juce::Rectangle<int> waveArea() const;
     double clipLenSecs() const;
     double sourceLenSecs();   // non-const: getAudioFile() is non-const in TE
+    double clipStartAbsSecs() const { return clip.getPosition().getStart().inSeconds(); }
 
     // clip-local time ↔ x pixel inside waveArea
     double xToLocalSecs (float x) const;

@@ -10,6 +10,7 @@
 #include "ai/StemImportEngine.h"
 #include "ai/MixApplyEngine.h"
 #include "ai/AiStudioLiveServer.h"
+#include "audio/DropoutMonitor.h"
 #include "ai/MixDataLogger.h"
 #include "ai/StemSeparationEngine.h"
 #include "generator/PluginGenerator.h"
@@ -458,6 +459,10 @@ private:
     };
     GeneratedLibraryWatcher generatedLibraryWatcher;
     int lastGeneratedClapCount = -1;
+
+    // M13-Diagnose: protokolliert XRuns (hörbare Aussetzer) mit App-Kontext nach
+    // ~/Library/Aizana/logs/dropouts.log — bis die Dropout-Ursache bestätigt ist.
+    std::unique_ptr<DropoutMonitor> dropoutMonitor;
 
     // KI-Studio (Phase 4 flagship): in-app chat that drives the user's Claude/Codex CLI.
     void openAiStudio();

@@ -171,6 +171,22 @@ public:
     void deleteClip (te::Clip& clip);
 
     /**
+     * Delete a batch of clips in ONE undo transaction (multi-selection delete).
+     * Null entries are skipped; clips are kept alive for the whole removal loop.
+     */
+    void deleteClips (const juce::Array<te::Clip*>& clips);
+
+    /**
+     * Remove [rangeStart, rangeEnd] (edit-absolute seconds) from ONE clip in a
+     * single undo step — the Studio One breath-edit workflow (mark range, remove,
+     * the gap stays). Hole inside the clip → split + right piece re-trimmed with
+     * source sync; edge overlap → trim; full cover → clip deleted.
+     * Returns the newly created right-hand piece, if one was created.
+     */
+    te::WaveAudioClip* removeRangeFromClip (te::WaveAudioClip& clip,
+                                            double rangeStartSecs, double rangeEndSecs);
+
+    /**
      * Import an audio file as a new WaveAudioClip on the given track.
      *
      * The clip's start time is startTimeSecs. Its duration is determined from
@@ -191,6 +207,12 @@ public:
 
 private:
     EditManager& editManager;
+
+    // Transaction-free cores (house pattern): the public cutClip/trimClip wrap these
+    // in their own transaction; composite gestures (removeRangeFromClip) call the
+    // cores directly so the whole gesture stays ONE undo step.
+    te::WaveAudioClip* cutClipCore  (te::WaveAudioClip& clip, double splitTimeSecs);
+    void               trimClipCore (te::Clip& clip, double newStartTimeSecs, double newEndTimeSecs);
 
     // One-slot clipboard — stores a reference to the last copied clip.
     // Weak pointer pattern: store the clip's juce::ValueTree (always valid until clip deleted).

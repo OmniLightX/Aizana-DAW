@@ -745,7 +745,14 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 }
                 else if (result == 2)
                 {
-                    clipEditor.deleteClip (clip);
+                    // Multi-selection aware: if this clip is part of a selection,
+                    // "Delete" removes the WHOLE selection in one undo step —
+                    // right-click → Delete on 3 selected snippets deletes all 3.
+                    auto* av = findParentComponentOfClass<ArrangementView>();
+                    if (av != nullptr && av->isClipSelected (this) && av->getNumSelectedClips() > 1)
+                        av->deleteSelectedClips();
+                    else
+                        clipEditor.deleteClip (clip);
                 }
                 else if (result == 3)
                 {

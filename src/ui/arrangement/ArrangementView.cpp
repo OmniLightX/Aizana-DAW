@@ -1260,32 +1260,13 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         }
     }
 
-    // Delete key with active time-range: remove the selected region from all clips
-    if ((key.getKeyCode() == juce::KeyPress::deleteKey
-         || key.getKeyCode() == juce::KeyPress::backspaceKey)
-        && rangeActive && rangeEndSecs > rangeStartSecs)
+    // Delete/Backspace (MacBook "Delete" sends backspace!) — selection-aware:
+    // time-range > selected clips > selected track. See deleteSelection().
+    if (key.getKeyCode() == juce::KeyPress::deleteKey
+        || key.getKeyCode() == juce::KeyPress::backspaceKey)
     {
-        deleteTimeRange();
-        return true;
-    }
-
-    // Delete key with a selected track header (and nothing clip-level selected):
-    // delete that track (Studio One parity — select track, press Delete). Immediate
-    // and undoable (Cmd+Z), no confirmation. The clip/range guards above mean this
-    // only fires when the track itself is the active selection.
-    if ((key.getKeyCode() == juce::KeyPress::deleteKey
-         || key.getKeyCode() == juce::KeyPress::backspaceKey)
-        && selectedTrackHeader != nullptr
-        && selectedClips.isEmpty()
-        && ! (rangeActive && rangeEndSecs > rangeStartSecs))
-    {
-        auto& track = selectedTrackHeader->getTrack();
-        const auto name = track.getName();
-        setSelectedTrackHeader (nullptr);   // detach before the header is rebuilt away
-        auto& um = appState.editManager.getUndoManager();
-        um.beginNewTransaction ("Delete Track: " + name);
-        track.edit.deleteTrack (&track);    // ValueTree listener rebuilds the rows
-        return true;
+        if (deleteSelection())
+            return true;
     }
 
     // ---- Cmd+A — select all clips on all tracks ----
@@ -2833,4 +2814,58 @@ void ArrangementView::deleteTimeRange()
     rangeActive = false;
     juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
     repaint();
+}
+
+//==============================================================================
+void ArrangementView::deleteSelectedClips()
+{
+    if (selectedClips.isEmpty())
+        return;
+
+    // Collect the engine-side clips FIRST, then drop the component selection:
+    // deleting state rebuilds the track rows and destroys the ClipComponents —
+    // the selection array must not hold dangling pointers through that.
+    juce::Array<te::Clip*> clips;
+    for (auto* cc : selectedClips)
+        if (cc != nullptr)
+            clips.add (&cc->getClip());
+
+    selectedClips.clear();
+
+    clipEditor.deleteClips (clips);   // one undo step for the whole batch
+
+    juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+    repaint();
+}
+
+bool ArrangementView::deleteSelection()
+{
+    // Active time-range beats everything (marquee range delete).
+    if (rangeActive && rangeEndSecs > rangeStartSecs)
+    {
+        deleteTimeRange();
+        return true;
+    }
+
+    // Selected clips next — ALL of them, one undo step (Studio One behaviour).
+    if (! selectedClips.isEmpty())
+    {
+        deleteSelectedClips();
+        return true;
+    }
+
+    // Finally: a selected track header deletes that track (Studio One parity —
+    // select track, press Delete). Immediate and undoable (Cmd+Z), no confirmation.
+    if (selectedTrackHeader != nullptr)
+    {
+        auto& track = selectedTrackHeader->getTrack();
+        const auto name = track.getName();
+        setSelectedTrackHeader (nullptr);   // detach before the header is rebuilt away
+        auto& um = appState.editManager.getUndoManager();
+        um.beginNewTransaction ("Delete Track: " + name);
+        track.edit.deleteTrack (&track);    // ValueTree listener rebuilds the rows
+        return true;
+    }
+
+    return false;
 }
