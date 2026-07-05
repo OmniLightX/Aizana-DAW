@@ -34,7 +34,7 @@ namespace cloudes
     class MixDataLogger
     {
     public:
-        /** Default corpus location: ~/Library/Application Support/Cloudes/training/mix_decisions.jsonl */
+        /** Default corpus location: ~/Library/Cloudes/training/mix_decisions.jsonl */
         static juce::File defaultLogFile();
 
         /** One JSONL line for a single (track, action, verdict). Pure — no I/O. */

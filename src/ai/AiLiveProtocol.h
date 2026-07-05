@@ -54,7 +54,9 @@ namespace cloudes
     {
     public:
         /** The discovery file the running app writes and `cloudes-mcp` reads:
-            ~/Library/Application Support/Cloudes/aistudio/live.json */
+            ~/Library/Cloudes/aistudio/live.json
+            (JUCE userApplicationDataDirectory on macOS is ~/Library, NOT
+            ~/Library/Application Support — keep docs/debugging pointed there). */
         static juce::File liveBridgeFile();
 
         // --- requests -------------------------------------------------------

@@ -6,7 +6,7 @@
 // server is the OPT-IN path where an LLM writes arbitrary Faust DSP. It reuses the exact
 // same C++ generator code (FaustCompiler/FaustEmitter/LocalComposer) — single source of
 // truth, no logic duplicated in another language. Compiled plugins land in the user's
-// Cloudes library (~/Library/Application Support/Cloudes/Generated Plugins); a running
+// Cloudes library (~/Library/Cloudes/Generated Plugins); a running
 // Cloudes instance auto-discovers them (PluginScanner::registerGeneratedPlugins + the
 // browser's 1 Hz poll), so "describe -> plugin appears in the DAW" works end to end.
 //

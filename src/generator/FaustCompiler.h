@@ -48,7 +48,7 @@ namespace cloudes
         /** True when a usable Faust toolchain is present (generation possible). */
         static bool isAvailable();
 
-        /** ~/Library/Application Support/Cloudes/Generated Plugins — the user's plugin library. */
+        /** ~/Library/Cloudes/Generated Plugins — the user's plugin library. */
         static juce::File generatedPluginsDir();
 
         /** Compile a Faust DSP source string → universal .clap at `outDir/<name>.clap`.

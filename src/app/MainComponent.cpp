@@ -1204,7 +1204,7 @@ void MainComponent::startMix()
         return;
     }
 
-    // Local ML (Slice 5a): drop a model at ~/Library/Application Support/Cloudes/
+    // Local ML (Slice 5a): drop a model at ~/Library/Cloudes/
     // models/mix_gain_trim.onnx and the mix consults it (CoreML/Neural Engine);
     // absent → pure heuristic. Load + run on the SAME worker (no load/run race).
     const auto modelFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
