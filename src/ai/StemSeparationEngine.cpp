@@ -86,7 +86,7 @@ StemSeparationEngine::~StemSeparationEngine()
 juce::File StemSeparationEngine::modelsDirectory()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-        .getChildFile ("Cloudes").getChildFile ("Models");
+        .getChildFile ("Aizana").getChildFile ("Models");
 }
 
 juce::Array<juce::File> StemSeparationEngine::requiredModelFiles (Model m)

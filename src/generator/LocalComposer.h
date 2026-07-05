@@ -2,7 +2,7 @@
 
 #include "PluginSpec.h"
 
-namespace cloudes
+namespace aizana
 {
     /**
         LocalComposer — Phase 4 / Generator G2: the default, *local* plugin author (no LLM).

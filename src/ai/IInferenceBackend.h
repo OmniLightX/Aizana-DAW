@@ -6,7 +6,7 @@
 /**
  * IInferenceBackend — the swappable inference seam (Phase 2, Block B scaffolding).
  *
- * Abstracts "run a model" so the rest of Cloudes never depends on a concrete ML
+ * Abstracts "run a model" so the rest of Aizana never depends on a concrete ML
  * runtime. Phase 2 ships a stub (OnnxModelRunner) with no real model; Phase 3 backs
  * it with ONNX Runtime + the CoreML execution provider (Apple Neural Engine) WITHOUT
  * touching callers. Inference always runs on a background thread (AIEngine) — never

@@ -1,6 +1,6 @@
 #include "FaustCompiler.h"
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -66,23 +66,23 @@ namespace cloudes
             tc.faustInclude = tc.faust.getParentDirectory().getParentDirectory().getChildFile ("include");
         }
 
-        // clap / clap-helpers headers + GUI globals: bundled with Cloudes. Resolution order:
-        //   1. CLOUDES_TOOLCHAIN_DIR env — explicit override (used by the standalone MCP server)
-        //   2. this executable's own .app bundle — the Cloudes app case
-        //   3. a GeneratorToolchain dir next to the executable — the standalone cloudes-mcp case
-        //   4. an installed Cloudes.app — so a relocated cloudes-mcp still finds the headers
+        // clap / clap-helpers headers + GUI globals: bundled with Aizana. Resolution order:
+        //   1. AIZANA_TOOLCHAIN_DIR env — explicit override (used by the standalone MCP server)
+        //   2. this executable's own .app bundle — the Aizana app case
+        //   3. a GeneratorToolchain dir next to the executable — the standalone aizana-mcp case
+        //   4. an installed Aizana.app — so a relocated aizana-mcp still finds the headers
         const auto exe = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
 
         juce::StringArray candidates;
-        if (const auto env = juce::SystemStats::getEnvironmentVariable ("CLOUDES_TOOLCHAIN_DIR", {});
+        if (const auto env = juce::SystemStats::getEnvironmentVariable ("AIZANA_TOOLCHAIN_DIR", {});
             env.isNotEmpty())
             candidates.add (env);
         candidates.add (juce::File::getSpecialLocation (juce::File::currentApplicationFile)
                             .getChildFile ("Contents/Resources/GeneratorToolchain").getFullPathName());
         candidates.add (exe.getParentDirectory().getChildFile ("GeneratorToolchain").getFullPathName());
-        candidates.add ("/Applications/Cloudes.app/Contents/Resources/GeneratorToolchain");
+        candidates.add ("/Applications/Aizana.app/Contents/Resources/GeneratorToolchain");
         candidates.add (juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-                            .getChildFile ("Applications/Cloudes.app/Contents/Resources/GeneratorToolchain")
+                            .getChildFile ("Applications/Aizana.app/Contents/Resources/GeneratorToolchain")
                             .getFullPathName());
 
         for (const auto& c : candidates)
@@ -106,7 +106,7 @@ namespace cloudes
     juce::File FaustCompiler::generatedPluginsDir()
     {
         return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                   .getChildFile ("Cloudes/Generated Plugins");
+                   .getChildFile ("Aizana/Generated Plugins");
     }
 
     juce::String FaustCompiler::sanitiseId (const juce::String& name)
@@ -135,18 +135,18 @@ namespace cloudes
 
         const auto id   = sanitiseId (pluginName);
         const auto work = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                              .getChildFile ("cloudes_gen_" + id + "_"
+                              .getChildFile ("aizana_gen_" + id + "_"
                                              + juce::String::toHexString (juce::Random::getSystemRandom().nextInt()));
         work.createDirectory();
         outDir.createDirectory();
 
         const auto safeName = pluginName.isNotEmpty() ? pluginName : juce::String ("Generated Plugin");
         work.getChildFile ("plugin_metadata.h").replaceWithText (
-            "#define FAUST_PLUGIN_ID \"com.cloudes.gen." + id + "\"\n"
+            "#define FAUST_PLUGIN_ID \"com.aizanagi.aizana.gen." + id + "\"\n"
             "#define FAUST_PLUGIN_NAME \"" + safeName + "\"\n"
-            "#define FAUST_PLUGIN_VENDOR \"Cloudes\"\n"
+            "#define FAUST_PLUGIN_VENDOR \"Aizana\"\n"
             "#define FAUST_PLUGIN_VERSION \"1.0.0\"\n"
-            "#define FAUST_PLUGIN_DESCRIPTION \"Cloudes generated plugin\"\n"
+            "#define FAUST_PLUGIN_DESCRIPTION \"Aizana generated plugin\"\n"
             "#define FAUST_NVOICES 16\n"
             "#define FAUST_IS_POLYPHONIC 0\n");
 

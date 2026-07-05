@@ -4,11 +4,11 @@
 #include "ai/AiAgentBridge.h"
 
 /**
-    AiStudioPanel — Phase 4 flagship "Cloudes AI Studio": an in-app chat where the user
-    talks to their own Claude Code / Codex CLI and has it act on Cloudes. The CLI is spawned
+    AiStudioPanel — Phase 4 flagship "Aizana AI Studio": an in-app chat where the user
+    talks to their own Claude Code / Codex CLI and has it act on Aizana. The CLI is spawned
     as the agent (login-shell wrapped so it inherits the user's PATH/auth) with the bundled
-    `cloudes-mcp` server registered, so the assistant can author real plugins that land in
-    the user's "Cloudes" plugin library and show up live.
+    `aizana-mcp` server registered, so the assistant can author real plugins that land in
+    the user's "Aizana" plugin library and show up live.
 
     Slice 1: plugin generation via chat. Live mixing tools are a follow-up (same seam).
     The subprocess runs on a background thread; output streams back via callAsync + SafePointer.
@@ -32,8 +32,8 @@ private:
     void onAgentDone (int exitCode);
     void appendLine (const juce::String& text);
 
-    // Resolve the bundled cloudes-mcp binary + its toolchain (env override → app bundle → dev build).
-    static juce::File resolveCloudesMcp();
+    // Resolve the bundled aizana-mcp binary + its toolchain (env override → app bundle → dev build).
+    static juce::File resolveAizanaMcp();
     static juce::File resolveToolchain();
 
     juce::TextEditor transcript;
@@ -46,9 +46,9 @@ private:
     juce::Label      backendLabel { {}, "KI:" };
     juce::ComboBox   backendBox;
     juce::TextButton reconnectButton { juce::String::fromUTF8 ("Neu verbinden") };
-    juce::Array<cloudes::AiCliInfo> clis;
+    juce::Array<aizana::AiCliInfo> clis;
 
-    cloudes::AiCliInfo cli;
+    aizana::AiCliInfo cli;
     juce::String       sessionId;     // dashed UUID, stable per panel
     bool               firstTurn = true;
     bool               busy      = false;

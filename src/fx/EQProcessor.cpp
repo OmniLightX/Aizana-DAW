@@ -114,7 +114,7 @@ private:
     juce::File getPresetsFile() const
     {
         return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                   .getChildFile ("Cloudes")
+                   .getChildFile ("Aizana")
                    .getChildFile ("eq_presets.xml");
     }
 
@@ -516,7 +516,7 @@ void EQProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void EQProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
-    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes EQ");
+    desc = BuiltInPluginFormat::getDescriptionFor ("Aizana EQ");
 }
 
 juce::AudioProcessorEditor* EQProcessor::createEditor()

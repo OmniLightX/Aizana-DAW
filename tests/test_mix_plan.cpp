@@ -7,9 +7,9 @@
 
 #include "ai/MixAction.h"
 
-using cloudes::MixAction;
-using cloudes::MixActionType;
-using cloudes::MixPlan;
+using aizana::MixAction;
+using aizana::MixActionType;
+using aizana::MixPlan;
 
 TEST_CASE ("MixAction: stable MCP-ready names", "[mixplan]")
 {

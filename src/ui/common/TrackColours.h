@@ -3,7 +3,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 
 /**
- * CloudesTrackColours — shared track-colour resolution for the colour-coded
+ * AizanaTrackColours — shared track-colour resolution for the colour-coded
  * arrangement (Sketch 005 P1, closes GAP-27).
  *
  * Tracktion's per-track colour (te::Track::getColour, persisted in the edit
@@ -15,7 +15,7 @@
  * Used by TrackHeader (colour strip), TrackRow (row wash) and ClipComponent
  * (clip body) so all three always agree on a track's colour.
  */
-namespace CloudesTrackColours
+namespace AizanaTrackColours
 {
     namespace te = tracktion::engine;
 

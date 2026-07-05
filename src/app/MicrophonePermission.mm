@@ -19,28 +19,28 @@ void requestMicrophonePermission (std::function<void (bool)> callback)
         case AVAuthorizationStatusAuthorized:     statusStr = "Authorized";    break;
         default:                                  statusStr = "Unknown";       break;
     }
-    NSLog (@"[Cloudes] Microphone permission status: %@", (__bridge NSString*) statusStr.toCFString());
+    NSLog (@"[Aizana] Microphone permission status: %@", (__bridge NSString*) statusStr.toCFString());
 
     if (status == AVAuthorizationStatusAuthorized)
     {
-        NSLog (@"[Cloudes] Already authorized — proceeding");
+        NSLog (@"[Aizana] Already authorized — proceeding");
         dispatch_async (dispatch_get_main_queue(), ^{ callback (true); });
         return;
     }
 
     if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted)
     {
-        NSLog (@"[Cloudes] Microphone DENIED — user must enable in System Settings");
+        NSLog (@"[Aizana] Microphone DENIED — user must enable in System Settings");
         dispatch_async (dispatch_get_main_queue(), ^{ callback (false); });
         return;
     }
 
     // NotDetermined — show the system dialog.
-    NSLog (@"[Cloudes] Requesting microphone permission via AVCaptureDevice...");
+    NSLog (@"[Aizana] Requesting microphone permission via AVCaptureDevice...");
     [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
                              completionHandler:^(BOOL granted)
     {
-        NSLog (@"[Cloudes] Microphone permission result: %@", granted ? @"GRANTED" : @"DENIED");
+        NSLog (@"[Aizana] Microphone permission result: %@", granted ? @"GRANTED" : @"DENIED");
         dispatch_async (dispatch_get_main_queue(), ^{ callback (granted); });
     }];
 }

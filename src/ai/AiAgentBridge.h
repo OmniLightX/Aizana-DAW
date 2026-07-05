@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace cloudes
+namespace aizana
 {
     /** Which external AI CLI backs the in-app assistant. */
     enum class AiCli { None, ClaudeCode, Codex };
@@ -17,10 +17,10 @@ namespace cloudes
     };
 
     /**
-        AiAgentBridge — Phase 4 flagship ("Cloudes AI Studio"): the non-UI core that lets
+        AiAgentBridge — Phase 4 flagship ("Aizana AI Studio"): the non-UI core that lets
         an in-app chat drive the user's own Claude Code / Codex CLI as an agent. The CLI is
-        the brain; Cloudes exposes its tools (plugin generation, and later live mixing) to it
-        via the bundled `cloudes-mcp` server. Local-first: uses the user's existing CLI login,
+        the brain; Aizana exposes its tools (plugin generation, and later live mixing) to it
+        via the bundled `aizana-mcp` server. Local-first: uses the user's existing CLI login,
         no API key, no logic in the cloud beyond what their assistant already does.
 
         Pure + deterministic where it can be (config/args/parse are golden-testable). The
@@ -40,10 +40,10 @@ namespace cloudes
         static juce::Array<AiCliInfo> detectClis();
         static juce::Array<AiCliInfo> detectClis (const juce::StringArray& candidateDirs);
 
-        /** Write an MCP config JSON registering the bundled `cloudes-mcp` (stdio) server so
-            the spawned CLI can call Cloudes' plugin tools. Returns the file written. */
+        /** Write an MCP config JSON registering the bundled `aizana-mcp` (stdio) server so
+            the spawned CLI can call Aizana' plugin tools. Returns the file written. */
         static juce::File writeClaudeMcpConfig (const juce::File& configFile,
-                                                const juce::File& cloudesMcpBinary,
+                                                const juce::File& aizanaMcpBinary,
                                                 const juce::File& toolchainDir);
 
         /** Build the Claude Code argv for one chat turn (without the login-shell wrapper).
@@ -54,12 +54,12 @@ namespace cloudes
                                                   bool firstTurn,
                                                   const juce::File& mcpConfig);
 
-        /** Build the Codex `exec` argv for one turn, registering the cloudes MCP server via
+        /** Build the Codex `exec` argv for one turn, registering the aizana MCP server via
             -c config overrides (no global config change). Codex prints plain text → stream raw
             (no stream-json parsing). */
         static juce::StringArray buildCodexArgs (const juce::File& codexExe,
                                                  const juce::String& prompt,
-                                                 const juce::File& cloudesMcpBinary,
+                                                 const juce::File& aizanaMcpBinary,
                                                  const juce::File& toolchainDir);
 
         /** Wrap an argv in a login shell so the child inherits the user's PATH (node etc.)

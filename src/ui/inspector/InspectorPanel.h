@@ -9,7 +9,7 @@ namespace te = tracktion::engine;
 
 /**
  * InspectorPanel — left dock with parameters of the current selection
- * (Studio One inspector, scoped to Cloudes essentials).
+ * (Studio One inspector, scoped to Aizana essentials).
  *
  *   [ TRACK ──────────────── ]   shown when a track is selected
  *   [  Name      (editable)  ]

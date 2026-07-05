@@ -173,7 +173,7 @@ void CompressorProcessor::setStateInformation (const void* data, int sizeInBytes
 
 void CompressorProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
-    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Compressor");
+    desc = BuiltInPluginFormat::getDescriptionFor ("Aizana Compressor");
 }
 
 juce::AudioProcessorEditor* CompressorProcessor::createEditor()

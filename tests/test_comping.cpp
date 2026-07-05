@@ -1,6 +1,6 @@
 // test_comping.cpp — Phase 2+: project-less take comping (CompingEngine)
 //
-// Covers the Cloudes comp model (CLOUDESCOMP sections in the clip state),
+// Covers the Aizana comp model (AIZANACOMP sections in the clip state),
 // the lane gestures (applyTakeSection / switchSectionAt), undo behaviour,
 // the direct-file take switching fix in ClipEditor::setActiveTake, and the
 // offline comp render (each take a distinct DC level → rendered regions
@@ -26,7 +26,7 @@ namespace
     juce::File makeTempDir()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                       .getChildFile ("cloudes_comping_tests")
+                       .getChildFile ("aizana_comping_tests")
                        .getNonexistentSibling();
         dir.createDirectory();
         return dir;

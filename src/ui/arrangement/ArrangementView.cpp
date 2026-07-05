@@ -1,5 +1,5 @@
 #include "ArrangementView.h"
-#include "ui/common/CloudesIcons.h"
+#include "ui/common/AizanaIcons.h"
 #include "AddTracksDialog.h"
 #include <set>
 
@@ -226,12 +226,12 @@ namespace
 {
     // Visible tool palette = the real EditTools (logic unchanged). Marquee stays
     // Cmd-drag-only (invariant), so it is not a palette cell.
-    struct ToolCell { EditTool tool; CloudesIcon icon; };
+    struct ToolCell { EditTool tool; AizanaIcon icon; };
     const ToolCell kToolCells[] {
-        { EditTool::Pointer,     CloudesIcon::Pointer  },
-        { EditTool::RangeSelect, CloudesIcon::Range    },
-        { EditTool::Scissors,    CloudesIcon::Scissors },
-        { EditTool::Eraser,      CloudesIcon::Erase    },
+        { EditTool::Pointer,     AizanaIcon::Pointer  },
+        { EditTool::RangeSelect, AizanaIcon::Range    },
+        { EditTool::Scissors,    AizanaIcon::Scissors },
+        { EditTool::Eraser,      AizanaIcon::Erase    },
     };
     constexpr int kNumToolCells = 4;
     constexpr int kToolCellMaxW = 34;
@@ -257,12 +257,12 @@ void ArrangementView::ToolSelectorStrip::paint (juce::Graphics& g)
         }
 
         g.setColour (active ? juce::Colours::white : juce::Colour (0xff9aa0a6));
-        auto p = CloudesIcons::path (kToolCells[i].icon);
+        auto p = AizanaIcons::path (kToolCells[i].icon);
         const float side = (float) cellW * 0.52f;
         auto target = juce::Rectangle<float> (side, side).withCentre (cell.getCentre());
         p.applyTransform (p.getTransformToScaleToFit (target, true));
 
-        if (CloudesIcons::stroked (kToolCells[i].icon))
+        if (AizanaIcons::stroked (kToolCells[i].icon))
             g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved,
                                                    juce::PathStrokeType::rounded));
         else
@@ -1064,7 +1064,7 @@ void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::Str
         // TrackHeader mono/stereo toggle); does NOT touch hardware input pairing.
         if (! midi && stereo)
         {
-            newTrack->state.setProperty (juce::Identifier ("cloudesTrackStereo"), true, &um);
+            newTrack->state.setProperty (juce::Identifier ("aizanaTrackStereo"), true, &um);
             if (auto* vp = newTrack->getVolumePlugin())
                 vp->panLaw.setValue ((int) te::PanLawLinear, &um);
         }

@@ -29,7 +29,7 @@ const int SAMPLE_RATE = 44100;
 const float OVERLAP = 0.75;
 const int OVERLAP_SAMPLES = ::floorf(SAMPLE_RATE * OVERLAP);
 
-// CLOUDES PATCH (2026-06-12): optional aggregateCb replaces the stdout
+// AIZANA PATCH (2026-06-12): optional aggregateCb replaces the stdout
 // per-thread logging with a single mean-progress callback (thread-safe).
 // The callback fires on WORKER threads — callers must marshal to their own
 // thread (StemSeparationEngine wraps it with MessageManager::callAsync).

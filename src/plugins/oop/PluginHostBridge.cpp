@@ -1,6 +1,6 @@
 #include "PluginHostBridge.h"
 
-namespace cloudes
+namespace aizana
 {
     void PluginHostBridge::run (SharedAudioRing& ring,
                                 juce::AudioProcessor& plugin,

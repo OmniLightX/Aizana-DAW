@@ -4,7 +4,7 @@
 
 namespace
 {
-    // Cloudes palette (matches the real Pro view + sketch theme)
+    // Aizana palette (matches the real Pro view + sketch theme)
     const juce::Colour kBg            { 0xff1a1a1a };
     const juce::Colour kBarBg         { 0xff141414 };
     const juce::Colour kBorder        { 0xff333333 };
@@ -17,7 +17,7 @@ namespace
     const juce::Colour kSeg           { 0xff2a2a2a };
     const juce::Colour kPrimary       { 0xff4488ff };  // selection / primary
     const juce::Colour kGold          { 0xffddcc00 };  // Pro accent
-    const juce::Colour kTeal          { 0xff1fa882 };  // assist / Cloudes voice
+    const juce::Colour kTeal          { 0xff1fa882 };  // assist / Aizana voice
     const juce::Colour kTealInk       { 0xff06241c };
     const juce::Colour kGreen         { 0xff00cc44 };
 
@@ -565,7 +565,7 @@ void BeginnerView::paint (juce::Graphics& g)
 
     g.setColour (kText);
     g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    g.drawText ("Cloudes", bar.withTrimmedLeft (16).withWidth (110), juce::Justification::centredLeft, false);
+    g.drawText ("Aizana", bar.withTrimmedLeft (16).withWidth (110), juce::Justification::centredLeft, false);
     g.setColour (kTextMuted);
     g.setFont (juce::FontOptions (13.0f));
     g.drawText ("Mein Song", bar.withTrimmedLeft (96).withWidth (200), juce::Justification::centredLeft, false);
@@ -660,7 +660,7 @@ void BeginnerView::paint (juce::Graphics& g)
         g.drawText ("C", inner.getX(), inner.getY() + 2, 30, 30, juce::Justification::centred);
         g.setColour (kText);
         g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-        g.drawText ("Cloudes", inner.getX() + 40, inner.getY(), 200, 18, juce::Justification::centredLeft);
+        g.drawText ("Aizana", inner.getX() + 40, inner.getY(), 200, 18, juce::Justification::centredLeft);
         g.setColour (kTextMuted);
         g.setFont (juce::FontOptions (12.0f));
         g.drawText ("achtet auf deinen Mix", inner.getX() + 40, inner.getY() + 17, 220, 16, juce::Justification::centredLeft);

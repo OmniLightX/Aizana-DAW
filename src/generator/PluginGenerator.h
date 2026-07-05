@@ -3,7 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <vector>
 
-namespace cloudes
+namespace aizana
 {
     /**
         PluginGenerator — Phase 4 / Iteration B, B1 (backend).
@@ -49,7 +49,7 @@ namespace cloudes
         static juce::File bundledGeneratorDir();
 
         /** Resolved bundled .clap file for a template (may not exist if generator was
-            built with CLOUDES_BUILD_GENERATOR=OFF). */
+            built with AIZANA_BUILD_GENERATOR=OFF). */
         static juce::File clapFileFor (const GeneratorTemplate&);
     };
 }

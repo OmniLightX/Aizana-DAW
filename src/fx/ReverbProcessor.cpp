@@ -249,7 +249,7 @@ void ReverbProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void ReverbProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
-    desc = BuiltInPluginFormat::getDescriptionFor ("Cloudes Reverb");
+    desc = BuiltInPluginFormat::getDescriptionFor ("Aizana Reverb");
 }
 
 juce::AudioProcessorEditor* ReverbProcessor::createEditor()

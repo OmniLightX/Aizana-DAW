@@ -10,11 +10,11 @@
 #include "ai/MixingEngine.h"
 #include "ai/MixFeatures.h"
 
-using cloudes::MixAction;
-using cloudes::MixActionType;
-using cloudes::MixPlan;
-using cloudes::MixingEngine;
-using cloudes::TrackMixProfile;
+using aizana::MixAction;
+using aizana::MixActionType;
+using aizana::MixPlan;
+using aizana::MixingEngine;
+using aizana::TrackMixProfile;
 
 namespace
 {
@@ -340,7 +340,7 @@ TEST_CASE ("MixingEngine: ML backend refines gain magnitude, clamped", "[mixing]
         const auto* g = find (plan, MixActionType::SetTrackGain, "Synth");
         REQUIRE (g != nullptr);
         REQUIRE (g->gainDb == Catch::Approx (heuristic + MixingEngine::kMlTrimClampDb));
-        REQUIRE (ml.lastInputSize == (int) cloudes::mixfeatures::GainTrimCount);
+        REQUIRE (ml.lastInputSize == (int) aizana::mixfeatures::GainTrimCount);
     }
 
     SECTION ("negative trim is clamped to -kMlTrimClampDb")

@@ -4,15 +4,15 @@
 
 #include "ai/OnnxModelRunner.h"
 
-#ifndef CLOUDES_TEST_RESOURCE_DIR
- #define CLOUDES_TEST_RESOURCE_DIR "."
+#ifndef AIZANA_TEST_RESOURCE_DIR
+ #define AIZANA_TEST_RESOURCE_DIR "."
 #endif
 
 namespace
 {
     juce::File dummyModel()
     {
-        return juce::File (CLOUDES_TEST_RESOURCE_DIR).getChildFile ("dummy_scale2.onnx");
+        return juce::File (AIZANA_TEST_RESOURCE_DIR).getChildFile ("dummy_scale2.onnx");
     }
 }
 
@@ -33,12 +33,12 @@ TEST_CASE ("OnnxModelRunner is a passthrough until a model is loaded", "[onnx]")
 TEST_CASE ("OnnxModelRunner reports a missing model gracefully", "[onnx]")
 {
     OnnxModelRunner runner;
-    const auto missing = juce::File (CLOUDES_TEST_RESOURCE_DIR).getChildFile ("does_not_exist.onnx");
+    const auto missing = juce::File (AIZANA_TEST_RESOURCE_DIR).getChildFile ("does_not_exist.onnx");
     REQUIRE_FALSE (runner.loadModel (missing));
     REQUIRE_FALSE (runner.isAvailable());
 }
 
-#if CLOUDES_HAVE_ONNXRUNTIME
+#if AIZANA_HAVE_ONNXRUNTIME
 
 // Real inference: the dummy model computes output = input * 2, so a correct run
 // returns doubled values — proving ORT executed the graph rather than the runner

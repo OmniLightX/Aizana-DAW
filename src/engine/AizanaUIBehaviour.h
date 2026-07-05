@@ -5,7 +5,7 @@
 namespace te = tracktion::engine;
 
 /**
- * CloudesUIBehaviour — custom Tracktion Engine UIBehaviour.
+ * AizanaUIBehaviour — custom Tracktion Engine UIBehaviour.
  *
  * The default te::UIBehaviour::runTaskWithProgressBar() calls jassertfalse
  * and does nothing — te::Renderer::renderToFile() calls it to run the render
@@ -29,7 +29,7 @@ namespace te = tracktion::engine;
  *
  * Reference: extern/tracktion_engine/examples/TestRunner/TestRunner.h
  */
-class CloudesUIBehaviour : public te::UIBehaviour
+class AizanaUIBehaviour : public te::UIBehaviour
 {
 public:
     // -------------------------------------------------------------------------
@@ -116,7 +116,7 @@ public:
         {
             juce::AlertWindow::showMessageBoxAsync (
                 juce::MessageBoxIconType::WarningIcon,
-                "Cloudes", msg);
+                "Aizana", msg);
         });
     }
 };

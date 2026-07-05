@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 /**
- * CloudesIcons — single source of truth for Cloudes' own vector-icon family
+ * AizanaIcons — single source of truth for Aizana' own vector-icon family
  * (Sketch 005, Pro-UI polish). Every icon is authored in a 24×24 box as a
  * juce::Path, so it never depends on font glyph coverage or source encoding
  * (the lesson from Fix 2's garbled ↶/↷). IconButton scales these to fit.
@@ -14,52 +14,52 @@
  * stroked(): true → draw with strokePath (outline icons: loop, tools, …),
  *            false → fillPath (solid icons: play/stop/record/pointer/rewind).
  */
-enum class CloudesIcon
+enum class AizanaIcon
 {
     Rewind, Play, Stop, Record, Loop, Metronome, Tap, Punch, Chevron,  // transport
     Pointer, Range, Scissors, Erase, Mute, Snap, Grid                  // tools
 };
 
-struct CloudesIcons
+struct AizanaIcons
 {
-    static bool stroked (CloudesIcon ic) noexcept
+    static bool stroked (AizanaIcon ic) noexcept
     {
         switch (ic)
         {
-            case CloudesIcon::Play:
-            case CloudesIcon::Stop:
-            case CloudesIcon::Record:
-            case CloudesIcon::Rewind:
-            case CloudesIcon::Pointer:
+            case AizanaIcon::Play:
+            case AizanaIcon::Stop:
+            case AizanaIcon::Record:
+            case AizanaIcon::Rewind:
+            case AizanaIcon::Pointer:
                 return false;   // solid / filled
             default:
                 return true;    // outline / stroked
         }
     }
 
-    static juce::Path path (CloudesIcon ic)
+    static juce::Path path (AizanaIcon ic)
     {
         juce::Path p;
         switch (ic)
         {
-            case CloudesIcon::Play:
+            case AizanaIcon::Play:
                 p.addTriangle (7.0f, 5.0f, 19.0f, 12.0f, 7.0f, 19.0f);
                 break;
 
-            case CloudesIcon::Stop:
+            case AizanaIcon::Stop:
                 p.addRoundedRectangle (7.0f, 7.0f, 10.0f, 10.0f, 1.6f);
                 break;
 
-            case CloudesIcon::Record:
+            case AizanaIcon::Record:
                 p.addEllipse (6.5f, 6.5f, 11.0f, 11.0f);
                 break;
 
-            case CloudesIcon::Rewind:                       // |◀  return to start
+            case AizanaIcon::Rewind:                       // |◀  return to start
                 p.addRectangle (5.0f, 6.0f, 2.4f, 12.0f);
                 p.addTriangle (19.0f, 6.0f, 9.0f, 12.0f, 19.0f, 18.0f);
                 break;
 
-            case CloudesIcon::Loop:                         // circular repeat arrow
+            case AizanaIcon::Loop:                         // circular repeat arrow
             {
                 constexpr float pi = juce::MathConstants<float>::pi;
                 p.addArc (4.5f, 5.0f, 15.0f, 14.0f, 0.55f * pi, 1.95f * pi, true);
@@ -73,7 +73,7 @@ struct CloudesIcons
                 break;
             }
 
-            case CloudesIcon::Metronome:                    // pendulum block + arm
+            case AizanaIcon::Metronome:                    // pendulum block + arm
                 p.startNewSubPath (9.0f, 4.0f);
                 p.lineTo (15.0f, 4.0f);
                 p.lineTo (18.5f, 20.0f);
@@ -83,13 +83,13 @@ struct CloudesIcons
                 p.lineTo (15.0f, 7.5f);
                 break;
 
-            case CloudesIcon::Tap:                          // ring + tick
+            case AizanaIcon::Tap:                          // ring + tick
                 p.addEllipse (4.5f, 4.5f, 15.0f, 15.0f);
                 p.startNewSubPath (12.0f, 12.0f);
                 p.lineTo (12.0f, 7.0f);
                 break;
 
-            case CloudesIcon::Punch:                        // In/Out brackets + record dot (auto-punch region)
+            case AizanaIcon::Punch:                        // In/Out brackets + record dot (auto-punch region)
                 p.startNewSubPath (7.0f, 5.0f);             // left bracket
                 p.lineTo (4.0f, 5.0f);
                 p.lineTo (4.0f, 19.0f);
@@ -101,13 +101,13 @@ struct CloudesIcons
                 p.addEllipse (9.5f, 9.5f, 5.0f, 5.0f);      // centre record dot (stroked ring)
                 break;
 
-            case CloudesIcon::Chevron:                      // small down caret (popover affordance)
+            case AizanaIcon::Chevron:                      // small down caret (popover affordance)
                 p.startNewSubPath (6.0f, 9.5f);
                 p.lineTo (12.0f, 15.0f);
                 p.lineTo (18.0f, 9.5f);
                 break;
 
-            case CloudesIcon::Pointer:                      // arrow cursor
+            case AizanaIcon::Pointer:                      // arrow cursor
                 p.startNewSubPath (5.0f, 3.0f);
                 p.lineTo (5.0f, 18.0f);
                 p.lineTo (9.0f, 14.0f);
@@ -118,11 +118,11 @@ struct CloudesIcons
                 p.closeSubPath();
                 break;
 
-            case CloudesIcon::Range:                        // selection rectangle
+            case AizanaIcon::Range:                        // selection rectangle
                 p.addRoundedRectangle (4.0f, 7.0f, 16.0f, 10.0f, 1.5f);
                 break;
 
-            case CloudesIcon::Scissors:                     // two rings + blades
+            case AizanaIcon::Scissors:                     // two rings + blades
                 p.addEllipse (3.5f, 4.0f, 5.0f, 5.0f);
                 p.addEllipse (3.5f, 15.0f, 5.0f, 5.0f);
                 p.startNewSubPath (8.0f, 7.5f);
@@ -131,7 +131,7 @@ struct CloudesIcons
                 p.lineTo (20.0f, 7.5f);
                 break;
 
-            case CloudesIcon::Erase:                        // eraser block + baseline
+            case AizanaIcon::Erase:                        // eraser block + baseline
                 p.startNewSubPath (3.5f, 14.5f);
                 p.lineTo (11.0f, 7.0f);
                 p.lineTo (17.5f, 13.5f);
@@ -142,7 +142,7 @@ struct CloudesIcons
                 p.lineTo (20.0f, 18.5f);
                 break;
 
-            case CloudesIcon::Mute:                         // speaker + ✕
+            case AizanaIcon::Mute:                         // speaker + ✕
                 p.startNewSubPath (4.0f, 9.5f);
                 p.lineTo (4.0f, 14.5f);
                 p.lineTo (8.5f, 14.5f);
@@ -156,7 +156,7 @@ struct CloudesIcons
                 p.lineTo (16.5f, 14.5f);
                 break;
 
-            case CloudesIcon::Snap:                         // magnet
+            case AizanaIcon::Snap:                         // magnet
                 p.startNewSubPath (7.0f, 4.0f);
                 p.lineTo (7.0f, 11.0f);
                 p.addArc (7.0f, 6.0f, 10.0f, 10.0f, juce::MathConstants<float>::pi,
@@ -168,7 +168,7 @@ struct CloudesIcons
                 p.lineTo (19.0f, 4.0f);
                 break;
 
-            case CloudesIcon::Grid:                         // hash
+            case AizanaIcon::Grid:                         // hash
                 p.startNewSubPath (4.0f, 9.0f);  p.lineTo (20.0f, 9.0f);
                 p.startNewSubPath (4.0f, 15.0f); p.lineTo (20.0f, 15.0f);
                 p.startNewSubPath (9.0f, 4.0f);  p.lineTo (9.0f, 20.0f);

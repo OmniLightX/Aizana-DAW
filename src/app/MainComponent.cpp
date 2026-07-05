@@ -86,9 +86,9 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     // Register the out-of-process hosting format in the ENGINE's format manager (E5.3c). It is
     // inert unless a description routes to it (pluginFormatName == kOopFormatName), which only
-    // happens for generated CLAP plugins when CLOUDES_OOP_PLUGINS=1 (see syncScannedPluginsToEngine).
+    // happens for generated CLAP plugins when AIZANA_OOP_PLUGINS=1 (see syncScannedPluginsToEngine).
     appState.editManager.getEngine().getPluginManager().pluginFormatManager
-        .addFormat (new cloudes::OutOfProcessPluginFormat());
+        .addFormat (new aizana::OutOfProcessPluginFormat());
 
     // Cache file for incremental, crash-safe persistence DURING a scan. With this set,
     // the scanner writes the partial list periodically + at every format boundary, so a
@@ -99,16 +99,16 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Load previously-scanned plugin list so the browser is populated on startup.
     pluginScanner.loadPluginList (pluginCache);
 
-    // Register Cloudes-generated plugins (the user's local plugin library) so they appear
+    // Register Aizana-generated plugins (the user's local plugin library) so they appear
     // in the browser/insert menu and survive restarts — the .clap files on disk are the
     // source of truth. Before syncScannedPluginsToEngine() so they're also made
     // instantiable by the engine (a saved session may reference a generated plugin).
-    pluginScanner.registerGeneratedPlugins (cloudes::FaustCompiler::generatedPluginsDir());
+    pluginScanner.registerGeneratedPlugins (aizana::FaustCompiler::generatedPluginsDir());
 
     // Live-watch the generated-plugins dir so a plugin authored by an external MCP client
-    // (Claude/Codex via cloudes-mcp) shows up in this running session without a restart.
+    // (Claude/Codex via aizana-mcp) shows up in this running session without a restart.
     {
-        const auto genDir = cloudes::FaustCompiler::generatedPluginsDir();
+        const auto genDir = aizana::FaustCompiler::generatedPluginsDir();
         lastGeneratedClapCount = genDir.isDirectory()
             ? genDir.getNumberOfChildFiles (juce::File::findFiles, "*.clap") : 0;
     }
@@ -144,7 +144,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     transportBar.onAiStudioRequested = [this] { openAiStudio(); };
 
     // KI-Studio live bridge (Phase 4, Slice 2): host the loopback socket so the in-app
-    // agent's cloudes-mcp can read tracks + mix the running session. Non-fatal if no port.
+    // agent's aizana-mcp can read tracks + mix the running session. Non-fatal if no port.
     aiLiveServer.start();
 
     // Inspector (left dock) — pulls the arrangement selection via providers
@@ -706,7 +706,7 @@ void MainComponent::hideCompingEditor()
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "Cloudes", "File", "Edit", "View", "Song", "Export" };
+    return { "Aizana", "File", "Edit", "View", "Song", "Export" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /*name*/)
@@ -717,8 +717,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
 
     switch (index)
     {
-        case 0:  // Cloudes
-            menu.addItem (CloudesPreferences, "Preferences...", true);
+        case 0:  // Aizana
+            menu.addItem (AizanaPreferences, "Preferences...", true);
             break;
 
         case 1:  // File
@@ -785,7 +785,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (SongAiStudio,
                           juce::String::fromUTF8 ("KI-Studio (Chat: Plugins bauen lassen)…"));
             menu.addItem (SongManagePlugins,
-                          juce::String::fromUTF8 ("Cloudes-Plugins verwalten…"));
+                          juce::String::fromUTF8 ("Aizana-Plugins verwalten…"));
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -841,7 +841,7 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 
     switch (itemID)
     {
-        case CloudesPreferences:
+        case AizanaPreferences:
             AudioPreferencesDialog::show (appState.audioEngine);
             break;
 
@@ -1000,7 +1000,7 @@ void MainComponent::handleFileOpen()
                     juce::AlertWindow::showMessageBoxAsync (
                         juce::MessageBoxIconType::WarningIcon,
                         "Open Session",
-                        juce::String::fromUTF8 ("Die Datei konnte nicht als Cloudes-Session gelesen werden:\n")
+                        juce::String::fromUTF8 ("Die Datei konnte nicht als Aizana-Session gelesen werden:\n")
                             + result.getFullPathName());
                 }
             }
@@ -1204,11 +1204,11 @@ void MainComponent::startMix()
         return;
     }
 
-    // Local ML (Slice 5a): drop a model at ~/Library/Cloudes/
+    // Local ML (Slice 5a): drop a model at ~/Library/Aizana/
     // models/mix_gain_trim.onnx and the mix consults it (CoreML/Neural Engine);
     // absent → pure heuristic. Load + run on the SAME worker (no load/run race).
     const auto modelFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                               .getChildFile ("Cloudes/models/mix_gain_trim.onnx");
+                               .getChildFile ("Aizana/models/mix_gain_trim.onnx");
 
     juce::Thread::launch (
         [scan = std::move (scan), reference = getActiveReferenceProfile(), modelFile,
@@ -1219,7 +1219,7 @@ void MainComponent::startMix()
                 engine->tryLoadModel (modelFile);
 
             const auto profiles = MixApplyEngine::profilesFromScan (scan);
-            const auto plan = cloudes::MixingEngine::mix (
+            const auto plan = aizana::MixingEngine::mix (
                 profiles, reference.isValid() ? &reference : nullptr, {}, engine->getBackend());
 
             juce::MessageManager::callAsync ([safe, plan, profiles]()
@@ -1231,8 +1231,8 @@ void MainComponent::startMix()
         });
 }
 
-void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan,
-                                    const std::vector<cloudes::TrackMixProfile>& profiles)
+void MainComponent::onMixPlanReady (const aizana::MixPlan& plan,
+                                    const std::vector<aizana::TrackMixProfile>& profiles)
 {
     if (plan.isEmpty())
         return;
@@ -1247,20 +1247,20 @@ void MainComponent::onMixPlanReady (const cloudes::MixPlan& plan,
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
     {
         mixApplyEngine.applyPlan (plan);
-        cloudes::MixDataLogger::logReview (profiles, plan, plan,
+        aizana::MixDataLogger::logReview (profiles, plan, plan,
                                            { "heuristic", "beginner", genre, "" });
         return;
     }
 
     MixPreviewDialog::show (*this, plan,
         [safe = juce::Component::SafePointer<MainComponent> (this),
-         proposed = plan, profiles, genre] (const cloudes::MixPlan& edited)
+         proposed = plan, profiles, genre] (const aizana::MixPlan& edited)
         {
             if (safe == nullptr)
                 return;
             safe->mixApplyEngine.applyPlan (edited);
             // The Pro user's keep/drop per move = the strong training signal.
-            cloudes::MixDataLogger::logReview (profiles, proposed, edited,
+            aizana::MixDataLogger::logReview (profiles, proposed, edited,
                                                { "heuristic", "pro", genre, "" });
         });
 }
@@ -1286,7 +1286,7 @@ void MainComponent::startRuntimeGenerator()
 
     // The runtime generator shells out to `faust` + `clang` — tell the user up front if the
     // toolchain isn't installed instead of failing after they've typed a description.
-    if (! cloudes::FaustCompiler::isAvailable())
+    if (! aizana::FaustCompiler::isAvailable())
     {
         juce::NativeMessageBox::showMessageBoxAsync (
             juce::MessageBoxIconType::WarningIcon, "Plugin generieren",
@@ -1333,8 +1333,8 @@ void MainComponent::runGeneratorFromPrompt (const juce::String& prompt, te::Edit
 
     // Compose + emit on the message thread (pure, instant); compile on a worker (file I/O +
     // spawns faust/clang → seconds). Result marshals back via callAsync + SafePointer.
-    const auto spec = cloudes::LocalComposer::compose (prompt);
-    const auto src  = cloudes::FaustEmitter::emit (spec);
+    const auto spec = aizana::LocalComposer::compose (prompt);
+    const auto src  = aizana::FaustEmitter::emit (spec);
 
     generatorBusy = true;
 
@@ -1351,7 +1351,7 @@ void MainComponent::runGeneratorFromPrompt (const juce::String& prompt, te::Edit
         [src, name = spec.name, trackID,
          safe = juce::Component::SafePointer<MainComponent> (this)]()
         {
-            const auto r = cloudes::FaustCompiler::compile (src, name);   // background thread
+            const auto r = aizana::FaustCompiler::compile (src, name);   // background thread
 
             juce::MessageManager::callAsync (
                 [safe, ok = r.ok, path = r.clapFile.getFullPathName(), log = r.log, name, trackID]()
@@ -1383,7 +1383,7 @@ void MainComponent::onGeneratedPluginReady (bool ok, const juce::String& clapPat
     // instantiable by the engine — independent of whether the target track still exists, so
     // it's reusable on any track and after restart. PluginBrowserPopup polls the list, so it
     // shows up immediately without a manual rescan.
-    pluginScanner.registerGeneratedPlugins (cloudes::FaustCompiler::generatedPluginsDir());
+    pluginScanner.registerGeneratedPlugins (aizana::FaustCompiler::generatedPluginsDir());
     syncScannedPluginsToEngine();
 
     auto* edit = appState.editManager.getEdit();
@@ -1442,7 +1442,7 @@ void MainComponent::startPluginGenerator()
     }
 
     juce::PopupMenu menu;
-    const auto& tmpls = cloudes::PluginGenerator::templates();
+    const auto& tmpls = aizana::PluginGenerator::templates();
     for (int i = 0; i < (int) tmpls.size(); ++i)
         menu.addItem (i + 1, tmpls[(size_t) i].displayName + "  —  " + tmpls[(size_t) i].description);
     menu.addSeparator();
@@ -1464,7 +1464,7 @@ void MainComponent::startPluginGenerator()
             if (t == nullptr)
                 return;
 
-            const auto& list = cloudes::PluginGenerator::templates();
+            const auto& list = aizana::PluginGenerator::templates();
             const int idx = choice - 1;
             if (idx >= 0 && idx < (int) list.size())
                 safe->generatePluginOnTrack (list[(size_t) idx], *t);
@@ -1494,7 +1494,7 @@ void MainComponent::describeAndGenerate()
                 if (safe == nullptr || result == 0)
                     return;
 
-                const auto* m = cloudes::PluginGenerator::match (text);
+                const auto* m = aizana::PluginGenerator::match (text);
                 auto* t = safe->arrangementView.getSelectedTrack();
                 if (t == nullptr)
                     return;
@@ -1512,9 +1512,9 @@ void MainComponent::describeAndGenerate()
         false);   // we delete the window ourselves via the captured unique_ptr
 }
 
-void MainComponent::generatePluginOnTrack (const cloudes::GeneratorTemplate& tmpl, te::AudioTrack& track)
+void MainComponent::generatePluginOnTrack (const aizana::GeneratorTemplate& tmpl, te::AudioTrack& track)
 {
-    const auto clapFile = cloudes::PluginGenerator::clapFileFor (tmpl);
+    const auto clapFile = aizana::PluginGenerator::clapFileFor (tmpl);
     if (! clapFile.existsAsFile())
     {
         juce::NativeMessageBox::showMessageBoxAsync (
@@ -1976,22 +1976,24 @@ void MainComponent::applyAssistIntent (IntentEngine::Intent intent)
 
 void MainComponent::syncScannedPluginsToEngine()
 {
-    // Cloudes scans into its own PluginScanner::knownPlugins (drives the browser), but
+    // Aizana scans into its own PluginScanner::knownPlugins (drives the browser), but
     // Tracktion Engine instantiates plugins from engine.getPluginManager().knownPluginList
     // (ExternalPlugin::findMatchingPlugin). Mirror the scanned descriptions across so TE
     // can create real instances — otherwise third-party plugins are inert shells with no
     // editor and no audio. addType() de-dupes by identifier, so repeat calls are safe.
     auto& engineList = appState.editManager.getEngine().getPluginManager().knownPluginList;
-    const bool oop = cloudes::oopHostingEnabled();
+    const bool oop = aizana::oopHostingEnabled();
     for (const auto& type : pluginScanner.getKnownPlugins().getTypes())
     {
-        // E5.3c: with CLOUDES_OOP_PLUGINS=1, route Cloudes-generated CLAP plugins through the
+        // E5.3c: with AIZANA_OOP_PLUGINS=1, route Aizana-generated CLAP plugins through the
         // out-of-process host (rewrite the format name so TE picks OutOfProcessPluginFormat).
         // Everything else — and the whole default (flag OFF) path — is unchanged.
-        if (oop && type.manufacturerName == "Cloudes" && type.pluginFormatName == "CLAP")
+        // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
+        if (oop && (type.manufacturerName == "Aizana" || type.manufacturerName == "Cloudes")
+                && type.pluginFormatName == "CLAP")
         {
             auto oopType = type;
-            oopType.pluginFormatName = cloudes::kOopFormatName;
+            oopType.pluginFormatName = aizana::kOopFormatName;
             engineList.addType (oopType);
         }
         else
@@ -2003,7 +2005,7 @@ void MainComponent::syncScannedPluginsToEngine()
 
 void MainComponent::pollGeneratedLibrary()
 {
-    const auto dir = cloudes::FaustCompiler::generatedPluginsDir();
+    const auto dir = aizana::FaustCompiler::generatedPluginsDir();
     const int count = dir.isDirectory()
                         ? dir.getNumberOfChildFiles (juce::File::findFiles, "*.clap") : 0;
 
@@ -2022,7 +2024,7 @@ namespace
     {
         std::function<void()> onClose;
         AiStudioWindow()
-            : juce::DocumentWindow (juce::String::fromUTF8 ("Cloudes KI-Studio"),
+            : juce::DocumentWindow (juce::String::fromUTF8 ("Aizana KI-Studio"),
                                     juce::Colour (0xff1a1a1a),
                                     juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton)
         {}
@@ -2072,7 +2074,7 @@ void MainComponent::openGeneratedPluginsManager()
     };
 
     auto win = std::make_unique<AiStudioWindow>();   // reuse the close-notifying DocumentWindow
-    win->setName (juce::String::fromUTF8 ("Cloudes-Plugins verwalten"));
+    win->setName (juce::String::fromUTF8 ("Aizana-Plugins verwalten"));
     win->setUsingNativeTitleBar (true);
     win->setContentOwned (new GeneratedPluginsPanel (pluginScanner, std::move (onChanged)), true);
     win->setResizable (true, true);
@@ -2090,6 +2092,6 @@ void MainComponent::openGeneratedPluginsManager()
 juce::File MainComponent::getPluginListCacheFile()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-               .getChildFile ("Cloudes")
+               .getChildFile ("Aizana")
                .getChildFile ("knownPlugins.xml");
 }

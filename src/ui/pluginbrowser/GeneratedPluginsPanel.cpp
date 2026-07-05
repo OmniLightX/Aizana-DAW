@@ -7,7 +7,7 @@
 GeneratedPluginsPanel::GeneratedPluginsPanel (PluginScanner& s, std::function<void()> onChanged)
     : scanner (s), onLibraryChanged (std::move (onChanged))
 {
-    header.setText (juce::String::fromUTF8 ("Cloudes-Plugins \xe2\x80\x94 generierte Plugins verwalten"),
+    header.setText (juce::String::fromUTF8 ("Aizana-Plugins \xe2\x80\x94 generierte Plugins verwalten"),
                     juce::dontSendNotification);
     header.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
     header.setColour (juce::Label::textColourId, juce::Colours::white);
@@ -63,7 +63,7 @@ void GeneratedPluginsPanel::refresh()
 {
     files.clear();
 
-    const auto dir = cloudes::FaustCompiler::generatedPluginsDir();
+    const auto dir = aizana::FaustCompiler::generatedPluginsDir();
     if (dir.isDirectory())
     {
         files = dir.findChildFiles (juce::File::findFiles, false, "*.clap");

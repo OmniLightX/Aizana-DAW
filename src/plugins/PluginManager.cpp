@@ -4,17 +4,18 @@
 
 namespace
 {
-    // E5.3c: with CLOUDES_OOP_PLUGINS=1, route Cloudes-generated CLAP plugins through the
+    // E5.3c: with AIZANA_OOP_PLUGINS=1, route Aizana-generated CLAP plugins through the
     // out-of-process host by rewriting the format name (TE then picks OutOfProcessPluginFormat).
     // Flag OFF (default) → returns the description unchanged, so the shipping path is untouched.
     juce::PluginDescription maybeRouteOutOfProcess (const juce::PluginDescription& desc)
     {
-        if (cloudes::oopHostingEnabled()
-            && desc.manufacturerName == "Cloudes"
+        // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
+        if (aizana::oopHostingEnabled()
+            && (desc.manufacturerName == "Aizana" || desc.manufacturerName == "Cloudes")
             && desc.pluginFormatName == "CLAP")
         {
             auto d = desc;
-            d.pluginFormatName = cloudes::kOopFormatName;
+            d.pluginFormatName = aizana::kOopFormatName;
             return d;
         }
         return desc;
@@ -43,29 +44,29 @@ te::Plugin* PluginManager::insertPlugin (te::Track& track,
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Insert plugin");
 
-    CloudesPluginLog::stage ("insertPlugin BEGIN  name=\"" + desc.name + "\"  format="
+    AizanaPluginLog::stage ("insertPlugin BEGIN  name=\"" + desc.name + "\"  format="
                              + desc.pluginFormatName + "  manuf=" + desc.manufacturerName);
 
     // TE's ExternalPlugin resolves its real instance from the ENGINE's knownPluginList
-    // (ExternalPlugin::findMatchingPlugin), NOT from Cloudes' scanner list. Without this,
+    // (ExternalPlugin::findMatchingPlugin), NOT from Aizana' scanner list. Without this,
     // third-party plugins load as empty shells: getAudioPluginInstance() is null, so the
     // editor shows "No editor available" and no audio is processed. Register the
     // description with the engine first so doFullInitialisation() creates the instance.
     edit->engine.getPluginManager().knownPluginList.addType (desc);
-    CloudesPluginLog::stage ("insertPlugin  addType done, calling createNewPlugin...");
+    AizanaPluginLog::stage ("insertPlugin  addType done, calling createNewPlugin...");
 
     // Create a new plugin via Tracktion Engine's PluginCache.
     // createNewPlugin wraps the JUCE PluginDescription into a tracktion Plugin::Ptr.
     auto pluginPtr = edit->getPluginCache().createNewPlugin (
         te::ExternalPlugin::xmlTypeName, desc);
-    CloudesPluginLog::stage ("insertPlugin  createNewPlugin returned "
+    AizanaPluginLog::stage ("insertPlugin  createNewPlugin returned "
                              + juce::String (pluginPtr != nullptr ? "OK" : "NULL"));
 
     if (pluginPtr == nullptr)
         return nullptr;
 
     track.pluginList.insertPlugin (pluginPtr, insertIndex, nullptr);
-    CloudesPluginLog::stage ("insertPlugin DONE  \"" + desc.name + "\"");
+    AizanaPluginLog::stage ("insertPlugin DONE  \"" + desc.name + "\"");
 
     return pluginPtr.get();
 }
@@ -84,7 +85,7 @@ te::Plugin* PluginManager::insertPluginOnClip (te::Clip& clip,
     auto& undoManager = editManager.getUndoManager();
     undoManager.beginNewTransaction ("Insert event FX");
 
-    CloudesPluginLog::stage ("insertPluginOnClip BEGIN  name=\"" + desc.name + "\"");
+    AizanaPluginLog::stage ("insertPluginOnClip BEGIN  name=\"" + desc.name + "\"");
 
     // Same engine registration as the track path — see insertPlugin().
     edit->engine.getPluginManager().knownPluginList.addType (desc);
@@ -95,7 +96,7 @@ te::Plugin* PluginManager::insertPluginOnClip (te::Clip& clip,
         return nullptr;
 
     clipPlugins->insertPlugin (pluginPtr, -1, nullptr);   // append at end
-    CloudesPluginLog::stage ("insertPluginOnClip DONE  \"" + desc.name + "\"");
+    AizanaPluginLog::stage ("insertPluginOnClip DONE  \"" + desc.name + "\"");
 
     return pluginPtr.get();
 }

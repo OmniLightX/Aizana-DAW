@@ -10,7 +10,7 @@ namespace te = tracktion::engine;
 /**
  * UIStateManager — "Das Dial" (Phase 2, Block A backbone).
  *
- * Cloudes is not a DAW with a beginner mode; it is an Intent→Mechanik engine whose
+ * Aizana is not a DAW with a beginner mode; it is an Intent→Mechanik engine whose
  * *prominence is a dial*. This class IS that dial — the single source of truth for:
  *
  *   - UIMode        : Beginner vs Pro. Picks the *default* assist prominence.
@@ -88,9 +88,9 @@ private:
     WorkContext workContext;
 
     // PropertiesFile keys (app-specific; isolated from TE's SettingID namespace).
-    static constexpr const char* kModeKey       = "cloudes_ui_mode";        // "beginner" | "pro"
-    static constexpr const char* kAssistKey     = "cloudes_assist_enabled"; // bool
-    static constexpr const char* kOnboardingKey = "cloudes_onboarding_done";// bool
+    static constexpr const char* kModeKey       = "aizana_ui_mode";        // "beginner" | "pro"
+    static constexpr const char* kAssistKey     = "aizana_assist_enabled"; // bool
+    static constexpr const char* kOnboardingKey = "aizana_onboarding_done";// bool
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UIStateManager)
 };

@@ -20,7 +20,7 @@
  * keep it allocation/lock free per block (the AudioBuffer wraps existing pointers, the MidiBuffer
  * is reused). The plugin must already be prepared (prepareToPlay) for ring.maxBlockSamples().
  */
-namespace cloudes
+namespace aizana
 {
     class PluginHostBridge
     {

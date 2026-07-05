@@ -1,7 +1,7 @@
 #include "MixDataLogger.h"
 #include "MixFeatures.h"
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -20,7 +20,7 @@ namespace cloudes
     juce::File MixDataLogger::defaultLogFile()
     {
         return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                   .getChildFile ("Cloudes/training/mix_decisions.jsonl");
+                   .getChildFile ("Aizana/training/mix_decisions.jsonl");
     }
 
     juce::String MixDataLogger::signature (const MixAction& a)

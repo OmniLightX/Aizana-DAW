@@ -6,12 +6,12 @@
 #include "ai/MixDataLogger.h"
 #include "ai/MixFeatures.h"
 
-using cloudes::MixAction;
-using cloudes::MixActionType;
-using cloudes::MixDataLogger;
-using cloudes::MixLogContext;
-using cloudes::MixPlan;
-using cloudes::TrackMixProfile;
+using aizana::MixAction;
+using aizana::MixActionType;
+using aizana::MixDataLogger;
+using aizana::MixLogContext;
+using aizana::MixPlan;
+using aizana::TrackMixProfile;
 
 namespace
 {
@@ -58,7 +58,7 @@ TEST_CASE ("MixDataLogger: toJsonLine emits a parseable labelled example", "[dat
     REQUIRE ((bool) v["track"]["lead"] == true);
     REQUIRE (v["features"]["gain_trim"].isArray());
     REQUIRE (v["features"]["gain_trim"].size()
-             == (int) cloudes::mixfeatures::GainTrimCount);
+             == (int) aizana::mixfeatures::GainTrimCount);
 }
 
 TEST_CASE ("MixDataLogger: logReview records verdicts and appends", "[datalog]")
@@ -78,7 +78,7 @@ TEST_CASE ("MixDataLogger: logReview records verdicts and appends", "[datalog]")
     accepted.add (proposed.actions[2]);
 
     auto logFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                       .getChildFile ("cloudes_mixlog_test.jsonl");
+                       .getChildFile ("aizana_mixlog_test.jsonl");
     logFile.deleteFile();
 
     const int n = MixDataLogger::logReview (profiles, proposed, accepted,

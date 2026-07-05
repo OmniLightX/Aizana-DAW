@@ -21,7 +21,7 @@
  *                     AICommandBridge as ONE batch (= one undo step). Each
  *                     MixAction becomes a transaction-free core: SetTrackGain/Pan
  *                     drive the track's volume plugin; the EQ moves (HPF, carve,
- *                     boost, shelves) collapse into ONE Cloudes EQ per track;
+ *                     boost, shelves) collapse into ONE Aizana EQ per track;
  *                     Compress/DeEss insert the matching built-in FX; a Compress
  *                     targeting "Master" inserts mix-bus glue on the master list.
  *
@@ -48,20 +48,20 @@ public:
 
     /** Background-safe (no Edit access): measure source RMS, classify the group
         from the name, flag the lead vocal. Run this off the message thread. */
-    static std::vector<cloudes::TrackMixProfile> profilesFromScan (const std::vector<TrackScan>& scan);
+    static std::vector<aizana::TrackMixProfile> profilesFromScan (const std::vector<TrackScan>& scan);
 
     /** Convenience (message thread): scanTracks() + profilesFromScan(). Does file
         I/O — prefer the split form for big sessions. Used by tests. */
-    std::vector<cloudes::TrackMixProfile> readProfiles() const;
+    std::vector<aizana::TrackMixProfile> readProfiles() const;
 
     /** Enqueue the whole plan as one AI batch (one undo step). Any thread. */
-    void applyPlan (const cloudes::MixPlan& plan);
+    void applyPlan (const aizana::MixPlan& plan);
 
     /** Synchronous core — message thread, inside the bridge's open transaction. */
-    void applyMixNow (const cloudes::MixPlan& plan, juce::UndoManager& um);
+    void applyMixNow (const aizana::MixPlan& plan, juce::UndoManager& um);
 
     /** KI-Studio live tool: route a track to a shared "Reverb" FX bus (created once with a
-        100%-wet Cloudes Reverb on the return) via an aux send. amountNorm 0..1 sets the send
+        100%-wet Aizana Reverb on the return) via an aux send. amountNorm 0..1 sets the send
         level. Enqueued as one AI batch = one undo step. Any thread. */
     void addReverbSend (tracktion::engine::EditItemID trackId, float amountNorm);
 

@@ -11,11 +11,11 @@ BASE="$(basename "$DSP" .dsp)"
 mkdir -p "$WORK" "$(dirname "$OUT")"
 
 cat > "$WORK/plugin_metadata.h" <<META
-#define FAUST_PLUGIN_ID "com.cloudes.gen.$BASE"
+#define FAUST_PLUGIN_ID "com.aizana.gen.$BASE"
 #define FAUST_PLUGIN_NAME "$BASE"
-#define FAUST_PLUGIN_VENDOR "Cloudes"
+#define FAUST_PLUGIN_VENDOR "Aizana"
 #define FAUST_PLUGIN_VERSION "1.0.0"
-#define FAUST_PLUGIN_DESCRIPTION "Cloudes generated plugin"
+#define FAUST_PLUGIN_DESCRIPTION "Aizana generated plugin"
 #define FAUST_NVOICES 16
 #define FAUST_IS_POLYPHONIC 0
 META

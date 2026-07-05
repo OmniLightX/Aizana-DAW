@@ -11,7 +11,7 @@
  *
  * REF-04 contract: targetLufs and the band balance are REFERENCE INFORMATION —
  * guidelines the AI reads (e.g. gain-staging emphasis, coach feedback), NEVER
- * enforced targets. Nothing in Cloudes auto-normalises the master to them.
+ * enforced targets. Nothing in Aizana auto-normalises the master to them.
  */
 struct ReferenceProfile
 {
@@ -31,7 +31,7 @@ struct ReferenceProfile
     bool isValid() const noexcept { return name.isNotEmpty(); }
 
     //==========================================================================
-    static constexpr const char* kStateType = "CLOUDESREF";
+    static constexpr const char* kStateType = "AIZANAREF";
 
     juce::ValueTree toValueTree() const
     {

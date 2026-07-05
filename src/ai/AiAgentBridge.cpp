@@ -1,6 +1,6 @@
 #include "AiAgentBridge.h"
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -117,20 +117,20 @@ namespace cloudes
     }
 
     juce::File AiAgentBridge::writeClaudeMcpConfig (const juce::File& configFile,
-                                                   const juce::File& cloudesMcpBinary,
+                                                   const juce::File& aizanaMcpBinary,
                                                    const juce::File& toolchainDir)
     {
         auto* env = new juce::DynamicObject();
         if (toolchainDir != juce::File())
-            env->setProperty ("CLOUDES_TOOLCHAIN_DIR", toolchainDir.getFullPathName());
+            env->setProperty ("AIZANA_TOOLCHAIN_DIR", toolchainDir.getFullPathName());
 
         auto* server = new juce::DynamicObject();
-        server->setProperty ("command", cloudesMcpBinary.getFullPathName());
+        server->setProperty ("command", aizanaMcpBinary.getFullPathName());
         server->setProperty ("args", juce::var (juce::Array<juce::var>{}));
         server->setProperty ("env", juce::var (env));
 
         auto* servers = new juce::DynamicObject();
-        servers->setProperty ("cloudes", juce::var (server));
+        servers->setProperty ("aizana", juce::var (server));
 
         auto* root = new juce::DynamicObject();
         root->setProperty ("mcpServers", juce::var (servers));
@@ -153,15 +153,15 @@ namespace cloudes
         args.add ("--output-format"); args.add ("stream-json");
         args.add ("--verbose");
         args.add ("--mcp-config");    args.add (mcpConfig.getFullPathName());
-        // Pre-approve the Cloudes MCP tools so the agent can act without interactive prompts.
+        // Pre-approve the Aizana MCP tools so the agent can act without interactive prompts.
         args.add ("--allowedTools");
-        args.add ("mcp__cloudes__faust_reference,mcp__cloudes__compose_plugin,"
-                  "mcp__cloudes__compile_plugin,mcp__cloudes__list_plugins,"
-                  "mcp__cloudes__list_tracks,mcp__cloudes__set_track_volume,"
-                  "mcp__cloudes__set_track_pan,mcp__cloudes__mute_track,"
-                  "mcp__cloudes__solo_track,mcp__cloudes__set_track_eq,"
-                  "mcp__cloudes__add_compressor,mcp__cloudes__add_deesser,"
-                  "mcp__cloudes__add_reverb,mcp__cloudes__create_bus_channel");
+        args.add ("mcp__aizana__faust_reference,mcp__aizana__compose_plugin,"
+                  "mcp__aizana__compile_plugin,mcp__aizana__list_plugins,"
+                  "mcp__aizana__list_tracks,mcp__aizana__set_track_volume,"
+                  "mcp__aizana__set_track_pan,mcp__aizana__mute_track,"
+                  "mcp__aizana__solo_track,mcp__aizana__set_track_eq,"
+                  "mcp__aizana__add_compressor,mcp__aizana__add_deesser,"
+                  "mcp__aizana__add_reverb,mcp__aizana__create_bus_channel");
 
         if (firstTurn)
         {
@@ -178,20 +178,20 @@ namespace cloudes
 
     juce::StringArray AiAgentBridge::buildCodexArgs (const juce::File& codexExe,
                                                     const juce::String& prompt,
-                                                    const juce::File& cloudesMcpBinary,
+                                                    const juce::File& aizanaMcpBinary,
                                                     const juce::File& toolchainDir)
     {
-        // Register the cloudes MCP server via -c TOML overrides (no change to ~/.codex/config.toml).
+        // Register the aizana MCP server via -c TOML overrides (no change to ~/.codex/config.toml).
         // The quotes are part of the TOML value string codex parses; passed as one argv element each.
         juce::StringArray args;
         args.add (codexExe.getFullPathName());
         args.add ("exec");
         args.add ("-c");
-        args.add ("mcp_servers.cloudes.command=\"" + cloudesMcpBinary.getFullPathName() + "\"");
+        args.add ("mcp_servers.aizana.command=\"" + aizanaMcpBinary.getFullPathName() + "\"");
         if (toolchainDir != juce::File())
         {
             args.add ("-c");
-            args.add ("mcp_servers.cloudes.env.CLOUDES_TOOLCHAIN_DIR=\"" + toolchainDir.getFullPathName() + "\"");
+            args.add ("mcp_servers.aizana.env.AIZANA_TOOLCHAIN_DIR=\"" + toolchainDir.getFullPathName() + "\"");
         }
         args.add (prompt);
         return args;

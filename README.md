@@ -1,18 +1,18 @@
-# Cloudes
+# Aizana
 
 An open-source, **AI-first DAW** built on JUCE 8 and Tracktion Engine for macOS. Mixing-first design: familiar enough that anyone starts immediately, with AI that turns intent into normal, reviewable, one-undo DAW actions — built for beginners and pros over the same session.
 
-> **Status: Public Alpha / Developer Preview.** Cloudes is real and works, but it is
+> **Status: Public Alpha / Developer Preview.** Aizana is real and works, but it is
 > not a finished v1.0. A DAW is high-trust software (it records performances, hosts
 > third-party plugins, writes files) — treat it as a preview, keep backups, and see
 > *Known limitations* below. This is not a replacement for Logic, Studio One, Pro
 > Tools, Ableton, Cubase, or REAPER.
 
-Cloudes source code is licensed under GPL-3.0-or-later.
+Aizana source code is licensed under GPL-3.0-or-later.
 
 Binary/source distributions also include third-party components under their own
 licenses. In particular, JUCE 8 is AGPLv3/Commercial, and Tracktion Engine is
-GPL3-or-later/Commercial. Public Cloudes releases therefore need to comply with
+GPL3-or-later/Commercial. Public Aizana releases therefore need to comply with
 the applicable copyleft obligations for those components. See
 `THIRD_PARTY_NOTICES.md` for the dependency and model-weight notices.
 
@@ -50,7 +50,7 @@ the applicable copyleft obligations for those components. See
 ```bash
 # Clone with submodules
 git clone --recurse-submodules <repo-url>
-cd cloudes
+cd aizana
 
 # Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -59,7 +59,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release -j8
 ```
 
-The app bundle is written to `build/Cloudes_artefacts/Release/Cloudes.app`.
+The app bundle is written to `build/Aizana_artefacts/Release/Aizana.app`.
 
 ### Universal Binary (Apple Silicon + Intel)
 
@@ -70,8 +70,8 @@ cmake --build build --config Release -j8
 
 The first `cmake -B build` downloads dependencies via `FetchContent`, including a
 prebuilt ONNX Runtime (~16 MB) for the local inference backend. To build without
-it, configure with `-DCLOUDES_ENABLE_ONNX=OFF` (the AI backend then compiles as a
-defined no-op and Cloudes falls back to its heuristics).
+it, configure with `-DAIZANA_ENABLE_ONNX=OFF` (the AI backend then compiles as a
+defined no-op and Aizana falls back to its heuristics).
 
 ## Known Limitations
 
@@ -88,22 +88,22 @@ defined no-op and Cloudes falls back to its heuristics).
 
 ## AI Model Weights
 
-Cloudes' stem separation uses the Demucs v4 hybrid-transformer models
+Aizana' stem separation uses the Demucs v4 hybrid-transformer models
 (© Meta / Facebook Research, [facebookresearch/demucs](https://github.com/facebookresearch/demucs)),
 run locally through the MIT-licensed [demucs.cpp](https://github.com/sevagh/demucs.cpp)
 inference library (vendored at `extern/demucs_cpp`).
 
 **The model weights are not part of this software.** They are not bundled in
-the app, not stored in this repository, and never distributed by the Cloudes
-project. On first use, Cloudes offers to download them directly from public
+the app, not stored in this repository, and never distributed by the Aizana
+project. On first use, Aizana offers to download them directly from public
 hosting onto your machine; that download happens between you and the hosting
 provider. All inference runs locally — no audio ever leaves your computer.
 
 Licensing note: the Demucs *code* is explicitly MIT-licensed; Meta has not
 published an explicit license statement for the pretrained *weights*
 (see [facebookresearch/demucs#327](https://github.com/facebookresearch/demucs/issues/327)).
-Cloudes therefore only links to the publicly hosted files instead of
-redistributing them. The GPL-3.0 license of Cloudes covers the Cloudes source
+Aizana therefore only links to the publicly hosted files instead of
+redistributing them. The GPL-3.0 license of Aizana covers the Aizana source
 code only and does not extend to the model weights.
 
 ## Project Structure

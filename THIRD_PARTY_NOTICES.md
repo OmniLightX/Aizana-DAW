@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-This file summarizes third-party components used by Cloudes and the release
+This file summarizes third-party components used by Aizana and the release
 obligations that matter for public source or binary distribution.
 
 This is a technical release checklist, not legal advice. When shipping a public
@@ -9,7 +9,7 @@ released commit, and the source or license text for each bundled dependency.
 
 ## Project License
 
-Cloudes source code is licensed under GPL-3.0-or-later. Cloudes combines with
+Aizana source code is licensed under GPL-3.0-or-later. Aizana combines with
 third-party libraries under their own licenses. Public releases must satisfy the
 licenses of the combined work, including JUCE and Tracktion Engine.
 
@@ -19,8 +19,8 @@ licenses of the combined work, including JUCE and Tracktion Engine.
 
 - Location: `extern/JUCE`
 - License: AGPLv3 or commercial JUCE license
-- Release note: Cloudes can be public/open-source under the AGPL-compatible
-  route. Do not describe JUCE 8 as GPL3-only. A proprietary Cloudes build would
+- Release note: Aizana can be public/open-source under the AGPL-compatible
+  route. Do not describe JUCE 8 as GPL3-only. A proprietary Aizana build would
   require an appropriate commercial JUCE license.
 - Upstream: https://github.com/juce-framework/JUCE
 - License page: https://github.com/juce-framework/JUCE/blob/master/LICENSE.md
@@ -33,8 +33,8 @@ list is in `extern/JUCE/LICENSE.md`.
 
 - Location: `extern/tracktion_engine`
 - License: GPL3-or-later or commercial Tracktion Engine license
-- Release note: GPL Cloudes releases can use the GPL route. A proprietary or
-  closed-source Cloudes build would require a commercial Tracktion Engine
+- Release note: GPL Aizana releases can use the GPL route. A proprietary or
+  closed-source Aizana build would require a commercial Tracktion Engine
   license.
 - Upstream: https://github.com/Tracktion/tracktion_engine
 - License page: https://github.com/Tracktion/tracktion_engine/blob/develop/LICENSE.md
@@ -44,16 +44,16 @@ list is in `extern/JUCE/LICENSE.md`.
 - Location: bundled inside Tracktion Engine at
   `extern/tracktion_engine/modules/tracktion_engine/3rd_party/soundtouch`
 - License: LGPL-2.1-or-later
-- Use in Cloudes: enabled through `TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1`
+- Use in Aizana: enabled through `TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1`
   for clip time-stretching.
 - Release note: LGPL is compatible with GPL/AGPL distribution, but binary
   releases should include the SoundTouch notice and corresponding source offer.
 
 ### ONNX Runtime
 
-- Location: downloaded by CMake when `CLOUDES_ENABLE_ONNX=ON`
+- Location: downloaded by CMake when `AIZANA_ENABLE_ONNX=ON`
 - License: MIT
-- Use in Cloudes: local inference backend, with CoreML execution provider on
+- Use in Aizana: local inference backend, with CoreML execution provider on
   macOS when available.
 - Upstream: https://github.com/microsoft/onnxruntime
 - License page: https://github.com/microsoft/onnxruntime/blob/main/LICENSE
@@ -65,7 +65,7 @@ list is in `extern/JUCE/LICENSE.md`.
 
 - Location: downloaded by CMake through `FetchContent`
 - License: primarily MPL-2.0, with some compatible third-party files
-- Use in Cloudes: header-only dependency for the vendored `demucs.cpp`
+- Use in Aizana: header-only dependency for the vendored `demucs.cpp`
   inference library.
 - Upstream: https://gitlab.com/libeigen/eigen
 - License notes: see Eigen's `COPYING.README`, `COPYING.MPL2`, and related
@@ -75,21 +75,21 @@ list is in `extern/JUCE/LICENSE.md`.
 
 - Location: downloaded by CMake through `FetchContent`
 - License: MIT
-- Use in Cloudes: EBU R128/LUFS loudness metering and reference analysis.
+- Use in Aizana: EBU R128/LUFS loudness metering and reference analysis.
 - Upstream: https://github.com/jiixyj/libebur128
 
 ### CLAP C API
 
 - Location: downloaded by CMake through `FetchContent`
 - License: MIT
-- Use in Cloudes: CLAP plugin hosting API.
+- Use in Aizana: CLAP plugin hosting API.
 - Upstream: https://github.com/free-audio/clap
 
 ### Catch2
 
 - Location: downloaded by CMake in `tests/`
 - License: Boost Software License 1.0
-- Use in Cloudes: test infrastructure only; not part of the Cloudes app runtime.
+- Use in Aizana: test infrastructure only; not part of the Aizana app runtime.
 - Upstream: https://github.com/catchorg/Catch2
 
 ## Plugin SDK and Platform Notes
@@ -98,16 +98,16 @@ list is in `extern/JUCE/LICENSE.md`.
 
 - Location: included through JUCE's audio processor format support
 - License: Steinberg VST3 License or GPLv3
-- Release note: Cloudes should avoid using Steinberg VST/VST3 trademarks or
+- Release note: Aizana should avoid using Steinberg VST/VST3 trademarks or
   logos in marketing unless the relevant usage guidelines are followed.
 - Local license text:
   `extern/JUCE/modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt`
 
 ### Apple SDKs and Audio Units
 
-Cloudes uses Apple platform APIs such as CoreAudio, AudioUnit, AVFoundation, and
+Aizana uses Apple platform APIs such as CoreAudio, AudioUnit, AVFoundation, and
 CoreML through JUCE, Tracktion Engine, and macOS SDKs. These are system/platform
-interfaces and are not bundled as Cloudes source dependencies.
+interfaces and are not bundled as Aizana source dependencies.
 
 For public macOS distribution, prefer a notarized direct download over Mac App
 Store distribution because GPL/AGPL-style copyleft and app-store terms can be
@@ -119,7 +119,7 @@ hard to reconcile.
 
 - Location: `extern/demucs_cpp`
 - License: MIT
-- Use in Cloudes: local source-separation inference wrapper for Demucs-format
+- Use in Aizana: local source-separation inference wrapper for Demucs-format
   models.
 - Upstream: https://github.com/sevagh/demucs.cpp
 
@@ -130,11 +130,11 @@ hard to reconcile.
 
 ### Demucs / htdemucs Model Weights
 
-Cloudes must not bundle pretrained Demucs model weights in the source repo or
+Aizana must not bundle pretrained Demucs model weights in the source repo or
 binary release unless the distributor has independently verified the right to do
 so.
 
-Cloudes' current public-release-safe model is:
+Aizana' current public-release-safe model is:
 
 - no model weights in the Git repository
 - no model weights in the app bundle

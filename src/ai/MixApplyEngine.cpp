@@ -10,10 +10,10 @@
 #include <vector>
 #include <cmath>
 
-using cloudes::MixAction;
-using cloudes::MixActionType;
-using cloudes::MixPlan;
-using cloudes::TrackMixProfile;
+using aizana::MixAction;
+using aizana::MixActionType;
+using aizana::MixPlan;
+using aizana::TrackMixProfile;
 
 namespace
 {
@@ -282,7 +282,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
         return nullptr;
     };
 
-    // 1) Collect EQ moves per track → ONE Cloudes EQ per track (bands in plan order).
+    // 1) Collect EQ moves per track → ONE Aizana EQ per track (bands in plan order).
     //    EQ moves targeting the master (REF-03 style tilt) fold into ONE master EQ — same
     //    master-name convention the glue compressor uses.
     std::map<te::AudioTrack*, std::vector<EQBand>> eqByTrack;
@@ -302,7 +302,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
 
     for (auto& [track, bands] : eqByTrack)
     {
-        insertBuiltIn (*edit, track->pluginList, "Cloudes EQ",
+        insertBuiltIn (*edit, track->pluginList, "Aizana EQ",
                        [&bands] (juce::AudioPluginInstance& inst)
         {
             if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
@@ -313,7 +313,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
 
     if (! masterEqBands.empty())
     {
-        insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes EQ",
+        insertBuiltIn (*edit, edit->getMasterPluginList(), "Aizana EQ",
                        [&masterEqBands] (juce::AudioPluginInstance& inst)
         {
             if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
@@ -334,7 +334,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
         if (track == nullptr)
         {
             if (a.type == MixActionType::Compress && a.targetName == kMasterTarget)
-                insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
+                insertBuiltIn (*edit, edit->getMasterPluginList(), "Aizana Compressor",
                                [&a] (juce::AudioPluginInstance& inst)
                 {
                     setHostParam (inst, "ratio",     a.ratio);
@@ -355,7 +355,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
                 break;
 
             case MixActionType::Compress:
-                insertBuiltIn (*edit, track->pluginList, "Cloudes Compressor",
+                insertBuiltIn (*edit, track->pluginList, "Aizana Compressor",
                                [&a] (juce::AudioPluginInstance& inst)
                 {
                     setHostParam (inst, "ratio",     a.ratio);
@@ -365,7 +365,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
                 break;
 
             case MixActionType::DeEss:
-                insertBuiltIn (*edit, track->pluginList, "Cloudes De-Esser",
+                insertBuiltIn (*edit, track->pluginList, "Aizana De-Esser",
                                [&a] (juce::AudioPluginInstance& inst)
                 {
                     // MixAction carries no Range — derive it from the de-ess ratio.
@@ -416,7 +416,7 @@ void MixApplyEngine::applyMixNow (const MixPlan& plan, juce::UndoManager& um)
                 mixerEngine.routeTrackToBus (*bus, *vocalsBus);
 
             // Gentle glue on the sub-bus — the layers move as one.
-            insertBuiltIn (*edit, bus->pluginList, "Cloudes Compressor",
+            insertBuiltIn (*edit, bus->pluginList, "Aizana Compressor",
                            [] (juce::AudioPluginInstance& inst)
             {
                 setHostParam (inst, "ratio",     2.0f);
@@ -442,7 +442,7 @@ void MixApplyEngine::addReverbSend (te::EditItemID trackId, float amountNorm)
         if (track == nullptr)
             return;
 
-        // Shared "Reverb" FX bus — created once with a 100%-wet Cloudes Reverb on the
+        // Shared "Reverb" FX bus — created once with a 100%-wet Aizana Reverb on the
         // return, reused on later sends (the way pros bus reverb instead of per-track inserts).
         te::AudioTrack* fx = nullptr;
         for (auto* f : mixerEngine.getFXChannels())
@@ -452,7 +452,7 @@ void MixApplyEngine::addReverbSend (te::EditItemID trackId, float amountNorm)
         {
             fx = mixerEngine.createFXChannel ("Reverb");
             if (fx != nullptr)
-                insertBuiltIn (*edit, fx->pluginList, "Cloudes Reverb",
+                insertBuiltIn (*edit, fx->pluginList, "Aizana Reverb",
                                [] (juce::AudioPluginInstance& inst) { setHostParam (inst, "wet", 1.0f); });
         }
         if (fx == nullptr)

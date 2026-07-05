@@ -2,7 +2,7 @@
 
 #include <sys/stat.h>
 
-namespace cloudes
+namespace aizana
 {
     namespace
     {
@@ -22,7 +22,7 @@ namespace cloudes
     juce::File AiLiveProtocol::liveBridgeFile()
     {
         return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                   .getChildFile ("Cloudes")
+                   .getChildFile ("Aizana")
                    .getChildFile ("aistudio")
                    .getChildFile ("live.json");
     }
@@ -96,7 +96,7 @@ namespace cloudes
 
         // The token grants control of the running mix session. Restrict the discovery file to
         // the owner (0600) so another local user can't read it and drive the live bridge. The
-        // app and the cloudes-mcp child run as the same user, so owner-only read is sufficient.
+        // app and the aizana-mcp child run as the same user, so owner-only read is sufficient.
         ::chmod (file.getFullPathName().toRawUTF8(), S_IRUSR | S_IWUSR);
         return file;
     }

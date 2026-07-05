@@ -1,4 +1,4 @@
-declare name "CloudesDelay";
+declare name "AizanaDelay";
 declare description "Delay — echo with feedback (time, feedback, mix)";
 import("stdfaust.lib");
 

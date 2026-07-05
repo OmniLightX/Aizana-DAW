@@ -14,7 +14,7 @@ namespace te = tracktion::engine;
  *
  * Opened via Cmd+, (macOS) / Ctrl+, (Windows) in MainComponent.
  *
- * CONTEXT.md: "Cloudes can act as MIDI clock master or slave."
+ * CONTEXT.md: "Aizana can act as MIDI clock master or slave."
  */
 class PreferencesDialog : public juce::Component
 {
@@ -35,8 +35,8 @@ private:
     juce::Label      midiClockSectionLabel  { {}, "MIDI Clock" };
     juce::ComboBox   midiClockModeCombo;                  // "Off", "Master", "Slave"
     juce::Label      midiClockModeLabel     { {}, "Mode:" };
-    juce::Label      midiClockNoteLabel     { {}, "As master, Cloudes broadcasts MIDI clock on all active outputs.\n"
-                                                  "As slave, Cloudes syncs its transport to incoming MIDI clock." };
+    juce::Label      midiClockNoteLabel     { {}, "As master, Aizana broadcasts MIDI clock on all active outputs.\n"
+                                                  "As slave, Aizana syncs its transport to incoming MIDI clock." };
 
     void midiClockModeChanged();
 

@@ -6,11 +6,11 @@
 // Heuristic rule values (Phase 2). Sensible pro defaults — intended to be refined by
 // the mix engineer. The interface is stable so Phase 3 can swap ML in behind it.
 //
-// IMPORTANT (Fix 3, 2026-06-05): character/space/glue intents insert *Cloudes'* own
+// IMPORTANT (Fix 3, 2026-06-05): character/space/glue intents insert *Aizana'* own
 // built-in FX (EQProcessor / CompressorProcessor / ReverbProcessor) — NOT the native
-// te::EqualiserPlugin/CompressorPlugin/ReverbPlugin. Cloudes only ships editors for its
+// te::EqualiserPlugin/CompressorPlugin/ReverbPlugin. Aizana only ships editors for its
 // own processors (see FloatingPluginWindow.cpp Stage 2); the native TE plugins render
-// "No editor available", which breaks the Nordstern ("editable mechanic"). The Cloudes
+// "No editor available", which breaks the Nordstern ("editable mechanic"). The Aizana
 // processors are inserted through TE's ExternalPlugin via BuiltInPluginFormat — the
 // exact path the mixer's insert slots use.
 namespace
@@ -34,8 +34,8 @@ namespace
                 }
     }
 
-    // Create a Cloudes built-in FX (wrapped as an ExternalPlugin so it carries the
-    // Cloudes editor), insert it at the end of `list`, fully initialise it, run
+    // Create a Aizana built-in FX (wrapped as an ExternalPlugin so it carries the
+    // Aizana editor), insert it at the end of `list`, fully initialise it, run
     // `configure` on the live instance, then flush state into the ValueTree so the
     // configuration survives undo/redo and session save. Insertion is recorded in the
     // edit's UndoManager (the bridge's active transaction) — one undo removes it whole.
@@ -87,13 +87,13 @@ namespace
         };
     }
 
-    // ---- character: Cloudes EQ / Compressor ----
+    // ---- character: Aizana EQ / Compressor ----
     Cmd eqWarmCmd (te::AudioTrack* t)
     {
         return [t] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            insertBuiltIn (t->edit, t->pluginList, "Cloudes EQ", [] (juce::AudioPluginInstance& inst)
+            insertBuiltIn (t->edit, t->pluginList, "Aizana EQ", [] (juce::AudioPluginInstance& inst)
             {
                 if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
                 {
@@ -114,7 +114,7 @@ namespace
         return [t] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            insertBuiltIn (t->edit, t->pluginList, "Cloudes EQ", [] (juce::AudioPluginInstance& inst)
+            insertBuiltIn (t->edit, t->pluginList, "Aizana EQ", [] (juce::AudioPluginInstance& inst)
             {
                 if (auto* eq = dynamic_cast<EQProcessor*> (&inst))
                 {
@@ -143,7 +143,7 @@ namespace
         return [t, ratio, thresholdDb, attackMs, releaseMs] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            insertBuiltIn (t->edit, t->pluginList, "Cloudes Compressor",
+            insertBuiltIn (t->edit, t->pluginList, "Aizana Compressor",
                            [ratio, thresholdDb, attackMs, releaseMs] (juce::AudioPluginInstance& inst)
             {
                 setHostParam (inst, "ratio",     ratio);
@@ -154,13 +154,13 @@ namespace
         };
     }
 
-    // ---- de-ess: Cloudes De-Esser (tames vocal sibilance) ----
+    // ---- de-ess: Aizana De-Esser (tames vocal sibilance) ----
     Cmd deEssCmd (te::AudioTrack* t)
     {
         return [t] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            insertBuiltIn (t->edit, t->pluginList, "Cloudes De-Esser",
+            insertBuiltIn (t->edit, t->pluginList, "Aizana De-Esser",
                            [] (juce::AudioPluginInstance& inst)
             {
                 setHostParam (inst, "frequency", 6500.0f);
@@ -170,13 +170,13 @@ namespace
         };
     }
 
-    // ---- space: Cloudes Reverb ----
+    // ---- space: Aizana Reverb ----
     Cmd reverbCmd (te::AudioTrack* t, float wet, float room)
     {
         return [t, wet, room] (juce::UndoManager&)
         {
             if (t == nullptr) return;
-            insertBuiltIn (t->edit, t->pluginList, "Cloudes Reverb",
+            insertBuiltIn (t->edit, t->pluginList, "Aizana Reverb",
                            [wet, room] (juce::AudioPluginInstance& inst)
             {
                 setHostParam (inst, "wet",      wet);
@@ -208,7 +208,7 @@ namespace
         {
             auto* edit = em->getEdit();
             if (edit == nullptr) return;
-            insertBuiltIn (*edit, edit->getMasterPluginList(), "Cloudes Compressor",
+            insertBuiltIn (*edit, edit->getMasterPluginList(), "Aizana Compressor",
                            [] (juce::AudioPluginInstance& inst)
             {
                 setHostParam (inst, "ratio",     2.0f);    // gentle 2:1 glue

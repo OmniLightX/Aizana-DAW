@@ -5,7 +5,7 @@
 
 #include "generator/PluginGenerator.h"
 
-using cloudes::PluginGenerator;
+using aizana::PluginGenerator;
 
 TEST_CASE ("PluginGenerator: registry has the real plugin templates", "[generator]")
 {

@@ -11,7 +11,7 @@
  * Device selection, sample rate, buffer size, and MIDI routing are handled internally
  * by JUCE/TE — no custom XML persistence or reinitialise() required.
  *
- * Opened via: Cloudes > Preferences... (Cmd+,)
+ * Opened via: Aizana > Preferences... (Cmd+,)
  *
  * Latency display auto-refreshes every 500ms via juce::Timer.
  */

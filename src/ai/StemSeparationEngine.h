@@ -6,7 +6,7 @@
  * StemSeparationEngine — Phase 3: full song → stems (demucs.cpp, Spike S1 GO).
  *
  * Wraps the vendored demucs.cpp inference library (extern/demucs_cpp, MIT) for
- * Cloudes: loads any audio file via JUCE, resamples to the model's mandatory
+ * Aizana: loads any audio file via JUCE, resamples to the model's mandatory
  * 44.1 kHz stereo, runs the hybrid-transformer separation on a background
  * thread, writes per-instrument WAVs (24-bit/44.1k — TE resamples on playback),
  * and skips near-silent stems (e.g. "Guitar" in a song without guitar).
@@ -33,7 +33,7 @@ public:
     struct Stem
     {
         juce::String instrument;   // "Drums", "Bass", "Vocals", "Other", …
-        juce::String group;        // Cloudes mixer group ("Drums", …, "Synths")
+        juce::String group;        // Aizana mixer group ("Drums", …, "Synths")
         juce::File   file;         // written WAV — invalid if silent
         double peakDb = -120.0, rmsDb = -120.0;
         bool   silent = false;     // below kSilenceRmsDb → no file written
@@ -43,7 +43,7 @@ public:
     ~StemSeparationEngine() override;
 
     // ---- model management -------------------------------------------------
-    static juce::File modelsDirectory();                       // App Support/Cloudes/Models
+    static juce::File modelsDirectory();                       // App Support/Aizana/Models
     static juce::Array<juce::File> requiredModelFiles (Model); // expected local files
     static juce::Array<juce::URL>  requiredModelURLs  (Model); // download sources
     static bool isModelInstalled (Model);

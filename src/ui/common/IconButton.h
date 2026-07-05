@@ -1,10 +1,10 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "CloudesIcons.h"
+#include "AizanaIcons.h"
 
 /**
- * IconButton — a general vector-icon button drawing a CloudesIcon (juce::Path).
+ * IconButton — a general vector-icon button drawing a AizanaIcon (juce::Path).
  *
  * Replaces text-label transport/tool buttons with crisp, font-independent icons
  * (Sketch 005 Pro-UI polish). Colours are caller-configurable so the same button
@@ -17,9 +17,9 @@
 class IconButton : public juce::Button
 {
 public:
-    explicit IconButton (CloudesIcon icon) : juce::Button ({}), iconId (icon) {}
+    explicit IconButton (AizanaIcon icon) : juce::Button ({}), iconId (icon) {}
 
-    void setIcon (CloudesIcon i) { iconId = i; repaint(); }
+    void setIcon (AizanaIcon i) { iconId = i; repaint(); }
 
     // Icon (foreground) colours
     juce::Colour iconColour   { 0xffaaaaaa };
@@ -50,12 +50,12 @@ public:
         if (! on && over) fg = fg.brighter (0.4f);
         g.setColour (fg);
 
-        auto p = CloudesIcons::path (iconId);
+        auto p = AizanaIcons::path (iconId);
         const float side = juce::jmin (bounds.getWidth(), bounds.getHeight()) * iconScale;
         auto target = juce::Rectangle<float> (side, side).withCentre (bounds.getCentre());
         p.applyTransform (p.getTransformToScaleToFit (target, true));
 
-        if (CloudesIcons::stroked (iconId))
+        if (AizanaIcons::stroked (iconId))
             g.strokePath (p, juce::PathStrokeType (1.7f, juce::PathStrokeType::curved,
                                                    juce::PathStrokeType::rounded));
         else
@@ -63,7 +63,7 @@ public:
     }
 
 private:
-    CloudesIcon iconId;
+    AizanaIcon iconId;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)
 };

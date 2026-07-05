@@ -21,18 +21,18 @@
  * (the app passes its format manager; the smoke test injects a stub) so the worker code carries
  * no plugin-format dependency of its own.
  */
-namespace cloudes
+namespace aizana
 {
     // Command-line marker that launches a process in plugin-host worker mode (like the scanner).
-    inline constexpr const char* kPluginHostProcessUID = "cloudes_plugin_host";
+    inline constexpr const char* kPluginHostProcessUID = "aizana_plugin_host";
 
     using PluginLoader = std::function<std::unique_ptr<juce::AudioProcessor> (
         const juce::PluginDescription&, double sampleRate, int blockSize, juce::String& error)>;
 
     // Descriptions whose pluginFormatName equals this route through OutOfProcessPluginFormat.
-    inline constexpr const char* kOopFormatName = "Cloudes OOP";
+    inline constexpr const char* kOopFormatName = "Aizana OOP";
 
-    /** True when out-of-process plugin hosting is enabled (env CLOUDES_OOP_PLUGINS=1).
+    /** True when out-of-process plugin hosting is enabled (env AIZANA_OOP_PLUGINS=1).
         Default OFF — in-process hosting stays the shipping path until E5 is complete. */
     bool oopHostingEnabled();
 

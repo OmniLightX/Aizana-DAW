@@ -2,7 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 /**
- * BuiltInPluginFormat — Custom AudioPluginFormat for Cloudes' built-in FX.
+ * BuiltInPluginFormat — Custom AudioPluginFormat for Aizana' built-in FX.
  *
  * Allows EQProcessor, CompressorProcessor, ReverbProcessor, LimiterProcessor
  * to be inserted into TE's plugin chain via the normal ExternalPlugin path.

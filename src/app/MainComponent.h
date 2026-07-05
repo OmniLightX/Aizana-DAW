@@ -39,7 +39,7 @@
 #include "ui/assist/ProAssistRail.h"
 
 /**
- * MainComponent — Root JUCE Component for the Cloudes DAW window.
+ * MainComponent — Root JUCE Component for the Aizana DAW window.
  *
  * Four-region layout (CONTEXT.md + plan 01-10):
  *   1. TransportBar      — fixed 50px at top
@@ -123,9 +123,9 @@ private:
     MixApplyEngine   mixApplyEngine   { appState.editManager, mixerEngine, appState.aiCommandBridge };
 
     // KI-Studio (Phase 4, flagship, Slice 2): hosts the loopback live bridge so the in-app
-    // agent's cloudes-mcp can read tracks + change the mix on the RUNNING session. Started in
+    // agent's aizana-mcp can read tracks + change the mix on the RUNNING session. Started in
     // the constructor, stopped on destruction. Mutations route through mixApplyEngine (1 undo).
-    cloudes::AiStudioLiveServer aiLiveServer { appState.editManager, mixApplyEngine, appState.aiCommandBridge };
+    aizana::AiStudioLiveServer aiLiveServer { appState.editManager, mixApplyEngine, appState.aiCommandBridge };
 
     // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
     // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.
@@ -354,13 +354,13 @@ private:
         SongMixAI         = 404,   // KI-Mix (Phase 4 — heuristic mixing co-pilot)
         SongGeneratePlugin = 405,  // Plugin generieren (Phase 4 — Faust→CLAP generator)
         SongAiStudio      = 406,   // KI-Studio: in-app chat agent (Claude/Codex) — Phase 4 flagship
-        SongManagePlugins = 407,   // Cloudes-Plugins verwalten (Phase 5 / G5b — rename/delete)
+        SongManagePlugins = 407,   // Aizana-Plugins verwalten (Phase 5 / G5b — rename/delete)
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,
 
-        // Cloudes menu
-        CloudesPreferences = 501,
+        // Aizana menu
+        AizanaPreferences = 501,
     };
 
     // Double-tap Space = Rewind: tracks timestamp of the previous Space press.
@@ -388,8 +388,8 @@ private:
     // KI-Mix (Phase 4, Slice 4): scan tracks (message thread) → measure + mix on a
     // worker → apply mode-dependently (Beginner instant / Pro preview dialog).
     void startMix();
-    void onMixPlanReady (const cloudes::MixPlan& plan,
-                         const std::vector<cloudes::TrackMixProfile>& profiles);
+    void onMixPlanReady (const aizana::MixPlan& plan,
+                         const std::vector<aizana::TrackMixProfile>& profiles);
 
     // Plugin generator — RUNTIME path (Phase 4 / Generator G3): describe a plugin → the
     // local composer writes Faust → FaustCompiler builds a brand-new .clap on a background
@@ -406,7 +406,7 @@ private:
     // precompiled template. Dormant (superseded by the runtime path); kept until B-rollback.
     void startPluginGenerator();
     void describeAndGenerate();   // free-text prompt → match → generate on the selected track
-    void generatePluginOnTrack (const cloudes::GeneratorTemplate& tmpl, te::AudioTrack& track);
+    void generatePluginOnTrack (const aizana::GeneratorTemplate& tmpl, te::AudioTrack& track);
 
     // KI-Referenz (Phase 3, Iteration 2 — REF-01/02/04): genre profile or
     // analysed reference track, persisted in the Edit state. Guides gain
@@ -441,12 +441,12 @@ private:
     void hideScanProgress();
 
     // Copy every scanned plugin description into the Tracktion Engine's knownPluginList,
-    // so TE can instantiate third-party plugins (editor + audio). Cloudes scans into its
+    // so TE can instantiate third-party plugins (editor + audio). Aizana scans into its
     // own list; TE resolves instances from the engine's list. Call after load and scan.
     void syncScannedPluginsToEngine();
 
-    // Picks up plugins authored by an external MCP client (Claude/Codex via cloudes-mcp)
-    // while Cloudes is running, so they appear in the browser without a restart. Cheap:
+    // Picks up plugins authored by an external MCP client (Claude/Codex via aizana-mcp)
+    // while Aizana is running, so they appear in the browser without a restart. Cheap:
     // only re-registers (dlopen) when the .clap count in the generated dir actually changes.
     void pollGeneratedLibrary();
 
@@ -467,7 +467,7 @@ private:
     std::unique_ptr<juce::DocumentWindow> generatedPluginsWindow;
 
     // Returns the path to the cached plugin list XML file
-    // (~/<AppData>/Cloudes/knownPlugins.xml on all platforms)
+    // (~/<AppData>/Aizana/knownPlugins.xml on all platforms)
     static juce::File getPluginListCacheFile();
 
     // Modeless scan-progress overlay — owned here, present only while scanning.

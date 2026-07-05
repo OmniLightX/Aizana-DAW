@@ -1,6 +1,7 @@
 #include "PluginScanner.h"
 #include "BuiltInPluginFormat.h"
 #include "OutOfProcessPluginScanner.h"
+#include "app/LegacyMigration.h"
 
 // ---------------------------------------------------------------------------
 // Background scan thread (multi-format, self-contained)
@@ -62,7 +63,7 @@ void PluginScanner::scanForPlugins (std::function<void(const ScanProgress&)> onP
     cancelScan();
 
     const auto deadPluginsFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                                     .getChildFile ("Cloudes")
+                                     .getChildFile ("Aizana")
                                      .getChildFile ("dead_plugins.txt");
     deadPluginsFile.getParentDirectory().createDirectory();
 
@@ -208,7 +209,7 @@ namespace
     // Sidecar mapping a generated .clap's file name → user display-name override (G5b rename).
     juce::File generatedNamesSidecar (const juce::File& dir)
     {
-        return dir.getChildFile (".cloudes-names.json");
+        return dir.getChildFile (".aizana-names.json");
     }
 
     juce::var readGeneratedNames (const juce::File& dir)
@@ -232,6 +233,10 @@ int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
     if (! dir.isDirectory())
         return 0;
 
+    // Rename-Migration: pre-rename installs keep display-name overrides in
+    // ".cloudes-names.json" — carry them over before reading. Idempotent.
+    aizana::legacy::migrateNamesSidecar (dir);
+
     // A local format instance is enough to read the descriptions — findAllTypesForFile
     // dlopens/scans/dlcloses each .clap on its own (no dependency on formatManager state).
     ClapPluginFormat clap;
@@ -245,7 +250,7 @@ int PluginScanner::registerGeneratedPlugins (const juce::File& dir)
 
         for (auto* d : descs)
         {
-            d->manufacturerName = "Cloudes";   // group as the Cloudes plugin library
+            d->manufacturerName = "Aizana";   // group as the Aizana plugin library
 
             // Apply a user rename if one exists (the baked-in name can't change without recompiling).
             if (const auto custom = names.getProperty (file.getFileName(), {}).toString(); custom.isNotEmpty())
@@ -323,7 +328,7 @@ void PluginScanner::savePluginList (const juce::File& file, bool markComplete)
         // Stamp the resume marker on the root element. KnownPluginList::recreateFromXml()
         // only reads PLUGIN child elements, so JUCE ignores this attribute on load; we
         // read it back explicitly in loadPluginList() to decide whether to resume.
-        xml->setAttribute ("cloudesScanComplete", markComplete ? 1 : 0);
+        xml->setAttribute ("aizanaScanComplete", markComplete ? 1 : 0);
         file.getParentDirectory().createDirectory();
         xml->writeTo (file);
     }
@@ -338,8 +343,12 @@ void PluginScanner::loadPluginList (const juce::File& file)
     {
         knownPlugins.recreateFromXml (*xml);
         // Legacy caches without the marker are treated as complete to avoid a
-        // surprise full re-scan for existing users.
-        scanWasComplete.store (xml->getBoolAttribute ("cloudesScanComplete", true));
+        // surprise full re-scan for existing users. Pre-rename caches carry the
+        // marker under its old "cloudes" name (Klasse C — intentional literal).
+        const bool complete = xml->hasAttribute ("aizanaScanComplete")
+                                  ? xml->getBoolAttribute ("aizanaScanComplete", true)
+                                  : xml->getBoolAttribute ("cloudesScanComplete", true);
+        scanWasComplete.store (complete);
     }
 }
 

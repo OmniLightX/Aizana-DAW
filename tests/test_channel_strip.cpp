@@ -174,7 +174,7 @@ TEST_CASE ("ChannelStrip: setPan change is individually undoable", "[mixer][MIX-
 TEST_CASE ("ChannelStrip: solo and mute persist through ValueTree XML round-trip", "[mixer][MIX-01]")
 {
     auto tempFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                        .getChildFile ("cloudes_test_mixer_roundtrip.tracktion");
+                        .getChildFile ("aizana_test_mixer_roundtrip.tracktion");
 
     {
         EditManager em;

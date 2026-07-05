@@ -6,7 +6,7 @@
 class PluginScanner;
 
 /**
-    GeneratedPluginsPanel — Phase 5 / G5b: manage the Cloudes-generated plugin library.
+    GeneratedPluginsPanel — Phase 5 / G5b: manage the Aizana-generated plugin library.
 
     Lists the .clap files in FaustCompiler::generatedPluginsDir() with their current display
     names and lets the user rename or delete them. Rename is a display-name override (stored

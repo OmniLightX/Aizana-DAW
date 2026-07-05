@@ -259,7 +259,7 @@ te::AudioTrack* MixerEngine::createFXChannel (const juce::String& name)
 
     // Also store bus number directly on the track state so callers can read it
     // without scanning the plugin chain (fallback if AuxReturnPlugin lookup fails).
-    track->state.setProperty ("cloudesBusNumber", nextBusNum, nullptr);
+    track->state.setProperty ("aizanaBusNumber", nextBusNum, nullptr);
 
     // New tracks default to solo-isolated off so solo works correctly on other tracks.
     track->setSoloIsolate (false);

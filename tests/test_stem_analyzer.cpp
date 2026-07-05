@@ -13,7 +13,7 @@ namespace
     juce::File makeTempDir()
     {
         auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                       .getChildFile ("cloudes_stems_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
+                       .getChildFile ("aizana_stems_" + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)));
         REQUIRE (dir.createDirectory());
         return dir;
     }

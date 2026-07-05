@@ -1,4 +1,4 @@
-declare name "CloudesReverb";
+declare name "AizanaReverb";
 declare description "Reverb — room/hall ambience (size, damping, mix)";
 import("stdfaust.lib");
 

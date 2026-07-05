@@ -56,9 +56,9 @@ static const clap_event_header_t* CLAP_ABI inputEventsGet (const clap_input_even
 static const clap_host_t kStubHost {
     CLAP_VERSION,
     nullptr,               // host_data
-    "Cloudes",             // name
-    "Cloudes",             // vendor
-    "https://cloudes.app", // url
+    "Aizana",             // name
+    "Aizana",             // vendor
+    "https://aizana.app", // url
     "0.1.0",               // version
     stubHostGetExtension,
     stubHostRequestRestart,

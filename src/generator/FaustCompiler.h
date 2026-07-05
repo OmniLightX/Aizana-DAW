@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace cloudes
+namespace aizana
 {
     /**
         FaustCompiler — Phase 4 / Generator G1: turn a Faust DSP *source string* generated
@@ -48,7 +48,7 @@ namespace cloudes
         /** True when a usable Faust toolchain is present (generation possible). */
         static bool isAvailable();
 
-        /** ~/Library/Cloudes/Generated Plugins — the user's plugin library. */
+        /** ~/Library/Aizana/Generated Plugins — the user's plugin library. */
         static juce::File generatedPluginsDir();
 
         /** Compile a Faust DSP source string → universal .clap at `outDir/<name>.clap`.

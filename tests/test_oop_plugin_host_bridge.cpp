@@ -62,7 +62,7 @@ TEST_CASE ("PluginHostBridge processes a real AudioProcessor over the ring (plan
         proc.prepareToPlay (44100.0, (int) c->maxBlockSamples());
         attached.store (true);
 
-        cloudes::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
+        aizana::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
     });
 
     while (! attached.load()) std::this_thread::sleep_for (std::chrono::milliseconds (1));
@@ -105,7 +105,7 @@ TEST_CASE ("PluginHostBridge handles a partial block (n < maxBlockSamples)", "[o
         ScaleProcessor proc;
         proc.prepareToPlay (44100.0, (int) c->maxBlockSamples());
         attached.store (true);
-        cloudes::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
+        aizana::PluginHostBridge::run (*c, proc, [&] { return stop.load(); });
     });
 
     while (! attached.load()) std::this_thread::sleep_for (std::chrono::milliseconds (1));

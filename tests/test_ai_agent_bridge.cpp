@@ -1,4 +1,4 @@
-// test_ai_agent_bridge.cpp — Phase 4 flagship "Cloudes AI Studio": the non-UI core that
+// test_ai_agent_bridge.cpp — Phase 4 flagship "Aizana AI Studio": the non-UI core that
 // lets an in-app chat drive the user's Claude Code / Codex CLI. Pure pieces are golden-tested
 // here; the subprocess + UI (AiStudioPanel) are user-tested.
 
@@ -7,7 +7,7 @@
 
 #include "ai/AiAgentBridge.h"
 
-using namespace cloudes;
+using namespace aizana;
 
 namespace
 {
@@ -22,7 +22,7 @@ namespace
 
 TEST_CASE ("AiAgentBridge: detectCli prefers claude, falls back to codex", "[ai][aistudio]")
 {
-    auto dir = makeTempDir ("cloudes_cli_test");
+    auto dir = makeTempDir ("aizana_cli_test");
 
     SECTION ("none present")
     {
@@ -51,7 +51,7 @@ TEST_CASE ("AiAgentBridge: detectCli prefers claude, falls back to codex", "[ai]
 
 TEST_CASE ("AiAgentBridge: detectClis lists all installed CLIs, Claude first", "[ai][aistudio]")
 {
-    auto dir = makeTempDir ("cloudes_clis_test");
+    auto dir = makeTempDir ("aizana_clis_test");
     dir.getChildFile ("codex").create();
     dir.getChildFile ("claude").create();
 
@@ -66,7 +66,7 @@ TEST_CASE ("AiAgentBridge: detectClis lists all installed CLIs, Claude first", "
 TEST_CASE ("AiAgentBridge: buildCodexArgs runs `exec` and registers the MCP server via -c", "[ai][aistudio]")
 {
     const juce::File exe ("/opt/homebrew/bin/codex");
-    const juce::File bin ("/tmp/cloudes-mcp");
+    const juce::File bin ("/tmp/aizana-mcp");
     const juce::File tc  ("/tmp/GeneratorToolchain");
 
     const auto args = AiAgentBridge::buildCodexArgs (exe, "make a reverb", bin, tc);
@@ -75,25 +75,25 @@ TEST_CASE ("AiAgentBridge: buildCodexArgs runs `exec` and registers the MCP serv
     CHECK (args.contains ("make a reverb"));
     bool hasServerOverride = false;
     for (const auto& a : args)
-        if (a.contains ("mcp_servers.cloudes.command") && a.contains (bin.getFullPathName()))
+        if (a.contains ("mcp_servers.aizana.command") && a.contains (bin.getFullPathName()))
             hasServerOverride = true;
     CHECK (hasServerOverride);
 }
 
-TEST_CASE ("AiAgentBridge: writeClaudeMcpConfig registers the cloudes server", "[ai][aistudio]")
+TEST_CASE ("AiAgentBridge: writeClaudeMcpConfig registers the aizana server", "[ai][aistudio]")
 {
-    auto dir = makeTempDir ("cloudes_mcpcfg_test");
+    auto dir = makeTempDir ("aizana_mcpcfg_test");
     const auto cfg  = dir.getChildFile ("mcp.json");
-    const auto bin  = dir.getChildFile ("cloudes-mcp");
+    const auto bin  = dir.getChildFile ("aizana-mcp");
     const auto tool = dir.getChildFile ("GeneratorToolchain");
 
     AiAgentBridge::writeClaudeMcpConfig (cfg, bin, tool);
     REQUIRE (cfg.existsAsFile());
 
     const auto v = juce::JSON::parse (cfg);
-    const auto server = v.getProperty ("mcpServers", {}).getProperty ("cloudes", {});
+    const auto server = v.getProperty ("mcpServers", {}).getProperty ("aizana", {});
     CHECK (server.getProperty ("command", {}).toString() == bin.getFullPathName());
-    CHECK (server.getProperty ("env", {}).getProperty ("CLOUDES_TOOLCHAIN_DIR", {}).toString()
+    CHECK (server.getProperty ("env", {}).getProperty ("AIZANA_TOOLCHAIN_DIR", {}).toString()
              == tool.getFullPathName());
 
     dir.deleteRecursively();
@@ -114,9 +114,9 @@ TEST_CASE ("AiAgentBridge: buildClaudeArgs — session start vs resume + allowed
     CHECK (first.contains ("--session-id"));
     CHECK (first.contains ("sess-123"));
     CHECK_FALSE (first.contains ("--resume"));
-    // Cloudes MCP tools are pre-approved.
+    // Aizana MCP tools are pre-approved.
     bool allowed = false;
-    for (const auto& a : first) if (a.contains ("mcp__cloudes__compile_plugin")) allowed = true;
+    for (const auto& a : first) if (a.contains ("mcp__aizana__compile_plugin")) allowed = true;
     CHECK (allowed);
 
     const auto next = AiAgentBridge::buildClaudeArgs (exe, "louder", "sess-123", false, cfg);

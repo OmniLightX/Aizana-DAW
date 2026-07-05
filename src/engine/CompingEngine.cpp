@@ -6,7 +6,7 @@
 // checks ([temp.explicit]/12) — the standard way to lift a member pointer
 // without patching the vendored submodule. A TE signature change here becomes
 // a compile error, never a silent break.
-namespace cloudes_access
+namespace aizana_access
 {
     using SetSourceFn = void (te::Clip::*) (const juce::File&);
     SetSourceFn setCurrentSourceFileFn();
@@ -18,11 +18,11 @@ namespace cloudes_access
 
 void CompingEngine::setSourceOverride (te::Clip& clip, const juce::File& file)
 {
-    (clip.*cloudes_access::setCurrentSourceFileFn()) (file);
+    (clip.*aizana_access::setCurrentSourceFileFn()) (file);
 }
 
 //==============================================================================
-const juce::Identifier CompingEngine::compType      ("CLOUDESCOMP");
+const juce::Identifier CompingEngine::compType      ("AIZANACOMP");
 const juce::Identifier CompingEngine::sectionType   ("SECTION");
 const juce::Identifier CompingEngine::takeIndexProp ("takeIndex");
 const juce::Identifier CompingEngine::endTimeProp   ("endTime");
@@ -387,7 +387,7 @@ juce::File CompingEngine::renderCompNow (te::WaveAudioClip& clip)
 juce::File CompingEngine::compCacheDirectory()
 {
     auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                   .getChildFile ("Cloudes Comps");
+                   .getChildFile ("Aizana Comps");
     dir.createDirectory();
     return dir;
 }
@@ -506,7 +506,7 @@ juce::File CompingEngine::renderCompFile (const juce::Array<juce::File>& takeFil
 }
 
 //==============================================================================
-// ValueTree listener — any change inside a CLOUDESCOMP subtree re-renders
+// ValueTree listener — any change inside a AIZANACOMP subtree re-renders
 
 void CompingEngine::handleTreeChange (juce::ValueTree tree)
 {

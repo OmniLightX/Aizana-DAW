@@ -3,11 +3,11 @@
 // Verifies that intents produce REAL, editable Tracktion-Engine mechanic applied as
 // ONE undo transaction via the AICommandBridge:
 //   - a level intent changes the target track's volume; one undo reverts it
-//   - a character intent inserts Cloudes' OWN EQ (editable — Fix 3); one undo removes it
-//   - a loudness intent inserts Cloudes' OWN glue compressor on the master; one undo reverts
+//   - a character intent inserts Aizana' OWN EQ (editable — Fix 3); one undo removes it
+//   - a loudness intent inserts Aizana' OWN glue compressor on the master; one undo reverts
 //   - category / label / intentsFor mapping is consistent
 //
-// Fix 3 (2026-06-05): intents now insert Cloudes' built-in FX (EQProcessor /
+// Fix 3 (2026-06-05): intents now insert Aizana' built-in FX (EQProcessor /
 // CompressorProcessor / ReverbProcessor) wrapped as ExternalPlugin via
 // BuiltInPluginFormat — NOT native te::*Plugin — so the inserted mechanic is editable.
 
@@ -19,7 +19,7 @@
 
 namespace
 {
-    // Count Cloudes built-in FX in a plugin list, identified by the wrapped processor's
+    // Count Aizana built-in FX in a plugin list, identified by the wrapped processor's
     // name ("EQProcessor", "CompressorProcessor", "ReverbProcessor"). They are inserted
     // as TE ExternalPlugins (getPluginType() == ExternalPlugin::xmlTypeName), so we look
     // through the wrapper at the live AudioPluginInstance.
@@ -70,7 +70,7 @@ TEST_CASE ("IntentEngine: VocalForward raises target volume, one undo reverts", 
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE ("IntentEngine: Warmer inserts one Cloudes EQ, one undo removes it", "[ai][phase2][intent]")
+TEST_CASE ("IntentEngine: Warmer inserts one Aizana EQ, one undo removes it", "[ai][phase2][intent]")
 {
     EditManager em; em.createNewEdit();
     auto* edit = em.getEdit(); REQUIRE (edit != nullptr);
@@ -88,7 +88,7 @@ TEST_CASE ("IntentEngine: Warmer inserts one Cloudes EQ, one undo removes it", "
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE ("IntentEngine: GlueMix inserts a Cloudes compressor on the master, one undo reverts", "[ai][phase2][intent]")
+TEST_CASE ("IntentEngine: GlueMix inserts a Aizana compressor on the master, one undo reverts", "[ai][phase2][intent]")
 {
     EditManager em; em.createNewEdit();
     auto* edit = em.getEdit(); REQUIRE (edit != nullptr);

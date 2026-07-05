@@ -57,7 +57,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
     sampleRateLabel.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     sampleRateLabel.setText ("-- kHz", juce::dontSendNotification);
 
-    // ---- Transport icon buttons (Sketch 005) — colours per CloudesIcon semantics ----
+    // ---- Transport icon buttons (Sketch 005) — colours per AizanaIcon semantics ----
     auto neutral = [] (IconButton& b)
     {
         b.bgColour     = juce::Colour (0xff3a3a3a);

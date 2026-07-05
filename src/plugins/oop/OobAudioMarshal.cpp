@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace cloudes
+namespace aizana
 {
     SharedAudioRing::Status OobAudioMarshal::hostProcessBlock (SharedAudioRing& ring,
                                                               juce::AudioBuffer<float>& buffer,

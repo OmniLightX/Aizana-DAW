@@ -3,7 +3,7 @@
 #include "MixAction.h"   // (pulls juce_core); TrackMixProfile lives in MixingEngine.h
 #include <vector>
 
-namespace cloudes
+namespace aizana
 {
     struct TrackMixProfile;   // fwd (defined in MixingEngine.h)
 
