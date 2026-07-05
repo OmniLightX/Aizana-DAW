@@ -54,8 +54,19 @@ public:
      */
     juce::File getLatestAutosave (const juce::File& sessionFile) const;
 
-    /** Perform an autosave immediately (called by the timer and on clean exit). */
+    /** Perform an autosave immediately (called by the timer and on clean exit).
+        While the transport is PLAYING this writes a playback-safe snapshot (see
+        writeAutosaveSnapshotAsync) instead of the full flush+save path — TE's
+        save suspends every hosted plugin and drops audio-thread realtime priority,
+        which made the whole mix audibly drop out on every timer tick (M13). */
     void performAutosave();
+
+    /** Playback-safe autosave core: serialises an exclusively-owned deep copy of
+        the edit state on a background thread and atomically swaps it into place.
+        Never touches plugins, files or thread priorities of the audio engine.
+        Public + static for direct regression testing. */
+    static void writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
+                                            const juce::File& target);
 
     /**
      * Fired at the end of createNewEdit() and loadEdit(), after the new Edit is
