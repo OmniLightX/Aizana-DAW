@@ -301,9 +301,42 @@ void EditManager::performAutosave()
     if (oldestFile == juce::File{})
         return;  // Shouldn't happen
 
-    // Flush and write the autosave (overwrite the oldest slot)
+    // M13 (Loop-Aussetzer): te::EditFileOperations::saveAs is NOT playback-safe —
+    // writeToFile() drops the audio threads' realtime priority for the duration
+    // (EditPlaybackContext::RealtimePriorityDisabler) and edit.flushState() calls
+    // suspendProcessing(true) on EVERY hosted plugin while its state is serialised,
+    // so each plugin outputs silence for a moment. Result: the whole mix audibly
+    // dropped out on every 2-minute autosave tick during playback.
+    if (edit->getTransport().isPlaying())
+    {
+        // Playback-safe path: snapshot the state tree as-is. Everything that lives
+        // in the ValueTree (clips, routing, volumes, pans, sends, automation) is
+        // current; hosted-plugin state blobs are as fresh as the last full flush
+        // (load / manual save / stopped autosave) — bounded staleness, zero audio
+        // impact. createCopy() hands the background thread an exclusively-owned tree.
+        writeAutosaveSnapshotAsync (edit->state.createCopy(), oldestFile);
+        return;
+    }
+
+    // Transport stopped: full-fidelity autosave. The plugin suspends are inaudible.
     edit->flushState();
     te::EditFileOperations (*edit).saveAs (oldestFile, true);
+}
+
+void EditManager::writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
+                                              const juce::File& target)
+{
+    juce::Thread::launch ([tree = std::move (exclusiveStateCopy), target]
+    {
+        if (auto xml = tree.createXml())
+        {
+            // Temp-write + move: a crash mid-write must never leave a torn autosave
+            // in the slot (the slot may still hold a good previous snapshot).
+            const auto tmp = target.getSiblingFile (target.getFileName() + ".tmp");
+            if (xml->writeTo (tmp) && ! tmp.moveFileTo (target))
+                tmp.deleteFile();
+        }
+    });
 }
 
 juce::File EditManager::getLatestAutosave (const juce::File& sessionFile) const

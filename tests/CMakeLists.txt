@@ -73,6 +73,8 @@ target_sources(engine_tests PRIVATE
     test_export_wav.cpp
     # Rename-Migration (Cloudes → Aizana, 2026-07-05)
     test_legacy_migration.cpp
+    # M13: Autosave darf die Wiedergabe nicht unterbrechen (playback-safe Snapshot)
+    test_autosave.cpp
     # Source files
     ../src/app/UIStateManager.cpp
     ../src/app/LegacyMigration.cpp
