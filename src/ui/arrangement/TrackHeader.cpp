@@ -774,6 +774,10 @@ void TrackHeader::showContextMenu()
     builtInMenu.addItem (11, "Compressor");
     builtInMenu.addItem (12, "Reverb");
     builtInMenu.addItem (13, "Limiter");
+    builtInMenu.addItem (14, "Delay");
+    builtInMenu.addItem (15, "Gate");
+    builtInMenu.addItem (16, "Saturator");
+    builtInMenu.addItem (17, "De-Esser");
 
     // Track colour submenu (closes GAP-27): palette swatches + custom picker + reset.
     juce::PopupMenu colourMenu;
@@ -845,6 +849,10 @@ void TrackHeader::showContextMenu()
                 case 11: handleInsertBuiltInFX ("Aizana Compressor"); break;
                 case 12: handleInsertBuiltInFX ("Aizana Reverb");     break;
                 case 13: handleInsertBuiltInFX ("Aizana Limiter");    break;
+                case 14: handleInsertBuiltInFX ("Aizana Delay");      break;
+                case 15: handleInsertBuiltInFX ("Aizana Gate");       break;
+                case 16: handleInsertBuiltInFX ("Aizana Saturator");  break;
+                case 17: handleInsertBuiltInFX ("Aizana De-Esser");   break;
                 case 98: handleCustomColourPicker();                   break;
                 case 99: handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
                 default: break;

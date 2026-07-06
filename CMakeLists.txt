@@ -234,6 +234,9 @@ target_sources(Aizana PRIVATE
     src/fx/ReverbProcessor.cpp
     src/fx/LimiterProcessor.cpp
     src/fx/DeEsserProcessor.cpp
+    src/fx/DelayProcessor.cpp
+    src/fx/GateProcessor.cpp
+    src/fx/SaturatorProcessor.cpp
     # Metering + Export (plan 01-07, EXP-01 through EXP-04; plan 01-39 TE global tap)
     src/metering/MeterProcessor.cpp
     src/metering/MasterMeterAudioProcessor.cpp

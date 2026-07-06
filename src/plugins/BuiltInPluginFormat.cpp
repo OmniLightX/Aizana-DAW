@@ -4,10 +4,37 @@
 #include "fx/ReverbProcessor.h"
 #include "fx/LimiterProcessor.h"
 #include "fx/DeEsserProcessor.h"
+#include "fx/DelayProcessor.h"
+#include "fx/GateProcessor.h"
+#include "fx/SaturatorProcessor.h"
 
 // ---------------------------------------------------------------------------
 // Static description helpers
 // ---------------------------------------------------------------------------
+
+namespace
+{
+    struct BuiltInEntry
+    {
+        const char* name;
+        const char* category;
+        const char* identifier;
+    };
+
+    // Single source of truth for all built-in FX — descriptions, scan results
+    // and instantiation all derive from this table.
+    constexpr BuiltInEntry kBuiltIns[] =
+    {
+        { "Aizana EQ",         "EQ",         "aizana.eq" },
+        { "Aizana Compressor", "Dynamics",   "aizana.compressor" },
+        { "Aizana Reverb",     "Reverb",     "aizana.reverb" },
+        { "Aizana Limiter",    "Dynamics",   "aizana.limiter" },
+        { "Aizana De-Esser",   "Dynamics",   "aizana.deesser" },
+        { "Aizana Delay",      "Delay",      "aizana.delay" },
+        { "Aizana Gate",       "Dynamics",   "aizana.gate" },
+        { "Aizana Saturator",  "Distortion", "aizana.saturator" },
+    };
+}
 
 static juce::PluginDescription makeDesc (const juce::String& name,
                                           const juce::String& category,
@@ -33,20 +60,15 @@ static juce::PluginDescription makeDesc (const juce::String& name,
 
 void BuiltInPluginFormat::getBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results)
 {
-    results.add (new juce::PluginDescription (makeDesc ("Aizana EQ",         "EQ",       "aizana.eq")));
-    results.add (new juce::PluginDescription (makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor")));
-    results.add (new juce::PluginDescription (makeDesc ("Aizana Reverb",     "Reverb",   "aizana.reverb")));
-    results.add (new juce::PluginDescription (makeDesc ("Aizana Limiter",    "Dynamics", "aizana.limiter")));
-    results.add (new juce::PluginDescription (makeDesc ("Aizana De-Esser",   "Dynamics", "aizana.deesser")));
+    for (const auto& e : kBuiltIns)
+        results.add (new juce::PluginDescription (makeDesc (e.name, e.category, e.identifier)));
 }
 
 juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::String& fxName)
 {
-    if (fxName == "Aizana EQ")         return makeDesc ("Aizana EQ",         "EQ",       "aizana.eq");
-    if (fxName == "Aizana Compressor") return makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor");
-    if (fxName == "Aizana Reverb")     return makeDesc ("Aizana Reverb",     "Reverb",   "aizana.reverb");
-    if (fxName == "Aizana Limiter")    return makeDesc ("Aizana Limiter",    "Dynamics", "aizana.limiter");
-    if (fxName == "Aizana De-Esser")   return makeDesc ("Aizana De-Esser",   "Dynamics", "aizana.deesser");
+    for (const auto& e : kBuiltIns)
+        if (fxName == e.name)
+            return makeDesc (e.name, e.category, e.identifier);
 
     jassertfalse;  // Unknown built-in FX name
     return {};
@@ -59,16 +81,9 @@ juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::Stri
 void BuiltInPluginFormat::findAllTypesForFile (juce::OwnedArray<juce::PluginDescription>& results,
                                                 const juce::String& fileOrIdentifier)
 {
-    if (fileOrIdentifier == "aizana.eq")
-        results.add (new juce::PluginDescription (makeDesc ("Aizana EQ", "EQ", "aizana.eq")));
-    else if (fileOrIdentifier == "aizana.compressor")
-        results.add (new juce::PluginDescription (makeDesc ("Aizana Compressor", "Dynamics", "aizana.compressor")));
-    else if (fileOrIdentifier == "aizana.reverb")
-        results.add (new juce::PluginDescription (makeDesc ("Aizana Reverb", "Reverb", "aizana.reverb")));
-    else if (fileOrIdentifier == "aizana.limiter")
-        results.add (new juce::PluginDescription (makeDesc ("Aizana Limiter", "Dynamics", "aizana.limiter")));
-    else if (fileOrIdentifier == "aizana.deesser")
-        results.add (new juce::PluginDescription (makeDesc ("Aizana De-Esser", "Dynamics", "aizana.deesser")));
+    for (const auto& e : kBuiltIns)
+        if (fileOrIdentifier == e.identifier)
+            results.add (new juce::PluginDescription (makeDesc (e.name, e.category, e.identifier)));
 }
 
 bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fileOrIdentifier)
@@ -78,7 +93,10 @@ bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fi
 
 juce::StringArray BuiltInPluginFormat::searchPathsForPlugins (const juce::FileSearchPath&, bool, bool)
 {
-    return { "aizana.eq", "aizana.compressor", "aizana.reverb", "aizana.limiter", "aizana.deesser" };
+    juce::StringArray paths;
+    for (const auto& e : kBuiltIns)
+        paths.add (e.identifier);
+    return paths;
 }
 
 void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& desc,
@@ -98,6 +116,12 @@ void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& d
         instance = std::make_unique<LimiterProcessor>();
     else if (desc.fileOrIdentifier == "aizana.deesser")
         instance = std::make_unique<DeEsserProcessor>();
+    else if (desc.fileOrIdentifier == "aizana.delay")
+        instance = std::make_unique<DelayProcessor>();
+    else if (desc.fileOrIdentifier == "aizana.gate")
+        instance = std::make_unique<GateProcessor>();
+    else if (desc.fileOrIdentifier == "aizana.saturator")
+        instance = std::make_unique<SaturatorProcessor>();
 
     if (instance != nullptr)
     {

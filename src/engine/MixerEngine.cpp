@@ -1,5 +1,6 @@
 #include "MixerEngine.h"
 #include "fx/CompressorProcessor.h"
+#include "fx/GateProcessor.h"
 
 //==============================================================================
 MixerEngine::MixerEngine (EditManager& em)
@@ -633,11 +634,15 @@ void MixerEngine::setSidechainSource (te::Plugin& plugin, te::AudioTrack& source
     if (plugin.getNumWires() == 0)
         plugin.guessSidechainRouting();
 
-    // If the hosted processor is our built-in compressor, keying on the external
-    // signal is what the user asked for — switch its detector to the key input.
+    // If the hosted processor is one of our key-capable built-ins, keying on the
+    // external signal is what the user asked for — switch its detector over.
     if (auto* ep = dynamic_cast<te::ExternalPlugin*> (&plugin))
+    {
         if (auto* comp = dynamic_cast<CompressorProcessor*> (ep->getAudioPluginInstance()))
             comp->setSidechainKeyEnabled (true);
+        else if (auto* gate = dynamic_cast<GateProcessor*> (ep->getAudioPluginInstance()))
+            gate->setSidechainKeyEnabled (true);
+    }
 }
 
 void MixerEngine::clearSidechainSource (te::Plugin& plugin)
@@ -646,6 +651,10 @@ void MixerEngine::clearSidechainSource (te::Plugin& plugin)
     plugin.setSidechainSourceID (te::EditItemID {});
 
     if (auto* ep = dynamic_cast<te::ExternalPlugin*> (&plugin))
+    {
         if (auto* comp = dynamic_cast<CompressorProcessor*> (ep->getAudioPluginInstance()))
             comp->setSidechainKeyEnabled (false);
+        else if (auto* gate = dynamic_cast<GateProcessor*> (ep->getAudioPluginInstance()))
+            gate->setSidechainKeyEnabled (false);
+    }
 }
