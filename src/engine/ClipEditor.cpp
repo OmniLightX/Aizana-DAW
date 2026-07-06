@@ -383,6 +383,83 @@ te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
 }
 
 //==============================================================================
+te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool withTrackFX)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr || &clip.edit != edit)
+        return nullptr;
+
+    auto* track = dynamic_cast<te::AudioTrack*> (clip.getClipTrack());
+    if (track == nullptr)
+        return nullptr;
+
+    // Renderer's tracksToDo indexes into getAllTracks()
+    const int trackIndex = te::getAllTracks (*edit).indexOf (track);
+    if (trackIndex < 0)
+        return nullptr;
+
+    const auto range = clip.getPosition().time;
+    if (range.getLength().inSeconds() <= 0.0)
+        return nullptr;
+
+    // Rendered files live next to the session; unsaved sessions use the temp dir
+    const auto sessionFile = editManager.getCurrentFile();
+    auto bounceDir = sessionFile.existsAsFile()
+        ? sessionFile.getParentDirectory().getChildFile ("Bounces")
+        : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("AizanaBounces");
+    bounceDir.createDirectory();
+
+    const auto outFile = bounceDir
+        .getChildFile (juce::File::createLegalFileName (clip.getName()) + " Bounce.wav")
+        .getNonexistentSibling();
+
+    double sampleRate = edit->engine.getDeviceManager().getSampleRate();
+    if (sampleRate < 8000.0)
+        sampleRate = 44100.0;   // headless / no device open
+
+    te::Renderer::Parameters params (*edit);
+    params.destFile           = outFile;
+    params.audioFormat        = edit->engine.getAudioFileFormatManager().getWavFormat();
+    params.bitDepth           = 24;
+    params.sampleRateForAudio = sampleRate;
+    params.blockSizeForAudio  = 512;
+    params.time               = range;
+    params.realTimeRender     = false;
+    params.usePlugins         = withTrackFX;
+    params.useMasterPlugins   = false;         // bounce ≠ mixdown — master stays live
+    params.checkNodesForAudio = false;
+    params.tracksToDo.setBit (trackIndex);
+    params.allowedClips.add (&clip);   // only THIS event renders, siblings stay out
+
+    const auto rendered = te::Renderer::renderToFile ("Bounce in Place", params);
+    const auto resultFile = rendered.existsAsFile() ? rendered : params.destFile;
+    if (! resultFile.existsAsFile())
+        return nullptr;
+
+    // Swap old clip for the render — ONE undo step (Cmd+Z restores the original;
+    // fades/gain/FX are baked into the file, so the new clip starts clean).
+    te::Clip::Ptr keepAlive (&clip);
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Bounce in Place");
+
+    te::ClipPosition pos { range, {} };
+    auto* newClipBase = track->insertNewClip (te::TrackItem::Type::wave,
+                                              clip.getName() + " (Bounce)",
+                                              pos, nullptr);
+    auto* newClip = dynamic_cast<te::WaveAudioClip*> (newClipBase);
+    if (newClip == nullptr)
+        return nullptr;
+
+    newClip->getSourceFileReference().setToDirectFileReference (resultFile, false);
+
+    juce::ValueTree parent = keepAlive->state.getParent();
+    if (parent.isValid())
+        parent.removeChild (keepAlive->state, &um);
+
+    return newClip;
+}
+
+//==============================================================================
 te::Clip* ClipEditor::duplicateClip (te::Clip& clip)
 {
     auto* edit = editManager.getEdit();

@@ -1,6 +1,7 @@
 # Build output
 build/
 builds/
+build-release/
 out/
 
 # CMake

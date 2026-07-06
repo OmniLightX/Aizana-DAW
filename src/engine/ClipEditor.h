@@ -236,6 +236,21 @@ public:
                                             double rangeStartSecs, double rangeEndSecs);
 
     /**
+     * P3 (S1-Parität "Bounce/Transform"): render ONE clip — optionally through
+     * the track's insert chain — to a new audio file and replace the clip with
+     * the rendered result. Master plugins are never baked (bounce ≠ mixdown).
+     *
+     * The rendered file lands in <session dir>/Bounces ("AizanaBounces" in the
+     * temp dir for unsaved sessions). The clip swap is ONE undo step; the
+     * rendered file itself stays on disk either way.
+     *
+     * Must be called from the message thread (TE render invariant, I-10).
+     *
+     * Returns the replacement clip, or nullptr if the render failed.
+     */
+    te::WaveAudioClip* bounceClipInPlace (te::WaveAudioClip& clip, bool withTrackFX = true);
+
+    /**
      * Import an audio file as a new WaveAudioClip on the given track.
      *
      * The clip's start time is startTimeSecs. Its duration is determined from

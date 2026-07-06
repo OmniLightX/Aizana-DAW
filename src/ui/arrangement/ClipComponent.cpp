@@ -653,6 +653,11 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 menu.addItem (7, juce::String::fromUTF8 ("Songtempo-Anpassung entfernen"), true, true);
             else
                 menu.addItem (7, juce::String::fromUTF8 ("An Songtempo anpassen…"));
+
+            // P3 (S1 "Bounce/Transform"): render the event to a new file in place
+            menu.addSeparator();
+            menu.addItem (8, "Bounce in Place (mit Insert-FX)");
+            menu.addItem (9, "Bounce in Place (nur Event)");
         }
 
         // Takes submenu: shown for WaveAudioClip when loop recording produced multiple takes
@@ -787,6 +792,11 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                         else
                             conformClipToSongTempo();
                     }
+                }
+                else if (result == 8 || result == 9)
+                {
+                    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+                        clipEditor.bounceClipInPlace (*wc, result == 8);
                 }
                 else if (result >= 100)
                 {

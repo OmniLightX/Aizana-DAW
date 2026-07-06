@@ -78,6 +78,7 @@ target_sources(engine_tests PRIVATE
     test_delay_dsp.cpp
     test_gate_dsp.cpp
     test_saturator_dsp.cpp
+    test_bounce_in_place.cpp
     # Metering tests (EXP-03) — require JUCE + libebur128
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
@@ -163,6 +164,10 @@ target_compile_definitions(engine_tests PRIVATE
     TRACKTION_ENABLE_REWIRE=0
     # Timestretch backend — must match the Aizana app target (Phase 3, Task 0)
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
+    # Offline-Render headless: AizanaUIBehaviour pumpt den Message-Loop nur mit
+    # diesem Define — ohne es schlaeft der Message-Thread und te::callBlocking
+    # in der Render-Initialisierung laeuft in den Timeout (Bounce/Freeze-Tests).
+    JUCE_MODAL_LOOPS_PERMITTED=1
 )
 
 target_link_libraries(engine_tests PRIVATE

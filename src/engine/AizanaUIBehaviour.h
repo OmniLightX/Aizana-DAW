@@ -114,6 +114,17 @@ public:
     {
         juce::MessageManager::callAsync ([msg]
         {
+            // Headless (engine_tests / CLI): there is no JUCEApplication and no
+            // user — an AlertWindow would sit unanswered forever. TE's
+            // PluginManager dtor pumps the message loop (cleanUpDanglingPlugins,
+            // JUCE_MODAL_LOOPS_PERMITTED), which delivers this lambda: with a
+            // modal window in flight that pump never finishes = suite hang.
+            if (juce::JUCEApplicationBase::getInstance() == nullptr)
+            {
+                juce::Logger::writeToLog ("Aizana warning (headless): " + msg);
+                return;
+            }
+
             juce::AlertWindow::showMessageBoxAsync (
                 juce::MessageBoxIconType::WarningIcon,
                 "Aizana", msg);
