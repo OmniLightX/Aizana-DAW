@@ -217,8 +217,8 @@ void TrackHeader::resized()
     auto controlArea = area.reduced (0, 0);
     dbScaleArea = controlArea.removeFromBottom (9);
     auto volumeRow = controlArea.removeFromBottom (14);
-    // Pan label: 24px wide on the right, same row as volume slider
-    panLabel.setBounds (volumeRow.removeFromRight (24));
+    // UX1: Pan-Label 34px — "L100"/"R100" wurden bei 24px abgeschnitten.
+    panLabel.setBounds (volumeRow.removeFromRight (34));
     volumeSlider.setBounds (volumeRow);
     controlArea.removeFromBottom (1);
 

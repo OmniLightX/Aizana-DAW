@@ -67,6 +67,7 @@ target_sources(engine_tests PRIVATE
     test_plugin_param_automation.cpp
     test_tempo_engine.cpp
     test_edit_groups.cpp
+    test_pan_value.cpp
     test_removable_media_guard.cpp
     # DSP effects tests (FX-01 through FX-04) — require juce::dsp
     test_eq_dsp.cpp

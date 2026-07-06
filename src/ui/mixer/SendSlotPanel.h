@@ -20,7 +20,7 @@ namespace te = tracktion::engine;
 class SendSlotPanel : public juce::Component
 {
 public:
-    static constexpr int kRowHeight   = 20;
+    static constexpr int kRowHeight   = 22;   // UX2: etwas höher — Balken + Wert lesbar
     static constexpr int kVisibleRows = 3;
 
     SendSlotPanel (te::AudioTrack& track, MixerEngine& mixerEngine);
@@ -53,7 +53,15 @@ private:
     void showAddSendMenu();
     void promptNewFxChannel();
 
-    struct SendRow : public juce::Component
+    /**
+     * UX2 (S1-Stil): die ZEILE ist der Level-Balken. Selbst gezeichnet —
+     * satter Füllbalken (-60..0 dB), FX-Name links, dB-Wert rechts, runder
+     * Enable-Punkt. Drag auf der Zeile = Level (1 Undo pro Geste, Shift = fein),
+     * Doppelklick = Reset -6 dB. Der alte halbtransparente Mini-Slider war
+     * praktisch unlesbar.
+     */
+    struct SendRow : public juce::Component,
+                     public juce::SettableTooltipClient   // setTooltip auf der Zeile
     {
         SendRow (te::AudioTrack& sourceTrack,
                  te::AudioTrack& fxChannel,
@@ -61,6 +69,9 @@ private:
 
         void resized() override;
         void paint   (juce::Graphics& g) override;
+        void mouseDown        (const juce::MouseEvent&) override;
+        void mouseDrag        (const juce::MouseEvent&) override;
+        void mouseDoubleClick (const juce::MouseEvent&) override;
 
         te::AudioTrack& fxChannel;
 
@@ -68,13 +79,20 @@ private:
         te::AudioTrack& sourceTrack;
         MixerEngine&    mixerEngine;
 
-        juce::Label  nameLabel;
-        juce::Slider levelSlider;
-
         /** Dot toggle button — compact, no text. */
         juce::TextButton dotButton { "" };
 
-        void syncDotColour();
+        float  shownLevelDb  = -6.0f;   // gecachter Anzeige-Level
+        bool   dragTxnOpen   = false;
+        double dragStartDb   = -6.0;
+        float  dragStartX    = 0.0f;
+
+        bool  sendExists() const;
+        bool  sendEnabled() const;
+        void  applyLevel (float dB, bool beginTransaction);
+        float levelToNorm (float dB) const;   // -60..0 → 0..1
+
+        static constexpr int kDotW = 16;
     };
 
     juce::Viewport              viewport;

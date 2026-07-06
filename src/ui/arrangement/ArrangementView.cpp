@@ -337,6 +337,8 @@ double ArrangementView::snapDeltaToGrid (double deltaSecs, bool altDown) const n
 
 //==============================================================================
 
+int ArrangementView::kHeaderWidth = ArrangementView::kHeaderWidthDefault;   // UX1
+
 ArrangementView::ArrangementView (ApplicationState&    appState_,
                                   ClipEditor&          clipEditor_,
                                   MixerEngine&         mixerEngine_,
@@ -484,6 +486,12 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     // Marker lane — above the ruler, aligned with the timeline panel (not headers)
     addAndMakeVisible (markerLane);
     addAndMakeVisible (tempoLane);
+    addAndMakeVisible (headerResizer);   // UX1: Spaltenbreite per Drag
+
+    // UX1: persistierte Header-Breite laden (Default 160).
+    kHeaderWidth = juce::jlimit (kHeaderWidthMin, kHeaderWidthMax,
+        appState.editManager.getEngine().getPropertyStorage().getPropertiesFile()
+            .getIntValue ("arrangeHeaderWidth", kHeaderWidthDefault));
 
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
@@ -615,6 +623,20 @@ void ArrangementView::attachToEdit()
     rebuildTrackRows();
 }
 
+void ArrangementView::setHeaderWidth (int newWidth)
+{
+    const int w = juce::jlimit (kHeaderWidthMin, kHeaderWidthMax, newWidth);
+    if (w == kHeaderWidth)
+        return;
+    kHeaderWidth = w;
+    resized();
+    repaint();
+
+    auto& props = appState.editManager.getEngine().getPropertyStorage().getPropertiesFile();
+    props.setValue ("arrangeHeaderWidth", w);
+    props.saveIfNeeded();
+}
+
 void ArrangementView::resized()
 {
     auto area = getLocalBounds();
@@ -659,6 +681,11 @@ void ArrangementView::resized()
 
     // Right: timeline panel (rest of width)
     timelineViewport.setBounds (area);
+
+    // UX1: 7px-Griffzone auf der Grenze Header|Timeline (volle Spurhöhe)
+    headerResizer.setBounds (kHeaderWidth - 3, kTimelineTopY, 7,
+                             getHeight() - kTimelineTopY);
+    headerResizer.toFront (false);
 
     // Timeline width: 5 minutes at current zoom, or at least the viewport width
     const double timelineWidthPx = pixelsPerSecond * 300.0;   // 5 minutes

@@ -240,24 +240,13 @@ void MixerView::rebuildStrips()
                                                      pluginScanner));
         strip->onTrackSelected = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
 
-        // Bus-group propagation: after a solo/mute button click, find all tracks on the
-        // same bus and apply the same new state so the entire bus group moves together.
-        strip->onSoloClicked = [this, strip]
-        {
-            const bool newState = strip->getTrack().isSolo (false);
-            for (auto* sibling : getTracksInSameBusGroup (strip->getTrack()))
-                if (sibling != &strip->getTrack())
-                    mixerEngine.setSolo (*sibling, newState);
-            refreshAllStrips();
-        };
-        strip->onMuteClicked = [this, strip]
-        {
-            const bool newState = strip->getTrack().isMuted (false);
-            for (auto* sibling : getTracksInSameBusGroup (strip->getTrack()))
-                if (sibling != &strip->getTrack())
-                    mixerEngine.setMute (*sibling, newState);
-            refreshAllStrips();
-        };
+        // UX3 (S1-Semantik): KEINE manuelle Bus-Gruppen-Propagation mehr.
+        // Track-Solo = solo-in-place NUR dieser Spur (TE hält den Bus-Pfad offen);
+        // Bus-Solo macht die Quellspuren NATIV indirekt hörbar (TE isSolo(true):
+        // output->getDestinationTrack()->isSolo). Die alte Propagation drückte beim
+        // Solo EINER Vocal-Spur die S-Buttons ALLER Bus-Mitglieder — falsch.
+        strip->onSoloClicked = [this] { refreshAllStrips(); };
+        strip->onMuteClicked = [this] { refreshAllStrips(); };
 
         // Multi-selection routing: when one selected strip is routed to a bus (or Master),
         // apply the same routing to all other selected strips simultaneously.
@@ -465,12 +454,7 @@ bool MixerView::keyPressed (const juce::KeyPress& key)
         for (auto* t : selectedMixerTracks)
         {
             const bool newSolo = ! t->isSolo (false);
-            mixerEngine.setSolo (*t, newSolo);
-
-            // Bus-group propagation: apply same solo to all tracks on the same bus
-            for (auto* sibling : getTracksInSameBusGroup (*t))
-                if (sibling != t)
-                    mixerEngine.setSolo (*sibling, newSolo);
+            mixerEngine.setSolo (*t, newSolo);   // UX3: nur die selektierten Spuren (S1)
         }
         refreshAllStrips();
         return true;
@@ -480,12 +464,7 @@ bool MixerView::keyPressed (const juce::KeyPress& key)
         for (auto* t : selectedMixerTracks)
         {
             const bool newMute = ! t->isMuted (false);
-            mixerEngine.setMute (*t, newMute);
-
-            // Bus-group propagation: apply same mute to all tracks on the same bus
-            for (auto* sibling : getTracksInSameBusGroup (*t))
-                if (sibling != t)
-                    mixerEngine.setMute (*sibling, newMute);
+            mixerEngine.setMute (*t, newMute);   // UX3: nur die selektierten Spuren (S1)
         }
         refreshAllStrips();
         return true;

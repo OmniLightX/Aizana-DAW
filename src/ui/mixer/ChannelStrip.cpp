@@ -601,6 +601,8 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     panKnob.setRange           (-1.0, 1.0, 0.01);
     panKnob.setDoubleClickReturnValue (true, 0.0);  // double-click resets centre
     panKnob.setValue           (0.0, juce::dontSendNotification);  // default centre
+    panKnob.setLookAndFeel     (&panLnf);           // UX4: S1-Arc statt Default-Rotary
+    panKnob.setMouseDragSensitivity (380);          // UX4: feinere Kontrolle (Default 250)
     panKnob.onValueChange = [this] { panChanged(); };
     // panValueLabel initial text is set after panValueLabel is constructed (below)
 
@@ -630,10 +632,23 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     };
 
     // ---- Pan value label (numeric readout: L33 / C / R48) ----
+    // UX4: Doppelklick = Wert eintippen ("L45", "R30", "C", "-20"); ungültige
+    // Eingabe stellt den alten Wert wieder her.
     panValueLabel.setText ("C", juce::dontSendNotification);
     panValueLabel.setJustificationType (juce::Justification::centred);
-    panValueLabel.setColour (juce::Label::textColourId, juce::Colour (0xffcccccc));
-    panValueLabel.setFont (juce::FontOptions (9.0f));
+    panValueLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    panValueLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    panValueLabel.setEditable (false, true, false);
+    panValueLabel.setTooltip (juce::String::fromUTF8 ("Doppelklick: Wert eingeben (L45, R30, C)"));
+    panValueLabel.onTextChange = [this]
+    {
+        double pan = 0.0;
+        if (aizana::panvalue::parse (panValueLabel.getText(), pan))
+            panKnob.setValue (pan, juce::sendNotification);   // → panChanged (1 Undo)
+        else
+            panValueLabel.setText (aizana::panvalue::format (panKnob.getValue()),
+                                   juce::dontSendNotification);
+    };
 
     // ---- Pan label ----
     panLabel.setText ("PAN", juce::dontSendNotification);
@@ -702,6 +717,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
 
 ChannelStrip::~ChannelStrip()
 {
+    panKnob.setLookAndFeel (nullptr);   // UX4: LnF-Member stirbt mit diesem Objekt
     track.state.removeListener (this);
 }
 
@@ -740,9 +756,9 @@ void ChannelStrip::resized()
     auto btnArea     = area.removeFromBottom (juce::jmax (0, kBtnH));
 
     // ---- Pan section — allocated from the top ----
-    const int kPanH    = 36;
-    const int kPanValH = 12;
-    const int kPanLblH = 12;
+    const int kPanH    = 48;   // UX4: größerer Knob (war 36 — zu fummelig)
+    const int kPanValH = 15;
+    const int kPanLblH = 11;
 
     auto panArea    = area.removeFromTop (juce::jmax (0, kPanH));
     auto panValArea = area.removeFromTop (juce::jmax (0, kPanValH));
@@ -875,9 +891,7 @@ void ChannelStrip::refresh()
 
 juce::String ChannelStrip::formatPanValue (double pan)
 {
-    int pct = juce::roundToInt (std::abs (pan) * 100.0);
-    if (pct == 0) return "C";
-    return (pan < 0.0 ? "L" : "R") + juce::String (pct);
+    return aizana::panvalue::format (pan);   // geteilter, golden-getesteter Helper (UX4)
 }
 
 void ChannelStrip::panChanged()

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "ui/common/PanKnobLookAndFeel.h"
+#include "ui/common/PanValue.h"
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
 #include "metering/MeterProcessor.h"
@@ -232,6 +234,8 @@ private:
     bool             isSelected = false;
     MeterBar         meterBar;
     juce::Slider     volumeFader;
+    PanKnobLookAndFeel panLnf;   // UX4: S1-Arc-Knob — VOR panKnob deklariert
+                                 // (Member-Dtor-Reihenfolge: Knob löst LnF im Strip-Dtor)
     juce::Slider     panKnob;
     juce::Label      panValueLabel; // numeric pan readout: "L33", "C", "R48"
     juce::Label      panLabel;      // "PAN" label below the pan knob

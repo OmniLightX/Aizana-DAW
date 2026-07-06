@@ -198,7 +198,11 @@ public:
     void   splitClipAtTime (double timeSecs, int screenY);  // also called by ClipComponent
 
     // Track header column width — needed by ClipComponent for scissors coordinate conversion
-    static constexpr int kHeaderWidth = 160;
+    // UX1: Header-Spalte ist jetzt RESIZABLE (Drag am rechten Rand der Spalte).
+    // Bewusst mutable static: eine ArrangementView pro Fenster, und ClipComponent/
+    // TrackRow lesen die Breite weiter als ArrangementView::kHeaderWidth.
+    static int kHeaderWidth;   // 120..340, persistiert ("arrangeHeaderWidth")
+    static constexpr int kHeaderWidthMin = 120, kHeaderWidthMax = 340, kHeaderWidthDefault = 160;
 
     // Snap helper — public so ClipComponent can call it during drag without needing
     // a separate reference. Returns snapped time; bypasses snap when Alt is held.
@@ -423,6 +427,29 @@ private:
     // ---- Marker lane (named song markers) — sits above the ruler ----
     MarkerLane markerLane;
     static constexpr int kMarkerLaneHeight = 18;
+
+    // ---- UX1: Drag-Griff zwischen Header-Spalte und Timeline ----
+    class HeaderResizer : public juce::Component
+    {
+    public:
+        explicit HeaderResizer (ArrangementView& o) : owner (o)
+        { setMouseCursor (juce::MouseCursor::LeftRightResizeCursor); }
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (juce::Colour (0xff111111));
+            g.fillRect (getLocalBounds().withWidth (1).withX (getWidth() / 2));
+        }
+        void mouseDown (const juce::MouseEvent&) override { startW = kHeaderWidth; }
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            owner.setHeaderWidth (startW + e.getDistanceFromDragStartX());
+        }
+    private:
+        ArrangementView& owner;
+        int startW = kHeaderWidthDefault;
+    };
+    HeaderResizer headerResizer { *this };
+    void setHeaderWidth (int newWidth);   // clamp + relayout + persist
 
     // ---- Tempo lane (T1.2) — Tempo-/Taktartwechsel, zwischen Marker und Ruler ----
     TempoEngine tempoEngine;
