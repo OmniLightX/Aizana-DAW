@@ -64,6 +64,33 @@ public:
     /** Taktart-Punkt entfernen (Index 0 nicht löschbar). */
     void removeTimeSigChange (int index);
 
+    // ---- P7a: Tempo-Map-Extraktion (S1 "Extract to tempo track") -------------
+
+    /**
+     * Ersetzt die Tempo-Map so, dass das GRID exakt auf den übergebenen
+     * Beat-Zeiten landet — das Audio bleibt stehen (kein Remap; Clip-Positionen
+     * sind zeitverankert, nur das Raster verschiebt sich).
+     *
+     * Mechanik: pro Beat-Intervall ein Tempo-STEP (curve=1.0 hält die BPM bis
+     * zum nächsten Punkt) mit bpm = 60/Δt an ganzzahligen Beat-Positionen;
+     * liegt der erste Beat nicht bei 0, bekommt der Vorlauf ein Tempo, das eine
+     * ganze Beat-Anzahl exakt auf beatTimes[0] enden lässt. Konstante Läufe
+     * werden zu EINEM Punkt zusammengefasst. TE-Clamp 20..300 BPM.
+     *
+     * beatTimesEditSecs: aufsteigend, EDIT-Zeit, >= 2 Einträge.
+     * EIN Undo-Schritt. Liefert die Anzahl gesetzter Tempo-Punkte (0 = nichts).
+     */
+    int extractTempoMap (const juce::Array<double>& beatTimesEditSecs);
+
+    /**
+     * Convenience: Beat-Zeiten aus der QUELLDATEI eines Clips (TempoDetector-
+     * Ausgabe) → Edit-Zeit (clipStart + t − offset), auf den Clip-Bereich
+     * gefiltert, dann extractTempoMap. Clips mit autoTempo (Timestretch) werden
+     * abgelehnt (Datei-Zeit ≠ Edit-Zeit). Liefert die Anzahl Tempo-Punkte.
+     */
+    int extractTempoMapFromClip (te::WaveAudioClip& clip,
+                                 const juce::Array<double>& beatTimesFileSecs);
+
 private:
     EditManager& editManager;
 

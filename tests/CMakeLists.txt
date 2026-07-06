@@ -80,6 +80,7 @@ target_sources(engine_tests PRIVATE
     test_saturator_dsp.cpp
     test_bounce_in_place.cpp
     test_clip_gain_envelope.cpp
+    test_tempo_map.cpp
     # Metering tests (EXP-03) — require JUCE + libebur128
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer

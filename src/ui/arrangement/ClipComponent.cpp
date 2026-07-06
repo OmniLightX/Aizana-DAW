@@ -6,6 +6,7 @@
 #include "ui/common/TrackColours.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "engine/TempoDetector.h"
+#include "engine/TempoEngine.h"
 
 // Strong time-type aliases — same as ClipEditor.cpp, needed for clip.setPosition()
 using TimePos = tracktion::core::TimePosition;
@@ -681,6 +682,11 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         {
             menu.addItem (6, juce::String::fromUTF8 ("Tempo aus Clip erkennen…"));
 
+            // P7a (S1 "Extract to tempo track"): Grid folgt der Performance.
+            // Bei aktivem Timestretch (autoTempo) ist Datei-Zeit != Edit-Zeit → aus.
+            menu.addItem (10, juce::String::fromUTF8 ("Tempo-Map aus Clip extrahieren…"),
+                          ! wc->getAutoTempo());
+
             // Timestretch (Phase 3, Task 0): follow / stop following the song tempo.
             // Item 7 is a toggle — checked while the clip is conformed (autoTempo on).
             if (wc->getAutoTempo())
@@ -831,6 +837,10 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 {
                     if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
                         clipEditor.bounceClipInPlace (*wc, result == 8);
+                }
+                else if (result == 10)
+                {
+                    extractTempoMapFromClip();
                 }
                 else if (result >= 100)
                 {
@@ -1352,6 +1362,52 @@ void ClipComponent::detectTempoFromClip()
                         edit.tempoSequence.getTempo (0)->setBpm (
                             juce::jlimit (30.0, 250.0, rounded));
                     }));
+        });
+}
+
+void ClipComponent::extractTempoMapFromClip()
+{
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (waveClip == nullptr || waveClip->getAutoTempo())
+        return;
+
+    const auto file = waveClip->getSourceFileReference().getFile();
+    if (! file.existsAsFile())
+        return;
+
+    // Beat-Tracking auf dem Worker; Anwendung auf dem Message-Thread (1 Undo).
+    TempoDetector::detectBeatsAsync (file,
+        [safe = juce::Component::SafePointer<ClipComponent> (this)] (juce::Array<double> beats)
+        {
+            if (safe == nullptr)
+                return;
+
+            if (beats.size() < 8)
+            {
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::InfoIcon,
+                    "Tempo-Map",
+                    juce::String::fromUTF8 ("Kein stabiler Puls erkennbar — "
+                                            "Tempo-Map nicht extrahiert."));
+                return;
+            }
+
+            auto* wc = dynamic_cast<te::WaveAudioClip*> (&safe->clip);
+            if (wc == nullptr)
+                return;
+
+            TempoEngine tempoEngine (safe->editManager);
+            const int numPoints = tempoEngine.extractTempoMapFromClip (*wc, beats);
+
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::InfoIcon,
+                "Tempo-Map",
+                numPoints > 0
+                    ? juce::String (numPoints)
+                        + juce::String::fromUTF8 (" Tempo-Punkte gesetzt — das Raster "
+                                                  "folgt jetzt der Performance (Cmd+Z macht "
+                                                  "alles r\xc3\xbc""ckg\xc3\xa4ngig).")
+                    : juce::String::fromUTF8 ("Tempo-Map konnte nicht angewendet werden."));
         });
 }
 

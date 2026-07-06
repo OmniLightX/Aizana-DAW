@@ -108,6 +108,7 @@ private:
     /** Context-menu action: estimate BPM from the clip's source audio on a
         background thread, then offer to set the song tempo (undoable). */
     void detectTempoFromClip();
+    void extractTempoMapFromClip();   // P7a: Grid folgt der Performance
 
     /** Context-menu action: estimate the clip's source BPM, then timestretch the
         clip to follow the song tempo (loopInfo BPM + setAutoTempo, undoable). */

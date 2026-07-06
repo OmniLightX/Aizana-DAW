@@ -32,4 +32,29 @@ public:
         (0.0 on failure) unless the app is shutting down. */
     static void detectAsync (const juce::File& audioFile,
                              std::function<void (double bpm)> onResult);
+
+    // -------------------------------------------------------------------------
+    // P7a: Beat-Tracking (Tempo-Map-Extraktion, S1 "Extract to tempo track")
+    // -------------------------------------------------------------------------
+
+    /**
+     * Beat-Zeitpunkte in Sekunden (Puffer-/Datei-Zeit), aufsteigend.
+     *
+     * Verfahren: dieselbe Onset-Envelope wie detectBpm + Ellis-2007-DP —
+     * Score(t) = Onset(t) + max über Vorgänger im Fenster [τ/2, 2τ] von
+     * (Score(prev) − α·log²(Δ/τ)), Backtrack vom besten Endpunkt. Folgt
+     * moderaten Tempo-Schwankungen (die Strafe wirkt auf das Verhältnis zum
+     * globalen Puls, nicht auf absolute Positionen).
+     *
+     * Leer wenn kein stabiler Puls erkennbar. Rein + blockierend → BG-Thread.
+     */
+    static juce::Array<double> detectBeats (const juce::AudioBuffer<float>& mono,
+                                            double sampleRate);
+
+    /** Wie detectBeats, auf den ersten 60 s einer Datei (Mono-Mixdown). */
+    static juce::Array<double> detectBeatsInFile (const juce::File& audioFile);
+
+    /** BG-Thread-Wrapper wie detectAsync; Callback liefert ggf. ein leeres Array. */
+    static void detectBeatsAsync (const juce::File& audioFile,
+                                  std::function<void (juce::Array<double>)> onResult);
 };
