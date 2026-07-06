@@ -2,6 +2,7 @@
 #include "app/LegacyMigration.h"
 #include "plugins/BuiltInPluginFormat.h"
 #include "plugins/ClapPluginFormat.h"
+#include "RemovableMediaGuard.h"
 
 // Convenience aliases for Tracktion's strong time types
 using TimePos = tracktion::core::TimePosition;
@@ -29,6 +30,11 @@ EditManager::EditManager()
     BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
     for (auto* desc : builtIns)
         engine.getPluginManager().knownPluginList.addType (*desc);
+
+    // M12: Dateien auf externen/Netz-Volumes NIE memory-mappen — ein gezogenes
+    // Volume machte gemappte Seiten ungültig → SIGBUS (CacheRefresher/Audio-Thread).
+    // TE fällt für diese Dateien auf seinen Buffered-Reader-Pfad zurück.
+    aizana::installRemovableMediaGuard (engine);
 }
 EditManager::~EditManager() = default;
 

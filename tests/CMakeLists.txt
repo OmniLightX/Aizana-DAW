@@ -64,6 +64,7 @@ target_sources(engine_tests PRIVATE
     test_oop_host_marshal.cpp
     test_oop_param_midi.cpp
     test_quantize.cpp
+    test_removable_media_guard.cpp
     # DSP effects tests (FX-01 through FX-04) — require juce::dsp
     test_eq_dsp.cpp
     test_compressor_dsp.cpp
@@ -101,6 +102,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/AiLiveProtocol.cpp
     ../src/ai/OnnxModelRunner.cpp
     ../src/engine/EditManager.cpp
+    ../src/engine/RemovableMediaGuard.cpp
     ../src/engine/ClipEditor.cpp
     ../src/engine/CompingEngine.cpp
     ../src/engine/TempoDetector.cpp

@@ -203,6 +203,7 @@ target_sources(Aizana PRIVATE
     src/generator/FaustEmitter.cpp
     src/generator/LocalComposer.cpp
     src/engine/EditManager.cpp
+    src/engine/RemovableMediaGuard.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
     src/engine/TempoDetector.cpp
