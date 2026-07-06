@@ -1,4 +1,6 @@
 #include "AudioClipEditor.h"
+#include "engine/CompingEngine.h"
+#include "ui/comping/CompingView.h"
 
 using TimePos = tracktion::core::TimePosition;
 using TimeRng = tracktion::core::TimeRange;
@@ -17,9 +19,11 @@ namespace
 }
 
 //==============================================================================
-AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editManager_)
+AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editManager_,
+                                  CompingEngine* compingEngine_)
     : clip (clip_), editManager (editManager_),
-      clipEditor (editManager_), automationEngine (editManager_)
+      clipEditor (editManager_), automationEngine (editManager_),
+      compingEngine (compingEngine_)
 {
     // Waveform source — shared app-wide thumbnail cache (finished reads survive
     // component destruction, so reopening the editor repaints instantly).
@@ -71,7 +75,7 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
 
     // ---- Toolbar (S1-Parität E1/E3): Werkzeuge, Snap, Mute, Automation, Range-Aktion ----
     for (auto* b : { &toolPointerBtn, &toolSplitBtn, &toolRangeBtn,
-                     &snapBtn, &muteBtn, &autoBtn, &rangeCutBtn })
+                     &snapBtn, &muteBtn, &autoBtn, &takesBtn, &rangeCutBtn })
     {
         styleToolButton (*b);
         addAndMakeVisible (*b);
@@ -83,6 +87,8 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     snapBtn       .setTooltip (juce::String::fromUTF8 ("Snap an 1/16-Raster (N) — Alt = tempor\xc3\xa4r aus"));
     muteBtn       .setTooltip (juce::String::fromUTF8 ("Clip stummschalten (undobar)"));
     autoBtn       .setTooltip (juce::String::fromUTF8 ("Automations-Spur (Volume/Pan) ein-/ausblenden"));
+    takesBtn      .setTooltip (juce::String::fromUTF8 ("Takes/Comping-Lanes (E6) — Lane ziehen = Bereich aus diesem Take, "
+                                                       "Klick = Abschnitt wechseln, Label = ganzer Take"));
     rangeCutBtn   .setTooltip (juce::String::fromUTF8 ("Gew\xc3\xa4hlten Bereich aus dem Clip entfernen (Delete) — 1 Undo-Schritt"));
 
     toolPointerBtn.onClick = [this] { setTool (Tool::pointer); };
@@ -91,10 +97,18 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     snapBtn.onClick = [this] { snapEnabled = ! snapEnabled; updateToolbarState(); };
     muteBtn.onClick = [this] { toggleClipMute(); };
     autoBtn.onClick = [this] { toggleAutomationLane(); };
+    takesBtn.onClick = [this] { toggleTakesLanes(); };
     rangeCutBtn.onClick = [this] { applyRangeDelete(); };
 
     // Automation nur möglich, wenn der Clip auf einem AudioTrack liegt.
     autoBtn.setEnabled (dynamic_cast<te::AudioTrack*> (clip.getTrack()) != nullptr);
+
+    // E6: Takes nur bei Multi-Take-Clips (Loop-Recording) und vorhandener Engine.
+    takesBtn.setVisible (compingEngine != nullptr && clip.hasAnyTakes());
+
+    // Loop-Takes sind der Comping-Workflow — Lanes standardmäßig auf.
+    if (takesBtn.isVisible())
+        toggleTakesLanes();
 
     updateToolbarState();
 
@@ -135,6 +149,7 @@ juce::Rectangle<int> AudioClipEditor::waveArea() const
     r.removeFromBottom (kScrollH);
     if (automationVisible)
         r.removeFromBottom (kAutoLaneH);
+    r.removeFromBottom (takesAreaHeight());   // E6: Takes-Lanes unter der Waveform
     return r;
 }
 
@@ -230,6 +245,7 @@ void AudioClipEditor::updateToolbarState()
     setActive (snapBtn,        snapEnabled);
     setActive (muteBtn,        isClipMuted());
     setActive (autoBtn,        automationVisible);
+    setActive (takesBtn,       takesVisible);
     rangeCutBtn.setEnabled (rangeActive);
     repaint();
 }
@@ -315,6 +331,55 @@ void AudioClipEditor::toggleClipMute()
     updateToolbarState();
 }
 
+//==============================================================================
+// E6: Takes/Comping-Lanes — CompingView-Reuse direkt im Dock
+//==============================================================================
+int AudioClipEditor::takesAreaHeight() const
+{
+    if (! takesVisible || takesView == nullptr)
+        return 0;
+
+    // CompingView: Header (28) + eine Lane je Take; bei vielen Takes deckeln,
+    // die View skaliert ihre Lanes in die verfügbare Höhe.
+    const int numTakes = clip.state.getChildWithName (te::IDs::TAKES).getNumChildren();
+    return juce::jlimit (80, 220, 28 + numTakes * 52);
+}
+
+void AudioClipEditor::toggleTakesLanes()
+{
+    if (takesVisible)
+    {
+        takesVisible = false;
+        takesView.reset();
+        updateToolbarState();
+        resized();
+        repaint();
+        return;
+    }
+
+    if (compingEngine == nullptr || ! clip.hasAnyTakes())
+        return;
+
+    takesView = std::make_unique<CompingView> (clip, editManager, *compingEngine);
+    takesView->onCloseRequest = [this]
+    {
+        // Der Clip verschwindet (Delete/Undo) — mid-Callback nur schließen,
+        // das Panel räumt den ganzen Editor über die Selektion ohnehin ab.
+        juce::MessageManager::callAsync (
+            [safe = juce::Component::SafePointer<AudioClipEditor> (this)]
+            {
+                if (safe == nullptr) return;
+                if (safe->takesVisible)
+                    safe->toggleTakesLanes();
+            });
+    };
+    addAndMakeVisible (*takesView);
+    takesVisible = true;
+    updateToolbarState();
+    resized();
+    repaint();
+}
+
 void AudioClipEditor::toggleAutomationLane()
 {
     if (automationVisible)
@@ -369,7 +434,8 @@ void AudioClipEditor::updateLaneMapping()
 AudioClipEditor::ViewHandover AudioClipEditor::getViewHandover() const
 {
     return { clipStartAbsSecs() + viewStartSecs, viewLenSecs,
-             (int) activeTool, snapEnabled, automationVisible };
+             (int) activeTool, snapEnabled, automationVisible, takesVisible,
+             takesBtn.isVisible() };
 }
 
 void AudioClipEditor::applyViewHandover (const ViewHandover& h)
@@ -389,6 +455,11 @@ void AudioClipEditor::applyViewHandover (const ViewHandover& h)
         activeTool = (Tool) h.tool;
     if (h.automationLaneOpen && ! automationVisible && autoBtn.isEnabled())
         toggleAutomationLane();
+
+    // E6: expliziter Takes-Zustand des Vorgängers gewinnt gegen den Auto-Default
+    // aus dem Konstruktor — aber nur Takes-Clip → Takes-Clip (takesCapable).
+    if (h.takesCapable && takesBtn.isVisible() && h.takesOpen != takesVisible)
+        toggleTakesLanes();
 
     updateToolbarState();
     syncScrollBar();
@@ -486,12 +557,17 @@ void AudioClipEditor::resized()
     muteBtn.setBounds (toolbar.removeFromLeft (46));
     toolbar.removeFromLeft (2);
     autoBtn.setBounds (toolbar.removeFromLeft (46));
+    toolbar.removeFromLeft (2);
+    takesBtn.setBounds (toolbar.removeFromLeft (52));
     rangeCutBtn.setBounds (toolbar.removeFromRight (86));
 
     hScroll.setBounds (area.removeFromBottom (kScrollH));
 
     if (automationVisible && autoLane != nullptr)
         autoLane->setBounds (area.removeFromBottom (kAutoLaneH));
+
+    if (takesVisible && takesView != nullptr)
+        takesView->setBounds (area.removeFromBottom (takesAreaHeight()));
 
     if (viewLenSecs <= 0.0)
     {

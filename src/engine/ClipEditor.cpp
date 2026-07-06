@@ -450,6 +450,78 @@ int ClipEditor::getActiveTake (const te::Clip& comp) const
 }
 
 //==============================================================================
+double ClipEditor::quantizedBeat (double beat, double grid,
+                                  double strength, double swing) noexcept
+{
+    if (grid <= 0.0)
+        return beat;
+
+    strength = juce::jlimit (0.0, 1.0, strength);
+    swing    = juce::jlimit (0.0, 1.0, swing);
+
+    // Ziel einer Rasterlinie s: gerade Linien liegen exakt, ungerade werden um
+    // swing·grid/2 nach hinten geschoben (S1/MPC-Konvention).
+    auto targetFor = [grid, swing] (int64_t s) noexcept
+    {
+        double t = (double) s * grid;
+        if ((s & 1) != 0)   // ungerade Rasterlinie (Zweierkomplement: gilt auch negativ)
+            t += swing * grid * 0.5;
+        return t;
+    };
+
+    const auto base = (int64_t) std::floor (beat / grid);
+    double best = targetFor (base);
+    double bestDist = std::abs (beat - best);
+
+    for (const auto s : { base - 1, base + 1, base + 2 })
+    {
+        const double t = targetFor (s);
+        const double d = std::abs (beat - t);
+        // <= : bei exakter Mitte gewinnt das SPÄTERE Ziel (Aufrunden, wie std::round)
+        if (d < bestDist || (d == bestDist && t > best)) { bestDist = d; best = t; }
+    }
+
+    return beat + (best - beat) * strength;
+}
+
+int ClipEditor::quantizeMidiClip (te::MidiClip& clip, double gridBeats,
+                                  double strength, double swing,
+                                  const juce::Array<te::MidiNote*>* subset)
+{
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Quantize");
+
+    auto notesToDo = [&]() -> juce::Array<te::MidiNote*>
+    {
+        if (subset != nullptr)
+            return *subset;
+        juce::Array<te::MidiNote*> all;
+        for (auto* n : clip.getSequence().getNotes())
+            all.add (n);
+        return all;
+    }();
+
+    int moved = 0;
+    for (auto* n : notesToDo)
+    {
+        if (n == nullptr)
+            continue;
+
+        const double oldStart = n->getStartBeat().inBeats();
+        const double newStart = juce::jmax (0.0, quantizedBeat (oldStart, gridBeats,
+                                                                strength, swing));
+        if (std::abs (newStart - oldStart) < 1.0e-9)
+            continue;
+
+        n->setStartAndLength (tracktion::core::BeatPosition::fromBeats (newStart),
+                              n->getLengthBeats(), &um);
+        ++moved;
+    }
+
+    return moved;
+}
+
+//==============================================================================
 bool ClipEditor::conformToSongTempo (te::WaveAudioClip& clip, double sourceBpm)
 {
     if (sourceBpm < 30.0 || sourceBpm > 1000.0)

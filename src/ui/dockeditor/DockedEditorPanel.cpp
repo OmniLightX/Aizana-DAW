@@ -2,8 +2,9 @@
 #include "DockedEditorPanel.h"
 
 DockedEditorPanel::DockedEditorPanel (EditManager& em,
-                                      std::function<te::Clip*()> provider)
-    : editManager (em), selectionProvider (std::move (provider))
+                                      std::function<te::Clip*()> provider,
+                                      CompingEngine* comping)
+    : editManager (em), selectionProvider (std::move (provider)), compingEngine (comping)
 {
     emptyLabel.setText (juce::String::fromUTF8 ("W\xc3\xa4hle einen Audio- oder MIDI-Clip aus, "
                                                 "um ihn hier zu bearbeiten."),
@@ -65,7 +66,7 @@ void DockedEditorPanel::rebuildFor (te::Clip* clip)
 
     if (auto* wave = dynamic_cast<te::WaveAudioClip*> (clip))
     {
-        audioEditor = std::make_unique<AudioClipEditor> (*wave, editManager);
+        audioEditor = std::make_unique<AudioClipEditor> (*wave, editManager, compingEngine);
         addAndMakeVisible (*audioEditor);
         emptyLabel.setVisible (false);
     }

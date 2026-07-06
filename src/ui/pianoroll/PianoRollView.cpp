@@ -2,6 +2,7 @@
 #include "VelocityLane.h"
 #include "CCLane.h"
 #include "engine/EditManager.h"
+#include "engine/ClipEditor.h"
 
 //==============================================================================
 // PianoKeyboard sub-component
@@ -283,6 +284,28 @@ PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
     quantizeGrid.setSelectedId (3);  // default 1/16
     addAndMakeVisible (quantizeGrid);
 
+    // ---- Quantize-Bar (E7): Strength/Swing + Apply — S1 "Exploring Quantisation" ----
+    auto setupQSlider = [this] (juce::Slider& s, double def, const juce::String& tip)
+    {
+        s.setSliderStyle (juce::Slider::LinearHorizontal);
+        s.setTextBoxStyle (juce::Slider::TextBoxRight, false, 38, 16);
+        s.setRange (0.0, 100.0, 1.0);
+        s.setValue (def, juce::dontSendNotification);
+        s.setTextValueSuffix ("%");
+        s.setTooltip (tip);
+        addAndMakeVisible (s);
+    };
+    setupQSlider (qStrength, 100.0,
+                  juce::String::fromUTF8 ("Quantize-St\xc3\xa4rke — 100 % = voll aufs Raster, "
+                                          "50 % = halber Weg (nat\xc3\xbcrlicher)"));
+    setupQSlider (qSwing, 0.0,
+                  juce::String::fromUTF8 ("Swing — verschiebt jede zweite Rasterlinie nach hinten"));
+
+    qApplyBtn.setClickingTogglesState (false);   // I-04
+    qApplyBtn.setTooltip (juce::String::fromUTF8 ("Quantisieren (Q) — selektierte Noten, sonst alle; 1 Undo-Schritt"));
+    qApplyBtn.onClick = [this] { applyQuantize(); };
+    addAndMakeVisible (qApplyBtn);
+
     // ---- Sub-lanes ----
     velocityLane = std::make_unique<VelocityLane> (clip, *this, editManager);
     addAndMakeVisible (*velocityLane);
@@ -343,7 +366,12 @@ void PianoRollView::resized()
         const int ctrlW = 90;
         keySelector.setBounds   (x, 2, ctrlW, headerH - 4);   x += ctrlW + 4;
         scaleSelector.setBounds (x, 2, ctrlW + 20, headerH - 4); x += ctrlW + 24;
-        quantizeGrid.setBounds  (x, 2, 70, headerH - 4);
+        quantizeGrid.setBounds  (x, 2, 70, headerH - 4);       x += 74;
+
+        // Quantize-Bar (E7): Strength | Swing | Q
+        qStrength.setBounds (x, 2, 120, headerH - 4);          x += 124;
+        qSwing.setBounds    (x, 2, 120, headerH - 4);          x += 124;
+        qApplyBtn.setBounds (x, 2, 28, headerH - 4);
     }
 
     // Calculate grid area height
@@ -715,6 +743,32 @@ void PianoRollView::deleteSelectedNotes()
         removeNote (*n);
 }
 
+//==============================================================================
+// Quantize-Bar (E7) — selektierte Noten, sonst alle; 1 Undo über ClipEditor
+//==============================================================================
+void PianoRollView::applyQuantize()
+{
+    const double grid     = 4.0 / getGridDivisionDenominator();   // beats (4/4)
+    const double strength = qStrength.getValue() / 100.0;
+    const double swing    = qSwing.getValue()    / 100.0;
+
+    juce::Array<te::MidiNote*> selected;
+    for (auto* nc : noteComponents)
+        if (nc->isSelected())
+            selected.add (&nc->getNote());
+
+    ClipEditor ce (editManager);
+    ce.quantizeMidiClip (clip, grid, strength, swing,
+                         selected.isEmpty() ? nullptr : &selected);
+
+    // Note-Positionen haben sich geändert — Components nachziehen.
+    for (auto* nc : noteComponents)
+        updateNoteComponentBounds (*nc);
+    repaint();
+    if (velocityLane != nullptr) velocityLane->repaintLane();
+    if (ccLane != nullptr)       ccLane->repaintLane();
+}
+
 void PianoRollView::updateMarqueeSelection()
 {
     for (auto* nc : noteComponents)
@@ -840,6 +894,11 @@ bool PianoRollView::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))
     {
         selectAll();
+        return true;
+    }
+    if (key == juce::KeyPress ('q') || key == juce::KeyPress ('Q'))
+    {
+        applyQuantize();   // E7: Quantize-Bar-Shortcut
         return true;
     }
     return false;

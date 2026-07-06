@@ -101,6 +101,12 @@ private:
     juce::ComboBox scaleSelector;   // Major, Minor, Dorian, etc.
     juce::ComboBox quantizeGrid;    // 1/4, 1/8, 1/16, 1/32
 
+    // ---- Quantize-Bar (E7, S1-Stil): Grid (Combo oben) + Strength/Swing + Apply ----
+    juce::Slider     qStrength;     // 0..100 % (default 100)
+    juce::Slider     qSwing;        // 0..100 % (default 0)
+    juce::TextButton qApplyBtn { "Q" };
+    void applyQuantize();           // Selektion, sonst alle Noten — 1 Undo
+
     // ---- Scroll bars ----
     juce::ScrollBar hScrollBar { false };  // horizontal
     juce::ScrollBar vScrollBar { true  };  // vertical

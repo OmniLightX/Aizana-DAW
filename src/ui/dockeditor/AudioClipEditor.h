@@ -10,6 +10,9 @@
 #include "ui/common/AudioThumbnailPool.h"
 #include "EditorViewState.h"
 
+class CompingEngine;
+class CompingView;
+
 namespace te = tracktion::engine;
 
 /**
@@ -27,6 +30,9 @@ namespace te = tracktion::engine;
  *   - Clip-Mute-Toggle (I-03: ValueTree-Property über den UndoManager)
  *   - Automation-Lane (Volume/Pan, AutomationLane-Reuse) unter der Waveform
  *   - Edge-Trim, Fades, Clip-Gain, Zoom/Scroll wie gehabt (Pfeil-Werkzeug)
+ *   - E6: Takes/Comping — bei Loop-Takes zeigt "Takes" die Studio-One-Lanes
+ *     (CompingView-Reuse) direkt im Dock; Lane-Drag = Comp-Bereich, Klick =
+ *     Section wechseln, Label-Klick = ganzer Take (CompingEngine, je 1 Undo)
  *
  * All mutations go through the Edit's shared UndoManager — one transaction per
  * gesture. NO copied clip data: the arrangement shows every change immediately
@@ -38,7 +44,8 @@ class AudioClipEditor : public juce::Component,
                         private juce::ScrollBar::Listener
 {
 public:
-    AudioClipEditor (te::WaveAudioClip& clip, EditManager& editManager);
+    AudioClipEditor (te::WaveAudioClip& clip, EditManager& editManager,
+                     CompingEngine* compingEngine = nullptr);
     ~AudioClipEditor() override;
 
     te::Clip& getClip() noexcept { return clip; }
@@ -56,6 +63,10 @@ public:
         int    tool     = 0;               // (int) Tool
         bool   snap     = true;
         bool   automationLaneOpen = false;
+        bool   takesOpen          = false; // E6: Takes-Lanes überleben den Wechsel …
+        bool   takesCapable       = false; // … aber nur Takes-Clip → Takes-Clip (sonst
+                                           // würde ein takes-loser Clip den Auto-Default
+                                           // des nächsten Multi-Take-Clips zuschließen)
     };
 
     ViewHandover getViewHandover() const;
@@ -99,6 +110,7 @@ private:
     juce::TextButton snapBtn        { "Snap" };
     juce::TextButton muteBtn        { "Mute" };
     juce::TextButton autoBtn        { "Auto" };
+    juce::TextButton takesBtn       { "Takes" };
     juce::TextButton rangeCutBtn    { juce::String::fromUTF8 ("\xe2\x88\x92 Bereich") };
 
     void setTool (Tool t);
@@ -117,6 +129,13 @@ private:
 
     bool isClipMuted() const;
     void toggleClipMute();
+
+    // ---- Takes/Comping lanes (E6, CompingView-Reuse im Dock) ----
+    CompingEngine* compingEngine = nullptr;   // nullptr = Takes-UI aus (Tests)
+    bool takesVisible = false;
+    std::unique_ptr<CompingView> takesView;
+    void toggleTakesLanes();
+    int  takesAreaHeight() const;             // 0 wenn zu / keine Takes
 
     // ---- Automation lane (AutomationLane-Reuse, arrangement-style mapping) ----
     bool automationVisible = false;

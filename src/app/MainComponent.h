@@ -167,7 +167,8 @@ private:
     // Docked Editor (Studio One "Edit" view) — bottom dock, driven by the
     // GLOBAL arrangement selection (no separate editor selection/data).
     DockedEditorPanel dockedEditorPanel { appState.editManager,
-        [this]() -> te::Clip* { return arrangementView.getPrimarySelectedClip(); } };
+        [this]() -> te::Clip* { return arrangementView.getPrimarySelectedClip(); },
+        &compingEngine };
 
     bool mixerVisible = true;   // derived: activeBottomDock == Mix (kept for menu/beginner paths)
 

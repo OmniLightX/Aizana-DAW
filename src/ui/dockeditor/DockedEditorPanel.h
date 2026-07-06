@@ -28,7 +28,8 @@ class DockedEditorPanel : public juce::Component,
 {
 public:
     DockedEditorPanel (EditManager& editManager,
-                       std::function<te::Clip*()> selectionProvider);
+                       std::function<te::Clip*()> selectionProvider,
+                       CompingEngine* compingEngine = nullptr);
     ~DockedEditorPanel() override;
 
     void resized() override;
@@ -47,6 +48,7 @@ public:
 private:
     EditManager& editManager;
     std::function<te::Clip*()> selectionProvider;
+    CompingEngine* compingEngine = nullptr;   // E6: Takes-Lanes im AudioClipEditor
 
     te::Clip* currentClip = nullptr;   // identity for change detection
     te::Clip::Ptr keepAlive;           // TE clips are refcounted — this keeps the shown

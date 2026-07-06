@@ -136,6 +136,30 @@ public:
     int getActiveTake (const te::Clip& comp) const;
 
     // -------------------------------------------------------------------------
+    // Quantize (E7) — MIDI-Noten aufs Raster ziehen (Studio-One-Quantize-Bar)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Pure quantize math (golden-testbar, kein TE):
+     *   grid     Rasterweite in Beats (z. B. 0.25 = 1/16 bei 4/4)
+     *   strength 0..1 — 1 = voll aufs Raster, 0.5 = halber Weg (S1 "Strength")
+     *   swing    0..1 — verschiebt jede UNGERADE Rasterlinie um swing·grid/2
+     *                   nach hinten (S1/MPC-Swing)
+     * Liefert die neue Beat-Position (nächstgelegenes — ggf. geswungenes — Ziel).
+     */
+    static double quantizedBeat (double beat, double grid,
+                                 double strength, double swing) noexcept;
+
+    /**
+     * Quantisiert MIDI-Noten eines Clips (Start; Länge bleibt musikalisch gleich).
+     * `subset` != nullptr → nur diese Noten (Selektion), sonst alle.
+     * EIN Undo-Schritt. Liefert die Zahl tatsächlich bewegter Noten.
+     */
+    int quantizeMidiClip (te::MidiClip& clip, double gridBeats,
+                          double strength, double swing,
+                          const juce::Array<te::MidiNote*>* subset = nullptr);
+
+    // -------------------------------------------------------------------------
     // Timestretch — conform a clip to the song tempo (Phase 3, Task 0)
     // Requires a timestretch backend (TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1),
     // otherwise TE silently plays the clip unstretched.
