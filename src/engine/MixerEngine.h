@@ -44,6 +44,9 @@ static const juce::String kChannelTypeBus { "bus" };
 static const juce::String kChannelTypeFX  { "fx" };
 /** Property value for VCA Channel AudioTracks (group fader — no audio path). */
 static const juce::String kChannelTypeVCA { "vca" };
+/** Property value for Cue Channel AudioTracks (P6 — headphone/monitor mix routed
+ *  to a selectable hardware output pair instead of master). */
+static const juce::String kChannelTypeCue { "cue" };
 
 /** Property stored on a member track: EditItemID string of its VCA channel. */
 static const juce::Identifier kVCAAssignmentProp { "aizanaVCA" };
@@ -208,6 +211,38 @@ public:
     static bool isAudioChannel (const te::AudioTrack& track);
 
     // -------------------------------------------------------------------------
+    // P6: Cue Channels (Kopfhörer-Mixes fürs Tracking — Studio One "Cue Mix")
+    // -------------------------------------------------------------------------
+
+    /**
+     * Create a Cue Channel — an AudioTrack with AuxReturnPlugin, tagged
+     * kChannelTypeCue. Same send/return plumbing as an FX Channel, but its
+     * output is meant to feed a hardware output pair (headphone amp) instead
+     * of the master bus. Freshly created cue channels output to the default
+     * device until setCueOutputDeviceID() picks a dedicated pair.
+     *
+     * Sends to a cue channel default to PRE-FADER (pro standard: the artist's
+     * headphone mix must not follow main-mix fader moves).
+     */
+    te::AudioTrack* createCueChannel (const juce::String& name);
+
+    /** Returns all Cue Channel AudioTracks in the current Edit. */
+    juce::Array<te::AudioTrack*> getCueChannels() const;
+
+    /** Returns true if track is tagged as a Cue Channel. */
+    static bool isCueChannel (const te::AudioTrack& track);
+
+    /**
+     * Route the cue channel's output to the given hardware output device
+     * (OutputDevice::getDeviceID()). Empty deviceID = back to the default
+     * audio output. Undoable (one transaction).
+     */
+    void setCueOutputDeviceID (te::AudioTrack& cueChannel, const juce::String& deviceID);
+
+    /** Display name of the cue channel's current output destination. */
+    juce::String getCueOutputName (const te::AudioTrack& cueChannel) const;
+
+    // -------------------------------------------------------------------------
     // VCA channels (group faders — Studio One pattern, Aizana semantics:
     // the VCA fader moves its members' faders RELATIVELY; no audio routing).
     // -------------------------------------------------------------------------
@@ -269,6 +304,11 @@ private:
     te::AuxSendPlugin* createAuxSend (te::AudioTrack& sourceTrack,
                                       te::AudioTrack& returnTrack,
                                       float sendLeveldB);
+
+    /** Shared body of createFXChannel/createCueChannel — AuxReturn channel with
+        the given channel-type tag. */
+    te::AudioTrack* createReturnChannelInternal (const juce::String& name,
+                                                 const juce::String& channelTypeTag);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerEngine)
 };

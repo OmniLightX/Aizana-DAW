@@ -202,7 +202,7 @@ void SendSlotPanel::rebuild (const juce::Array<te::AudioTrack*>& fxChannels)
 void SendSlotPanel::showAddSendMenu()
 {
     juce::PopupMenu menu;
-    menu.addSectionHeader ("Send auf FX-Bus");
+    menu.addSectionHeader ("Send auf FX-/Cue-Bus");
 
     for (int i = 0; i < sendTargets.size(); ++i)
         menu.addItem (i + 1, sendTargets[i]->getName());

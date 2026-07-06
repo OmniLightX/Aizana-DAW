@@ -132,6 +132,11 @@ bool MixerEngine::isVCAChannel (const te::AudioTrack& track)
     return track.state.getProperty (kChannelTypeProp).toString() == kChannelTypeVCA;
 }
 
+bool MixerEngine::isCueChannel (const te::AudioTrack& track)
+{
+    return track.state.getProperty (kChannelTypeProp).toString() == kChannelTypeCue;
+}
+
 // ---- VCA channels ----
 
 te::AudioTrack* MixerEngine::createVCAChannel (const juce::String& name)
@@ -257,6 +262,22 @@ te::AudioTrack* MixerEngine::createBusChannel (const juce::String& name)
 
 te::AudioTrack* MixerEngine::createFXChannel (const juce::String& name)
 {
+    return createReturnChannelInternal (name, kChannelTypeFX);
+}
+
+te::AudioTrack* MixerEngine::createCueChannel (const juce::String& name)
+{
+    // Same AuxSend/Return plumbing as an FX Channel; the difference is the tag
+    // (own strip colour, output-device selector) and the pre-fader send default
+    // applied in createFXSend(). Output starts on the default device — a fresh
+    // cue is audible immediately; setCueOutputDeviceID() moves it to the
+    // headphone pair.
+    return createReturnChannelInternal (name, kChannelTypeCue);
+}
+
+te::AudioTrack* MixerEngine::createReturnChannelInternal (const juce::String& name,
+                                                          const juce::String& channelTypeTag)
+{
     auto* edit = editManager.getEdit();
     jassert (edit != nullptr);
 
@@ -273,8 +294,8 @@ te::AudioTrack* MixerEngine::createFXChannel (const juce::String& name)
 
     track->setName (name);
 
-    // Tag as FX Channel — hides it from ArrangementView, identifies it in Mixer
-    track->state.setProperty (kChannelTypeProp, kChannelTypeFX, nullptr);
+    // Tag the channel type — hides it from ArrangementView, identifies it in Mixer
+    track->state.setProperty (kChannelTypeProp, channelTypeTag, nullptr);
 
     // Also store bus number directly on the track state so callers can read it
     // without scanning the plugin chain (fallback if AuxReturnPlugin lookup fails).
@@ -303,11 +324,12 @@ te::AudioTrack* MixerEngine::createFXChannel (const juce::String& name)
         track->pluginList.insertPlugin (returnPlugin, 0, nullptr);
     }
 
-    // Register the FX channel name in TE's aux bus name registry
+    // Register the channel name in TE's aux bus name registry
     edit->setAuxBusName (nextBusNum, name);
 
-    // Ensure FX Channel output goes to master — AuxReturn receives audio from
-    // the aux bus, processes through inserts, then fader outputs to master.
+    // Output goes to the default device initially — AuxReturn receives audio
+    // from the aux bus, processes through inserts, then the fader outputs.
+    // Cue channels get re-routed to a hardware pair via setCueOutputDeviceID().
     track->getOutput().setOutputToDefaultDevice (false);
 
     return track.get();
@@ -381,10 +403,18 @@ te::AuxSendPlugin* MixerEngine::createFXSend (te::AudioTrack& sourceTrack,
                                                te::AudioTrack& fxChannel,
                                                float sendLeveldB)
 {
-    if (! isFXChannel (fxChannel))
+    const bool isCue = isCueChannel (fxChannel);
+    if (! isFXChannel (fxChannel) && ! isCue)
         return nullptr;
 
-    return createAuxSend (sourceTrack, fxChannel, sendLeveldB);
+    auto* send = createAuxSend (sourceTrack, fxChannel, sendLeveldB);
+
+    // P6: sends into a cue mix default to PRE-FADER — the artist's headphone
+    // mix must not follow main-mix fader moves (pro standard, S1 behaviour).
+    if (send != nullptr && isCue)
+        setFXSendPreFader (sourceTrack, fxChannel, true);
+
+    return send;
 }
 
 void MixerEngine::removeFXSend (te::AudioTrack& sourceTrack, te::AudioTrack& fxChannel)
@@ -506,6 +536,48 @@ juce::Array<te::AudioTrack*> MixerEngine::getFXChannels() const
         if (isFXChannel (*t))
             result.add (t);
     return result;
+}
+
+juce::Array<te::AudioTrack*> MixerEngine::getCueChannels() const
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr)
+        return {};
+
+    juce::Array<te::AudioTrack*> result;
+    for (auto* t : te::getAudioTracks (*edit))
+        if (isCueChannel (*t))
+            result.add (t);
+    return result;
+}
+
+void MixerEngine::setCueOutputDeviceID (te::AudioTrack& cueChannel, const juce::String& deviceID)
+{
+    if (! isCueChannel (cueChannel))
+        return;
+
+    // TrackOutput's CachedValue writes through the edit's UndoManager, so the
+    // routing change lands in this transaction and is undoable.
+    auto& um = editManager.getUndoManager();
+    um.beginNewTransaction ("Cue-Ausgang");
+
+    if (deviceID.isEmpty())
+        cueChannel.getOutput().setOutputToDefaultDevice (false);
+    else
+        cueChannel.getOutput().setOutputToDeviceID (deviceID);
+}
+
+juce::String MixerEngine::getCueOutputName (const te::AudioTrack& cueChannel) const
+{
+    auto& out = const_cast<te::AudioTrack&> (cueChannel).getOutput();
+
+    // Prefer the resolved device alias (short, user-facing); fall back to the
+    // raw stored name when the device is currently unavailable (headless or
+    // interface unplugged) so the strip still shows WHAT was chosen.
+    if (auto* dev = out.getOutputDevice (false))
+        return dev->getAlias();
+
+    return out.getOutputName();
 }
 
 // ---- Legacy API (retained for existing callers) ----

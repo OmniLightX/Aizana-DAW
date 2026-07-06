@@ -20,10 +20,13 @@ namespace te = tracktion::engine;
  * The accent colour distinguishes them:
  *   Bus Channel → blue (0xff0055cc)
  *   FX Channel  → purple (0xff882299)
+ *   Cue Channel → teal (0xff1f9e8e) — P6 headphone mix
  *
  * Bus Channels use output redirection (TrackOutput::setOutputToTrack).
  * FX Channels use AuxSend/Return parallel routing.
- * Both are otherwise identical in the mixer UI.
+ * Cue Channels are FX-style returns whose output feeds a selectable hardware
+ * output pair — they additionally show an output-device button.
+ * All are otherwise identical in the mixer UI.
  */
 class BusFXStrip : public juce::Component,
                    private juce::ValueTree::Listener
@@ -80,6 +83,7 @@ private:
     juce::Slider     volumeFader;
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
+    juce::TextButton outputButton;   // cue strips only: "▶ <device>" hardware-output selector
     juce::Label      trackNameLabel;
 
     // ---- Meter (reuses MeterBar from ChannelStrip via inline paint) ----
@@ -161,6 +165,10 @@ private:
     void volumeChanged();
     void soloClicked();
     void muteClicked();
+
+    // ---- Cue output selection (P6) ----
+    void updateOutputButtonText();
+    void showOutputDeviceMenu();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusFXStrip)
 };

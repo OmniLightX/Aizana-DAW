@@ -466,6 +466,16 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     addAndMakeVisible (sendSlotPanel);   // bus→bus sends (rows appear once FX channels exist)
     addAndMakeVisible (trackNameLabel);
 
+    // P6: cue strips get a hardware-output selector ("▶ <device>")
+    if (MixerEngine::isCueChannel (track))
+    {
+        outputButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a2a30));
+        outputButton.setTooltip ("Hardware-Ausgang des Cue-Mixes w\xc3\xa4hlen");
+        outputButton.onClick = [this] { showOutputDeviceMenu(); };
+        updateOutputButtonText();
+        addAndMakeVisible (outputButton);
+    }
+
     track.state.addListener (this);
 }
 
@@ -485,6 +495,10 @@ void BusFXStrip::resized()
 
     trackNameLabel.setBounds (area.removeFromBottom (kNameH));
 
+    // Cue strips: output-device selector row directly above the name label
+    if (outputButton.isVisible())
+        outputButton.setBounds (area.removeFromBottom (kBtnH).reduced (1));
+
     auto btnArea = area.removeFromBottom (kBtnH);
     soloButton.setBounds (btnArea.removeFromLeft (btnArea.getWidth() / 2).reduced (1));
     muteButton.setBounds (btnArea.reduced (1));
@@ -501,9 +515,11 @@ void BusFXStrip::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff222228));
 
-    // Accent stripe at top — blue for Bus, purple for FX
-    const bool isFX = MixerEngine::isFXChannel (track);
-    g.setColour (isFX ? juce::Colour (0xff882299) : juce::Colour (0xff0055cc));
+    // Accent stripe at top — blue for Bus, purple for FX, teal for Cue
+    const auto accent = MixerEngine::isCueChannel (track) ? juce::Colour (0xff1f9e8e)
+                      : MixerEngine::isFXChannel  (track) ? juce::Colour (0xff882299)
+                                                          : juce::Colour (0xff0055cc);
+    g.setColour (accent);
     g.fillRect (0, 0, getWidth(), 4);
 
     // Right border
@@ -562,6 +578,10 @@ void BusFXStrip::refresh()
     if (! trackNameLabel.isBeingEdited())
         trackNameLabel.setText (track.getName(), juce::dontSendNotification);
 
+    // Cue output can change via undo/redo — keep the selector label in sync
+    if (outputButton.isVisible())
+        updateOutputButtonText();
+
     repaint();
 }
 
@@ -584,6 +604,58 @@ void BusFXStrip::volumeChanged()
     auto& um = track.edit.getUndoManager();
     um.beginNewTransaction ("Volume fader");
     mixerEngine.setVolume (track, (float)volumeFader.getValue());
+}
+
+//==============================================================================
+// Cue output selection (P6)
+
+void BusFXStrip::updateOutputButtonText()
+{
+    auto name = mixerEngine.getCueOutputName (track);
+    if (name.isEmpty())
+        name = "Standard";
+    outputButton.setButtonText (juce::String::fromUTF8 ("\xe2\x96\xb6 ") + name);
+}
+
+void BusFXStrip::showOutputDeviceMenu()
+{
+    auto& dm = track.edit.engine.getDeviceManager();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Cue-Ausgang");
+    menu.addItem (1, "Standard-Ausgang", true,
+                  track.getOutput().usesDefaultAudioOut());
+
+    // Collect selectable hardware outputs (audio only, enabled)
+    juce::StringArray deviceIDs;
+    auto* currentDev = track.getOutput().getOutputDevice (false);
+
+    for (int i = 0; i < dm.getNumOutputDevices(); ++i)
+    {
+        if (auto* dev = dm.getOutputDeviceAt (i))
+        {
+            if (dev->isMidi() || ! dev->isEnabled())
+                continue;
+
+            deviceIDs.add (dev->getDeviceID());
+            menu.addItem (2 + deviceIDs.size() - 1, dev->getAlias(), true,
+                          dev == currentDev && ! track.getOutput().usesDefaultAudioOut());
+        }
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&outputButton),
+        [safe = juce::Component::SafePointer<BusFXStrip> (this), deviceIDs] (int result)
+        {
+            if (safe == nullptr || result == 0)
+                return;
+
+            if (result == 1)
+                safe->mixerEngine.setCueOutputDeviceID (safe->track, {});
+            else if (result - 2 < deviceIDs.size())
+                safe->mixerEngine.setCueOutputDeviceID (safe->track, deviceIDs[result - 2]);
+
+            safe->updateOutputButtonText();
+        });
 }
 
 //==============================================================================

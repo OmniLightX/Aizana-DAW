@@ -22,6 +22,7 @@ target_sources(engine_tests PRIVATE
     test_clip_editing.cpp
     test_comping.cpp
     test_vca.cpp
+    test_cue_mixes.cpp
     test_event_fx.cpp
     test_tempo_detector.cpp
     test_auto_tempo.cpp

@@ -142,6 +142,7 @@ void MixerView::showAddChannelMenu (juce::Component* target)
     menu.addItem (1, "Add Bus Channel");
     menu.addItem (2, "Add FX Channel");
     menu.addItem (3, "Add VCA Channel");
+    menu.addItem (4, "Add Cue Channel");
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target),
         [this] (int result)
@@ -157,6 +158,10 @@ void MixerView::showAddChannelMenu (juce::Component* target)
             else if (result == 3)
             {
                 mixerEngine.createVCAChannel ("VCA " + juce::String (mixerEngine.getVCAChannels().size() + 1));
+            }
+            else if (result == 4)
+            {
+                mixerEngine.createCueChannel ("Cue " + juce::String (mixerEngine.getCueChannels().size() + 1));
             }
         });
 }
@@ -301,6 +306,11 @@ void MixerView::rebuildStrips()
         if (MixerEngine::isFXChannel (*audioTrack))
             addBusFXStrip (audioTrack);
 
+    // Cue channels after FX (headphone mixes sit at the right edge, before VCAs)
+    for (auto* audioTrack : te::getAudioTracks (*edit))
+        if (MixerEngine::isCueChannel (*audioTrack))
+            addBusFXStrip (audioTrack);
+
     // ---- VCA strips (group faders, after Bus/FX, before Master) ----
     for (auto* audioTrack : te::getAudioTracks (*edit))
     {
@@ -328,14 +338,18 @@ void MixerView::rebuildStrips()
 
 void MixerView::rebuildAllSends()
 {
-    const auto fxChannels = mixerEngine.getFXChannels();
+    // Send targets: FX channels + cue channels (P6 — every strip gets a cue
+    // send row so the headphone mix can be dialled in per channel).
+    auto sendTargets = mixerEngine.getFXChannels();
+    sendTargets.addArray (mixerEngine.getCueChannels());
+
     for (auto* strip : strips)
-        strip->rebuildSends (fxChannels);
+        strip->rebuildSends (sendTargets);
 
     // Bus/FX strips get sends too (Studio One: vocal bus → reverb bus,
     // delay bus → reverb bus); each strip filters its own track out.
     for (auto* strip : busFXStrips)
-        strip->rebuildSends (fxChannels);
+        strip->rebuildSends (sendTargets);
 }
 
 //==============================================================================
