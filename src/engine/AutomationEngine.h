@@ -30,6 +30,41 @@ public:
     explicit AutomationEngine (EditManager& editManager);
 
     // -------------------------------------------------------------------------
+    // T1.1: Plugin-Parameter-Automation — beliebige AutomatableParameter
+    // -------------------------------------------------------------------------
+
+    /**
+     * Ein automatisierbarer Parameter der Spur für die UI-Auswahl.
+     *
+     * `id` ist entweder ein Legacy-Kurzname ("volume"/"pan" — VolumeAndPan-Plugin)
+     * oder eine QUALIFIZIERTE ID `plug:<pluginItemID>:<paramID>`. Die Qualifizierung
+     * ist nötig, weil paramIDs über mehrere Instanzen desselben Plugins NICHT
+     * eindeutig sind (2× "Aizana EQ" auf einer Spur = identische paramIDs).
+     */
+    struct ParamChoice
+    {
+        juce::String id;            // "volume" | "pan" | "plug:<itemID>:<paramID>"
+        juce::String displayName;   // "Volume" | "Aizana EQ · Band 1 Gain" | …
+    };
+
+    /**
+     * Alle automatisierbaren Parameter der Spur in UI-Reihenfolge:
+     * Volume, Pan, dann je User-Plugin (inkl. Sends, ohne interne volume/level/
+     * auxreturn-Plugins) alle Parameter als qualifizierte IDs.
+     */
+    juce::Array<ParamChoice> getAutomatableParams (te::Track& track) const;
+
+    /** Normalisierung über die valueRange des Parameters (0..1 ↔ nativ).
+        Fixt nebenbei Pan: dessen Range ist -1..1, nicht 0..1. */
+    static float toNorm   (const te::AutomatableParameter& p, float nativeValue) noexcept;
+    static float fromNorm (const te::AutomatableParameter& p, float norm) noexcept;
+
+    /** Öffentlicher Resolver (auch von AutomationLane genutzt): versteht
+        Legacy-Kurznamen UND qualifizierte `plug:`-IDs. nullptr wenn nicht gefunden. */
+    static te::AutomatableParameter* resolveParameter (te::Track& track,
+                                                       const juce::String& parameterID);
+
+    // -------------------------------------------------------------------------
     // MIX-04: Draw and edit automation for any parameter
     // -------------------------------------------------------------------------
 
@@ -90,7 +125,7 @@ private:
 
     /**
      * Find the AutomatableParameter on the track's plugins with the given paramID.
-     * Returns nullptr if not found.
+     * Delegates to resolveParameter (legacy short names + qualified plug:-IDs).
      */
     te::AutomatableParameter* findParameter (te::Track& track,
                                               const juce::String& parameterID) const;

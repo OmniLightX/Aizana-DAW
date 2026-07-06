@@ -136,6 +136,31 @@ public:
     int getActiveTake (const te::Clip& comp) const;
 
     // -------------------------------------------------------------------------
+    // Edit-Gruppen (T1.3) — Studio-One-Stil: Spuren in einer Gruppe editieren
+    // gemeinsam. Split und Delete propagieren auf zeitgleiche Clips der
+    // Gruppen-Spuren (Multimic-Drums!). Gruppe = Track-Property
+    // "aizanaEditGroup" (int, 0 = keine) über den UndoManager (I-03-Muster).
+    // Move/Trim-Propagation ist bewusst Folgearbeit (Ghost-Drag-Komplexität).
+    // -------------------------------------------------------------------------
+
+    static constexpr int kMaxEditGroups = 8;
+
+    // Komplett statisch (Edit/UndoManager kommen aus track.edit) — damit kann
+    // auch die UI (TrackHeader) ohne ClipEditor-Instanz Gruppen zuweisen.
+
+    /** Gruppen-ID der Spur (0 = keine Gruppe). */
+    static int getEditGroup (const te::Track& track);
+
+    /** Gruppen-ID setzen (0 = entfernen). Eine Undo-Transaktion. */
+    static void setEditGroup (te::Track& track, int groupId);
+
+    /** Alle AudioTracks derselben Gruppe (ohne `track` selbst; leer wenn Gruppe 0). */
+    static juce::Array<te::AudioTrack*> editGroupSiblings (te::Track& track);
+
+    /** Zeitgleiche WaveAudioClips (Start UND Ende ±1 ms) auf den Gruppen-Spuren. */
+    static juce::Array<te::WaveAudioClip*> groupCompanions (te::WaveAudioClip& clip);
+
+    // -------------------------------------------------------------------------
     // Quantize (E7) — MIDI-Noten aufs Raster ziehen (Studio-One-Quantize-Bar)
     // -------------------------------------------------------------------------
 

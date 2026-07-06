@@ -15,18 +15,14 @@ AutomationLane::AutomationLane (te::AudioTrack&    track_,
     // Listen to the track's ValueTree so we repaint after undo / external changes
     track.state.addListener (this);
 
-    // Parameter selector dropdown (Volume / Pan for Phase 1)
-    paramSelector.addItem ("Volume", 1);
-    paramSelector.addItem ("Pan",    2);
-    paramSelector.setSelectedId (1, juce::dontSendNotification);
+    // Parameter selector — T1.1: Volume/Pan + ALLE Plugin-Parameter der Spur
+    // (qualifizierte plug:-IDs; siehe AutomationEngine::getAutomatableParams).
+    rebuildParamChoices();
     paramSelector.onChange = [this]
     {
-        switch (paramSelector.getSelectedId())
-        {
-            case 1:  setParameterID ("volume"); break;
-            case 2:  setParameterID ("pan");    break;
-            default: break;
-        }
+        const int idx = paramSelector.getSelectedId() - 1;   // IDs sind index+1
+        if (idx >= 0 && idx < paramChoices.size())
+            setParameterID (paramChoices.getReference (idx).id);
     };
     addAndMakeVisible (paramSelector);
 
@@ -82,12 +78,49 @@ AutomationLane::~AutomationLane()
     track.state.removeListener (this);
 }
 
+void AutomationLane::rebuildParamChoices()
+{
+    paramChoices = automationEngine.getAutomatableParams (track);
+
+    paramSelector.clear (juce::dontSendNotification);
+    int selectedId = 1;   // default Volume
+    for (int i = 0; i < paramChoices.size(); ++i)
+    {
+        paramSelector.addItem (paramChoices.getReference (i).displayName, i + 1);
+        if (paramChoices.getReference (i).id == parameterID)
+            selectedId = i + 1;
+    }
+    paramSelector.setSelectedId (selectedId, juce::dontSendNotification);
+}
+
+float AutomationLane::normFromNative (float native) const
+{
+    if (auto* p = getParam())
+        return AutomationEngine::toNorm (*p, native);
+    return juce::jlimit (0.0f, 1.0f, native);
+}
+
+float AutomationLane::nativeFromNorm (float norm) const
+{
+    if (auto* p = getParam())
+        return AutomationEngine::fromNorm (*p, norm);
+    return juce::jlimit (0.0f, 1.0f, norm);
+}
+
 //==============================================================================
 // Parameter access helper
 //==============================================================================
 
 te::AutomatableParameter* AutomationLane::getParam() const
 {
+    // T1.1: qualifizierte plug:-IDs (und volume/pan) löst der Engine-Resolver —
+    // die Stages unten bleiben als Fallback für Alt-Strings.
+    if (auto* p = AutomationEngine::resolveParameter (track, parameterID))
+        return p;
+
+    if (parameterID.startsWith ("plug:"))
+        return nullptr;   // qualifiziert & nicht gefunden = Plugin entfernt — kein Name-Fallback
+
     const auto& allParams = track.getAllAutomatableParams();
 
     // Stage 1: exact case-sensitive match (fastest, most reliable when paramID is correct)
@@ -126,11 +159,14 @@ void AutomationLane::paint (juce::Graphics& g)
     g.setColour (juce::Colours::black.withAlpha (0.5f));
     g.fillRect (getLocalBounds());
 
-    // Parameter label
+    // Parameter label — Anzeigename, nicht die (ggf. qualifizierte) interne ID
     g.setColour (juce::Colours::grey);
     g.setFont (juce::FontOptions (10.0f));
-    g.drawText ("AUTO: " + parameterID.toUpperCase(),
-                4, 4, 80, 16, juce::Justification::centredLeft);
+    juce::String labelText = parameterID;
+    for (const auto& c : paramChoices)
+        if (c.id == parameterID) { labelText = c.displayName; break; }
+    g.drawText ("AUTO: " + labelText.toUpperCase(),
+                4, 4, 160, 16, juce::Justification::centredLeft);
 
     // Zero / centre reference line (0.5 in normalised space = 0 dB or centre pan)
     float zeroY = valueToY (0.5f);
@@ -162,7 +198,7 @@ void AutomationLane::drawCurve (juce::Graphics& g) const
     {
         double t = xToTime (static_cast<float> (px));
         float  v = automationEngine.getValueAtTime (track, parameterID, t);
-        float  y = valueToY (v);
+        float  y = valueToY (normFromNative (v));   // Kurve speichert NATIVE Werte
 
         if (!pathStarted)
         {
@@ -190,7 +226,7 @@ void AutomationLane::drawPoints (juce::Graphics& g) const
     {
         auto pt = curve.getPoint (i);
         float x = timeToX (pt.time.inSeconds());
-        float y = valueToY (pt.value);
+        float y = valueToY (normFromNative (pt.value));
         g.fillEllipse (x - 4.0f, y - 4.0f, 8.0f, 8.0f);
     }
 }
@@ -225,9 +261,9 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
     if (drawMode && e.mods.isLeftButtonDown() && !e.mods.isAltDown())
     {
         double timeSecs  = xToTime (e.position.x);
-        float  normValue = yToValue (e.position.y);
-        normValue = juce::jlimit (0.0f, 1.0f, normValue);
-        automationEngine.addAutomationPoint (track, parameterID, timeSecs, normValue);
+        float  normValue = juce::jlimit (0.0f, 1.0f, yToValue (e.position.y));
+        automationEngine.addAutomationPoint (track, parameterID, timeSecs,
+                                             nativeFromNorm (normValue));
         return;
     }
 
@@ -278,7 +314,7 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
     if (e.mods.isAltDown())
     {
         double clickTime  = xToTime (e.position.x);
-        float  clickValue = yToValue (e.position.y);
+        float  clickValue = nativeFromNorm (yToValue (e.position.y));
         automationEngine.addAutomationPoint (track, parameterID, clickTime, clickValue);
         return;
     }
@@ -304,7 +340,7 @@ void AutomationLane::mouseDown (const juce::MouseEvent& e)
     {
         // Left-click in empty area: add a new automation point
         double clickTime  = xToTime (e.position.x);
-        float  clickValue = yToValue (e.position.y);
+        float  clickValue = nativeFromNorm (yToValue (e.position.y));
         automationEngine.addAutomationPoint (track, parameterID, clickTime, clickValue);
     }
 }
@@ -325,8 +361,9 @@ void AutomationLane::mouseDrag (const juce::MouseEvent& e)
         if (segmentLeftIndex  >= 0 && segmentLeftIndex  < curve.getNumPoints()
          && segmentRightIndex >= 0 && segmentRightIndex < curve.getNumPoints())
         {
-            float newLeftVal  = juce::jlimit (0.0f, 1.0f, segmentLeftStartValue  + deltaValue);
-            float newRightVal = juce::jlimit (0.0f, 1.0f, segmentRightStartValue + deltaValue);
+            // Delta wirkt im NORM-Raum (pixelproportional), Werte bleiben nativ.
+            float newLeftVal  = nativeFromNorm (normFromNative (segmentLeftStartValue)  + deltaValue);
+            float newRightVal = nativeFromNorm (normFromNative (segmentRightStartValue) + deltaValue);
 
             // Use movePoint — no index shift, no remove+add cycle, no extra undo transactions.
             // The single transaction opened in mouseDown groups the entire drag into one undo step.

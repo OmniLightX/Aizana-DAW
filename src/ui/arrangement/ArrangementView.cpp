@@ -354,6 +354,8 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     , automationEngine    (automationEngine_)
     , inputBusManager     (inputBusManager_)
     , markerLane          (appState_, pixelsPerSecond, scrollPositionSecs)
+    , tempoEngine         (appState_.editManager)
+    , tempoLane           (appState_, tempoEngine, pixelsPerSecond, scrollPositionSecs)
     , rulerStrip          (appState_, pixelsPerSecond, scrollPositionSecs, gridResolution, snapEnabled)
     , toolSelector        (activeTool, [this] (EditTool t) { setActiveTool (t); })
 {
@@ -466,6 +468,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
 
         rulerStrip.repaint();
         markerLane.repaint();
+    tempoLane.repaint();
         repaint();
     };
 
@@ -480,6 +483,7 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
 
     // Marker lane — above the ruler, aligned with the timeline panel (not headers)
     addAndMakeVisible (markerLane);
+    addAndMakeVisible (tempoLane);
 
     // Ruler strip — above timeline rows, aligned with timeline panel (not headers)
     addAndMakeVisible (rulerStrip);
@@ -640,6 +644,10 @@ void ArrangementView::resized()
     auto markerArea = area.removeFromTop (kMarkerLaneHeight);
     markerLane.setBounds (markerArea.withTrimmedLeft (kHeaderWidth));
 
+    // Tempo lane (T1.2) — zwischen Marker und Ruler, pixel-aligned mit beiden.
+    auto tempoArea = area.removeFromTop (kTempoLaneHeight);
+    tempoLane.setBounds (tempoArea.withTrimmedLeft (kHeaderWidth));
+
     // Ruler strip — full width, sits between marker lane and track rows.
     // The marker-lane + ruler portion under the header column (left of
     // kHeaderWidth) is filled by paint() to match the colour, keeping alignment clean.
@@ -690,7 +698,7 @@ void ArrangementView::paint (juce::Graphics& g)
     // Fill the marker-lane + ruler column on the left (under the header column)
     // to match their colour, so they form a visually continuous strip.
     g.setColour (juce::Colour (0xff191919));
-    g.fillRect (0, kHeaderStripHeight, kHeaderWidth, kMarkerLaneHeight + kRulerHeight);
+    g.fillRect (0, kHeaderStripHeight, kHeaderWidth, kMarkerLaneHeight + kTempoLaneHeight + kRulerHeight);
 
     // Draw a blue highlight border when audio files are being dragged over
     if (isDragHovering)
@@ -909,6 +917,7 @@ void ArrangementView::setPixelsPerSecond (double pps)
     scrollPositionSecs = (double)timelineViewport.getViewPositionX() / pixelsPerSecond;
     rulerStrip.repaint();
     markerLane.repaint();
+    tempoLane.repaint();
     repaint();
     // Reposition automation lane controls for new zoom level
     for (auto* row : trackRows)
@@ -960,6 +969,7 @@ void ArrangementView::mouseWheelMove (const juce::MouseEvent& event,
 
         rulerStrip.repaint();
         markerLane.repaint();
+    tempoLane.repaint();
         repaint();
         return;
     }
@@ -993,6 +1003,7 @@ void ArrangementView::timerCallback()
         timelineContainer.repaint();
         rulerStrip.repaint();
         markerLane.repaint();
+    tempoLane.repaint();
         repaint();  // repaints the playhead line (paintOverChildren — always on top of clips)
     }
 
@@ -1014,6 +1025,7 @@ void ArrangementView::timerCallback()
             scrollPositionSecs = juce::jmax (0.0, newStartSecs);
             rulerStrip.repaint();
             markerLane.repaint();
+    tempoLane.repaint();
         }
 
         // Also handle playhead scrolling left (e.g., loop back to start)
@@ -1025,6 +1037,7 @@ void ArrangementView::timerCallback()
             scrollPositionSecs = newStartSecs;
             rulerStrip.repaint();
             markerLane.repaint();
+    tempoLane.repaint();
         }
     }
 }
@@ -1506,7 +1519,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
                 else if (result == 3)
                 {
                     // Paste onto the nearest track below the click Y
-                    const int yInContainer = (clickY - kHeaderStripHeight - kRulerHeight)
+                    const int yInContainer = (clickY - kTimelineTopY)
                                              + timelineViewport.getViewPositionY();
                     const int trackIdx = yContainerToTrackIndex (yInContainer);
                     auto tracks = te::getAudioTracks (*edit);
@@ -1536,7 +1549,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
         rangeDragOriginSecs = snapTimeToGrid (clickTimeSecs, false);
         rangeStartSecs      = rangeDragOriginSecs;
         rangeEndSecs        = rangeDragOriginSecs;
-        const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+        const int yInContainer = (e.y - kTimelineTopY)
                                  + timelineViewport.getViewPositionY();
         rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
         rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
@@ -1639,7 +1652,7 @@ void ArrangementView::mouseDrag (const juce::MouseEvent& e)
         rangeEndSecs   = juce::jmax (rangeDragOriginSecs, snapped);
 
         // Update track range from current Y
-        const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
+        const int yInContainer = (e.y - kTimelineTopY)
                                  + timelineViewport.getViewPositionY();
         const int currentTrack = yContainerToTrackIndex (yInContainer);
         rangeTrackStart = juce::jmin (rangeDragTrackIndex, currentTrack);
@@ -2272,6 +2285,7 @@ void ArrangementView::valueTreePropertyChanged (juce::ValueTree&, const juce::Id
         repaint();
         rulerStrip.repaint();
         markerLane.repaint();
+    tempoLane.repaint();
         if (gridCombo.onChange)
             gridCombo.onChange();  // recompute gridResolution using live BPM
     });
@@ -2298,6 +2312,7 @@ void ArrangementView::scrollBarMoved (juce::ScrollBar* scrollBar, double newRang
         scrollPositionSecs = newRangeStart / pixelsPerSecond;
         rulerStrip.repaint();
         markerLane.repaint();
+    tempoLane.repaint();
         repaint();  // repaint playhead line with updated scroll offset
 
         // Reposition automation lane controls so they stay at the visible left edge

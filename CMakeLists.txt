@@ -204,6 +204,7 @@ target_sources(Aizana PRIVATE
     src/generator/LocalComposer.cpp
     src/engine/EditManager.cpp
     src/engine/RemovableMediaGuard.cpp
+    src/engine/TempoEngine.cpp
     src/engine/ClipEditor.cpp
     src/engine/CompingEngine.cpp
     src/engine/TempoDetector.cpp
@@ -241,6 +242,7 @@ target_sources(Aizana PRIVATE
     src/ui/arrangement/TransportBar.cpp
     src/ui/arrangement/ArrangementView.cpp
     src/ui/arrangement/MarkerLane.cpp
+    src/ui/arrangement/TempoLane.cpp
     src/ui/arrangement/TrackHeader.cpp
     src/ui/arrangement/ClipComponent.cpp
     src/ui/mixer/MixerView.cpp

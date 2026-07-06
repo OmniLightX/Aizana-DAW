@@ -1,4 +1,5 @@
 #include "TrackHeader.h"
+#include "engine/ClipEditor.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
 #include "ui/common/TrackColours.h"
@@ -798,6 +799,19 @@ void TrackHeader::showContextMenu()
                   isFrozen || aizana::canFreezeIndividually (track),
                   isFrozen);
     menu.addSeparator();
+
+    // T1.3 Edit-Gruppen: Split/Delete wirken auf alle Spuren derselben Gruppe
+    // (zeitgleiche Clips — der Multimic-Drum-Workflow).
+    {
+        juce::PopupMenu groupMenu;
+        const int currentGroup = ClipEditor::getEditGroup (track);
+        groupMenu.addItem (200, "Keine", true, currentGroup == 0);
+        for (int g = 1; g <= ClipEditor::kMaxEditGroups; ++g)
+            groupMenu.addItem (200 + g, "Gruppe " + juce::String (g), true, currentGroup == g);
+        menu.addSubMenu ("Edit-Gruppe", groupMenu);
+    }
+
+    menu.addSeparator();
     menu.addSubMenu ("Track-Farbe", colourMenu);
     menu.addItem (4, "Rename Track");
     menu.addItem (5, "Delete Track");
@@ -808,6 +822,13 @@ void TrackHeader::showContextMenu()
             if (result >= 100 && result < 100 + AizanaTrackColours::paletteSize())
             {
                 handleSetTrackColour (AizanaTrackColours::palette (result - 100));
+                return;
+            }
+
+            if (result >= 200 && result <= 200 + ClipEditor::kMaxEditGroups)
+            {
+                ClipEditor::setEditGroup (track, result - 200);
+                repaint();   // Badge aktualisieren
                 return;
             }
 

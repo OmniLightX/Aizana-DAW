@@ -19,7 +19,71 @@ te::WaveAudioClip* ClipEditor::cutClip (te::WaveAudioClip& clip, double splitTim
         return nullptr;
 
     editManager.getUndoManager().beginNewTransaction ("Cut clip");
+
+    // T1.3 Edit-Gruppen: der Schnitt sitzt auf allen zeitgleichen Clips der
+    // Gruppen-Spuren (Multimic-Drums) — in DERSELBEN Transaktion = 1 Undo.
+    // Companions VOR dem Zielschnitt einsammeln (der Cut ändert die Clip-Länge,
+    // damit würde das Zeitgleichheits-Matching danach nicht mehr treffen).
+    for (auto* companion : groupCompanions (clip))
+        cutClipCore (*companion, splitTimeSecs);
+
     return cutClipCore (clip, splitTimeSecs);
+}
+
+//==============================================================================
+// T1.3: Edit-Gruppen
+//==============================================================================
+
+static const juce::Identifier kEditGroupProp ("aizanaEditGroup");
+
+int ClipEditor::getEditGroup (const te::Track& track)
+{
+    return (int) track.state.getProperty (kEditGroupProp, 0);
+}
+
+void ClipEditor::setEditGroup (te::Track& track, int groupId)
+{
+    groupId = juce::jlimit (0, kMaxEditGroups, groupId);
+    auto& um = track.edit.getUndoManager();   // dieselbe geteilte UM des Edits
+    um.beginNewTransaction (groupId == 0 ? juce::String ("Edit-Gruppe entfernen")
+                                         : "Edit-Gruppe " + juce::String (groupId));
+    if (groupId == 0)
+        track.state.removeProperty (kEditGroupProp, &um);
+    else
+        track.state.setProperty (kEditGroupProp, groupId, &um);
+}
+
+juce::Array<te::AudioTrack*> ClipEditor::editGroupSiblings (te::Track& track)
+{
+    juce::Array<te::AudioTrack*> out;
+    const int group = getEditGroup (track);
+    if (group == 0)
+        return out;
+
+    for (auto* t : te::getAudioTracks (track.edit))
+        if (t != &track && getEditGroup (*t) == group)
+            out.add (t);
+    return out;
+}
+
+juce::Array<te::WaveAudioClip*> ClipEditor::groupCompanions (te::WaveAudioClip& clip)
+{
+    juce::Array<te::WaveAudioClip*> out;
+    auto* track = clip.getTrack();
+    if (track == nullptr)
+        return out;
+
+    const double start = clip.getPosition().getStart().inSeconds();
+    const double end   = clip.getPosition().getEnd().inSeconds();
+    constexpr double eps = 0.001;   // 1 ms — Multimic-Aufnahmen starten samplegleich
+
+    for (auto* sibling : editGroupSiblings (*track))
+        for (auto* c : sibling->getClips())
+            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (c))
+                if (std::abs (wc->getPosition().getStart().inSeconds() - start) < eps
+                 && std::abs (wc->getPosition().getEnd().inSeconds()   - end)   < eps)
+                    out.add (wc);
+    return out;
 }
 
 // Transaction-free core (house pattern: cores never beginNewTransaction themselves,
@@ -386,6 +450,24 @@ void ClipEditor::deleteClips (const juce::Array<te::Clip*>& clips)
 
     if (keepAlive.isEmpty())
         return;
+
+    // T1.3 Edit-Gruppen: Delete propagiert auf zeitgleiche Clips der Gruppen-
+    // Spuren (gleicher Batch = weiterhin EIN Undo). Dedupe über EditItemID.
+    {
+        juce::Array<te::EditItemID> seen;
+        for (const auto& c : keepAlive)
+            seen.add (c->itemID);
+
+        const int originalCount = keepAlive.size();
+        for (int i = 0; i < originalCount; ++i)
+            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (keepAlive.getReference (i).get()))
+                for (auto* companion : groupCompanions (*wc))
+                    if (! seen.contains (companion->itemID))
+                    {
+                        seen.add (companion->itemID);
+                        keepAlive.add (companion);
+                    }
+    }
 
     // ONE transaction for the whole batch — deleting a multi-selection must be a
     // single Cmd+Z step (Studio One behaviour), not one step per clip.

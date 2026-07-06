@@ -111,8 +111,15 @@ private:
     bool viewportTimeMapping = false;          // s. setViewportTimeMapping()
     juce::TextButton drawModeButton { "P" };   // Pencil toggle in the lane header
 
-    // Parameter selector (Volume / Pan)
+    // Parameter selector — T1.1: Volume/Pan + alle Plugin-Parameter der Spur
     juce::ComboBox paramSelector;
+    juce::Array<AutomationEngine::ParamChoice> paramChoices;
+    void rebuildParamChoices();
+
+    // Norm-Helfer: Kurvenwerte sind NATIV (Param-Range), die Lane zeichnet in [0,1].
+    // Fixt nebenbei Pan (-1..1) — das alte 0..1-Mapping konnte nur Mitte→Rechts.
+    float normFromNative (float native) const;
+    float nativeFromNorm (float norm) const;
 
     // Automation mode selector (Read / Touch / Latch / Write) — shown only in lane header
     juce::ComboBox modeSelector;

@@ -13,18 +13,94 @@ AutomationEngine::AutomationEngine (EditManager& em)
 // Parameter lookup helper
 //==============================================================================
 
+te::AutomatableParameter* AutomationEngine::resolveParameter (te::Track& track,
+                                                              const juce::String& parameterID)
+{
+    // Qualifizierte ID "plug:<pluginItemID>:<paramID>" — eindeutig auch bei
+    // mehreren Instanzen desselben Plugins auf der Spur (T1.1).
+    if (parameterID.startsWith ("plug:"))
+    {
+        const auto rest     = parameterID.fromFirstOccurrenceOf ("plug:", false, false);
+        const auto itemStr  = rest.upToFirstOccurrenceOf (":", false, false);
+        const auto paramStr = rest.fromFirstOccurrenceOf (":", false, false);
+
+        if (auto* at = dynamic_cast<te::AudioTrack*> (&track))
+            for (auto p : at->pluginList)
+                if (p != nullptr && p->itemID.toString() == itemStr)
+                    for (auto* param : p->getAutomatableParameters())
+                        if (param != nullptr && param->paramID == paramStr)
+                            return param;
+
+        return nullptr;
+    }
+
+    // Legacy-Kurznamen ("volume"/"pan"): erster Treffer über alle Track-Params —
+    // trifft das VolumeAndPan-Plugin der Spur (bestehendes Verhalten).
+    for (auto* param : track.getAllAutomatableParams())
+        if (param->paramID == parameterID)
+            return param;
+
+    return nullptr;
+}
+
 te::AutomatableParameter* AutomationEngine::findParameter (te::Track& track,
                                                              const juce::String& parameterID) const
 {
-    // Walk all AutomatableParameters on the track's plugins and find the one
-    // whose paramID matches the requested ID.
-    for (auto* param : track.getAllAutomatableParams())
+    return resolveParameter (track, parameterID);
+}
+
+//==============================================================================
+// T1.1: Parameterliste für die UI + Normalisierung
+//==============================================================================
+
+juce::Array<AutomationEngine::ParamChoice> AutomationEngine::getAutomatableParams (te::Track& track) const
+{
+    juce::Array<ParamChoice> out;
+    out.add ({ "volume", "Volume" });
+    out.add ({ "pan",    "Pan" });
+
+    auto* at = dynamic_cast<te::AudioTrack*> (&track);
+    if (at == nullptr)
+        return out;
+
+    for (auto p : at->pluginList)
     {
-        if (param->paramID == parameterID)
-            return param;
+        if (p == nullptr)
+            continue;
+
+        // Interne Struktur-Plugins raus; Sends BEHALTEN (Send-Level-Automation
+        // ist Profi-Standard — „Reverb-Send im Chorus hochfahren").
+        const auto type = p->getPluginType();
+        if (type == "volume" || type == "level" || type == "auxreturn")
+            continue;
+
+        const auto prefix   = "plug:" + p->itemID.toString() + ":";
+        const auto plugName = p->getName();
+
+        for (auto* param : p->getAutomatableParameters())
+            if (param != nullptr && param->isParameterActive())
+                out.add ({ prefix + param->paramID,
+                           plugName + juce::String::fromUTF8 (" \xc2\xb7 ") + param->getParameterName() });
     }
 
-    return nullptr;
+    return out;
+}
+
+float AutomationEngine::toNorm (const te::AutomatableParameter& p, float nativeValue) noexcept
+{
+    const auto& r = p.valueRange;   // NormalisableRange — convertTo0to1 respektiert Skew
+    if (r.getRange().getLength() <= 0.0f)
+        return 0.0f;
+    return juce::jlimit (0.0f, 1.0f,
+                         r.convertTo0to1 (juce::jlimit (r.start, r.end, nativeValue)));
+}
+
+float AutomationEngine::fromNorm (const te::AutomatableParameter& p, float norm) noexcept
+{
+    const auto& r = p.valueRange;
+    if (r.getRange().getLength() <= 0.0f)
+        return r.start;
+    return r.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, norm));
 }
 
 //==============================================================================

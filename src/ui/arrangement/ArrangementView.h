@@ -14,6 +14,8 @@
 #include "TrackRow.h"
 #include "ClipComponent.h"
 #include "MarkerLane.h"
+#include "TempoLane.h"
+#include "engine/TempoEngine.h"
 #include "EditTool.h"
 
 /**
@@ -422,6 +424,11 @@ private:
     MarkerLane markerLane;
     static constexpr int kMarkerLaneHeight = 18;
 
+    // ---- Tempo lane (T1.2) — Tempo-/Taktartwechsel, zwischen Marker und Ruler ----
+    TempoEngine tempoEngine;
+    TempoLane   tempoLane;
+    static constexpr int kTempoLaneHeight = TempoLane::kLaneHeight;
+
     // ---- Ruler strip ----
     RulerStrip rulerStrip;
     static constexpr int kRulerHeight = 18;  // slim ruler, one line of bar number text
@@ -448,7 +455,7 @@ private:
 
     // Y where the scrollable timeline content begins: below the header strip,
     // the marker lane, and the ruler. Single source of truth for overlay math.
-    static constexpr int kTimelineTopY = kHeaderStripHeight + kMarkerLaneHeight + kRulerHeight;
+    static constexpr int kTimelineTopY = kHeaderStripHeight + kMarkerLaneHeight + kTempoLaneHeight + kRulerHeight;
 
     double pixelsPerSecond    = 100.0;
     double scrollPositionSecs =   0.0;
