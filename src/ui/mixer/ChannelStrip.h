@@ -110,6 +110,12 @@ public:
      *  Safe to call on the message thread at any time. */
     void refresh();
 
+    /** Fader/Pan folgen der Automations-Kurve beim Playback (S1/Logic-Verhalten).
+     *  Anzeige-Sync aus dem AutomatableParameter-currentValue — schreibt NIE
+     *  zurück (dontSendNotification + Drag-Guard). Von MixerView::timerCallback
+     *  nur bei laufendem Transport aufgerufen. */
+    void followAutomation();
+
     /** Callback invoked on mouseDown — MixerView wires this to its selection handler. */
     std::function<void (te::AudioTrack*)> onTrackSelected;
 

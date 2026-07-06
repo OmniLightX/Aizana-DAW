@@ -827,6 +827,29 @@ void ChannelStrip::volumeChanged()
     mixerEngine.setVolume (track, (float)volumeFader.getValue());
 }
 
+void ChannelStrip::followAutomation()
+{
+    // Anzeige-Sync aus dem Parameter-currentValue (Automations-Playback schreibt
+    // nie ins ValueTree, deshalb greift der ValueTree-Listener hier nicht).
+    // NIEMALS zurückschreiben — nur setValue mit dontSendNotification.
+    if (! volumeFader.isMouseButtonDown())
+    {
+        const float dB = mixerEngine.getLiveVolumeDb (track);
+        if (std::abs ((float) volumeFader.getValue() - dB) > 0.05f)
+            volumeFader.setValue (dB, juce::dontSendNotification);
+    }
+
+    if (! panKnob.isMouseButtonDown())
+    {
+        const float pan = mixerEngine.getLivePan (track);
+        if (std::abs ((float) panKnob.getValue() - pan) > 0.005f)
+        {
+            panKnob.setValue (pan, juce::dontSendNotification);
+            panValueLabel.setText (formatPanValue (pan), juce::dontSendNotification);
+        }
+    }
+}
+
 void ChannelStrip::refresh()
 {
     // Pull current engine state and update all controls without firing callbacks.

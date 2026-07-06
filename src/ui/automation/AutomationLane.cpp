@@ -442,16 +442,17 @@ void AutomationLane::mouseDoubleClick (const juce::MouseEvent& /*e*/)
 
 double AutomationLane::xToTime (float x) const
 {
-    // AutomationLane lives inside the full-width timelineContainer.
-    // Local x=0 always corresponds to timeline position 0s.
-    // The viewport scroll is handled by the container position — no offset here.
-    return static_cast<double> (x) / pixelsPerSecond;
+    // Arrangement (default): lane is full-width inside the scrolled
+    // timelineContainer — local x=0 IS timeline 0s, no offset.
+    // Viewport mode (Docked Editor): local x=0 = scrollPositionSeconds.
+    return laneXToTime (x, pixelsPerSecond,
+                        viewportTimeMapping ? scrollPositionSeconds : 0.0);
 }
 
 float AutomationLane::timeToX (double time) const
 {
-    // No scroll offset: lane is full-width, absolute position in container.
-    return static_cast<float> (time * pixelsPerSecond);
+    return laneTimeToX (time, pixelsPerSecond,
+                        viewportTimeMapping ? scrollPositionSeconds : 0.0);
 }
 
 float AutomationLane::valueToY (float value) const
@@ -535,10 +536,12 @@ bool AutomationLane::findSegmentAtPosition (juce::Point<float> pos, int& leftIdx
 
 void AutomationLane::resized()
 {
-    // The AutomationLane is full-width inside the scrollable timelineContainer,
-    // so local x=0 = timeline position 0s.  To keep controls visible at any
-    // scroll position we offset their x by the current scroll position in pixels.
-    const int scrollX = static_cast<int> (scrollPositionSeconds * pixelsPerSecond);
+    // Arrangement: full-width lane in the scrolled container — controls must be
+    // offset by the scroll position to stay visible. Viewport mode (Docked
+    // Editor): the lane itself is viewport-sized, controls sit at x=0.
+    const int scrollX = viewportTimeMapping
+                            ? 0
+                            : static_cast<int> (scrollPositionSeconds * pixelsPerSecond);
     drawModeButton.setBounds (scrollX + 4,   2, 20, 18);
     paramSelector.setBounds  (scrollX + 28,  2, 80, 20);
     modeSelector.setBounds   (scrollX + 112, 2, 70, 20);
@@ -547,6 +550,13 @@ void AutomationLane::resized()
 void AutomationLane::updateScrollOffset()
 {
     // Called by TrackRow/ArrangementView whenever scroll or zoom changes.
+    resized();
+    repaint();
+}
+
+void AutomationLane::setViewportTimeMapping (bool useViewportMapping)
+{
+    viewportTimeMapping = useViewportMapping;
     resized();
     repaint();
 }

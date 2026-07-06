@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/EditManager.h"
@@ -7,6 +8,7 @@
 #include "engine/AutomationEngine.h"
 #include "ui/automation/AutomationLane.h"
 #include "ui/common/AudioThumbnailPool.h"
+#include "EditorViewState.h"
 
 namespace te = tracktion::engine;
 
@@ -40,6 +42,24 @@ public:
     ~AudioClipEditor() override;
 
     te::Clip& getClip() noexcept { return clip; }
+
+    /**
+     * S1-Anker (Studio-One-Parität): Zeitachse + Werkzeug-Zustand überleben den
+     * Selektionswechsel. DockedEditorPanel liest den Handover vom alten Editor
+     * und wendet ihn auf den neuen an — die Edit-View "springt" dadurch nicht
+     * mehr, wenn nach einem Split das andere Teilstück selektiert wird.
+     */
+    struct ViewHandover
+    {
+        double absStart = 0.0;             // absolute Sekunden am linken Fensterrand
+        double len      = 0.0;             // Fensterlänge in Sekunden
+        int    tool     = 0;               // (int) Tool
+        bool   snap     = true;
+        bool   automationLaneOpen = false;
+    };
+
+    ViewHandover getViewHandover() const;
+    void applyViewHandover (const ViewHandover& h);
 
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;   // I-05: Range-Overlay
@@ -114,6 +134,13 @@ private:
     juce::SharedResourcePointer<AudioThumbnailPool> thumbnailPool;
     juce::AudioThumbnail thumbnail { 512, thumbnailPool->formatManager, thumbnailPool->cache };
 
+    // Nachbar-Clips derselben Spur werden gedimmt mitgezeichnet (S1: die Edit-
+    // View zeigt die Spur im Zeitkontext — nach einem Split "verschwindet" das
+    // rechte Teilstück nicht). Thumbnails lazy pro Quelldatei, App-weiter Cache.
+    std::map<juce::String, std::unique_ptr<juce::AudioThumbnail>> neighbourThumbs;
+    juce::AudioThumbnail* neighbourThumbFor (const juce::File& sourceFile);
+    void paintNeighbourClips (juce::Graphics& g, const juce::Rectangle<int>& wa);
+
     // ---- Gesture state ----
     enum class Drag { none, trimLeft, trimRight, fadeIn, fadeOut };
     Drag  activeDrag = Drag::none;
@@ -124,6 +151,7 @@ private:
     double dragStartFadeSecs   = 0.0;
     double trimMaxExtendLeft   = 0.0;
     double trimMaxExtendRight  = 0.0;
+    double dragStartViewAbs    = 0.0;   // S1-Anker: absolute Fensterlage beim Trim halten
 
     static constexpr int kHeaderH   = 28;
     static constexpr int kToolbarH  = 26;

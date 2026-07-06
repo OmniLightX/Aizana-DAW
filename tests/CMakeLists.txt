@@ -53,6 +53,7 @@ target_sources(engine_tests PRIVATE
     test_ai_live_protocol.cpp
     test_sidechain_routing.cpp
     test_automation_curve.cpp
+    test_editor_view_state.cpp
     # Plugin hosting tests (PLUG-01 through PLUG-04) — require JUCE + Tracktion + CLAP API
     test_vst3_scan.cpp
     test_au_scan.cpp
