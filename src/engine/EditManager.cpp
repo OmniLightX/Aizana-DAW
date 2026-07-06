@@ -1,4 +1,5 @@
 #include "EditManager.h"
+#include "WarpEngine.h"
 #include "app/LegacyMigration.h"
 #include "plugins/BuiltInPluginFormat.h"
 #include "plugins/ClapPluginFormat.h"
@@ -52,11 +53,13 @@ void EditManager::createNewEdit()
     if (edit != nullptr)
     {
         edit->getTransport().stop (false, false);
+        warpRenderWatcher.detach();
         if (onEditWillChange)
             onEditWillChange();
     }
 
     edit = std::move (newEdit);
+    warpRenderWatcher.attach (*edit);
 
     // Tracktion's WaveInputDevice records to "%projectdir%" and falls back to
     // juce::File::getCurrentWorkingDirectory() if an Edit has no file/project.
@@ -156,11 +159,13 @@ bool EditManager::loadEdit (const juce::File& file)
     if (edit != nullptr)
     {
         edit->getTransport().stop (false, false);
+        warpRenderWatcher.detach();
         if (onEditWillChange)
             onEditWillChange();
     }
 
     edit = std::move (newEdit);
+    warpRenderWatcher.attach (*edit);
 
     // Same as createNewEdit: allocate context so input devices are immediately accessible.
     edit->getTransport().ensureContextAllocated();

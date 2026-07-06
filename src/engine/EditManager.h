@@ -3,6 +3,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_core/juce_core.h>
 #include "AizanaUIBehaviour.h"
+#include "WarpEngine.h"
 
 namespace te = tracktion::engine;
 
@@ -128,6 +129,12 @@ public:
 private:
     te::Engine engine { "Aizana", std::make_unique<AizanaUIBehaviour>(), nullptr };
     std::unique_ptr<te::Edit> edit;
+
+    // P7b: stößt bei jeder Warp-Änderung (auch Undo/Redo) den KORREKTEN
+    // Warp-Render an, bevor TEs eigener stiller Job greift (WarpEngine-Doku).
+    // Nach `edit` deklariert → wird VOR dem Edit zerstört (Auto-Detach, I-11);
+    // zusätzlich explizit detacht, bevor loadEdit/createNewEdit swappen.
+    WarpRenderWatcher warpRenderWatcher;
 
     // ---- Autosave (RESEARCH.md Open Question 4) ----
     juce::File currentSessionFile;  // set by setCurrentFile()

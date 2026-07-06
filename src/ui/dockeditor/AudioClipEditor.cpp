@@ -1,6 +1,7 @@
 #include "AudioClipEditor.h"
 #include "engine/ClipGainEnvelope.h"
 #include "engine/CompingEngine.h"
+#include "engine/WarpEngine.h"
 #include "ui/comping/CompingView.h"
 
 using TimePos = tracktion::core::TimePosition;
@@ -76,7 +77,7 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
 
     // ---- Toolbar (S1-Parität E1/E3): Werkzeuge, Snap, Mute, Automation, Range-Aktion ----
     for (auto* b : { &toolPointerBtn, &toolSplitBtn, &toolRangeBtn,
-                     &snapBtn, &muteBtn, &autoBtn, &takesBtn, &gainEnvBtn, &rangeCutBtn })
+                     &snapBtn, &muteBtn, &autoBtn, &takesBtn, &gainEnvBtn, &bendBtn, &rangeCutBtn })
     {
         styleToolButton (*b);
         addAndMakeVisible (*b);
@@ -102,7 +103,14 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     rangeCutBtn.onClick = [this] { applyRangeDelete(); };
     gainEnvBtn.setTooltip (juce::String::fromUTF8 ("Gain-H\xc3\xbcllkurve (G) \xe2\x80\x94 Klick = Punkt, Ziehen = formen, "
                                                    "Doppelklick auf Punkt = l\xc3\xb6schen; ganz unten = kill (-60 dB)"));
-    gainEnvBtn.onClick = [this] { gainEnvMode = ! gainEnvMode; updateToolbarState(); repaint(); };
+    gainEnvBtn.onClick = [this] { gainEnvMode = ! gainEnvMode; if (gainEnvMode) bendMode = false;
+                                  updateToolbarState(); repaint(); };
+
+    // P7b: Audio-Bend — Warp-Marker direkt in der Waveform
+    bendBtn.setTooltip (juce::String::fromUTF8 ("Audio-Bend (B) \xe2\x80\x94 Klick = Warp-Marker (snappt auf Transienten), "
+                                                "Ziehen = Timing biegen, Doppelklick = Marker l\xc3\xb6schen, "
+                                                "Rechtsklick = Zur\xc3\xbc""cksetzen/Deaktivieren"));
+    bendBtn.onClick = [this] { toggleBendMode(); };
 
     // Automation nur möglich, wenn der Clip auf einem AudioTrack liegt.
     autoBtn.setEnabled (dynamic_cast<te::AudioTrack*> (clip.getTrack()) != nullptr);
@@ -251,6 +259,7 @@ void AudioClipEditor::updateToolbarState()
     setActive (autoBtn,        automationVisible);
     setActive (takesBtn,       takesVisible);
     setActive (gainEnvBtn,     gainEnvMode);
+    setActive (bendBtn,        bendMode);
     rangeCutBtn.setEnabled (rangeActive);
     repaint();
 }
@@ -566,6 +575,7 @@ void AudioClipEditor::resized()
     takesBtn.setBounds (toolbar.removeFromLeft (52));
     toolbar.removeFromLeft (2);
     gainEnvBtn.setBounds (toolbar.removeFromLeft (42));
+    bendBtn.setBounds (toolbar.removeFromLeft (46));
     rangeCutBtn.setBounds (toolbar.removeFromRight (86));
 
     hScroll.setBounds (area.removeFromBottom (kScrollH));
@@ -721,6 +731,10 @@ void AudioClipEditor::paintOverChildren (juce::Graphics& g)
     if (ClipGainEnvelope::hasEnvelope (clip) || gainEnvMode)
         paintGainEnvelope (g, waveArea());
 
+    // P7b: Warp-Marker — sichtbar sobald Bend aktiv ist, editierbar im Bend-Modus
+    if (WarpEngine::isWarped (clip))
+        paintWarpMarkers (g, waveArea());
+
     if (! rangeActive)
         return;
 
@@ -822,6 +836,98 @@ void AudioClipEditor::paintGainEnvelope (juce::Graphics& g, const juce::Rectangl
 }
 
 //==============================================================================
+// P7b: Audio-Bend — Warp-Marker-Zeichnung + Hit-Test + Zeit-Mapping
+
+double AudioClipEditor::warpToLocal (double warpSecs) const
+{
+    // Warp-Zeitachse beginnt am Quellen-Anfang; der Clip zeigt sie ab Offset.
+    return warpSecs - clip.getPosition().getOffset().inSeconds();
+}
+
+double AudioClipEditor::localToWarp (double localSecs) const
+{
+    return localSecs + clip.getPosition().getOffset().inSeconds();
+}
+
+void AudioClipEditor::toggleBendMode()
+{
+    bendMode = ! bendMode;
+
+    if (bendMode)
+    {
+        gainEnvMode = false;   // Modi schließen sich aus (beide klicken in die Waveform)
+
+        if (! WarpEngine::isWarped (clip))
+        {
+            editManager.getUndoManager().beginNewTransaction ("Audio-Bend an");
+            WarpEngine::setWarpEnabled (clip, true);
+        }
+    }
+
+    updateToolbarState();
+    repaint();
+}
+
+int AudioClipEditor::bendMarkerAt (juce::Point<int> pos, const juce::Rectangle<int>& wa)
+{
+    if (! wa.contains (pos))
+        return -1;
+
+    const auto markers = WarpEngine::getMarkers (clip);
+    for (int i = 0; i < markers.size(); ++i)
+    {
+        const float x = localSecsToX (warpToLocal (markers[i].warpSecs));
+        if (std::abs ((float) pos.x - x) <= 6.0f)
+            return i;
+    }
+    return -1;
+}
+
+void AudioClipEditor::paintWarpMarkers (juce::Graphics& g, const juce::Rectangle<int>& wa)
+{
+    const juce::Colour warpColour (0xff2ad4c0);   // teal — abgesetzt von Env-amber
+    const auto markers = WarpEngine::getMarkers (clip);
+
+    // Transienten-Ticks (nur im Bend-Modus; Detection läuft im Hintergrund)
+    if (bendMode)
+    {
+        auto [ready, transients] = WarpEngine::getTransients (clip);
+        if (ready)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.35f));
+            for (double src : transients)
+            {
+                const float x = localSecsToX (warpToLocal (WarpEngine::sourceToWarp (clip, src)));
+                if (x >= (float) wa.getX() && x <= (float) wa.getRight())
+                    g.drawLine (x, (float) wa.getY(), x, (float) wa.getY() + 8.0f, 1.0f);
+            }
+        }
+    }
+
+    // Warp-Marker: volle Höhe, Dreiecks-Griff oben; Endpunkte gedimmt
+    const float alpha = bendMode ? 0.95f : 0.45f;
+    for (int i = 0; i < markers.size(); ++i)
+    {
+        const bool endpoint = (i == 0 || i == markers.size() - 1);
+        const bool dragging = (i == bendDragMarker);
+        const float x = dragging ? bendDragX
+                                 : localSecsToX (warpToLocal (markers[i].warpSecs));
+
+        if (x < (float) wa.getX() - 1.0f || x > (float) wa.getRight() + 1.0f)
+            continue;
+
+        g.setColour (warpColour.withAlpha (endpoint ? alpha * 0.45f : alpha));
+        g.drawLine (x, (float) wa.getY(), x, (float) wa.getBottom(), dragging ? 2.0f : 1.5f);
+
+        juce::Path grip;
+        grip.addTriangle (x - 5.0f, (float) wa.getY(),
+                          x + 5.0f, (float) wa.getY(),
+                          x,        (float) wa.getY() + 8.0f);
+        g.fillPath (grip);
+    }
+}
+
+//==============================================================================
 void AudioClipEditor::mouseMove (const juce::MouseEvent& e)
 {
     const auto wa = waveArea();
@@ -858,6 +964,77 @@ void AudioClipEditor::mouseDown (const juce::MouseEvent& e)
     const auto wa = waveArea();
     if (! wa.contains (e.getPosition()))
         return;
+
+    // ---- P7b: Bend-Modus — Marker greifen, setzen oder Kontextmenü ----
+    if (bendMode && e.mods.isPopupMenu())
+    {
+        juce::PopupMenu menu;
+        menu.addItem (1, juce::String::fromUTF8 ("Alle Warp-Marker zur\xc3\xbc""cksetzen"));
+        menu.addItem (2, juce::String::fromUTF8 ("Audio-Bend deaktivieren (linear)"));
+
+        menu.showMenuAsync (juce::PopupMenu::Options(),
+            [safe = juce::Component::SafePointer<AudioClipEditor> (this)] (int result)
+            {
+                if (safe == nullptr || result == 0)
+                    return;
+
+                auto& um = safe->editManager.getUndoManager();
+                if (result == 1)
+                {
+                    um.beginNewTransaction ("Warp-Marker zur\xc3\xbc""cksetzen");
+                    WarpEngine::resetMarkers (safe->clip);
+                }
+                else if (result == 2)
+                {
+                    um.beginNewTransaction ("Audio-Bend aus");
+                    WarpEngine::setWarpEnabled (safe->clip, false);
+                    safe->bendMode = false;
+                    safe->updateToolbarState();
+                }
+                safe->repaint();
+            });
+        return;
+    }
+
+    if (bendMode && e.mods.isLeftButtonDown() && WarpEngine::isWarped (clip))
+    {
+        const int hit = bendMarkerAt (e.getPosition(), wa);
+
+        if (hit >= 0)
+        {
+            // Ziehen beginnt — Ghost-Linie; Commit (1 Undo + 1 Warp-Render)
+            // erst auf mouseUp, damit nicht jede Mausbewegung neu rendert.
+            bendDragMarker = hit;
+            bendDragX = (float) e.x;
+        }
+        else
+        {
+            // Marker setzen — snappt auf nahe erkannte Transiente (±8 px);
+            // das Setzen selbst ist klangneutral (Mapping unverändert).
+            double src = WarpEngine::warpToSource (clip, localToWarp (xToLocalSecs ((float) e.x)));
+
+            auto [ready, transients] = WarpEngine::getTransients (clip);
+            if (ready && ! e.mods.isAltDown())
+            {
+                float bestDx = 8.0f;
+                for (double t : transients)
+                {
+                    const float tx = localSecsToX (warpToLocal (WarpEngine::sourceToWarp (clip, t)));
+                    if (std::abs (tx - (float) e.x) < bestDx)
+                    {
+                        bestDx = std::abs (tx - (float) e.x);
+                        src = t;
+                    }
+                }
+            }
+
+            editManager.getUndoManager().beginNewTransaction ("Warp-Marker");
+            WarpEngine::addMarkerAtSourceTime (clip, src);
+        }
+
+        repaint();
+        return;
+    }
 
     // ---- P5: Env-Modus hat Vorrang — Punkt greifen oder neu setzen ----
     if (gainEnvMode && e.mods.isLeftButtonDown())
@@ -969,6 +1146,20 @@ void AudioClipEditor::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto wa = waveArea();
 
+    // P7b: im Bend-Modus löscht Doppelklick den getroffenen Warp-Marker
+    if (bendMode && wa.contains (e.getPosition()))
+    {
+        const int hit = bendMarkerAt (e.getPosition(), wa);
+        if (hit >= 0)
+        {
+            editManager.getUndoManager().beginNewTransaction ("Warp-Marker entfernen");
+            WarpEngine::removeMarker (clip, hit);
+            bendDragMarker = -1;
+            repaint();
+        }
+        return;   // kein Split im Bend-Modus
+    }
+
     // P5: im Env-Modus löscht Doppelklick den getroffenen Kurvenpunkt
     if (gainEnvMode && wa.contains (e.getPosition()))
     {
@@ -991,6 +1182,15 @@ void AudioClipEditor::mouseDoubleClick (const juce::MouseEvent& e)
 
 void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
 {
+    // P7b: Warp-Marker ziehen — nur Ghost-Linie, Commit auf mouseUp
+    if (bendMode && bendDragMarker >= 0)
+    {
+        const auto wa = waveArea();
+        bendDragX = juce::jlimit ((float) wa.getX(), (float) wa.getRight(), (float) e.x);
+        repaint();
+        return;
+    }
+
     // P5: Kurvenpunkt ziehen (Zeit + dB); movePoint liefert den neuen Index,
     // falls der Punkt an anderen vorbeigezogen wurde
     if (gainEnvMode && envDragPoint >= 0)
@@ -1073,6 +1273,17 @@ void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
 
 void AudioClipEditor::mouseUp (const juce::MouseEvent&)
 {
+    // P7b: Marker-Drag committen — EINE Transaktion, EIN Warp-Render
+    // (der WarpRenderWatcher stößt den korrekten Render-Job an)
+    if (bendDragMarker >= 0)
+    {
+        editManager.getUndoManager().beginNewTransaction ("Warp-Marker bewegen");
+        WarpEngine::moveMarker (clip, bendDragMarker,
+                                localToWarp (xToLocalSecs (bendDragX)));
+        bendDragMarker = -1;
+        repaint();
+    }
+
     if (envDragPoint >= 0)
     {
         envDragPoint = -1;   // Ende der Env-Geste (Transaktion war bereits gesetzt)
@@ -1113,13 +1324,23 @@ bool AudioClipEditor::keyPressed (const juce::KeyPress& key)
     if (kc == 'g' || kc == 'G')
     {
         gainEnvMode = ! gainEnvMode;
+        if (gainEnvMode)
+            bendMode = false;
         updateToolbarState();
         repaint();
         return true;
     }
 
+    // P7b: B = Audio-Bend-Modus
+    if (kc == 'b' || kc == 'B')
+    {
+        toggleBendMode();
+        return true;
+    }
+
     if (kc == juce::KeyPress::escapeKey)
     {
+        if (bendMode)                { bendMode = false; bendDragMarker = -1; updateToolbarState(); repaint(); return true; }
         if (gainEnvMode)             { gainEnvMode = false; updateToolbarState(); repaint(); return true; }
         if (rangeActive)             { rangeActive = false; updateToolbarState(); repaint(); return true; }
         if (activeTool != Tool::pointer) { setTool (Tool::pointer); return true; }

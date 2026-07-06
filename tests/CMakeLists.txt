@@ -82,6 +82,7 @@ target_sources(engine_tests PRIVATE
     test_bounce_in_place.cpp
     test_clip_gain_envelope.cpp
     test_tempo_map.cpp
+    test_warp_bend.cpp
     # Metering tests (EXP-03) — require JUCE + libebur128
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
@@ -121,6 +122,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/TempoDetector.cpp
     ../src/engine/MidiRecorder.cpp
     ../src/engine/MixerEngine.cpp
+    ../src/engine/WarpEngine.cpp
     ../src/engine/InputBusManager.cpp
     ../src/engine/AICommandBridge.cpp
     ../src/engine/AutomationEngine.cpp

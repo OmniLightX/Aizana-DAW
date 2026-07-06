@@ -112,6 +112,7 @@ private:
     juce::TextButton autoBtn        { "Auto" };
     juce::TextButton takesBtn       { "Takes" };
     juce::TextButton gainEnvBtn     { "Env" };
+    juce::TextButton bendBtn        { "Bend" };
     juce::TextButton rangeCutBtn    { juce::String::fromUTF8 ("\xe2\x88\x92 Bereich") };
 
     void setTool (Tool t);
@@ -132,6 +133,22 @@ private:
     float envYToDb (float y,  const juce::Rectangle<int>& wa) const;
     int   envPointAt (juce::Point<int> pos, const juce::Rectangle<int>& wa);
     void  paintGainEnvelope (juce::Graphics& g, const juce::Rectangle<int>& wa);
+
+    // ---- P7b: Audio-Bend/Warp (WarpEngine über TEs WarpTimeManager) ----
+    // Bend-Modus (Taste B): Klick = Warp-Marker setzen (snappt auf erkannte
+    // Transienten), Marker ziehen = Timing biegen (Ghost-Linie, Commit auf
+    // mouseUp = 1 Undo + 1 Warp-Render), Doppelklick = Marker löschen,
+    // Rechtsklick = Zurücksetzen/Deaktivieren. Marker sichtbar sobald Warp
+    // aktiv ist; editierbar nur im Bend-Modus (P5-Env-Konvention).
+    bool  bendMode       = false;
+    int   bendDragMarker = -1;      // Marker-Index während des Drags
+    float bendDragX      = 0.0f;    // Ghost-Position (Commit erst auf mouseUp)
+
+    void   toggleBendMode();
+    int    bendMarkerAt (juce::Point<int> pos, const juce::Rectangle<int>& wa);
+    void   paintWarpMarkers (juce::Graphics& g, const juce::Rectangle<int>& wa);
+    double warpToLocal (double warpSecs) const;    // Warp-Zeit ↔ Clip-Lokalzeit
+    double localToWarp (double localSecs) const;   // (Offset-Verschiebung)
 
     // ---- Range selection (clip-LOCAL seconds) ----
     bool   rangeActive   = false;
