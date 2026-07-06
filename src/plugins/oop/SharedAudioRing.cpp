@@ -33,13 +33,29 @@ static_assert (std::atomic<uint32_t>::is_always_lock_free,
 namespace
 {
     constexpr uint32_t kMagic        = 0x434C4453; // 'CLDS'
-    constexpr uint32_t kVersion      = 1;
+    constexpr uint32_t kVersion      = 2;          // v2: E5.4 param + MIDI regions
     constexpr size_t   kAudioOffset  = 128;        // audio region starts here (header padded out)
 
-    size_t totalSize (uint32_t maxChannels, uint32_t maxBlockSamples) noexcept
+    // Region offsets (all 4-byte aligned: the audio region is a whole number of floats).
+    size_t paramOffset (uint32_t maxChannels, uint32_t maxBlockSamples) noexcept
     {
         return kAudioOffset
              + (size_t) maxChannels * (size_t) maxBlockSamples * sizeof (float);
+    }
+
+    size_t midiInOffset (uint32_t mc, uint32_t mb) noexcept
+    {
+        return paramOffset (mc, mb) + SharedAudioRing::kParamRegionBytes;
+    }
+
+    size_t midiOutOffset (uint32_t mc, uint32_t mb) noexcept
+    {
+        return midiInOffset (mc, mb) + SharedAudioRing::kMidiRegionBytes;
+    }
+
+    size_t totalSize (uint32_t maxChannels, uint32_t maxBlockSamples) noexcept
+    {
+        return midiOutOffset (maxChannels, maxBlockSamples) + SharedAudioRing::kMidiRegionBytes;
     }
 }
 
@@ -104,6 +120,9 @@ std::unique_ptr<SharedAudioRing> SharedAudioRing::createHost (uint32_t maxChanne
     std::unique_ptr<SharedAudioRing> ring (new SharedAudioRing());
     ring->hdr         = h;
     ring->audio       = reinterpret_cast<float*> (static_cast<char*> (base) + kAudioOffset);
+    ring->params      = reinterpret_cast<uint8_t*> (base) + paramOffset (maxChannels, maxBlockSamples);
+    ring->midiIn      = reinterpret_cast<uint8_t*> (base) + midiInOffset (maxChannels, maxBlockSamples);
+    ring->midiOut     = reinterpret_cast<uint8_t*> (base) + midiOutOffset (maxChannels, maxBlockSamples);
     ring->mapped      = base;
     ring->mappedSize  = size;
     ring->fd          = fd;
@@ -153,6 +172,9 @@ std::unique_ptr<SharedAudioRing> SharedAudioRing::attachChild (const juce::Strin
     std::unique_ptr<SharedAudioRing> ring (new SharedAudioRing());
     ring->hdr         = reinterpret_cast<Header*> (base);
     ring->audio       = reinterpret_cast<float*> (static_cast<char*> (base) + kAudioOffset);
+    ring->params      = reinterpret_cast<uint8_t*> (base) + paramOffset (mc, mb);
+    ring->midiIn      = reinterpret_cast<uint8_t*> (base) + midiInOffset (mc, mb);
+    ring->midiOut     = reinterpret_cast<uint8_t*> (base) + midiOutOffset (mc, mb);
     ring->mapped      = base;
     ring->mappedSize  = size;
     ring->fd          = fd;

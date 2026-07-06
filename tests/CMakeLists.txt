@@ -62,6 +62,7 @@ target_sources(engine_tests PRIVATE
     test_oop_audio_ring.cpp
     test_oop_plugin_host_bridge.cpp
     test_oop_host_marshal.cpp
+    test_oop_param_midi.cpp
     # DSP effects tests (FX-01 through FX-04) — require juce::dsp
     test_eq_dsp.cpp
     test_compressor_dsp.cpp

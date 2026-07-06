@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SharedAudioRing.h"
+#include "OobAudioMarshal.h"
 
 #include <atomic>
 #include <functional>
@@ -51,6 +52,9 @@ namespace aizana
     class OutOfProcessPluginInstance : public juce::AudioPluginInstance
     {
     public:
+        /** Spawns the child worker and queries the plugin's metadata (parameters, MIDI flags)
+            synchronously, so TE sees the real parameter list when it wraps this instance.
+            If the worker can't launch, the instance stays valid but silent + parameterless. */
         OutOfProcessPluginInstance (const juce::PluginDescription& desc, int numChannels);
         ~OutOfProcessPluginInstance() override;
 
@@ -62,8 +66,8 @@ namespace aizana
 
         void fillInPluginDescription (juce::PluginDescription& d) const override { d = desc; }
         double getTailLengthSeconds() const override { return 0.0; }
-        bool acceptsMidi() const override { return false; }   // MIDI across the boundary = E5.4
-        bool producesMidi() const override { return false; }
+        bool acceptsMidi() const override { return childAcceptsMidi; }     // E5.4
+        bool producesMidi() const override { return childProducesMidi; }   // E5.4
         juce::AudioProcessorEditor* createEditor() override { return nullptr; }   // GUI = E5.5
         bool hasEditor() const override { return false; }
         int getNumPrograms() override { return 1; }
@@ -71,14 +75,19 @@ namespace aizana
         void setCurrentProgram (int) override {}
         const juce::String getProgramName (int) override { return {}; }
         void changeProgramName (int, const juce::String&) override {}
-        void getStateInformation (juce::MemoryBlock&) override {}
-        void setStateInformation (const void*, int) override {}
+        void getStateInformation (juce::MemoryBlock&) override;            // E5.4
+        void setStateInformation (const void*, int) override;              // E5.4
 
         /** True once the child process has loaded the plugin and is pumping audio. */
         bool isChildConnected() const noexcept { return childReady.load(); }
 
+        /** Parameter proxies call this (any thread, lock-free) — drained into the ring's
+            param region on the next processBlock. */
+        void queueParamChange (uint32_t index, float value) noexcept;
+
     private:
         void teardown();
+        bool ensureCoordinator();   // (re)spawn worker + describe; builds params on first success
 
         struct Impl;                                   // hides the ChildProcessCoordinator
         juce::PluginDescription          desc;
@@ -88,6 +97,14 @@ namespace aizana
         juce::String                     ringName;
         std::atomic<bool>                childReady { false };
         uint32_t                         timeoutMicros { 8000 };
+        bool                             childAcceptsMidi  { false };
+        bool                             childProducesMidi { false };
+        bool                             paramsBuilt { false };
+
+        // Lock-free param-change queue: proxies write, processBlock drains (audio thread).
+        static constexpr int             kParamFifoSize = 2048;
+        juce::AbstractFifo               paramFifo { kParamFifoSize };
+        OopParamEvent                    paramSlots[kParamFifoSize] = {};
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutOfProcessPluginInstance)
     };

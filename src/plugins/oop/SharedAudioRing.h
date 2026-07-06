@@ -33,10 +33,23 @@
  *
  * AUDIO LAYOUT (in audioData()): planar, [ch0: maxBlockSamples floats][ch1: …] …
  *   Processing is IN PLACE — the child overwrites the input region with the plugin's output.
+ *
+ * E5.4 — CONTROL REGIONS (behind the audio region, same mapping, same seq-counter ordering):
+ *   paramRegion()  : host → child parameter changes for the NEXT block.
+ *                    [uint32 count][count × {uint32 paramIndex; float normalisedValue}]
+ *   midiInRegion() : host → child MIDI for the next block; midiOutRegion(): child → host.
+ *                    [uint32 count][count × {int32 samplePos; uint32 byteSize; bytes, 4-aligned}]
+ *   All regions are written BEFORE the reqSeq release-store (host) / doneSeq release-store
+ *   (child), so the existing acquire/release pair orders them across the boundary — no extra
+ *   synchronisation. The child zeroes the inbound counts after consuming them.
  */
 class SharedAudioRing
 {
 public:
+    // Fixed capacities for the E5.4 control regions (per block, per direction).
+    static constexpr uint32_t kMaxParamEvents  = 1024;
+    static constexpr uint32_t kParamRegionBytes = 8 + kMaxParamEvents * 8;
+    static constexpr uint32_t kMidiRegionBytes  = 8192;
     enum class Status
     {
         ok,          // child processed the block; output is in audioData()
@@ -62,6 +75,11 @@ public:
     uint32_t maxBlockSamples() const noexcept { return capSamples;  }
     const juce::String& name() const noexcept { return shmName; }
 
+    /** E5.4 control regions — see the layout comment above. Same lifetime as audioData(). */
+    uint8_t* paramRegion()   noexcept { return params;  }
+    uint8_t* midiInRegion()  noexcept { return midiIn;  }
+    uint8_t* midiOutRegion() noexcept { return midiOut; }
+
     // ---- HOST ----------------------------------------------------------------
     /** HOST audio thread. Input must already be in audioData(). Publishes the request, waits
      *  up to timeoutMicros for the child to mirror the sequence, then leaves output in
@@ -86,6 +104,9 @@ private:
 
     Header*      hdr        { nullptr };
     float*       audio      { nullptr };   // = mapped base + audioOffset
+    uint8_t*     params     { nullptr };   // E5.4 regions, behind the audio region
+    uint8_t*     midiIn     { nullptr };
+    uint8_t*     midiOut    { nullptr };
     void*        mapped     { nullptr };
     size_t       mappedSize { 0 };
     int          fd         { -1 };
