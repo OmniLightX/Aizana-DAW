@@ -135,6 +135,8 @@ int main (int argc, char* argv[])
         pass = fail ("parameter name did not survive the boundary");
     if (! proxy->acceptsMidi() || ! proxy->producesMidi())
         pass = fail ("MIDI flags did not survive the boundary");
+    if (proxy->hasEditor())   // stub has none — E5.5 flag must cross correctly
+        pass = fail ("hasEditor flag did not survive the boundary");
 
     proxy->prepareToPlay (44100.0, 64);
     if (! proxy->isChildConnected())
@@ -193,6 +195,41 @@ int main (int argc, char* argv[])
             // gain 0.5 → 0.5 * 2 * 0.5 = 0.5
             pass = expectLevel (*proxy, 0.5f, 0.5f, "setState across the boundary");
         }
+    }
+
+    // E5.6 — Crash-Restart-Policy: Worker hart crashen → Proxy silenced sofort,
+    // respawnt budgetiert auf dem Message-Thread und stellt Param-Werte wieder her.
+    if (pass)
+    {
+        proxy->crashChildForTest();
+
+        // Verbindungsverlust-Erkennung + Respawn laufen über den Message-Thread und
+        // können komplett INNERHALB eines Pump-Fensters passieren (der transiente
+        // childReady=false ist von außen nicht zuverlässig beobachtbar). Deshalb
+        // aufs ERGEBNIS pollen: Audio kommt mit restauriertem Zustand zurück.
+        // Restore-Reihenfolge: erst lastKnownState (gain 0.5), dann die gecachten
+        // Proxy-Param-Werte (0.25 aus dem setValue — Automation gewinnt)
+        // → 0.5 × 2 × 0.25 = 0.25.
+        auto* mm = juce::MessageManager::getInstance();
+        bool audioBack = false;
+        for (int i = 0; i < 200 && ! audioBack; ++i)   // ~10 s Deckel
+        {
+            mm->runDispatchLoopUntil (50);
+            if (! proxy->isChildConnected())
+                continue;
+
+            juce::AudioBuffer<float> b (2, 64);
+            for (int c = 0; c < 2; ++c)
+                for (int s = 0; s < 64; ++s)
+                    b.setSample (c, s, 0.5f);
+            juce::MidiBuffer m;
+            proxy->processBlock (b, m);
+            audioBack = std::abs (b.getSample (0, 0) - 0.25f) < 1.0e-4f
+                     && std::abs (b.getSample (1, 63) - 0.25f) < 1.0e-4f;
+        }
+
+        if (! audioBack)
+            pass = fail ("audio did not come back (with restored state) after the crash");
     }
 
     proxy->releaseResources();

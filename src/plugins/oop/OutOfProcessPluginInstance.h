@@ -37,6 +37,10 @@ namespace aizana
         Default OFF — in-process hosting stays the shipping path until E5 is complete. */
     bool oopHostingEnabled();
 
+    /** E5.6: True when ALSO 3rd-party plugins (VST3/AU/CLAP) route out-of-process
+        (env AIZANA_OOP_ALL=1; impliziert oopHostingEnabled). LIVE-TEST-only. */
+    bool oopThirdPartyEnabled();
+
     struct PluginHostWorkerHandle
     {
         virtual ~PluginHostWorkerHandle() = default;
@@ -68,8 +72,18 @@ namespace aizana
         double getTailLengthSeconds() const override { return 0.0; }
         bool acceptsMidi() const override { return childAcceptsMidi; }     // E5.4
         bool producesMidi() const override { return childProducesMidi; }   // E5.4
-        juce::AudioProcessorEditor* createEditor() override { return nullptr; }   // GUI = E5.5
-        bool hasEditor() const override { return false; }
+
+        /** E5.5: die ECHTE Plugin-GUI lebt als child-owned Fenster im Worker-Prozess
+            (crash-sicher; ein GUI-Hänger friert die DAW nicht ein). Der Host-Editor
+            ist ein schmales Panel mit "GUI öffnen" und öffnet das Child-Fenster
+            direkt mit; sein Schließen schließt auch das Child-Fenster. */
+        juce::AudioProcessorEditor* createEditor() override;
+        bool hasEditor() const override { return childHasEditor; }
+
+        /** E5.5: Child-GUI-Fenster anzeigen/schließen (fire-and-forget über den
+            Coordinator-Kanal; ohne lebenden Worker ein No-op). */
+        void showChildGui();
+        void hideChildGui();
         int getNumPrograms() override { return 1; }
         int getCurrentProgram() override { return 0; }
         void setCurrentProgram (int) override {}
@@ -85,9 +99,16 @@ namespace aizana
             param region on the next processBlock. */
         void queueParamChange (uint32_t index, float value) noexcept;
 
+        /** NUR für den Cross-Process-Smoke-Test: lässt den Worker hart crashen
+            (_exit), um die Crash-Restart-Policy end-to-end zu verifizieren. */
+        void crashChildForTest();
+
     private:
         void teardown();
         bool ensureCoordinator();   // (re)spawn worker + describe; builds params on first success
+        void dropCoordinator();     // intentionaler Reset — onLost darf dabei NICHT feuern
+        void handleWorkerDied();    // E5.6: Crash-Restart (Message-Thread)
+        bool restartBudgetAllows(); // max 3 Respawns pro Minute, dann dauerhaft still
 
         struct Impl;                                   // hides the ChildProcessCoordinator
         juce::PluginDescription          desc;
@@ -99,7 +120,16 @@ namespace aizana
         uint32_t                         timeoutMicros { 8000 };
         bool                             childAcceptsMidi  { false };
         bool                             childProducesMidi { false };
+        bool                             childHasEditor    { false };   // E5.5
         bool                             paramsBuilt { false };
+
+        // E5.6: Crash-Restart-Policy — Respawn nach Worker-Tod, budgetiert.
+        std::shared_ptr<std::atomic<bool>> aliveGuard { std::make_shared<std::atomic<bool>> (true) };
+        double                           lastPreparedRate  { 0.0 };
+        int                              lastPreparedBlock { 0 };
+        int                              restartCount { 0 };
+        juce::int64                      restartWindowStartMs { 0 };
+        juce::MemoryBlock                lastKnownState;   // re-applied after a respawn
 
         // Lock-free param-change queue: proxies write, processBlock drains (audio thread).
         static constexpr int             kParamFifoSize = 2048;
@@ -130,7 +160,11 @@ namespace aizana
         bool pluginNeedsRescanning (const juce::PluginDescription&) override { return false; }
         bool doesPluginStillExist (const juce::PluginDescription& d) override
         {
-            return juce::File::isAbsolutePath (d.fileOrIdentifier) && juce::File (d.fileOrIdentifier).exists();
+            // AU-Identifier sind keine Pfade ("AudioUnit:Effects/…") — nicht
+            // verifizierbar heißt hier: als existent annehmen (E5.6, 3rd-party).
+            if (! juce::File::isAbsolutePath (d.fileOrIdentifier))
+                return true;
+            return juce::File (d.fileOrIdentifier).exists();
         }
         juce::StringArray searchPathsForPlugins (const juce::FileSearchPath&, bool, bool) override { return {}; }
         void findAllTypesForFile (juce::OwnedArray<juce::PluginDescription>&, const juce::String&) override {}

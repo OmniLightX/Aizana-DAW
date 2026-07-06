@@ -2,10 +2,13 @@
 #include "PluginHostBridge.h"
 #include "app/LegacyMigration.h"
 
+#include <juce_gui_basics/juce_gui_basics.h>   // E5.5: child-owned GUI window
+
 #include <atomic>
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 
 namespace aizana
 {
@@ -29,8 +32,29 @@ namespace aizana
 
         struct OopPluginInfo
         {
-            bool acceptsMidi = false, producesMidi = false;
+            bool acceptsMidi = false, producesMidi = false, hasEditor = false;
             juce::Array<OopParamInfo> params;
+        };
+
+        // E5.5: das child-owned Fenster um den echten Plugin-Editor. Läuft komplett
+        // im Worker-Prozess — ein hängender/abstürzender Editor reißt nur den
+        // Kindprozess, nie die DAW.
+        class ChildPluginGuiWindow final : public juce::DocumentWindow
+        {
+        public:
+            ChildPluginGuiWindow (const juce::String& name, juce::AudioProcessorEditor* editor)
+                : juce::DocumentWindow (name, juce::Colours::darkgrey,
+                                        juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton)
+            {
+                setUsingNativeTitleBar (true);
+                setContentOwned (editor, true);
+                setResizable (editor->isResizable(), false);
+                centreWithSize (getWidth(), getHeight());
+                setVisible (true);
+                toFront (true);
+            }
+
+            void closeButtonPressed() override { setVisible (false); }
         };
 
         // ===================================================================
@@ -61,6 +85,9 @@ namespace aizana
                 else if (type == "unprepare")  handleUnprepare();
                 else if (type == "getstate")   handleGetState();
                 else if (type == "setstate")   handleSetState (in);
+                else if (type == "showgui")    handleShowGui();     // E5.5
+                else if (type == "hidegui")    handleHideGui();     // E5.5
+                else if (type == "_testcrash") std::_Exit (9);      // E5.6 Smoke: echter Crash
             }
 
             void handleDescribe (juce::MemoryInputStream& in)
@@ -85,6 +112,7 @@ namespace aizana
                 os.writeString ("info");
                 os.writeBool (plugin->acceptsMidi());
                 os.writeBool (plugin->producesMidi());
+                os.writeBool (plugin->hasEditor());   // E5.5
 
                 const auto& params = plugin->getParameters();
                 os.writeInt (params.size());
@@ -171,8 +199,39 @@ namespace aizana
                 sendMessageToCoordinator (out);
             }
 
+            // E5.5: GUI lebt auf dem Message-Thread des Workers; die IPC-Callbacks
+            // kommen vom Connection-Thread → callAsync mit alive-Guard (Checkpoint 10).
+            void handleShowGui()
+            {
+                juce::MessageManager::callAsync ([this, alive = aliveGuard]
+                {
+                    if (! alive->load() || plugin == nullptr)
+                        return;
+
+                    if (guiWindow == nullptr)
+                        if (auto* ed = plugin->createEditorIfNeeded())
+                            guiWindow = std::make_unique<ChildPluginGuiWindow> (plugin->getName(), ed);
+
+                    if (guiWindow != nullptr)
+                    {
+                        guiWindow->setVisible (true);
+                        guiWindow->toFront (true);
+                    }
+                });
+            }
+
+            void handleHideGui()
+            {
+                juce::MessageManager::callAsync ([this, alive = aliveGuard]
+                {
+                    if (alive->load())
+                        guiWindow.reset();
+                });
+            }
+
             void handleConnectionLost() override
             {
+                aliveGuard->store (false);   // queued GUI lambdas dürfen nicht mehr in `this` greifen
                 stopPump();
                 finished.store (true);
                 if (auto* app = juce::JUCEApplicationBase::getInstance())
@@ -198,6 +257,8 @@ namespace aizana
             PluginLoader                          loader;
             std::unique_ptr<SharedAudioRing>      ring;
             std::unique_ptr<juce::AudioProcessor> plugin;
+            std::unique_ptr<ChildPluginGuiWindow> guiWindow;   // E5.5, Message-Thread only
+            std::shared_ptr<std::atomic<bool>>    aliveGuard { std::make_shared<std::atomic<bool>> (true) };
             std::thread                           pump;
             std::atomic<bool>                     stopFlag { false };
             std::atomic<bool>                     finished { false };
@@ -217,6 +278,9 @@ namespace aizana
                     juce::File::getSpecialLocation (juce::File::currentExecutableFile),
                     kPluginHostProcessUID, 5000, 5000);
             }
+
+            /** E5.6: vom IPC-Thread gefeuert, wenn der Worker stirbt (Crash). */
+            std::function<void()> onLost;
 
             bool isUsable() const noexcept { return launchedOk && ! lost.load(); }
 
@@ -263,6 +327,15 @@ namespace aizana
                 sendMessageToWorker (mb);
             }
 
+            void sendSimple (const char* type)   // E5.5: showgui / hidegui
+            {
+                juce::MemoryBlock mb;
+                juce::MemoryOutputStream out (mb, false);
+                out.writeString (type);
+                out.flush();
+                sendMessageToWorker (mb);
+            }
+
             bool getState (juce::MemoryBlock& outState)
             {
                 juce::MemoryBlock mb;
@@ -304,6 +377,7 @@ namespace aizana
                     OopPluginInfo parsed;
                     parsed.acceptsMidi  = in.readBool();
                     parsed.producesMidi = in.readBool();
+                    parsed.hasEditor    = in.readBool();   // E5.5
 
                     const int n = juce::jlimit (0, 100000, in.readInt());
                     for (int i = 0; i < n && ! in.isExhausted(); ++i)
@@ -353,6 +427,9 @@ namespace aizana
                 infoEvent.signal();
                 stateEvent.signal();
                 stateSetEvent.signal();
+
+                if (onLost)
+                    onLost();   // E5.6: Crash-Restart anstoßen (Callee hüpft auf den Message-Thread)
             }
 
             bool                    launchedOk { false };
@@ -444,9 +521,20 @@ namespace aizana
 
     OutOfProcessPluginInstance::~OutOfProcessPluginInstance()
     {
+        aliveGuard->store (false);   // queued Restart-Lambdas dürfen nicht mehr in `this` greifen
         teardown();
-        if (impl != nullptr)
-            impl->coordinator.reset();   // drops the worker connection → worker exits cleanly
+        dropCoordinator();           // drops the worker connection → worker exits cleanly
+    }
+
+    void OutOfProcessPluginInstance::dropCoordinator()
+    {
+        // Intentionaler Reset: onLost VORHER lösen, sonst würde die Verbindungs-
+        // trennung beim Zerstören einen Crash-Respawn gegen uns selbst anstoßen.
+        if (impl != nullptr && impl->coordinator != nullptr)
+        {
+            impl->coordinator->onLost = nullptr;
+            impl->coordinator.reset();
+        }
     }
 
     bool OutOfProcessPluginInstance::ensureCoordinator()
@@ -454,12 +542,27 @@ namespace aizana
         if (impl->coordinator != nullptr && impl->coordinator->isUsable())
             return true;
 
+        dropCoordinator();
         impl->coordinator = std::make_unique<PluginHostCoordinator>();
         if (! impl->coordinator->isUsable())
         {
-            impl->coordinator.reset();
+            dropCoordinator();
             return false;
         }
+
+        // E5.6: Worker-Tod (Crash) → sofort stumm schalten (kein Timeout-Streak auf
+        // dem Audio-Thread) und budgetierten Respawn auf dem Message-Thread anstoßen.
+        impl->coordinator->onLost = [this, alive = aliveGuard]
+        {
+            if (! alive->load())
+                return;
+            childReady.store (false);
+            juce::MessageManager::callAsync ([this, alive]
+            {
+                if (alive->load())
+                    handleWorkerDied();
+            });
+        };
 
         OopPluginInfo info;
         if (! impl->coordinator->describe (descToXml (desc), info))
@@ -470,6 +573,7 @@ namespace aizana
 
         childAcceptsMidi  = info.acceptsMidi;
         childProducesMidi = info.producesMidi;
+        childHasEditor    = info.hasEditor;   // E5.5
 
         // Parameters can only be added once per AudioProcessor — on a respawn after a child
         // death the existing proxies stay valid (indices are stable per description).
@@ -484,9 +588,70 @@ namespace aizana
         return true;
     }
 
+    bool OutOfProcessPluginInstance::restartBudgetAllows()
+    {
+        // Max 3 Respawns pro 60-s-Fenster — ein instant-crashendes Plugin darf keine
+        // Spawn-Schleife erzeugen. Danach bleibt die Spur still (bounded silence).
+        const auto now = juce::Time::currentTimeMillis();
+        if (now - restartWindowStartMs > 60000)
+        {
+            restartWindowStartMs = now;
+            restartCount = 0;
+        }
+        return restartCount < 3;
+    }
+
+    void OutOfProcessPluginInstance::handleWorkerDied()
+    {
+        // Message-Thread, während der Audio-Thread ggf. WEITER processBlock ruft.
+        // Deshalb: den Ring NICHT anfassen (kein teardown/prepareToPlay — das wäre
+        // ein UAF-Fenster gegen den Audio-Thread). Der neue Worker attacht an das
+        // BESTEHENDE shm; bis dahin silenced childReady=false jeden Block.
+        childReady.store (false);
+
+        if (ring == nullptr || lastPreparedRate <= 0.0 || ! restartBudgetAllows())
+            return;   // nie prepared oder Budget erschöpft → dauerhaft still
+
+        ++restartCount;
+        dropCoordinator();
+
+        if (! ensureCoordinator())
+            return;
+
+        // Zustand VOR dem Audio-Neustart wiederherstellen (setState ist synchron):
+        // zuletzt bekannter State-Blob + aktuelle Proxy-Parameterwerte.
+        if (lastKnownState.getSize() > 0)
+            impl->coordinator->setState (lastKnownState.getData(), (int) lastKnownState.getSize());
+
+        const auto& params = getParameters();
+        for (int i = 0; i < params.size(); ++i)
+            queueParamChange ((uint32_t) i, params[i]->getValue());
+
+        if (! impl->coordinator->prepare (ringName, lastPreparedRate, lastPreparedBlock, numCh))
+            return;
+
+        // Warm-up wie in prepareToPlay: der neue Pump braucht einen Moment, und
+        // childAlive steht vom Crash noch stale auf 1 → ohne Warm-up wäre der erste
+        // echte Block ein timedOut. Solange childReady=false ist, fasst der
+        // Audio-Thread den Ring nicht an — die Region gehört hier exklusiv uns.
+        std::memset (ring->audioData(), 0, sizeof (float) * (size_t) numCh * ring->maxBlockSamples());
+        for (int i = 0; i < 40; ++i)
+        {
+            if (ring->roundTrip ((uint32_t) numCh, 1, 5000) == SharedAudioRing::Status::ok)
+            {
+                childReady.store (true);
+                break;
+            }
+            std::this_thread::sleep_for (std::chrono::milliseconds (5));
+        }
+    }
+
     void OutOfProcessPluginInstance::prepareToPlay (double sampleRate, int blockSize)
     {
         teardown();
+
+        lastPreparedRate  = sampleRate;   // E5.6: für den Crash-Respawn merken
+        lastPreparedBlock = blockSize;
 
         if (! ensureCoordinator())
             return;   // childReady stays false → processBlock silences
@@ -559,16 +724,91 @@ namespace aizana
         paramFifo.finishedWrite (size1);   // FIFO full → drop; the child keeps its last value
     }
 
+    //==============================================================================
+    // E5.5 — Host-Editor: schmales Panel; die echte GUI ist das Child-Fenster.
+    //==============================================================================
+    namespace
+    {
+        class OopHostEditor final : public juce::AudioProcessorEditor
+        {
+        public:
+            explicit OopHostEditor (OutOfProcessPluginInstance& o)
+                : juce::AudioProcessorEditor (o), owner (o)
+            {
+                info.setText (juce::String::fromUTF8 ("Die Plugin-Oberfl\xc3\xa4" "che l\xc3\xa4" "uft in einem "
+                                                      "eigenen Prozess (absturzsicher) und \xc3\xb6" "ffnet "
+                                                      "als eigenes Fenster."),
+                              juce::dontSendNotification);
+                info.setJustificationType (juce::Justification::centred);
+                info.setFont (juce::FontOptions (13.0f));
+                addAndMakeVisible (info);
+
+                openBtn.setButtonText (juce::String::fromUTF8 ("GUI \xc3\xb6" "ffnen"));
+                openBtn.onClick = [this] { owner.showChildGui(); };
+                addAndMakeVisible (openBtn);
+
+                setSize (360, 110);
+                owner.showChildGui();   // direkt mit aufmachen — ein Klick weniger
+            }
+
+            ~OopHostEditor() override
+            {
+                owner.hideChildGui();   // Host-Fenster zu → Child-Fenster zu
+            }
+
+            void resized() override
+            {
+                auto r = getLocalBounds().reduced (12);
+                openBtn.setBounds (r.removeFromBottom (28).withSizeKeepingCentre (140, 28));
+                info.setBounds (r);
+            }
+
+        private:
+            OutOfProcessPluginInstance& owner;
+            juce::Label       info;
+            juce::TextButton  openBtn;
+        };
+    }
+
+    juce::AudioProcessorEditor* OutOfProcessPluginInstance::createEditor()
+    {
+        return new OopHostEditor (*this);
+    }
+
+    void OutOfProcessPluginInstance::showChildGui()
+    {
+        if (impl->coordinator != nullptr && impl->coordinator->isUsable())
+            impl->coordinator->sendSimple ("showgui");
+    }
+
+    void OutOfProcessPluginInstance::hideChildGui()
+    {
+        if (impl->coordinator != nullptr && impl->coordinator->isUsable())
+            impl->coordinator->sendSimple ("hidegui");
+    }
+
+    void OutOfProcessPluginInstance::crashChildForTest()
+    {
+        if (impl->coordinator != nullptr && impl->coordinator->isUsable())
+            impl->coordinator->sendSimple ("_testcrash");
+    }
+
     void OutOfProcessPluginInstance::getStateInformation (juce::MemoryBlock& mb)
     {
         if (impl->coordinator != nullptr && impl->coordinator->isUsable())
-            impl->coordinator->getState (mb);
+            if (impl->coordinator->getState (mb))
+                lastKnownState = mb;   // E5.6: Kopie für den Crash-Respawn
     }
 
     void OutOfProcessPluginInstance::setStateInformation (const void* data, int size)
     {
-        if (data != nullptr && size > 0
-             && impl->coordinator != nullptr && impl->coordinator->isUsable())
+        if (data == nullptr || size <= 0)
+            return;
+
+        lastKnownState.setSize ((size_t) size);
+        lastKnownState.copyFrom (data, 0, (size_t) size);   // E5.6
+
+        if (impl->coordinator != nullptr && impl->coordinator->isUsable())
             impl->coordinator->setState (data, size);
     }
 
@@ -594,7 +834,16 @@ namespace aizana
     {
         // Pre-rename flag honoured as fallback (Klasse C: scripts/docs/muscle-memory).
         return legacy::envWithLegacyFallback ("AIZANA_OOP_PLUGINS", "CLOUDES_OOP_PLUGINS", "0")
-                   .trim() == "1";
+                   .trim() == "1"
+            || oopThirdPartyEnabled();
+    }
+
+    bool oopThirdPartyEnabled()
+    {
+        // E5.6: neues Flag, kein Legacy-Vorgänger. LIVE-TEST-only bis E5 komplett.
+        if (const char* v = ::getenv ("AIZANA_OOP_ALL"))
+            return juce::String (v).trim() == "1";
+        return false;
     }
 
     void OutOfProcessPluginFormat::createPluginInstance (const juce::PluginDescription& desc,

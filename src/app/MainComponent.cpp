@@ -2017,10 +2017,17 @@ void MainComponent::syncScannedPluginsToEngine()
     {
         // E5.3c: with AIZANA_OOP_PLUGINS=1, route Aizana-generated CLAP plugins through the
         // out-of-process host (rewrite the format name so TE picks OutOfProcessPluginFormat).
+        // E5.6: with AIZANA_OOP_ALL=1 additionally route 3rd-party VST3/AU/CLAP.
         // Everything else — and the whole default (flag OFF) path — is unchanged.
         // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
-        if (oop && (type.manufacturerName == "Aizana" || type.manufacturerName == "Cloudes")
-                && type.pluginFormatName == "CLAP")
+        const bool generatedClap = (type.manufacturerName == "Aizana" || type.manufacturerName == "Cloudes")
+                                    && type.pluginFormatName == "CLAP";
+        const bool thirdParty = aizana::oopThirdPartyEnabled()
+                                 && (type.pluginFormatName == "VST3"
+                                      || type.pluginFormatName == "AudioUnit"
+                                      || type.pluginFormatName == "CLAP");
+
+        if (oop && (generatedClap || thirdParty))
         {
             auto oopType = type;
             oopType.pluginFormatName = aizana::kOopFormatName;

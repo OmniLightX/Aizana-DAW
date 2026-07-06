@@ -10,9 +10,17 @@ namespace
     juce::PluginDescription maybeRouteOutOfProcess (const juce::PluginDescription& desc)
     {
         // "Cloudes" = pre-rename vendor baked into old generated .clap binaries (Klasse C).
-        if (aizana::oopHostingEnabled()
-            && (desc.manufacturerName == "Aizana" || desc.manufacturerName == "Cloudes")
-            && desc.pluginFormatName == "CLAP")
+        const bool generatedClap = (desc.manufacturerName == "Aizana" || desc.manufacturerName == "Cloudes")
+                                    && desc.pluginFormatName == "CLAP";
+
+        // E5.6: AIZANA_OOP_ALL=1 routet auch 3rd-party (VST3/AU/CLAP) in den
+        // Kindprozess; Built-in-Aizana-FX bleiben IMMER in-process.
+        const bool thirdParty = aizana::oopThirdPartyEnabled()
+                                 && (desc.pluginFormatName == "VST3"
+                                      || desc.pluginFormatName == "AudioUnit"
+                                      || desc.pluginFormatName == "CLAP");
+
+        if (aizana::oopHostingEnabled() && (generatedClap || thirdParty))
         {
             auto d = desc;
             d.pluginFormatName = aizana::kOopFormatName;
