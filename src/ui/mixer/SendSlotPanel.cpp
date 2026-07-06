@@ -35,7 +35,7 @@ SendSlotPanel::SendRow::SendRow (te::AudioTrack& sourceTrack_,
     const float currentLevel = mixerEngine.getFXSendLevel (sourceTrack, fxChannel);
     shownLevelDb = currentLevel > -99.0f ? currentLevel : -6.0f;
 
-    setTooltip (juce::String::fromUTF8 ("Ziehen = Send-Level (Shift = fein) Â· "
+    setTooltip (juce::String::fromUTF8 ("Ziehen = Send-Level (Shift = fein) \xc2\xb7 "
                                         "Doppelklick = -6 dB"));
 }
 
@@ -144,7 +144,8 @@ void SendSlotPanel::SendRow::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
     g.setColour (enabled ? juce::Colours::white.withAlpha (0.95f)
                          : juce::Colour (0xff88888f));
-    g.drawText (exists ? juce::String (shownLevelDb, 1) + " dB" : juce::String ("â"),
+        g.drawText (exists ? juce::String (shownLevelDb, 1) + " dB"
+                       : juce::String::fromUTF8 ("\xe2\x80\x93"),
                 bar.toNearestInt().withTrimmedRight (4),
                 juce::Justification::centredRight, true);
 
@@ -178,10 +179,17 @@ SendSlotPanel::SendSlotPanel (te::AudioTrack& track_, MixerEngine& mixerEngine_)
 void SendSlotPanel::rebuild (const juce::Array<te::AudioTrack*>& fxChannels)
 {
     rows.clear();
-    sendTargets = fxChannels;
+    sendTargets = fxChannels;   // "+ Send"-Menü bietet weiterhin ALLE FX-Busse an
 
     for (auto* fxCh : fxChannels)
     {
+        // S1-Verhalten (User-Befund 2026-07-06): Zeilen NUR für Sends, die auf
+        // DIESEM Kanal existieren. Vorher bekam jeder Strip eine (graue) Zeile
+        // pro FX-Bus — ein neuer Delay-Send auf dem Reverb-Bus "erschien"
+        // dadurch scheinbar auf allen Vocal-Spuren.
+        if (mixerEngine.getFXSendLevel (track, *fxCh) <= -99.0f)
+            continue;
+
         auto* row = rows.add (new SendRow (track, *fxCh, mixerEngine));
         content.addAndMakeVisible (row);
     }
