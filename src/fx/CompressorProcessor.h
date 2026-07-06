@@ -21,6 +21,12 @@ class BuiltInPluginFormat;
  *   - processBlock() is allocation-free.
  *
  * FX-02 requirements: attack, release, threshold, ratio, knee, GR meter.
+ *
+ * Sidechain (MIX-03): a second stereo input bus "Sidechain". TE's ExternalPlugin
+ * reports 4 input channels for this layout, which makes te::Plugin::canSidechain()
+ * true; the sidechain wires route the source track into channels 2/3. When the
+ * "sckey" parameter is on AND the host delivers the sidechain channels, gain
+ * detection runs on the key signal while gain reduction is applied to the main bus.
  */
 class CompressorProcessor : public juce::AudioPluginInstance,
                             public juce::AudioProcessorValueTreeState::Listener
@@ -36,6 +42,8 @@ public:
     void setKnee(float dB);              // Soft knee width in dB (0 = hard knee)
     void setMakeupGain(float dB);
     void setBypass(bool bypass);
+    void setSidechainKeyEnabled(bool useKey);
+    bool isSidechainKeyEnabled() const noexcept { return scKeyEnabled.load(std::memory_order_relaxed); }
 
     /** Thread-safe gain reduction readout (dB, positive = attenuation). */
     float getGainReductionDB() const noexcept { return currentGainReductionDB.load(std::memory_order_relaxed); }
@@ -44,6 +52,7 @@ public:
     // juce::AudioProcessor interface
     // -------------------------------------------------------------------------
     void prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock) override;
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     void processBlock(juce::AudioBuffer<double>&, juce::MidiBuffer&) override {}
     void releaseResources() override {}
@@ -78,6 +87,7 @@ private:
     std::atomic<float> kneeDB         { 6.0f };
     std::atomic<float> makeupGainDB   { 0.0f };
     std::atomic<bool>  bypassed       { false };
+    std::atomic<bool>  scKeyEnabled   { false };
 
     // Gain reduction meter (written by audio thread, read by message thread)
     mutable std::atomic<float> currentGainReductionDB { 0.0f };

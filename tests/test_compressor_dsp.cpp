@@ -198,3 +198,102 @@ TEST_CASE("Compressor: bypass mode passes signal unmodified", "[compressor][FX-0
     for (int i = 0; i < blockSize; ++i)
         REQUIRE_THAT(out[i], Catch::Matchers::WithinAbs(original[i], 1e-6f));
 }
+
+// ---------------------------------------------------------------------------
+// Sidechain key (MIX-03): channels 0/1 = main bus, channels 2/3 = key input
+// ---------------------------------------------------------------------------
+
+// 4-channel buffer as TE delivers it once sidechain wires exist
+static juce::AudioBuffer<float> makeKeyedBuffer(float mainAmp, float scAmp, int numSamples)
+{
+    juce::AudioBuffer<float> buf(4, numSamples);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        buf.setSample(0, i, mainAmp);
+        buf.setSample(1, i, mainAmp);
+        buf.setSample(2, i, scAmp);
+        buf.setSample(3, i, scAmp);
+    }
+    return buf;
+}
+
+TEST_CASE("Compressor: external key ducks a quiet main signal", "[compressor][sidechain]")
+{
+    CompressorProcessor comp;
+    comp.setThreshold(-20.0f);
+    comp.setRatio(4.0f);
+    comp.setAttack(0.1f);
+    comp.setRelease(200.0f);
+    comp.setKnee(0.0f);
+    comp.setMakeupGain(0.0f);
+    comp.setSidechainKeyEnabled(true);
+    REQUIRE(comp.isSidechainKeyEnabled());
+
+    comp.prepareToPlay(44100.0, 4096);
+
+    // Main way below threshold (-40 dB), key 6 dB above it (-14 dB)
+    const float mainAmp = std::pow(10.0f, -40.0f / 20.0f);
+    const float scAmp   = std::pow(10.0f, -14.0f / 20.0f);
+    auto buf = makeKeyedBuffer(mainAmp, scAmp, 4096);
+
+    juce::MidiBuffer midi;
+    comp.processBlock(buf, midi);
+
+    // GR comes from the KEY level: 6 dB over threshold at 4:1 → ~4.5 dB
+    REQUIRE_THAT(comp.getGainReductionDB(), Catch::Matchers::WithinAbs(4.5f, 0.5f));
+
+    // Main output is ducked although the main input never crossed the threshold
+    REQUIRE(std::abs(buf.getSample(0, 4095)) < mainAmp * 0.75f);
+
+    // Key channels are input-only — they must pass through untouched
+    REQUIRE_THAT(buf.getSample(2, 4095), Catch::Matchers::WithinAbs(scAmp, 1e-6f));
+}
+
+TEST_CASE("Compressor: key enabled but silent key → no compression of hot main", "[compressor][sidechain]")
+{
+    CompressorProcessor comp;
+    comp.setThreshold(-20.0f);
+    comp.setRatio(4.0f);
+    comp.setAttack(0.1f);
+    comp.setRelease(200.0f);
+    comp.setKnee(0.0f);
+    comp.setMakeupGain(0.0f);
+    comp.setSidechainKeyEnabled(true);
+
+    comp.prepareToPlay(44100.0, 4096);
+
+    // Main hot (-14 dB), key silent → detector sees silence → no GR
+    const float mainAmp = std::pow(10.0f, -14.0f / 20.0f);
+    auto buf = makeKeyedBuffer(mainAmp, 0.0f, 4096);
+
+    juce::MidiBuffer midi;
+    comp.processBlock(buf, midi);
+
+    REQUIRE(comp.getGainReductionDB() < 0.1f);
+    REQUIRE_THAT(buf.getSample(0, 4095), Catch::Matchers::WithinAbs(mainAmp, 1e-4f));
+}
+
+TEST_CASE("Compressor: key disabled ignores sidechain channels", "[compressor][sidechain]")
+{
+    CompressorProcessor comp;
+    comp.setThreshold(-20.0f);
+    comp.setRatio(4.0f);
+    comp.setAttack(0.1f);
+    comp.setRelease(200.0f);
+    comp.setKnee(0.0f);
+    comp.setMakeupGain(0.0f);
+    comp.setSidechainKeyEnabled(false);
+
+    comp.prepareToPlay(44100.0, 4096);
+
+    // Loud key present but key mode OFF → self-keyed on the quiet main → no GR
+    const float mainAmp = std::pow(10.0f, -40.0f / 20.0f);
+    const float scAmp   = std::pow(10.0f, -14.0f / 20.0f);
+    auto buf = makeKeyedBuffer(mainAmp, scAmp, 4096);
+
+    juce::MidiBuffer midi;
+    comp.processBlock(buf, midi);
+
+    REQUIRE(comp.getGainReductionDB() < 0.1f);
+    REQUIRE_THAT(buf.getSample(0, 4095), Catch::Matchers::WithinAbs(mainAmp, 1e-5f));
+}

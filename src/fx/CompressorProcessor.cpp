@@ -4,8 +4,9 @@
 
 CompressorProcessor::CompressorProcessor()
     : juce::AudioPluginInstance (BusesProperties()
-          .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+          .withInput ("Input",     juce::AudioChannelSet::stereo(), true)
+          .withOutput("Output",    juce::AudioChannelSet::stereo(), true)
+          .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true))
     , apvts (*this, nullptr, "CompressorState",
         {
             std::make_unique<juce::AudioParameterFloat>("threshold", "Threshold",    -60.0f, 0.0f,    -20.0f),
@@ -14,6 +15,7 @@ CompressorProcessor::CompressorProcessor()
             std::make_unique<juce::AudioParameterFloat>("release",   "Release (ms)",  10.0f, 2000.0f, 100.0f),
             std::make_unique<juce::AudioParameterFloat>("knee",      "Knee (dB)",      0.0f, 24.0f,     6.0f),
             std::make_unique<juce::AudioParameterFloat>("makeup",    "Makeup (dB)",  -12.0f, 24.0f,     0.0f),
+            std::make_unique<juce::AudioParameterBool> ("sckey",     "Sidechain Key", false),
         })
 {
     apvts.addParameterListener("threshold", this);
@@ -22,6 +24,7 @@ CompressorProcessor::CompressorProcessor()
     apvts.addParameterListener("release",   this);
     apvts.addParameterListener("knee",      this);
     apvts.addParameterListener("makeup",    this);
+    apvts.addParameterListener("sckey",     this);
 }
 
 void CompressorProcessor::parameterChanged (const juce::String& paramID, float newValue)
@@ -32,6 +35,31 @@ void CompressorProcessor::parameterChanged (const juce::String& paramID, float n
     else if (paramID == "release")   releaseMs.store(newValue,    std::memory_order_relaxed);
     else if (paramID == "knee")      kneeDB.store(newValue,       std::memory_order_relaxed);
     else if (paramID == "makeup")    makeupGainDB.store(newValue, std::memory_order_relaxed);
+    else if (paramID == "sckey")     scKeyEnabled.store(newValue >= 0.5f, std::memory_order_relaxed);
+}
+
+bool CompressorProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    // Main: mono or stereo, in == out. Sidechain: disabled, mono or stereo.
+    const auto mainIn  = layouts.getMainInputChannelSet();
+    const auto mainOut = layouts.getMainOutputChannelSet();
+
+    if (mainIn != mainOut)
+        return false;
+
+    if (mainIn != juce::AudioChannelSet::stereo() && mainIn != juce::AudioChannelSet::mono())
+        return false;
+
+    if (layouts.inputBuses.size() > 1)
+    {
+        const auto sc = layouts.getChannelSet (true, 1);
+        if (! sc.isDisabled()
+            && sc != juce::AudioChannelSet::mono()
+            && sc != juce::AudioChannelSet::stereo())
+            return false;
+    }
+
+    return true;
 }
 
 void CompressorProcessor::setThreshold(float dBFS)  { thresholdDB.store(dBFS, std::memory_order_relaxed); }
@@ -41,6 +69,16 @@ void CompressorProcessor::setRelease(float ms)       { releaseMs.store(ms, std::
 void CompressorProcessor::setKnee(float dB)          { kneeDB.store(dB, std::memory_order_relaxed); }
 void CompressorProcessor::setMakeupGain(float dB)    { makeupGainDB.store(dB, std::memory_order_relaxed); }
 void CompressorProcessor::setBypass(bool bypass)     { bypassed.store(bypass, std::memory_order_relaxed); }
+
+void CompressorProcessor::setSidechainKeyEnabled(bool useKey)
+{
+    // Write through the parameter so host/GUI/state stay in sync;
+    // parameterChanged() mirrors into the atomic.
+    if (auto* p = apvts.getParameter("sckey"))
+        p->setValueNotifyingHost(useKey ? 1.0f : 0.0f);
+    else
+        scKeyEnabled.store(useKey, std::memory_order_relaxed);
+}
 
 void CompressorProcessor::prepareToPlay(double sr, int)
 {
@@ -111,13 +149,26 @@ void CompressorProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 
+    // Main bus = first channels; sidechain (if the host delivers it) follows.
+    // Hosts/tests may pass a plain 2-ch buffer even though the layout declares
+    // a sidechain bus — only trust the key channels when they are really there.
+    const int mainChannels = juce::jmin (numChannels,
+                                         juce::jmax (1, getMainBusNumInputChannels()));
+    const int scChannels   = (getBusCount (true) > 1) ? getChannelCountOfBus (true, 1) : 0;
+    const bool haveKey     = scKeyEnabled.load(std::memory_order_relaxed)
+                          && scChannels > 0
+                          && numChannels >= mainChannels + scChannels;
+
+    const int detectStart = haveKey ? mainChannels : 0;
+    const int detectEnd   = haveKey ? mainChannels + scChannels : mainChannels;
+
     float maxGainReductionDB = 0.0f;
 
     for (int n = 0; n < numSamples; ++n)
     {
-        // Detect: peak across all channels
+        // Detect: peak across the key channels (sidechain if keyed, else main)
         float peak = 0.0f;
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int ch = detectStart; ch < detectEnd; ++ch)
             peak = std::max(peak, std::abs(buffer.getSample(ch, n)));
 
         // Level detection: peak envelope follower
@@ -133,8 +184,9 @@ void CompressorProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         float grDB    = computeGainReductionDB(inputDB, thresh, rat, knee);
         float grLinear = std::pow(10.0f, -grDB / 20.0f);  // Invert: GR reduces gain
 
-        // Apply gain reduction + makeup gain
-        for (int ch = 0; ch < numChannels; ++ch)
+        // Apply gain reduction + makeup gain to the MAIN bus only —
+        // sidechain channels are key input, they must never reach the output.
+        for (int ch = 0; ch < mainChannels; ++ch)
         {
             float s = buffer.getSample(ch, n);
             buffer.setSample(ch, n, s * grLinear * makeupGain);

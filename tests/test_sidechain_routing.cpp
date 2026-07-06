@@ -16,6 +16,10 @@
 
 #include "engine/EditManager.h"
 #include "engine/MixerEngine.h"
+#include "plugins/PluginManager.h"
+#include "plugins/PluginScanner.h"
+#include "plugins/BuiltInPluginFormat.h"
+#include "fx/CompressorProcessor.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,4 +122,58 @@ TEST_CASE ("Sidechain: removeSend removes send from source track", "[sidechain][
     // After removal, plugin count should decrease
     auto countAfter = sourceTrack->pluginList.getPlugins().size();
     CHECK (countAfter < countBefore);
+}
+
+// ---------------------------------------------------------------------------
+// MIX-03 end-to-end: built-in compressor exposes a key bus, and setting a
+// source creates the input WIRES that actually carry audio. The old path only
+// wrote the source ID — TE routes nothing without wires (fixed silent failure).
+// ---------------------------------------------------------------------------
+TEST_CASE ("Sidechain: compressor key bus + wires + undo", "[sidechain][MIX-03]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    MixerEngine mixer (em);
+    PluginScanner scanner;
+    PluginManager pm (scanner, em);
+
+    auto* kickTrack = getFirstAudioTrack (*edit);
+    REQUIRE (kickTrack != nullptr);
+    auto* bassTrack = insertAudioTrack (*edit);
+    REQUIRE (bassTrack != nullptr);
+
+    auto* plugin = pm.insertPlugin (*bassTrack,
+                                    BuiltInPluginFormat::getDescriptionFor ("Aizana Compressor"),
+                                    -1);
+    REQUIRE (plugin != nullptr);
+
+    auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin);
+    REQUIRE (ext != nullptr);
+    ext->initialiseFully();
+    REQUIRE (ext->getAudioPluginInstance() != nullptr);
+
+    // Stereo main + stereo sidechain bus → 4 reported inputs → sidechain-capable
+    CHECK (ext->getNumInputs() == 4);
+    CHECK (ext->canSidechain());
+    CHECK (ext->getNumWires() == 0);
+
+    mixer.setSidechainSource (*ext, *kickTrack);
+
+    CHECK (ext->getSidechainSourceID() == kickTrack->itemID);
+    CHECK (ext->getNumWires() > 0);   // audio path exists, not just the ID label
+
+    // The hosted processor switched its detector to the external key input
+    auto* comp = dynamic_cast<CompressorProcessor*> (ext->getAudioPluginInstance());
+    REQUIRE (comp != nullptr);
+    CHECK (comp->isSidechainKeyEnabled());
+
+    // Clearing restores normal self-keyed compression
+    mixer.clearSidechainSource (*ext);
+    CHECK_FALSE (ext->getSidechainSourceID().isValid());
+    CHECK_FALSE (comp->isSidechainKeyEnabled());
+
+    // Undo the clear → source assignment returns (I-02: one transaction per action)
+    edit->getUndoManager().undo();
+    CHECK (ext->getSidechainSourceID() == kickTrack->itemID);
 }

@@ -167,6 +167,7 @@ public:
     {
     public:
         InsertSlotPanel (te::Track& track,
+                         MixerEngine& mixerEngine,
                          PluginManager& pluginManager,
                          PluginWindowManager& pluginWindowManager,
                          PluginScanner& pluginScanner);
@@ -184,6 +185,7 @@ public:
 
     private:
         te::Track&           track;
+        MixerEngine&         mixerEngine;
         PluginManager&       pluginManager;
         PluginWindowManager& pluginWindowManager;
         PluginScanner&       pluginScanner;
@@ -217,7 +219,7 @@ public:
         int dragTargetSlot = -1;
 
         void showAddPluginMenu (int slotIndex);
-        void showRemovePluginMenu (te::Plugin* plugin);
+        void showSlotContextMenu (te::Plugin* plugin);   // Remove + Sidechain source
         int  slotIndexForEvent (const juce::MouseEvent& e);
         void commitSlotDrag (int fromSlot, int toSlot);
 

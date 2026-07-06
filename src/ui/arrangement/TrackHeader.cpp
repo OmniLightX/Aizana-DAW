@@ -1056,26 +1056,35 @@ void TrackHeader::handleSetSidechainSource()
         juce::PopupMenu::Options().withTargetComponent (this),
         [this, otherTracks] (int result)
         {
-            if (result <= 1)  // (None) or dismissed
+            if (result <= 0)  // dismissed
                 return;
+
+            // Find the first sidechain-capable plugin in this track's chain.
+            te::Plugin* target = nullptr;
+            for (auto* plugin : pluginManager.getPluginChain (track))
+            {
+                if (plugin->canSidechain())
+                {
+                    target = plugin;
+                    break;
+                }
+            }
+
+            if (target == nullptr)
+                return;
+
+            if (result == 1)  // (None) → actually clear (was a no-op before)
+            {
+                mixerEngine.clearSidechainSource (*target);
+                return;
+            }
 
             // result == 2 → otherTracks[0], result == 3 → otherTracks[1], etc.
             const int trackIndex = result - 2;
             if (trackIndex < 0 || trackIndex >= otherTracks.size())
                 return;
 
-            auto* sourceTrack = otherTracks[trackIndex];
-
-            // Find the first compressor plugin in this track's chain and sidechain it.
-            const auto chain = pluginManager.getPluginChain (track);
-            for (auto* plugin : chain)
-            {
-                if (plugin->getName().containsIgnoreCase ("Compressor"))
-                {
-                    mixerEngine.setSidechainSource (*plugin, *sourceTrack);
-                    break;
-                }
-            }
+            mixerEngine.setSidechainSource (*target, *otherTracks[trackIndex]);
         });
 }
 

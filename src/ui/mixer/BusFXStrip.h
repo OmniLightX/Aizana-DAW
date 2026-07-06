@@ -119,6 +119,7 @@ private:
         };
 
         InsertSlotPanel (te::AudioTrack& track_,
+                         MixerEngine& me,
                          PluginManager& pm,
                          PluginWindowManager& pwm,
                          PluginScanner& ps);
@@ -130,6 +131,7 @@ private:
 
     private:
         te::AudioTrack&       track;
+        MixerEngine&          mixerEngine;
         PluginManager&        pluginManager;
         PluginWindowManager&  pluginWindowManager;
         PluginScanner&        pluginScanner;
@@ -141,7 +143,7 @@ private:
         int dragTargetSlot = -1;   // visible slot the drag currently hovers (-1 = no drag)
 
         void showAddPluginMenu (int slotIndex);
-        void showRemovePluginMenu (te::Plugin* plugin);
+        void showSlotContextMenu (te::Plugin* plugin);   // Remove + Sidechain source
         int  slotIndexForEvent (const juce::MouseEvent& e);
         void commitSlotDrag (int fromSlot, int toSlot);
     };

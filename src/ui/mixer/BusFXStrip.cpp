@@ -149,10 +149,12 @@ void BusFXStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::Mous
 // InsertSlotPanel
 
 BusFXStrip::InsertSlotPanel::InsertSlotPanel (te::AudioTrack& track_,
+                                               MixerEngine& me,
                                                PluginManager& pm,
                                                PluginWindowManager& pwm,
                                                PluginScanner& ps)
     : track (track_)
+    , mixerEngine (me)
     , pluginManager (pm)
     , pluginWindowManager (pwm)
     , pluginScanner (ps)
@@ -244,7 +246,7 @@ void BusFXStrip::InsertSlotPanel::refresh()
         slot->onRightClick = [this, slotIndex]
         {
             if (slotIndex < slots.size() && slots[slotIndex]->plugin != nullptr)
-                showRemovePluginMenu (slots[slotIndex]->plugin);
+                showSlotContextMenu (slots[slotIndex]->plugin);
         };
 
         // Drag-reorder: track the hovered slot while dragging, commit on release.
@@ -342,7 +344,7 @@ void BusFXStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
         });
 }
 
-void BusFXStrip::InsertSlotPanel::showRemovePluginMenu (te::Plugin* plugin)
+void BusFXStrip::InsertSlotPanel::showSlotContextMenu (te::Plugin* plugin)
 {
     if (plugin == nullptr)
         return;
@@ -350,13 +352,47 @@ void BusFXStrip::InsertSlotPanel::showRemovePluginMenu (te::Plugin* plugin)
     juce::PopupMenu menu;
     menu.addItem (1, "Remove \"" + plugin->getName() + "\"");
 
+    // Sidechain source submenu — e.g. key the bus compressor from the kick track
+    juce::Array<te::AudioTrack*> sourceTracks;
+    if (plugin->canSidechain())
+    {
+        juce::PopupMenu scMenu;
+        const auto currentSource = plugin->getSidechainSourceID();
+
+        scMenu.addItem (2, "(Keine)", true, ! currentSource.isValid());
+        scMenu.addSeparator();
+
+        int itemId = 3;
+        for (auto* t : te::getAudioTracks (track.edit))
+        {
+            if (t == &track)
+                continue;
+
+            sourceTracks.add (t);
+            scMenu.addItem (itemId++, t->getName(), true, currentSource == t->itemID);
+        }
+
+        menu.addSeparator();
+        menu.addSubMenu ("Sidechain-Quelle", scMenu);
+    }
+
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-        [this, plugin] (int result)
+        [this, plugin, sourceTracks] (int result)
         {
             if (result == 1)
             {
                 pluginManager.removePlugin (track, *plugin);
                 refresh();
+            }
+            else if (result == 2)
+            {
+                mixerEngine.clearSidechainSource (*plugin);
+            }
+            else if (result >= 3)
+            {
+                const int idx = result - 3;
+                if (idx < sourceTracks.size())
+                    mixerEngine.setSidechainSource (*plugin, *sourceTracks[idx]);
             }
         });
 }
@@ -375,7 +411,7 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     , pluginManager (pluginManager_)
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner (pluginScanner_)
-    , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
+    , insertSlotPanel (track_, mixerEngine_, pluginManager_, pluginWindowManager_, pluginScanner_)
     , sendSlotPanel (track_, mixerEngine_)
 {
     juce::ignoreUnused (meterProcessor_);  // meter values pushed via setMeterValues()

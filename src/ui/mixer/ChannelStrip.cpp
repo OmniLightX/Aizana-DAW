@@ -331,10 +331,12 @@ void ChannelStrip::InsertSlotPanel::SlotButton::mouseDoubleClick (const juce::Mo
 // InsertSlotPanel
 
 ChannelStrip::InsertSlotPanel::InsertSlotPanel (te::Track& track_,
+                                                 MixerEngine& mixerEngine_,
                                                  PluginManager& pluginManager_,
                                                  PluginWindowManager& pluginWindowManager_,
                                                  PluginScanner& pluginScanner_)
     : track (track_)
+    , mixerEngine (mixerEngine_)
     , pluginManager (pluginManager_)
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner (pluginScanner_)
@@ -438,7 +440,7 @@ void ChannelStrip::InsertSlotPanel::refresh()
         slot->onRightClick = [this, slotIndex]
         {
             if (slotIndex < slots.size() && slots[slotIndex]->plugin != nullptr)
-                showRemovePluginMenu (slots[slotIndex]->plugin);
+                showSlotContextMenu (slots[slotIndex]->plugin);
         };
 
         // Drag-reorder: track the hovered slot while dragging, commit on release.
@@ -544,7 +546,7 @@ void ChannelStrip::InsertSlotPanel::showAddPluginMenu (int slotIndex)
         });
 }
 
-void ChannelStrip::InsertSlotPanel::showRemovePluginMenu (te::Plugin* plugin)
+void ChannelStrip::InsertSlotPanel::showSlotContextMenu (te::Plugin* plugin)
 {
     if (plugin == nullptr)
         return;
@@ -552,13 +554,48 @@ void ChannelStrip::InsertSlotPanel::showRemovePluginMenu (te::Plugin* plugin)
     juce::PopupMenu menu;
     menu.addItem (1, "Remove \"" + plugin->getName() + "\"");
 
+    // Sidechain source submenu — only for plugins that expose a key input
+    // (te::Plugin::canSidechain() == true once the processor reports >2 ins).
+    juce::Array<te::AudioTrack*> sourceTracks;
+    if (plugin->canSidechain())
+    {
+        juce::PopupMenu scMenu;
+        const auto currentSource = plugin->getSidechainSourceID();
+
+        scMenu.addItem (2, "(Keine)", true, ! currentSource.isValid());
+        scMenu.addSeparator();
+
+        int itemId = 3;
+        for (auto* t : te::getAudioTracks (track.edit))
+        {
+            if (t == &track)
+                continue;   // a track can't key itself
+
+            sourceTracks.add (t);
+            scMenu.addItem (itemId++, t->getName(), true, currentSource == t->itemID);
+        }
+
+        menu.addSeparator();
+        menu.addSubMenu ("Sidechain-Quelle", scMenu);
+    }
+
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-        [this, plugin] (int result)
+        [this, plugin, sourceTracks] (int result)
         {
             if (result == 1)
             {
                 pluginManager.removePlugin (track, *plugin);
                 refresh();
+            }
+            else if (result == 2)
+            {
+                mixerEngine.clearSidechainSource (*plugin);
+            }
+            else if (result >= 3)
+            {
+                const int idx = result - 3;
+                if (idx < sourceTracks.size())
+                    mixerEngine.setSidechainSource (*plugin, *sourceTracks[idx]);
             }
         });
 }
@@ -577,7 +614,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     , pluginWindowManager (pluginWindowManager_)
     , pluginScanner (pluginScanner_)
     , meterBar (meterProcessor_)
-    , insertSlotPanel (track_, pluginManager_, pluginWindowManager_, pluginScanner_)
+    , insertSlotPanel (track_, mixerEngine_, pluginManager_, pluginWindowManager_, pluginScanner_)
     , sendSlotPanel (track_, mixerEngine_)
 {
     // ---- Volume fader ----

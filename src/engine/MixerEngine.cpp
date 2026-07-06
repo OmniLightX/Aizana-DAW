@@ -1,4 +1,5 @@
 #include "MixerEngine.h"
+#include "fx/CompressorProcessor.h"
 
 //==============================================================================
 MixerEngine::MixerEngine (EditManager& em)
@@ -621,10 +622,30 @@ int MixerEngine::getBusNumberForReturnTrack (const te::AudioTrack& returnTrack) 
 
 void MixerEngine::setSidechainSource (te::Plugin& plugin, te::AudioTrack& sourceTrack)
 {
+    auto& um = plugin.edit.getUndoManager();
+    um.beginNewTransaction ("Set sidechain source");
+
     plugin.setSidechainSourceID (sourceTrack.itemID);
+
+    // The source ID alone routes NO audio — TE only feeds the sidechain
+    // channels through the plugin's input wires. Without wires the sidechain
+    // stays silent (silent failure), so mirror te::Plugin::setSidechainSourceByName.
+    if (plugin.getNumWires() == 0)
+        plugin.guessSidechainRouting();
+
+    // If the hosted processor is our built-in compressor, keying on the external
+    // signal is what the user asked for — switch its detector to the key input.
+    if (auto* ep = dynamic_cast<te::ExternalPlugin*> (&plugin))
+        if (auto* comp = dynamic_cast<CompressorProcessor*> (ep->getAudioPluginInstance()))
+            comp->setSidechainKeyEnabled (true);
 }
 
 void MixerEngine::clearSidechainSource (te::Plugin& plugin)
 {
+    plugin.edit.getUndoManager().beginNewTransaction ("Clear sidechain source");
     plugin.setSidechainSourceID (te::EditItemID {});
+
+    if (auto* ep = dynamic_cast<te::ExternalPlugin*> (&plugin))
+        if (auto* comp = dynamic_cast<CompressorProcessor*> (ep->getAudioPluginInstance()))
+            comp->setSidechainKeyEnabled (false);
 }
