@@ -7,6 +7,7 @@
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "engine/TempoDetector.h"
 #include "engine/TempoEngine.h"
+#include "engine/VocalTuner.h"
 
 // Strong time-type aliases — same as ClipEditor.cpp, needed for clip.setPosition()
 using TimePos = tracktion::core::TimePosition;
@@ -698,6 +699,10 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
             menu.addSeparator();
             menu.addItem (8, "Bounce in Place (mit Insert-FX)");
             menu.addItem (9, "Bounce in Place (nur Event)");
+
+            // P8: Vocal-Tuning (offline, Bounce-Weg) — nur bei Datei-Zeit == Edit-Zeit
+            menu.addItem (11, juce::String::fromUTF8 ("Vocal-Tuning\xe2\x80\xa6"),
+                          ! wc->getAutoTempo());
         }
 
         // Takes submenu: shown for WaveAudioClip when loop recording produced multiple takes
@@ -841,6 +846,11 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 else if (result == 10)
                 {
                     extractTempoMapFromClip();
+                }
+                else if (result == 11)
+                {
+                    if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
+                        showVocalTuningDialog();
                 }
                 else if (result >= 100)
                 {
@@ -1409,6 +1419,68 @@ void ClipComponent::extractTempoMapFromClip()
                                                   "alles r\xc3\xbc""ckg\xc3\xa4ngig).")
                     : juce::String::fromUTF8 ("Tempo-Map konnte nicht angewendet werden."));
         });
+}
+
+void ClipComponent::showVocalTuningDialog()
+{
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (waveClip == nullptr || waveClip->getAutoTempo())
+        return;
+
+    auto* w = new juce::AlertWindow (juce::String::fromUTF8 ("Vocal-Tuning"),
+                                     juce::String::fromUTF8 ("Tonh\xc3\xb6he auf die Skala ziehen "
+                                                             "(offline, ersetzt den Clip \xe2\x80\x94 1\xc3\x97 Cmd+Z stellt das Original wieder her)."),
+                                     juce::MessageBoxIconType::NoIcon);
+
+    const juce::StringArray keys   { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    const juce::StringArray scales { "Chromatisch", "Dur", "Moll" };
+    const juce::StringArray strengths { "100 % (voll)", "80 %", "50 % (sanft)" };
+    const juce::StringArray speeds { juce::String::fromUTF8 ("Schnell (hart, 15 ms)"),
+                                     juce::String::fromUTF8 ("Mittel (35 ms)"),
+                                     juce::String::fromUTF8 ("Langsam (nat\xc3\xbcrlich, 80 ms)") };
+
+    w->addComboBox ("scale", scales, "Skala");
+    w->addComboBox ("key", keys, "Tonart (bei Dur/Moll)");
+    w->addComboBox ("strength", strengths, juce::String::fromUTF8 ("St\xc3\xa4rke"));
+    w->addComboBox ("speed", speeds, "Reaktion");
+    w->getComboBoxComponent ("speed")->setSelectedItemIndex (1, juce::dontSendNotification);
+
+    w->addButton ("Tunen", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    w->enterModalState (true,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<ClipComponent> (this), w] (int result)
+            {
+                std::unique_ptr<juce::AlertWindow> owner (w);
+                if (safe == nullptr || result != 1)
+                    return;
+
+                auto* wc = dynamic_cast<te::WaveAudioClip*> (&safe->clip);
+                if (wc == nullptr)
+                    return;
+
+                VocalTuner::Settings st;
+                const int scaleIdx = w->getComboBoxComponent ("scale")->getSelectedItemIndex();
+                st.scale       = scaleIdx == 1 ? VocalTuner::Scale::major
+                               : scaleIdx == 2 ? VocalTuner::Scale::minor
+                                               : VocalTuner::Scale::chromatic;
+                st.keyRootNote = juce::jmax (0, w->getComboBoxComponent ("key")->getSelectedItemIndex());
+                const int sIdx = w->getComboBoxComponent ("strength")->getSelectedItemIndex();
+                st.strength    = sIdx == 1 ? 0.8f : sIdx == 2 ? 0.5f : 1.0f;
+                const int spIdx = w->getComboBoxComponent ("speed")->getSelectedItemIndex();
+                st.smoothingMs = spIdx == 0 ? 15.0f : spIdx == 2 ? 80.0f : 35.0f;
+
+                // v1 synchron (Analyse+Render); bei typischen Take-Längen kurz.
+                VocalTuner tuner (safe->editManager);
+                if (tuner.tuneClipInPlace (*wc, st) == nullptr)
+                    juce::AlertWindow::showMessageBoxAsync (
+                        juce::MessageBoxIconType::InfoIcon,
+                        "Vocal-Tuning",
+                        juce::String::fromUTF8 ("Kein tonales Material erkannt oder Clip "
+                                                "nicht tunebar (gestretcht/zu kurz)."));
+            }),
+        false);
 }
 
 void ClipComponent::conformClipToSongTempo()

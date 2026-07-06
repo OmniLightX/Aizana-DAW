@@ -109,6 +109,7 @@ private:
         background thread, then offer to set the song tempo (undoable). */
     void detectTempoFromClip();
     void extractTempoMapFromClip();   // P7a: Grid folgt der Performance
+    void showVocalTuningDialog();     // P8: Key/Skala/Stärke → VocalTuner (1 Undo)
 
     /** Context-menu action: estimate the clip's source BPM, then timestretch the
         clip to follow the song tempo (loopInfo BPM + setAutoTempo, undoable). */
