@@ -1,4 +1,5 @@
 #include "AudioClipEditor.h"
+#include "engine/ClipGainEnvelope.h"
 #include "engine/CompingEngine.h"
 #include "ui/comping/CompingView.h"
 
@@ -75,7 +76,7 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
 
     // ---- Toolbar (S1-Parität E1/E3): Werkzeuge, Snap, Mute, Automation, Range-Aktion ----
     for (auto* b : { &toolPointerBtn, &toolSplitBtn, &toolRangeBtn,
-                     &snapBtn, &muteBtn, &autoBtn, &takesBtn, &rangeCutBtn })
+                     &snapBtn, &muteBtn, &autoBtn, &takesBtn, &gainEnvBtn, &rangeCutBtn })
     {
         styleToolButton (*b);
         addAndMakeVisible (*b);
@@ -99,6 +100,9 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     autoBtn.onClick = [this] { toggleAutomationLane(); };
     takesBtn.onClick = [this] { toggleTakesLanes(); };
     rangeCutBtn.onClick = [this] { applyRangeDelete(); };
+    gainEnvBtn.setTooltip (juce::String::fromUTF8 ("Gain-H\xc3\xbcllkurve (G) \xe2\x80\x94 Klick = Punkt, Ziehen = formen, "
+                                                   "Doppelklick auf Punkt = l\xc3\xb6schen; ganz unten = kill (-60 dB)"));
+    gainEnvBtn.onClick = [this] { gainEnvMode = ! gainEnvMode; updateToolbarState(); repaint(); };
 
     // Automation nur möglich, wenn der Clip auf einem AudioTrack liegt.
     autoBtn.setEnabled (dynamic_cast<te::AudioTrack*> (clip.getTrack()) != nullptr);
@@ -246,6 +250,7 @@ void AudioClipEditor::updateToolbarState()
     setActive (muteBtn,        isClipMuted());
     setActive (autoBtn,        automationVisible);
     setActive (takesBtn,       takesVisible);
+    setActive (gainEnvBtn,     gainEnvMode);
     rangeCutBtn.setEnabled (rangeActive);
     repaint();
 }
@@ -559,6 +564,8 @@ void AudioClipEditor::resized()
     autoBtn.setBounds (toolbar.removeFromLeft (46));
     toolbar.removeFromLeft (2);
     takesBtn.setBounds (toolbar.removeFromLeft (52));
+    toolbar.removeFromLeft (2);
+    gainEnvBtn.setBounds (toolbar.removeFromLeft (42));
     rangeCutBtn.setBounds (toolbar.removeFromRight (86));
 
     hScroll.setBounds (area.removeFromBottom (kScrollH));
@@ -709,6 +716,11 @@ void AudioClipEditor::paintOverChildren (juce::Graphics& g)
 {
     // I-05: Overlays gehören in paintOverChildren, sonst verschwinden sie unter
     // Kind-Komponenten (Scrollbar, Automation-Lane).
+
+    // P5: Gain-Hüllkurve — immer sichtbar wenn vorhanden, editierbar im Env-Modus
+    if (ClipGainEnvelope::hasEnvelope (clip) || gainEnvMode)
+        paintGainEnvelope (g, waveArea());
+
     if (! rangeActive)
         return;
 
@@ -722,6 +734,91 @@ void AudioClipEditor::paintOverChildren (juce::Graphics& g)
     g.fillRect (r);
     g.setColour (kAccent);
     g.drawRect (r, 1.0f);
+}
+
+//==============================================================================
+// P5: Gain-Hüllkurve — Zeichnung + Hit-Test + dB↔y
+
+float AudioClipEditor::dbToEnvY (float db, const juce::Rectangle<int>& wa) const
+{
+    const float norm = (kEnvTopDb - juce::jlimit (kEnvBottomDb, kEnvTopDb, db))
+                     / (kEnvTopDb - kEnvBottomDb);
+    return (float) wa.getY() + norm * (float) wa.getHeight();
+}
+
+float AudioClipEditor::envYToDb (float y, const juce::Rectangle<int>& wa) const
+{
+    // Ganz unten = kill: unterhalb der -30-dB-Anzeige-Skala auf -60 clampen
+    if (y >= (float) wa.getBottom() - 3.0f)
+        return ClipGainEnvelope::kMinDb;
+
+    const float norm = ((float) wa.getBottom() - y) / (float) wa.getHeight();
+    return kEnvBottomDb + norm * (kEnvTopDb - kEnvBottomDb);
+}
+
+int AudioClipEditor::envPointAt (juce::Point<int> pos, const juce::Rectangle<int>& wa)
+{
+    const double clipStart = clipStartAbsSecs();
+    for (int i = 0; i < ClipGainEnvelope::numPoints (clip); ++i)
+    {
+        const float px = localSecsToX (ClipGainEnvelope::pointTime (clip, i) - clipStart);
+        const float py = dbToEnvY (ClipGainEnvelope::pointDb (clip, i), wa);
+        if (std::abs ((float) pos.x - px) <= 7.0f && std::abs ((float) pos.y - py) <= 7.0f)
+            return i;
+    }
+    return -1;
+}
+
+void AudioClipEditor::paintGainEnvelope (juce::Graphics& g, const juce::Rectangle<int>& wa)
+{
+    const juce::Colour envColour (0xffffc24d);   // amber — abgesetzt vom blauen Accent
+    const double clipStart = clipStartAbsSecs();
+    const int n = ClipGainEnvelope::numPoints (clip);
+
+    // 0-dB-Referenzlinie im Env-Modus
+    if (gainEnvMode)
+    {
+        g.setColour (envColour.withAlpha (0.25f));
+        const float y0 = dbToEnvY (0.0f, wa);
+        for (float x = (float) wa.getX(); x < (float) wa.getRight(); x += 8.0f)
+            g.drawHorizontalLine ((int) y0, x, juce::jmin (x + 4.0f, (float) wa.getRight()));
+    }
+
+    if (n == 0)
+        return;
+
+    // Polyline: vor dem ersten / nach dem letzten Punkt konstant weiterziehen
+    juce::Path path;
+    const float yFirst = dbToEnvY (ClipGainEnvelope::pointDb (clip, 0), wa);
+    path.startNewSubPath ((float) wa.getX(), yFirst);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float x = localSecsToX (ClipGainEnvelope::pointTime (clip, i) - clipStart);
+        const float y = dbToEnvY (ClipGainEnvelope::pointDb (clip, i), wa);
+        path.lineTo (x, y);
+    }
+
+    const float yLast = dbToEnvY (ClipGainEnvelope::pointDb (clip, n - 1), wa);
+    path.lineTo ((float) wa.getRight(), yLast);
+
+    g.setColour (envColour.withAlpha (gainEnvMode ? 0.95f : 0.55f));
+    g.strokePath (path, juce::PathStrokeType (gainEnvMode ? 2.0f : 1.5f));
+
+    // Punkte (im Env-Modus größer und gefüllt)
+    const float r = gainEnvMode ? 4.5f : 3.0f;
+    for (int i = 0; i < n; ++i)
+    {
+        const float x = localSecsToX (ClipGainEnvelope::pointTime (clip, i) - clipStart);
+        const float y = dbToEnvY (ClipGainEnvelope::pointDb (clip, i), wa);
+        g.setColour (envColour);
+        g.fillEllipse (x - r, y - r, r * 2.0f, r * 2.0f);
+        if (i == envDragPoint)
+        {
+            g.setColour (juce::Colours::white);
+            g.drawEllipse (x - r - 1.5f, y - r - 1.5f, (r + 1.5f) * 2.0f, (r + 1.5f) * 2.0f, 1.5f);
+        }
+    }
 }
 
 //==============================================================================
@@ -761,6 +858,30 @@ void AudioClipEditor::mouseDown (const juce::MouseEvent& e)
     const auto wa = waveArea();
     if (! wa.contains (e.getPosition()))
         return;
+
+    // ---- P5: Env-Modus hat Vorrang — Punkt greifen oder neu setzen ----
+    if (gainEnvMode && e.mods.isLeftButtonDown())
+    {
+        const int hit = envPointAt (e.getPosition(), wa);
+        auto& um = editManager.getUndoManager();
+
+        if (hit >= 0)
+        {
+            um.beginNewTransaction ("Gain-Punkt ziehen");
+            envDragPoint = hit;
+        }
+        else
+        {
+            um.beginNewTransaction ("Gain-Punkt");
+            const double editTime = clipStartAbsSecs()
+                                  + snapLocal (xToLocalSecs ((float) e.x), e.mods.isAltDown());
+            envDragPoint = ClipGainEnvelope::addPoint (clip, editTime,
+                                                       envYToDb ((float) e.y, wa));
+        }
+
+        repaint();
+        return;
+    }
 
     // ---- Split-Werkzeug: Klick = Schnitt (gesnappt, Alt = frei) ----
     if (activeTool == Tool::split)
@@ -846,15 +967,43 @@ void AudioClipEditor::mouseDown (const juce::MouseEvent& e)
 
 void AudioClipEditor::mouseDoubleClick (const juce::MouseEvent& e)
 {
+    const auto wa = waveArea();
+
+    // P5: im Env-Modus löscht Doppelklick den getroffenen Kurvenpunkt
+    if (gainEnvMode && wa.contains (e.getPosition()))
+    {
+        const int hit = envPointAt (e.getPosition(), wa);
+        if (hit >= 0)
+        {
+            editManager.getUndoManager().beginNewTransaction ("Gain-Punkt entfernen");
+            ClipGainEnvelope::removePoint (clip, hit);
+            envDragPoint = -1;
+            repaint();
+        }
+        return;   // kein Split im Env-Modus
+    }
+
     // S1: Doppelklick schneidet — unabhängig vom aktiven Werkzeug (außer Range,
     // dort wäre es ein Konflikt mit dem Aufziehen).
-    const auto wa = waveArea();
     if (activeTool != Tool::range && wa.contains (e.getPosition()))
         splitAt (snapLocal (xToLocalSecs ((float) e.x), e.mods.isAltDown()));
 }
 
 void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
 {
+    // P5: Kurvenpunkt ziehen (Zeit + dB); movePoint liefert den neuen Index,
+    // falls der Punkt an anderen vorbeigezogen wurde
+    if (gainEnvMode && envDragPoint >= 0)
+    {
+        const auto wa = waveArea();
+        const double editTime = clipStartAbsSecs()
+                              + snapLocal (xToLocalSecs ((float) e.x), e.mods.isAltDown());
+        envDragPoint = ClipGainEnvelope::movePoint (clip, envDragPoint, editTime,
+                                                    envYToDb ((float) e.y, wa));
+        repaint();
+        return;
+    }
+
     if (rangeDragging)
     {
         rangeB = snapLocal (xToLocalSecs ((float) e.x), e.mods.isAltDown());
@@ -924,6 +1073,12 @@ void AudioClipEditor::mouseDrag (const juce::MouseEvent& e)
 
 void AudioClipEditor::mouseUp (const juce::MouseEvent&)
 {
+    if (envDragPoint >= 0)
+    {
+        envDragPoint = -1;   // Ende der Env-Geste (Transaktion war bereits gesetzt)
+        repaint();
+    }
+
     if (rangeDragging)
     {
         rangeDragging = false;
@@ -954,8 +1109,18 @@ bool AudioClipEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // P5: G = Gain-Hüllkurven-Modus
+    if (kc == 'g' || kc == 'G')
+    {
+        gainEnvMode = ! gainEnvMode;
+        updateToolbarState();
+        repaint();
+        return true;
+    }
+
     if (kc == juce::KeyPress::escapeKey)
     {
+        if (gainEnvMode)             { gainEnvMode = false; updateToolbarState(); repaint(); return true; }
         if (rangeActive)             { rangeActive = false; updateToolbarState(); repaint(); return true; }
         if (activeTool != Tool::pointer) { setTool (Tool::pointer); return true; }
         return false;   // nichts zu räumen → MainComponent darf den Dock schließen

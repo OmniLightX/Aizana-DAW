@@ -79,6 +79,7 @@ target_sources(engine_tests PRIVATE
     test_gate_dsp.cpp
     test_saturator_dsp.cpp
     test_bounce_in_place.cpp
+    test_clip_gain_envelope.cpp
     # Metering tests (EXP-03) — require JUCE + libebur128
     test_lufs_meter.cpp
     # Export tests (EXP-01, EXP-04) — require JUCE + Tracktion Renderer
@@ -113,6 +114,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/RemovableMediaGuard.cpp
     ../src/engine/TempoEngine.cpp
     ../src/engine/ClipEditor.cpp
+    ../src/engine/ClipGainEnvelope.cpp
     ../src/engine/CompingEngine.cpp
     ../src/engine/TempoDetector.cpp
     ../src/engine/MidiRecorder.cpp

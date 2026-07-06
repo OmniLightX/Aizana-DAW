@@ -2,6 +2,7 @@
 #include "ArrangementView.h"
 #include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
+#include "engine/ClipGainEnvelope.h"
 #include "ui/common/TrackColours.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "engine/TempoDetector.h"
@@ -257,6 +258,39 @@ void ClipComponent::paint (juce::Graphics& g)
         }
 
         drawFadeOverlay (g, fadeInSecs, fadeOutSecs);
+    }
+
+    // ---- P5: Gain-Hüllkurve (read-only Anzeige; editiert wird im Dock-Editor) ----
+    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+    {
+        if (ClipGainEnvelope::hasEnvelope (*wc))
+        {
+            // dB→y: +6 oben, -30 unten (gleiche Skala wie der Dock-Editor)
+            const double clipStart = clip.getPosition().getStart().inSeconds();
+            const double clipLen   = juce::jmax (0.001, clip.getPosition().getLength().inSeconds());
+            const auto b = getLocalBounds().toFloat();
+
+            auto dbToY = [&b] (float db)
+            {
+                const float norm = (6.0f - juce::jlimit (-30.0f, 6.0f, db)) / 36.0f;
+                return b.getY() + norm * b.getHeight();
+            };
+            auto timeToX = [&] (double editSecs)
+            {
+                return (float) (b.getX() + (editSecs - clipStart) / clipLen * b.getWidth());
+            };
+
+            const int n = ClipGainEnvelope::numPoints (*wc);
+            juce::Path env;
+            env.startNewSubPath (b.getX(), dbToY (ClipGainEnvelope::pointDb (*wc, 0)));
+            for (int i = 0; i < n; ++i)
+                env.lineTo (timeToX (ClipGainEnvelope::pointTime (*wc, i)),
+                            dbToY (ClipGainEnvelope::pointDb (*wc, i)));
+            env.lineTo (b.getRight(), dbToY (ClipGainEnvelope::pointDb (*wc, n - 1)));
+
+            g.setColour (juce::Colour (0xffffc24d).withAlpha (0.65f));
+            g.strokePath (env, juce::PathStrokeType (1.5f));
+        }
     }
 
     // ---- Outer border — always visible ----

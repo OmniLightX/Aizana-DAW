@@ -111,10 +111,27 @@ private:
     juce::TextButton muteBtn        { "Mute" };
     juce::TextButton autoBtn        { "Auto" };
     juce::TextButton takesBtn       { "Takes" };
+    juce::TextButton gainEnvBtn     { "Env" };
     juce::TextButton rangeCutBtn    { juce::String::fromUTF8 ("\xe2\x88\x92 Bereich") };
 
     void setTool (Tool t);
     void updateToolbarState();
+
+    // ---- P5: Clip-Gain-Envelope (Multi-Point-Gain, ClipGainEnvelope-Engine) ----
+    // Env-Modus (Taste G): Klick in die Waveform = Punkt setzen, Drag = ziehen,
+    // Doppelklick auf Punkt = löschen. Kurve wird IMMER gezeichnet, wenn sie
+    // existiert; editierbar nur im Env-Modus. 1 Undo-Transaktion pro Geste.
+    bool gainEnvMode  = false;
+    int  envDragPoint = -1;                    // Kurvenpunkt-Index während des Drags
+
+    static constexpr float kEnvTopDb    = 6.0f;    // y-Mapping der Envelope-Anzeige
+    static constexpr float kEnvBottomDb = -30.0f;  // unterer Rand = -30 dB (Drag ganz
+                                                   // unten = kill, Engine clampt -60)
+
+    float dbToEnvY (float db, const juce::Rectangle<int>& wa) const;
+    float envYToDb (float y,  const juce::Rectangle<int>& wa) const;
+    int   envPointAt (juce::Point<int> pos, const juce::Rectangle<int>& wa);
+    void  paintGainEnvelope (juce::Graphics& g, const juce::Rectangle<int>& wa);
 
     // ---- Range selection (clip-LOCAL seconds) ----
     bool   rangeActive   = false;

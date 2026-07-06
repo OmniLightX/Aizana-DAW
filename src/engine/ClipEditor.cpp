@@ -1,5 +1,6 @@
 #include "ClipEditor.h"
 #include "CompingEngine.h"
+#include "ClipGainEnvelope.h"
 
 // Convenience aliases for Tracktion's strong time types
 using TimePos = tracktion::core::TimePosition;
@@ -160,6 +161,10 @@ te::WaveAudioClip* ClipEditor::cutClipCore (te::WaveAudioClip& clip, double spli
     newClip->setPosition ({ TimeRng (rightStart, rightEnd),
                             TimeDur::fromSeconds (rightOffsetSecs) });
 
+    // P5: the right half inherits the gain envelope (curve lives in edit time,
+    // each half only plays its own range → the gain profile stays identical).
+    ClipGainEnvelope::copyFrom (*newClip, clip);
+
     // ---- Fade correction after split ----
     // Studio One 7 standard: the clip that retains the original edge keeps the fade;
     // the clip that lost the edge loses it.
@@ -288,6 +293,7 @@ void ClipEditor::moveClip (te::Clip& clip, double newStartTimeSecs)
     // No beginNewTransaction here — the caller is responsible for the undo boundary.
     // For drag moves, call beginMoveTransaction() in mouseDown so that the entire
     // drag resolves to a single Cmd+Z step.
+    double startSecs  = clip.getPosition().getStart().inSeconds();
     double lengthSecs = clip.getPosition().getLength().inSeconds();
     double offsetSecs = clip.getPosition().getOffset().inSeconds();
 
@@ -295,6 +301,11 @@ void ClipEditor::moveClip (te::Clip& clip, double newStartTimeSecs)
     auto newEnd   = TimePos::fromSeconds (newStartTimeSecs + lengthSecs);
     clip.setPosition ({ TimeRng (newStart, newEnd),
                         TimeDur::fromSeconds (offsetSecs) });
+
+    // P5: the gain envelope lives in EDIT time — it travels with the clip
+    // (same transaction as the move, so one Cmd+Z reverts both).
+    if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+        ClipGainEnvelope::shift (*wc, newStartTimeSecs - startSecs);
 }
 
 //==============================================================================
@@ -335,6 +346,11 @@ te::Clip* ClipEditor::copyClip (te::Clip& sourceClip,
             // Preserve the source offset
             newWave->setPosition ({ TimeRng (newStart, newEnd),
                                     TimeDur::fromSeconds (offsetSecs) });
+
+            // P5: copies carry the gain envelope, re-anchored to the new position
+            ClipGainEnvelope::copyFrom (*newWave, *srcWave);
+            ClipGainEnvelope::shift (*newWave,
+                startTimeSecs - srcWave->getPosition().getStart().inSeconds());
         }
     }
 
