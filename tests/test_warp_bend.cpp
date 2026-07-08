@@ -18,7 +18,7 @@
 #include "engine/WarpEngine.h"
 
 #include <cmath>
-#include <iostream>
+#include <atomic>
 
 using Catch::Approx;
 
@@ -73,21 +73,35 @@ namespace
         EditManager em;
         te::WaveAudioClip* clip = nullptr;
         juce::File wavFile;
+        juce::File dir;
 
         WarpFixture (double burstStartSecs = 0.75)
         {
             em.createNewEdit();
             ClipEditor clipEditor (em);
 
-            auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                               .getChildFile ("aizana_warp_test");
-            tempDir.createDirectory();
-            wavFile = writeBurstWav (tempDir, "burst.wav", burstStartSecs);
+            // HERMETISCH eindeutiges Verzeichnis pro Fixture-INSTANZ (UUID).
+            // Kritisch: der Render-Zieldateiname leitet sich aus dem Quell-PFAD
+            // ab (AudioFile::getHash = getFullPathName().hashCode64). Ein FESTER
+            // Pfad ⇒ derselbe Hash ⇒ dieselbe Render-Datei über Prozess-Läufe
+            // hinweg. Bricht ein Prozess mitten im Render ab (Crash/Kill), bleibt
+            // eine halb-geschriebene, STILLE Datei liegen, die ein späterer Lauf
+            // fälschlich als fertig wiederverwendet (kickWarpRender überspringt
+            // den Render, wenn die Zieldatei existiert). UUID ⇒ jeder Lauf
+            // rendert frisch. (Produkt-Pendant: seltener Crash-mitten-im-
+            // Warp-Render-Edge, dokumentiert in REMAINING_WORK.)
+            dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                      .getChildFile ("aizana_warp_test")
+                      .getChildFile (juce::Uuid().toString());
+            dir.createDirectory();
+            wavFile = writeBurstWav (dir, "burst.wav", burstStartSecs);
 
             auto* track = te::getAudioTracks (*em.getEdit())[0];
             clip = clipEditor.importAudioFile (wavFile, *track, 1.0);
             REQUIRE (clip != nullptr);
         }
+
+        ~WarpFixture() { dir.deleteRecursively(); }
     };
 }
 
@@ -213,26 +227,35 @@ TEST_CASE ("WarpEngine: RENDER PROOF — warp actually moves audio", "[warp][p7b
     WarpEngine::moveMarker (*f.clip, idx, 0.5);
 
     // Warp ersetzt die CLIP-QUELLE asynchron: der WarpRenderWatcher (im
-    // EditManager) hat den korrekten Render-Job schon angestoßen (TEs eigener
-    // Job würde STILLE rendern — getWaveInfo-Falle, siehe WarpEngine-Doku).
-    // Headless: Message-Loop pumpen, bis die Datei valid ist — genau DIESE
-    // Datei konsumiert das Playback.
-    // Erst retargetet updateSourceFile die Quelle auf die Hash-Datei, dann
-    // rendert der Job sie — warten bis BEIDES passiert ist.
-    auto warpedReady = [&]
+    // EditManager) stößt den korrekten Render-Job an (TEs eigener Job würde
+    // STILLE rendern — getWaveInfo-Falle, siehe WarpEngine-Doku). Headless:
+    // Message-Loop pumpen, bis der Render ABGESCHLOSSEN ist. WICHTIG: NICHT nur
+    // auf AudioFile::isValid() warten — das wird schon true, sobald die Datei
+    // existiert, BEVOR der BG-Render die Samples geschrieben hat (sonst liest
+    // der Test die halb-gerenderte, stille Datei = Flake). isWarpRenderPending
+    // ist erst false, wenn der Job weg UND die Datei die valide Quelle ist.
+    // Warten bis der Render nicht mehr pending ist UND hörbaren Inhalt hat.
+    // Die Wartebedingung (Inhalt vorhanden) ist bewusst SCHWÄCHER als die
+    // Assertion (Inhalt bei 0.5s ±0.08) — kein Zirkelschluss: ein wirklich
+    // stiller/hängender Render läuft in den Timeout und die REQUIRE fällt.
+    // Rein auf isWarpRenderPending zu warten reicht NICHT — die Job-Entfernung
+    // liegt einen Wimpernschlag vor dem finalen Datei-Flush/Cache-Update.
+    double burstAt = -1.0;
+    for (int i = 0; i < 600; ++i)
     {
-        auto af = f.clip->getAudioFile();
-        return af.getFile() != f.wavFile && af.isValid();
-    };
-    for (int i = 0; i < 600 && ! warpedReady(); ++i)
+        if (! WarpEngine::isWarpRenderPending (*f.clip))
+        {
+            const auto f2 = f.clip->getAudioFile().getFile();
+            if (f2 != f.wavFile && (burstAt = firstLoudSecs (f2)) >= 0.0)
+                break;
+        }
         juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    }
 
     const auto rendered = f.clip->getAudioFile().getFile();
-    REQUIRE (warpedReady());
     REQUIRE (rendered != f.wavFile);   // wirklich der Warp-Render, nicht das Original
 
     // Burst muss jetzt bei ~0.5s liegen (SoundTouch-Schmierung toleriert)
-    const double burstAt = firstLoudSecs (rendered);
     REQUIRE (burstAt >= 0.0);
     CHECK (burstAt == Approx (0.5).margin (0.08));
 }

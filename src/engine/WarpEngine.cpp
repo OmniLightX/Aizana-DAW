@@ -200,6 +200,26 @@ void WarpEngine::kickWarpRender (te::WaveAudioClip& clip)
         return;
 
     auto& edit = clip.edit;
+
+    // Quelle in den AudioFileCache aufwärmen, BEVOR der Render-BG-Thread sie
+    // liest. Ohne das kann der StretchSegment-Reader auf einen noch nicht
+    // befüllten Cache-Eintrag treffen und Nullen liefern → stiller Warp-Render
+    // (nur unter Last reproduzierbar, z. B. viele Edits kurz nacheinander).
+    // Ein einmaliger Sample-Read auf dem Message-Thread garantiert einen warmen
+    // Cache. Der AudioFileCache lebt pro Engine; derselbe, den der Job nutzt.
+    {
+        te::AudioFile origin (edit.engine, clip.getOriginalFile());
+        if (auto reader = edit.engine.getAudioFileManager().cache.createReader (origin))
+        {
+            juce::AudioBuffer<float> warm (juce::jmax (1, origin.getInfo().numChannels), 4096);
+            reader->setReadPosition (0);
+            reader->readSamples (warm.getNumSamples(), warm, warm.getNumChannels() == 1
+                                     ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo(),
+                                 0, juce::AudioChannelSet::canonicalChannelSet (warm.getNumChannels()),
+                                 5000);
+        }
+    }
+
     const auto target = te::RenderManager::getAudioFileForHash (
         edit.engine, edit.getTempDirectory (false), clip.getHash());
 
@@ -211,6 +231,27 @@ void WarpEngine::kickWarpRender (te::WaveAudioClip& clip)
 
     // Quelle auf die Zieldatei umstellen + Job/fertige Datei adoptieren.
     clip.updateSourceFile();
+}
+
+bool WarpEngine::isWarpRenderPending (const te::WaveAudioClip& clip)
+{
+    if (! isWarped (clip))
+        return false;
+
+    auto& c = const_cast<te::WaveAudioClip&> (clip);
+    const auto target = te::RenderManager::getAudioFileForHash (
+        c.edit.engine, c.edit.getTempDirectory (false), c.getHash());
+
+    // Läuft/queued noch ein Render-Job für den aktuellen Hash? → pending.
+    if (c.edit.engine.getRenderManager().getRenderJobWithoutCreating (target) != nullptr)
+        return true;
+
+    // Kein Job → pending, solange der Clip noch nicht auf die Zieldatei
+    // umgestellt ist (der deferred WarpRenderWatcher-Kick lief noch nicht).
+    // Bewusst KEIN AudioFile::isValid() hier: das liest den AudioFileCache, der
+    // während/nach dem Render veraltete Info liefern kann — die Job-Existenz ist
+    // das autoritative „läuft noch"-Signal.
+    return c.getAudioFile().getFile() != target.getFile();
 }
 
 //==============================================================================

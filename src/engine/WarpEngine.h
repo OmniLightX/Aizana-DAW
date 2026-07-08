@@ -106,6 +106,16 @@ public:
      */
     static void kickWarpRender (te::WaveAudioClip& clip);
 
+    /**
+     * True, solange der Warp-Render für den aktuellen Marker-Stand noch nicht
+     * fertig ist (Job registriert ODER Zieldatei noch nicht als Clip-Quelle
+     * valid). Die UI kann daraus eine „Warping…"-Anzeige speisen; Tests warten
+     * damit deterministisch auf den ABSCHLUSS (nicht nur auf „Datei existiert" —
+     * AudioFile::isValid() wird schon true, bevor der BG-Render die Samples
+     * geschrieben hat).
+     */
+    static bool isWarpRenderPending (const te::WaveAudioClip& clip);
+
 private:
     WarpEngine() = delete;
 };
