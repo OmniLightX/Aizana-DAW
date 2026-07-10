@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <juce_events/juce_events.h>
 #include "AiLiveProtocol.h"
 
 #include <atomic>
@@ -35,7 +36,8 @@ namespace aizana
         Volume/pan/EQ/compress/de-ess go through MixApplyEngine (MixAction vocabulary);
         mute/solo are not MixActions and go through the bridge directly (still one undo step).
     */
-    class AiStudioLiveServer : private juce::Thread
+    class AiStudioLiveServer : private juce::Thread,
+                               private juce::Timer
     {
     public:
         AiStudioLiveServer (EditManager& editManager, MixApplyEngine& mixApply, AICommandBridge& bridge);
@@ -53,6 +55,7 @@ namespace aizana
 
     private:
         void run() override;                                   // accept loop (bg thread)
+        void timerCallback() override;                         // self-heal discovery file (msg thread)
         void handleConnection (juce::StreamingSocket& sock);   // one request/response
         LiveResponse dispatch (const LiveRequest& req);        // message thread
 

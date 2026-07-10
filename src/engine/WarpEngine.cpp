@@ -40,6 +40,15 @@ namespace
 
         bool renderNextBlock() override
         {
+            // Atomarer Write: erst in eine tmp-Datei NEBEN dem Ziel rendern, dann per
+            // rename() auf den Ziel-Hash-Pfad heben. Ein App-Crash (oder ein Kill)
+            // mitten im Render hinterlässt so NIE eine halb-gerenderte STILLE Zieldatei,
+            // die Folgeläufe über den Hash als „fertig" adoptieren würden → Dauer-Stille
+            // (real gefangen 2026-07-09). rename() auf demselben Volume ist atomar; die
+            // TemporaryFile liegt im Ziel-Verzeichnis (= gleiches Volume).
+            juce::TemporaryFile temp (proxy.getFile());
+            const te::AudioFile tempTarget (engine, temp.getFile());
+
             if (proxyInfo != nullptr)
             {
                 te::AudioFileInfo sourceInfo (source.getInfo());
@@ -48,18 +57,26 @@ namespace
                 if (sourceInfo.metadata.getValue ("MetaDataSource", "None") == "AIFF")
                     sourceInfo.metadata.clear();
 
-                te::AudioFileWriter writer (proxy, engine.getAudioFileFormatManager().getWavFormat(),
-                                            sourceInfo.numChannels, sourceInfo.sampleRate,
-                                            juce::jmax (16, sourceInfo.bitsPerSample),
-                                            sourceInfo.metadata, 0);
+                {
+                    te::AudioFileWriter writer (tempTarget, engine.getAudioFileFormatManager().getWavFormat(),
+                                                sourceInfo.numChannels, sourceInfo.sampleRate,
+                                                juce::jmax (16, sourceInfo.bitsPerSample),
+                                                sourceInfo.metadata, 0);
 
-                ok = writer.isOpen()
-                      && proxyInfo->render (engine, source, writer, this, progress);
+                    ok = writer.isOpen()
+                          && proxyInfo->render (engine, source, writer, this, progress);
+                }   // writer-Dtor flusht+schließt die tmp-Datei VOR dem rename
             }
 
-            // Fehlschlag: Original kopieren statt Endlos-Retry (wie TE)
+            // Fehlschlag: Original kopieren statt Endlos-Retry (wie TE) — ebenfalls in tmp
             if (! shouldExit() && ! ok)
-                source.getFile().copyFileTo (proxy.getFile());
+                ok = source.getFile().copyFileTo (temp.getFile());
+
+            // Nur bei Erfolg atomar auf den Ziel-Pfad heben. Sonst verwirft der
+            // TemporaryFile-Dtor die tmp-Datei und der Ziel-Hash bleibt UNBELEGT →
+            // der nächste kickWarpRender baut den Job sauber neu (statt Stille zu erben).
+            if (ok && ! shouldExit())
+                ok = temp.overwriteTargetFileWithTemporary();
 
             return true;
         }

@@ -116,4 +116,10 @@ namespace aizana
         d.valid = d.port > 0 && d.token.isNotEmpty();
         return d;
     }
+
+    bool AiLiveProtocol::discoveryMatches (const juce::File& file, int port, const juce::String& token)
+    {
+        const auto d = readDiscovery (file);
+        return d.valid && d.port == port && d.token == token;
+    }
 }

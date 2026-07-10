@@ -134,3 +134,25 @@ TEST_CASE ("AiLiveProtocol: bridge file lives under Aizana/aistudio", "[aistudio
     CHECK (f.getParentDirectory().getFileName() == "aistudio");
     CHECK (f.getFullPathName().contains ("Aizana"));
 }
+
+TEST_CASE ("AiLiveProtocol: discoveryMatches guards ownership of live.json", "[aistudio][live]")
+{
+    auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                    .getChildFile ("aizana_live_match_test").getChildFile ("live.json");
+    file.deleteFile();
+
+    // Missing file is owned by nobody — stop() must NOT delete, timer MUST rewrite.
+    CHECK_FALSE (AiLiveProtocol::discoveryMatches (file, 49720, "tok-A"));
+
+    AiLiveProtocol::writeDiscovery (file, 49720, "tok-A");
+    CHECK      (AiLiveProtocol::discoveryMatches (file, 49720, "tok-A"));   // ours
+    CHECK_FALSE (AiLiveProtocol::discoveryMatches (file, 49720, "tok-B"));  // another instance re-minted a token
+    CHECK_FALSE (AiLiveProtocol::discoveryMatches (file, 49721, "tok-A"));  // another instance re-bound a port
+
+    // A second instance clobbers the file → we no longer own it (stop() leaves it alone).
+    AiLiveProtocol::writeDiscovery (file, 49721, "tok-B");
+    CHECK_FALSE (AiLiveProtocol::discoveryMatches (file, 49720, "tok-A"));
+    CHECK      (AiLiveProtocol::discoveryMatches (file, 49721, "tok-B"));
+
+    file.getParentDirectory().deleteRecursively();
+}

@@ -126,6 +126,11 @@ namespace aizana
 
         running = true;
         startThread();
+
+        // Self-heal: while we run, live.json must always point at us. It can go missing
+        // (external delete, or another instance's stop()) → the agent then reports
+        // "Aizana isn't running" although it is. Re-assert it cheaply on the message thread.
+        startTimer (3000);
         return true;
     }
 
@@ -133,6 +138,8 @@ namespace aizana
     {
         if (! running && listener == nullptr)
             return;
+
+        stopTimer();
 
         running = false;
         alive->store (false);         // any queued message-thread job now bails early
@@ -144,7 +151,23 @@ namespace aizana
         stopThread (4000);            // > the per-iteration waits below → no force-kill
         listener.reset();
 
-        AiLiveProtocol::liveBridgeFile().deleteFile();
+        // Only remove live.json if it still describes THIS server. A second Aizana instance
+        // (or a live-test client) may have re-bound a fresh port and rewritten it; deleting
+        // it then would orphan the still-running instance ("running but no live.json").
+        if (AiLiveProtocol::discoveryMatches (AiLiveProtocol::liveBridgeFile(), boundPort, token))
+            AiLiveProtocol::liveBridgeFile().deleteFile();
+    }
+
+    void AiStudioLiveServer::timerCallback()
+    {
+        // Runs on the message thread. running/boundPort/token are only written on this
+        // thread (start()/stop()), so no synchronisation is needed. Rewrite the discovery
+        // file whenever it has gone missing or been clobbered by another instance.
+        if (! running || boundPort == 0)
+            return;
+
+        if (! AiLiveProtocol::discoveryMatches (AiLiveProtocol::liveBridgeFile(), boundPort, token))
+            AiLiveProtocol::writeDiscovery (AiLiveProtocol::liveBridgeFile(), boundPort, token);
     }
 
     //==============================================================================

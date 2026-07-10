@@ -73,5 +73,14 @@ namespace aizana
         // --- discovery ------------------------------------------------------
         static juce::File      writeDiscovery (const juce::File& file, int port, const juce::String& token);
         static LiveDiscovery   readDiscovery  (const juce::File& file);
+
+        /** True if the discovery file on disk currently describes exactly this server
+            (same port AND token). Two uses in AiStudioLiveServer:
+              (a) stop() only deletes live.json if it's still OURS — a second Aizana
+                  instance (or a test client) may have re-bound a fresh port and
+                  rewritten it; deleting it then orphans the still-running instance
+                  ("running but no live.json", real finding 2026-07-09);
+              (b) a self-heal timer rewrites it whenever it has gone missing/clobbered. */
+        static bool discoveryMatches (const juce::File& file, int port, const juce::String& token);
     };
 }
