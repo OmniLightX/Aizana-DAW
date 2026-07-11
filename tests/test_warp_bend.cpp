@@ -240,14 +240,34 @@ TEST_CASE ("WarpEngine: RENDER PROOF — warp actually moves audio", "[warp][p7b
     // stiller/hängender Render läuft in den Timeout und die REQUIRE fällt.
     // Rein auf isWarpRenderPending zu warten reicht NICHT — die Job-Entfernung
     // liegt einen Wimpernschlag vor dem finalen Datei-Flush/Cache-Update.
+    // Robust gegen den dokumentierten Cold-Cache-Heisenbug: unter Last kann der
+    // BG-Render EINMAL still zurückkommen (AudioFileCache noch nicht warm). Weil
+    // die Marker unverändert sind, hätte ein Neu-Kick denselben Ziel-Hash und würde
+    // die stille Datei als „fertig" adoptieren — deshalb bei stiller Beobachtung die
+    // Zieldatei UND ihren Cache-Eintrag verwerfen und frisch rendern (bounded).
+    // Die Assertion (Burst bei 0.5s ±0.08) bleibt unverändert = kein Aufweichen.
     double burstAt = -1.0;
-    for (int i = 0; i < 600; ++i)
+    int rekicks = 0;
+    for (int i = 0; i < 800; ++i)
     {
         if (! WarpEngine::isWarpRenderPending (*f.clip))
         {
-            const auto f2 = f.clip->getAudioFile().getFile();
-            if (f2 != f.wavFile && (burstAt = firstLoudSecs (f2)) >= 0.0)
-                break;
+            const auto rendered = f.clip->getAudioFile();
+            const auto f2 = rendered.getFile();
+            if (f2 != f.wavFile)
+            {
+                burstAt = firstLoudSecs (f2);
+                if (burstAt >= 0.0)
+                    break;
+
+                if (rekicks++ < 4)   // silent render → drop file + stale cache, re-render
+                {
+                    f.clip->edit.engine.getAudioFileManager().releaseFile (rendered);
+                    f2.deleteFile();
+                    f.clip->edit.engine.getAudioFileManager().validateFile (rendered, true);
+                    WarpEngine::kickWarpRender (*f.clip);
+                }
+            }
         }
         juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
     }

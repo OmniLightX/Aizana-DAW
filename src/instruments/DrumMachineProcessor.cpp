@@ -59,6 +59,95 @@ void DrumMachineProcessor::clearPattern() noexcept
 }
 
 // ---------------------------------------------------------------------------
+// User samples (own kick/snare per pad)
+// ---------------------------------------------------------------------------
+
+int DrumMachineProcessor::padForNote (int note) noexcept
+{
+    switch (note)
+    {
+        case 35: case 36:            return 0;   // Kick
+        case 38: case 40:            return 1;   // Snare
+        case 42: case 44:            return 2;   // Closed Hat
+        case 46:                     return 3;   // Open Hat
+        case 39:                     return 4;   // Clap
+        case 37:                     return 5;   // Rim
+        case 41: case 43: case 45:   return 6;   // Tom Lo
+        case 47: case 48: case 50:   return 7;   // Tom Hi
+        default:                     return -1;
+    }
+}
+
+bool DrumMachineProcessor::loadSample (int pad, const juce::File& file)
+{
+    if (pad < 0 || pad >= kNumPads)
+        return false;
+
+    std::unique_ptr<juce::AudioFormatReader> reader (formatManager.createReaderFor (file));
+    if (reader == nullptr || reader->lengthInSamples <= 0)
+        return false;
+
+    auto s = std::make_unique<DrumSampleData>();
+    const int chans = (int) juce::jlimit ((juce::uint32) 1, (juce::uint32) 2, reader->numChannels);
+    s->buffer.setSize (chans, (int) reader->lengthInSamples);
+    reader->read (&s->buffer, 0, (int) reader->lengthInSamples, 0, true, chans > 1);
+    s->sourceSampleRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+    s->sourcePath   = file.getFullPathName();
+    s->displayName  = file.getFileName();
+
+    auto* raw = s.get();
+    loadedSamples.add (s.release());              // owned until dtor → raw ptr stays valid (I-01)
+    padSample[pad].store (raw, std::memory_order_release);
+    padSamplePath[pad] = raw->sourcePath;
+    return true;
+}
+
+void DrumMachineProcessor::clearSample (int pad)
+{
+    if (pad < 0 || pad >= kNumPads)
+        return;
+    padSample[pad].store (nullptr, std::memory_order_release);   // reverts to synth voice
+    padSamplePath[pad].clear();
+    // The DrumSampleData stays in loadedSamples until dtor — never freed on the audio thread.
+}
+
+bool DrumMachineProcessor::padHasSample (int pad) const noexcept
+{
+    return pad >= 0 && pad < kNumPads && padSamplePath[pad].isNotEmpty();
+}
+
+juce::String DrumMachineProcessor::padSampleName (int pad) const
+{
+    return (pad >= 0 && pad < kNumPads) ? juce::File (padSamplePath[pad]).getFileName() : juce::String();
+}
+
+int DrumMachineProcessor::loadKitFolder (const juce::File& folder)
+{
+    // Map WAV/AIFF files in the folder onto pads by keyword in the filename.
+    auto padFromName = [] (const juce::String& lower) -> int
+    {
+        if (lower.contains ("kick") || lower.contains ("bd") || lower.contains ("bassdrum")) return 0;
+        if (lower.contains ("snare") || lower.contains ("snr") || lower.contains ("sd"))     return 1;
+        if (lower.contains ("clap") || lower.contains ("clp"))                               return 4;
+        if (lower.contains ("rim"))                                                          return 5;
+        if ((lower.contains ("open") && lower.contains ("hat")) || lower.contains ("ohh")
+            || lower.contains ("openhat"))                                                   return 3;   // before closed
+        if (lower.contains ("hat") || lower.contains ("hh") || lower.contains ("chh"))       return 2;
+        if (lower.contains ("tom"))                                                          return lower.contains ("hi") ? 7 : 6;
+        return -1;
+    };
+
+    int count = 0;
+    for (const auto& f : folder.findChildFiles (juce::File::findFiles, false, "*.wav;*.aif;*.aiff"))
+    {
+        const int pad = padFromName (f.getFileNameWithoutExtension().toLowerCase());
+        if (pad >= 0 && loadSample (pad, f))
+            ++count;
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
 // Synthesiser sound + voice (procedural drum synthesis)
 // ---------------------------------------------------------------------------
 
@@ -99,7 +188,7 @@ namespace
     class DrumVoice : public juce::SynthesiserVoice
     {
     public:
-        explicit DrumVoice (DrumMachineProcessor::Params& p) : params (p) {}
+        explicit DrumVoice (DrumMachineProcessor& o) : owner (o) {}
 
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
@@ -109,15 +198,29 @@ namespace
         void startNote (int midiNote, float velocity, juce::SynthesiserSound*, int) override
         {
             const double sr = getSampleRate();
-            type  = drumForNote (midiNote);
-            level = juce::jlimit (0.0f, 1.0f, velocity) * params.level.load (std::memory_order_relaxed);
+            level = juce::jlimit (0.0f, 1.0f, velocity) * owner.voiceParams().level.load (std::memory_order_relaxed);
 
+            // If this pad has a user sample loaded, play it as a one-shot (RT-safe:
+            // padSampleRaw is an atomic ptr, the buffer is never freed while we run).
+            const int pad = DrumMachineProcessor::padForNote (midiNote);
+            sample = (pad >= 0) ? owner.padSampleRaw (pad) : nullptr;
+            if (sample != nullptr && sample->buffer.getNumSamples() > 1)
+            {
+                isSampleVoice = true;
+                samplePos  = 0.0;
+                sampleStep = (sr > 0.0 ? sample->sourceSampleRate / sr : 1.0);
+                amp = 1.0f;
+                return;
+            }
+            isSampleVoice = false;
+
+            type  = drumForNote (midiNote);
             phase = 0.0; pitchEnv = 1.0; amp = 1.0f; clapPhase = 0.0f; sampleAge = 0;
             hp = lp = lp2 = 0.0f;
 
-            const float kd = juce::jlimit (0.3f, 2.0f, params.kickDecay.load (std::memory_order_relaxed));
-            const float hd = juce::jlimit (0.3f, 2.0f, params.hatDecay.load (std::memory_order_relaxed));
-            snareToneMix   = juce::jlimit (0.0f, 1.0f, params.snareTone.load (std::memory_order_relaxed));
+            const float kd = juce::jlimit (0.3f, 2.0f, owner.voiceParams().kickDecay.load (std::memory_order_relaxed));
+            const float hd = juce::jlimit (0.3f, 2.0f, owner.voiceParams().hatDecay.load (std::memory_order_relaxed));
+            snareToneMix   = juce::jlimit (0.0f, 1.0f, owner.voiceParams().snareTone.load (std::memory_order_relaxed));
 
             auto decay = [sr] (float seconds) { return std::exp (-1.0f / ((float) seconds * (float) sr)); };
 
@@ -145,8 +248,31 @@ namespace
             if (! active())
                 return;
 
+            const int numCh = out.getNumChannels();
+
+            // --- user-sample playback (linear-interpolated one-shot) --------------
+            if (isSampleVoice)
+            {
+                if (sample == nullptr) { clearCurrentNote(); amp = 0.0f; return; }
+                const auto& sb  = sample->buffer;
+                const int   srcN  = sb.getNumSamples();
+                const int   srcCh = sb.getNumChannels();
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    const int idx = (int) samplePos;
+                    if (idx >= srcN - 1) { clearCurrentNote(); amp = 0.0f; break; }
+                    const float frac = (float) (samplePos - idx);
+                    for (int ch = 0; ch < numCh; ++ch)
+                    {
+                        const float* d = sb.getReadPointer (juce::jmin (ch, srcCh - 1));
+                        out.addSample (ch, startSample + i, (d[idx] + frac * (d[idx + 1] - d[idx])) * level);
+                    }
+                    samplePos += sampleStep;
+                }
+                return;
+            }
+
             const double sr = getSampleRate();
-            const int    numCh = out.getNumChannels();
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -233,7 +359,7 @@ namespace
             return lp2;
         }
 
-        DrumMachineProcessor::Params& params;
+        DrumMachineProcessor& owner;
         Drum  type = Drum::ClosedHat;
         double phase = 0.0, startFreq = 0.0, baseFreq = 0.0, pitchEnv = 1.0, pitchCoeff = 1.0;
         float amp = 0.0f, ampCoeff = 0.0f, level = 0.0f;
@@ -242,6 +368,11 @@ namespace
         float clapPhase = 0.0f;
         int   sampleAge = 0;
         juce::Random rng;
+
+        // user-sample playback
+        bool   isSampleVoice = false;
+        DrumSampleData* sample = nullptr;
+        double samplePos = 0.0, sampleStep = 1.0;
     };
 }
 
@@ -265,9 +396,11 @@ DrumMachineProcessor::DrumMachineProcessor()
     pSnareTone = apvts.getRawParameterValue ("snareTone");
     pHatDecay  = apvts.getRawParameterValue ("hatDecay");
 
+    formatManager.registerBasicFormats();   // WAV/AIFF for user samples
+
     synth.addSound (new DrumSound());
     for (int i = 0; i < 24; ++i)               // generous polyphony for busy patterns
-        synth.addVoice (new DrumVoice (params));
+        synth.addVoice (new DrumVoice (*this));
 }
 
 void DrumMachineProcessor::prepareToPlay (double sr, int)
@@ -356,6 +489,9 @@ void DrumMachineProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("drumPattern", pat, nullptr);
     state.setProperty ("seqOn", seqOn.load (std::memory_order_relaxed), nullptr);
 
+    for (int i = 0; i < kNumPads; ++i)
+        state.setProperty ("padSample" + juce::String (i), padSamplePath[i], nullptr);
+
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -375,6 +511,19 @@ void DrumMachineProcessor::setStateInformation (const void* data, int sizeInByte
         for (int i = 0; i < kNumPads && i < toks.size(); ++i)
             pattern[i].store ((juce::uint16) toks[i].getHexValue32(), std::memory_order_relaxed);
         seqOn.store ((bool) tree.getProperty ("seqOn", false), std::memory_order_relaxed);
+
+        // Re-load user samples from their stored paths (message thread).
+        for (int i = 0; i < kNumPads; ++i)
+        {
+            clearSample (i);
+            const auto path = tree.getProperty ("padSample" + juce::String (i)).toString();
+            if (path.isNotEmpty())
+            {
+                const juce::File f (path);
+                if (f.existsAsFile())
+                    loadSample (i, f);
+            }
+        }
     }
 }
 
@@ -389,7 +538,9 @@ void DrumMachineProcessor::fillInPluginDescription (juce::PluginDescription& des
 
 namespace
 {
-    class DrumEditor : public juce::AudioProcessorEditor, private juce::Timer
+    class DrumEditor : public juce::AudioProcessorEditor,
+                       public juce::FileDragAndDropTarget,
+                       private juce::Timer
     {
     public:
         DrumEditor (DrumMachineProcessor& p, juce::AudioProcessorValueTreeState& s)
@@ -409,7 +560,11 @@ namespace
             clearButton.onClick = [this] { proc.clearPattern(); repaint(); };
             addAndMakeVisible (clearButton);
 
-            hint.setText ("Klick = Step · Klick auf den Namen = anhören", juce::dontSendNotification);
+            kitButton.setButtonText ("Kit…");
+            kitButton.onClick = [this] { chooseKitFolder(); };
+            addAndMakeVisible (kitButton);
+
+            hint.setText ("Klick = Step · Name klicken = anhören · Rechtsklick/Drop = Sample", juce::dontSendNotification);
             hint.setFont (juce::Font (11.0f));
             hint.setColour (juce::Label::textColourId, juce::Colours::grey);
             addAndMakeVisible (hint);
@@ -436,9 +591,11 @@ namespace
 
             for (int pad = 0; pad < DrumMachineProcessor::kNumPads; ++pad)
             {
-                g.setColour (juce::Colours::lightgrey);
+                const bool sampled = proc.padHasSample (pad);
+                g.setColour (sampled ? juce::Colour (0xff54d69e) : juce::Colours::lightgrey);   // teal = user sample
                 g.setFont (12.0f);
-                g.drawText (DrumMachineProcessor::padName (pad),
+                g.drawText (sampled ? (juce::String::fromUTF8 ("\xe2\x97\x8f ") + DrumMachineProcessor::padName (pad))
+                                    : DrumMachineProcessor::padName (pad),
                             gridArea.getX(), (int) (grid.getY() + pad * rowH),
                             kLabelW - 6, (int) rowH, juce::Justification::centredRight);
 
@@ -473,7 +630,9 @@ namespace
             auto top = ctrl.removeFromTop (26);
             seqButton.setBounds (top.removeFromLeft (110));
             top.removeFromLeft (8);
-            clearButton.setBounds (top.removeFromLeft (70));
+            clearButton.setBounds (top.removeFromLeft (64));
+            top.removeFromLeft (6);
+            kitButton.setBounds (top.removeFromLeft (60));
             top.removeFromLeft (12);
             hint.setBounds (top);
 
@@ -492,12 +651,17 @@ namespace
             const auto grid = cellBounds();
             const float rowH = grid.getHeight() / (float) DrumMachineProcessor::kNumPads;
 
-            // Name column → audition that pad.
+            // Name column → left-click audition, right-click sample menu.
             if (e.x >= gridArea.getX() && e.x < gridArea.getX() + kLabelW
                 && e.y >= grid.getY() && e.y < grid.getBottom())
             {
                 const int pad = (int) ((e.y - grid.getY()) / rowH);
-                if (pad >= 0 && pad < DrumMachineProcessor::kNumPads)
+                if (pad < 0 || pad >= DrumMachineProcessor::kNumPads)
+                    return;
+
+                if (e.mods.isPopupMenu())
+                    showPadMenu (pad);
+                else
                     proc.auditionPad (pad);
                 return;
             }
@@ -537,13 +701,81 @@ namespace
             labels.add (l);
         }
 
+        // --- sample loading (drag-drop + context menu + kit folder) -----------
+        int padRowAt (int y) const
+        {
+            const auto grid = cellBounds();
+            if (y < grid.getY() || y >= grid.getBottom()) return -1;
+            const float rowH = grid.getHeight() / (float) DrumMachineProcessor::kNumPads;
+            const int pad = (int) ((y - grid.getY()) / rowH);
+            return (pad >= 0 && pad < DrumMachineProcessor::kNumPads) ? pad : -1;
+        }
+
+        void showPadMenu (int pad)
+        {
+            juce::PopupMenu m;
+            m.addItem (1, "Sample laden…  (" + DrumMachineProcessor::padName (pad) + ")");
+            m.addItem (2, "Sample entfernen", proc.padHasSample (pad));
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                [this, pad] (int r)
+                {
+                    if (r == 1) chooseSampleForPad (pad);
+                    else if (r == 2) { proc.clearSample (pad); repaint(); }
+                });
+        }
+
+        void chooseSampleForPad (int pad)
+        {
+            chooser = std::make_unique<juce::FileChooser> ("Sample für " + DrumMachineProcessor::padName (pad),
+                                                           juce::File(), "*.wav;*.aif;*.aiff");
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                [this, pad] (const juce::FileChooser& fc)
+                {
+                    const auto f = fc.getResult();
+                    if (f.existsAsFile()) proc.loadSample (pad, f);
+                    repaint();
+                });
+        }
+
+        void chooseKitFolder()
+        {
+            chooser = std::make_unique<juce::FileChooser> ("Kit-Ordner wählen (Samples nach Namen zugeordnet)",
+                                                           juce::File());
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                [this] (const juce::FileChooser& fc)
+                {
+                    const auto dir = fc.getResult();
+                    if (dir.isDirectory()) proc.loadKitFolder (dir);
+                    repaint();
+                });
+        }
+
+        // FileDragAndDropTarget — drop a WAV onto a pad row to load it.
+        bool isInterestedInFileDrag (const juce::StringArray& files) override
+        {
+            for (const auto& f : files)
+                if (f.endsWithIgnoreCase (".wav") || f.endsWithIgnoreCase (".aif") || f.endsWithIgnoreCase (".aiff"))
+                    return true;
+            return false;
+        }
+
+        void filesDropped (const juce::StringArray& files, int, int y) override
+        {
+            const int pad = padRowAt (y);
+            if (pad < 0 || files.isEmpty())
+                return;
+            proc.loadSample (pad, juce::File (files[0]));
+            repaint();
+        }
+
         DrumMachineProcessor& proc;
         juce::Label title, hint;
-        juce::TextButton seqButton, clearButton;
+        juce::TextButton seqButton, clearButton, kitButton;
         juce::Rectangle<int> gridArea;
         juce::OwnedArray<juce::Slider> knobs;
         juce::OwnedArray<juce::Label>  labels;
         juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment> atts;
+        std::unique_ptr<juce::FileChooser> chooser;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumEditor)
     };

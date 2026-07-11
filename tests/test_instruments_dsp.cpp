@@ -50,6 +50,23 @@ namespace
             return p;
         }
     };
+
+    // Write a constant-amplitude mono WAV to temp for the sampler tests.
+    juce::File makeTempWav (float amp, int numSamples)
+    {
+        auto f = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                     .getChildFile ("aizana_drum_smp_"
+                                    + juce::String (juce::Random::getSystemRandom().nextInt (1 << 30)) + ".wav");
+        juce::AudioBuffer<float> buf (1, numSamples);
+        for (int i = 0; i < numSamples; ++i) buf.setSample (0, i, amp);
+
+        juce::WavAudioFormat fmt;
+        if (auto os = f.createOutputStream())
+            if (std::unique_ptr<juce::AudioFormatWriter> w (fmt.createWriterFor (os.release(), 44100.0, 1, 16, {}, 0));
+                w != nullptr)
+                w->writeFromAudioSampleBuffer (buf, 0, numSamples);
+        return f;
+    }
 }
 
 TEST_CASE ("Aizana Drums: kick and hat notes produce audio", "[instrument][drums]")
@@ -196,4 +213,75 @@ TEST_CASE ("Aizana Drums: pattern round-trips through state", "[instrument][drum
     CHECK (b.getStep (2, 8));
     CHECK_FALSE (b.getStep (0, 5));
     CHECK (b.isSeqEnabled());
+}
+
+TEST_CASE ("Aizana Drums: loads a WAV onto a pad and plays it", "[instrument][drums][sample]")
+{
+    auto wav = makeTempWav (0.5f, 4410);
+    DrumMachineProcessor drums;
+    REQUIRE (drums.loadSample (0, wav));      // pad 0 = Kick
+    CHECK (drums.padHasSample (0));
+
+    drums.prepareToPlay (kSR, kBlock);
+    drums.auditionPad (0);
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer m;
+    drums.processBlock (buf, m);
+    CHECK (buf.getMagnitude (0, kBlock) > 0.2f);   // the loaded 0.5 sample plays
+    wav.deleteFile();
+}
+
+TEST_CASE ("Aizana Drums: loaded sample survives state round-trip", "[instrument][drums][sample]")
+{
+    auto wav = makeTempWav (0.5f, 2205);
+    DrumMachineProcessor a;
+    REQUIRE (a.loadSample (1, wav));           // Snare
+
+    juce::MemoryBlock mb;
+    a.getStateInformation (mb);
+    DrumMachineProcessor b;
+    b.setStateInformation (mb.getData(), (int) mb.getSize());
+    CHECK (b.padHasSample (1));                 // reloaded from the stored path
+    wav.deleteFile();
+}
+
+TEST_CASE ("Aizana Drums: clearSample reverts a pad to the synth voice", "[instrument][drums][sample]")
+{
+    auto wav = makeTempWav (0.5f, 2205);
+    DrumMachineProcessor drums;
+    drums.loadSample (0, wav);
+    CHECK (drums.padHasSample (0));
+
+    drums.clearSample (0);
+    CHECK_FALSE (drums.padHasSample (0));
+
+    drums.prepareToPlay (kSR, kBlock);
+    drums.auditionPad (0);
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer m;
+    drums.processBlock (buf, m);
+    CHECK (buf.getMagnitude (0, kBlock) > 0.05f);   // synth kick is back
+    wav.deleteFile();
+}
+
+TEST_CASE ("Aizana Drums: step sequencer triggers a loaded sample", "[instrument][drums][sample][seq]")
+{
+    auto wav = makeTempWav (0.5f, 4410);
+    DrumMachineProcessor drums;
+    drums.loadSample (0, wav);
+    drums.setStep (0, 0, true);
+    drums.setSeqEnabled (true);
+    drums.prepareToPlay (kSR, kBlock);
+
+    FakePlayHead ph;
+    drums.setPlayHead (&ph);
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer empty;
+    drums.processBlock (buf, empty);
+    CHECK (buf.getMagnitude (0, kBlock) > 0.2f);    // sampled kick fired from the pattern
+    drums.setPlayHead (nullptr);
+    wav.deleteFile();
 }

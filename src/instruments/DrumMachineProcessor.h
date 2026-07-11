@@ -1,6 +1,18 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
+
+/** One loaded drum sample (user WAV/AIFF). Owned by the processor's message-thread
+    OwnedArray and never freed until the processor is destroyed, so the audio thread
+    can hold a raw pointer for a voice's lifetime without any lock (I-01). */
+struct DrumSampleData
+{
+    juce::AudioBuffer<float> buffer;         // 1 or 2 channels
+    double        sourceSampleRate = 44100.0;
+    juce::String  sourcePath;
+    juce::String  displayName;
+};
 
 /**
  * DrumMachineProcessor — "Aizana Drums": a self-contained procedural drum
@@ -48,6 +60,24 @@ public:
     int  getCurrentStep() const noexcept   { return uiStep.load (std::memory_order_relaxed); }  // -1 = not running
     void auditionPad (int pad) noexcept     { auditionReq.store (pad, std::memory_order_relaxed); }
 
+    // --- user samples (own kick/snare/… per pad) -----------------------------
+    // All message-thread; the audio thread only reads padSampleRaw() (atomic ptr).
+    bool loadSample (int pad, const juce::File& file);   // reads WAV/AIFF; true on success
+    void clearSample (int pad);                          // pad reverts to the synth voice
+    bool padHasSample (int pad) const noexcept;
+    juce::String padSampleName (int pad) const;          // filename for the UI, "" if none
+    int  loadKitFolder (const juce::File& folder);       // auto-map by filename; returns loaded count
+
+    /** MIDI note → pad index (with GM aliases), or -1 if the note is not a pad. */
+    static int padForNote (int note) noexcept;
+
+    // Called by the internal voices on the audio thread — RT-safe atomic reads only.
+    Params& voiceParams() noexcept { return params; }
+    DrumSampleData* padSampleRaw (int pad) const noexcept
+    {
+        return (pad >= 0 && pad < kNumPads) ? padSample[pad].load (std::memory_order_acquire) : nullptr;
+    }
+
     // -------------------------------------------------------------------------
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -91,6 +121,14 @@ private:
     std::atomic<bool> seqOn      { false };
     std::atomic<int>  uiStep     { -1 };
     std::atomic<int>  auditionReq { -1 };
+
+    // User samples: audio thread reads padSample[] (atomic raw ptr); the objects
+    // live in loadedSamples (message thread), freed only in the destructor → the
+    // raw pointer a voice grabbed at note-on stays valid for its whole lifetime.
+    std::atomic<DrumSampleData*> padSample[kNumPads] {};
+    juce::OwnedArray<DrumSampleData> loadedSamples;
+    juce::String padSamplePath[kNumPads];
+    juce::AudioFormatManager formatManager;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumMachineProcessor)
 };
