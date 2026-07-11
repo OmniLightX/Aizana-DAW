@@ -34,6 +34,22 @@ namespace
         }
         return peak;
     }
+
+    // Minimal transport for the drum sequencer: reports playing at a fixed BPM/ppq.
+    struct FakePlayHead : juce::AudioPlayHead
+    {
+        double ppq = 0.0, bpm = 120.0;
+        bool   playing = true;
+
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo p;
+            p.setPpqPosition (ppq);
+            p.setBpm (bpm);
+            p.setIsPlaying (playing);
+            return p;
+        }
+    };
 }
 
 TEST_CASE ("Aizana Drums: kick and hat notes produce audio", "[instrument][drums]")
@@ -96,4 +112,88 @@ TEST_CASE ("Aizana Synth: note-off releases to silence", "[instrument][synth]")
             tailPeak = std::max (tailPeak, buf.getMagnitude (0, kBlock));
     }
     CHECK (tailPeak < 1.0e-3f);
+}
+
+TEST_CASE ("Aizana Synth: factory presets load and render", "[instrument][synth][preset]")
+{
+    SynthProcessor synth;
+    REQUIRE (synth.getNumPrograms() >= 6);          // Init + the synth pack
+
+    int bass = -1;
+    for (int i = 0; i < synth.getNumPrograms(); ++i)
+        if (synth.getProgramName (i) == "Bass")
+            bass = i;
+    REQUIRE (bass >= 0);
+
+    synth.setCurrentProgram (bass);
+    CHECK (synth.getCurrentProgram() == bass);
+    // A low note through the Bass preset is clearly audible.
+    CHECK (renderPeak (synth, 40, 1.0f, 16) > 0.05f);
+}
+
+TEST_CASE ("Aizana Drums: step sequencer triggers pads on the grid", "[instrument][drums][seq]")
+{
+    DrumMachineProcessor drums;
+    drums.setStep (0, 0, true);        // kick on step 1 (index 0)
+    drums.setSeqEnabled (true);
+    drums.prepareToPlay (kSR, kBlock);
+
+    FakePlayHead ph;                   // playing, 120 BPM, ppq = 0 → downbeat at block start
+    drums.setPlayHead (&ph);
+
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer empty;
+    drums.processBlock (buf, empty);
+    CHECK (buf.getMagnitude (0, kBlock) > 0.1f);      // kick fired from the pattern
+    CHECK (drums.getCurrentStep() == 0);
+    drums.setPlayHead (nullptr);       // drop the stack playhead before it goes out of scope
+}
+
+TEST_CASE ("Aizana Drums: sequencer with empty pattern stays silent", "[instrument][drums][seq]")
+{
+    DrumMachineProcessor drums;
+    drums.clearPattern();
+    drums.setSeqEnabled (true);
+    drums.prepareToPlay (kSR, kBlock);
+    FakePlayHead ph;
+    drums.setPlayHead (&ph);
+
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer empty;
+    drums.processBlock (buf, empty);
+    CHECK (buf.getMagnitude (0, kBlock) < 1.0e-6f);
+    drums.setPlayHead (nullptr);
+}
+
+TEST_CASE ("Aizana Drums: audition triggers a pad without transport", "[instrument][drums]")
+{
+    DrumMachineProcessor drums;
+    drums.prepareToPlay (kSR, kBlock);
+    drums.auditionPad (0);   // kick, no playhead needed
+
+    juce::AudioBuffer<float> buf (2, kBlock);
+    buf.clear();
+    juce::MidiBuffer empty;
+    drums.processBlock (buf, empty);
+    CHECK (buf.getMagnitude (0, kBlock) > 0.1f);
+}
+
+TEST_CASE ("Aizana Drums: pattern round-trips through state", "[instrument][drums]")
+{
+    DrumMachineProcessor a;
+    a.setStep (0, 4, true);
+    a.setStep (2, 8, true);
+    a.setSeqEnabled (true);
+
+    juce::MemoryBlock mb;
+    a.getStateInformation (mb);
+
+    DrumMachineProcessor b;
+    b.setStateInformation (mb.getData(), (int) mb.getSize());
+    CHECK (b.getStep (0, 4));
+    CHECK (b.getStep (2, 8));
+    CHECK_FALSE (b.getStep (0, 5));
+    CHECK (b.isSeqEnabled());
 }

@@ -1,6 +1,35 @@
 #include "SynthProcessor.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
+
+// ---------------------------------------------------------------------------
+// Factory presets
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    struct SynthPreset
+    {
+        const char* name;
+        int   wave;                     // 0 Saw 1 Square 2 Tri 3 Sine
+        float cutoff, resonance, attack, decay, sustain, release, filterEnv, volume;
+    };
+
+    // Init first (index 0) = the plain defaults. The rest are the "synth pack".
+    constexpr SynthPreset kPresets[] =
+    {
+        { "Init",       0,  3000.0f, 0.20f, 0.005f, 0.20f, 0.75f, 0.25f, 0.40f, 0.80f },
+        { "Bass",       0,   700.0f, 0.30f, 0.002f, 0.18f, 0.55f, 0.10f, 0.55f, 0.85f },
+        { "Sub",        3,   250.0f, 0.05f, 0.004f, 0.30f, 0.90f, 0.12f, 0.10f, 0.90f },
+        { "Lead",       0,  4500.0f, 0.45f, 0.010f, 0.30f, 0.80f, 0.30f, 0.35f, 0.75f },
+        { "Pluck",      1,  2600.0f, 0.35f, 0.002f, 0.14f, 0.00f, 0.09f, 0.80f, 0.80f },
+        { "Keys",       2,  2200.0f, 0.15f, 0.006f, 0.35f, 0.55f, 0.30f, 0.30f, 0.80f },
+        { "Pad",        0,  1600.0f, 0.25f, 0.60f,  0.80f, 0.80f, 1.20f, 0.55f, 0.70f },
+        { "Brass",      0,  2000.0f, 0.20f, 0.08f,  0.30f, 0.70f, 0.30f, 0.50f, 0.78f },
+        { "Pluck Wide", 0,  3200.0f, 0.40f, 0.001f, 0.12f, 0.05f, 0.10f, 0.75f, 0.80f },
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Synthesiser sound + voice (2-osc subtractive with TPT SVF low-pass)
@@ -211,4 +240,156 @@ void SynthProcessor::setStateInformation (const void* data, int sizeInBytes)
 void SynthProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
     desc = BuiltInPluginFormat::getDescriptionFor ("Aizana Synth");
+}
+
+// ---------------------------------------------------------------------------
+// Factory presets (AudioProcessor programs)
+// ---------------------------------------------------------------------------
+
+juce::StringArray SynthProcessor::presetNames()
+{
+    juce::StringArray names;
+    for (const auto& p : kPresets)
+        names.add (p.name);
+    return names;
+}
+
+int SynthProcessor::getNumPrograms() { return (int) std::size (kPresets); }
+
+const juce::String SynthProcessor::getProgramName (int index)
+{
+    return (index >= 0 && index < (int) std::size (kPresets)) ? juce::String (kPresets[index].name) : juce::String();
+}
+
+void SynthProcessor::applyProgram (int index)
+{
+    if (index < 0 || index >= (int) std::size (kPresets))
+        return;
+
+    const auto& p = kPresets[index];
+    auto set = [this] (const char* id, float v)
+    {
+        if (auto* prm = apvts.getParameter (id))
+            prm->setValueNotifyingHost (prm->convertTo0to1 (v));
+    };
+
+    set ("wave",      (float) p.wave);
+    set ("cutoff",    p.cutoff);
+    set ("resonance", p.resonance);
+    set ("attack",    p.attack);
+    set ("decay",     p.decay);
+    set ("sustain",   p.sustain);
+    set ("release",   p.release);
+    set ("filterEnv", p.filterEnv);
+    set ("volume",    p.volume);
+}
+
+void SynthProcessor::setCurrentProgram (int index)
+{
+    currentProgram = juce::jlimit (0, getNumPrograms() - 1, index);
+    applyProgram (currentProgram);
+}
+
+// ---------------------------------------------------------------------------
+// Editor — preset picker + parameter knobs
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    class SynthEditor : public juce::AudioProcessorEditor
+    {
+    public:
+        SynthEditor (SynthProcessor& p, juce::AudioProcessorValueTreeState& s)
+            : juce::AudioProcessorEditor (p), proc (p)
+        {
+            title.setText ("Aizana Synth", juce::dontSendNotification);
+            title.setFont (juce::Font (16.0f, juce::Font::bold));
+            addAndMakeVisible (title);
+
+            presetLabel.setText ("Preset", juce::dontSendNotification);
+            addAndMakeVisible (presetLabel);
+            presetBox.addItemList (SynthProcessor::presetNames(), 1);
+            presetBox.setSelectedId (proc.getCurrentProgram() + 1, juce::dontSendNotification);
+            presetBox.onChange = [this] { proc.setCurrentProgram (presetBox.getSelectedId() - 1); };
+            addAndMakeVisible (presetBox);
+
+            waveBox.addItemList (SynthProcessor::waveChoices(), 1);
+            waveAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (s, "wave", waveBox);
+            addAndMakeVisible (waveBox);
+            addLabelFor (waveBox, "Wave");
+
+            addKnob (s, "cutoff",    "Cutoff");
+            addKnob (s, "resonance", "Reso");
+            addKnob (s, "attack",    "Attack");
+            addKnob (s, "decay",     "Decay");
+            addKnob (s, "sustain",   "Sustain");
+            addKnob (s, "release",   "Release");
+            addKnob (s, "filterEnv", "Flt Env");
+            addKnob (s, "volume",    "Volume");
+
+            setSize (520, 300);
+        }
+
+        void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xff23262b)); }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (10);
+            title.setBounds (r.removeFromTop (24));
+            auto presetRow = r.removeFromTop (28);
+            presetLabel.setBounds (presetRow.removeFromLeft (48));
+            presetBox.setBounds (presetRow.removeFromLeft (200));
+            auto waveRow = r.removeFromTop (28).withTrimmedTop (4);
+            waveBox.setBounds (waveRow.removeFromLeft (200).withTrimmedLeft (48));
+            r.removeFromTop (8);
+
+            // knob grid (4 per row)
+            const int kw = r.getWidth() / 4;
+            for (int i = 0; i < knobs.size(); ++i)
+            {
+                if (i % 4 == 0 && i > 0) r.removeFromTop (0);
+                auto cell = juce::Rectangle<int> ((i % 4) * kw, r.getY() + (i / 4) * 100, kw, 96);
+                labels[i]->setBounds (cell.removeFromTop (16));
+                knobs[i]->setBounds (cell);
+            }
+        }
+
+    private:
+        void addLabelFor (juce::Component& c, const juce::String& text)
+        {
+            auto* l = new juce::Label (); l->setText (text, juce::dontSendNotification);
+            l->attachToComponent (&c, true);
+            waveTextLabel.reset (l); addAndMakeVisible (l);
+        }
+
+        void addKnob (juce::AudioProcessorValueTreeState& s, const juce::String& id, const juce::String& text)
+        {
+            auto* k = new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
+            k->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 16);
+            addAndMakeVisible (k);
+            knobs.add (k);
+            atts.add (new juce::AudioProcessorValueTreeState::SliderAttachment (s, id, *k));
+
+            auto* l = new juce::Label (); l->setText (text, juce::dontSendNotification);
+            l->setJustificationType (juce::Justification::centred);
+            addAndMakeVisible (l);
+            labels.add (l);
+        }
+
+        SynthProcessor& proc;
+        juce::Label title, presetLabel;
+        juce::ComboBox presetBox, waveBox;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> waveAtt;
+        std::unique_ptr<juce::Label> waveTextLabel;
+        juce::OwnedArray<juce::Slider> knobs;
+        juce::OwnedArray<juce::Label>  labels;
+        juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment> atts;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthEditor)
+    };
+}
+
+juce::AudioProcessorEditor* SynthProcessor::createEditor()
+{
+    return new SynthEditor (*this, apvts);
 }

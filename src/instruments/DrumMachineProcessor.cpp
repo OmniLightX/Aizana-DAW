@@ -1,6 +1,62 @@
 #include "DrumMachineProcessor.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
+
+// ---------------------------------------------------------------------------
+// Pad layout — the 8 sequencer rows and the GM note each triggers.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    struct PadDef { const char* name; int note; };
+    constexpr PadDef kPads[DrumMachineProcessor::kNumPads] =
+    {
+        { "Kick",      36 },
+        { "Snare",     38 },
+        { "Cl Hat",    42 },
+        { "Op Hat",    46 },
+        { "Clap",      39 },
+        { "Rim",       37 },
+        { "Tom Lo",    45 },
+        { "Tom Hi",    48 },
+    };
+}
+
+juce::String DrumMachineProcessor::padName (int pad)
+{
+    return (pad >= 0 && pad < kNumPads) ? juce::String (kPads[pad].name) : juce::String();
+}
+
+int DrumMachineProcessor::padNote (int pad)
+{
+    return (pad >= 0 && pad < kNumPads) ? kPads[pad].note : 60;
+}
+
+bool DrumMachineProcessor::getStep (int pad, int step) const noexcept
+{
+    if (pad < 0 || pad >= kNumPads || step < 0 || step >= kNumSteps) return false;
+    return (pattern[pad].load (std::memory_order_relaxed) & (juce::uint16) (1u << step)) != 0;
+}
+
+void DrumMachineProcessor::setStep (int pad, int step, bool on) noexcept
+{
+    if (pad < 0 || pad >= kNumPads || step < 0 || step >= kNumSteps) return;
+    const juce::uint16 bit = (juce::uint16) (1u << step);
+    auto v = pattern[pad].load (std::memory_order_relaxed);
+    v = on ? (juce::uint16) (v | bit) : (juce::uint16) (v & ~bit);
+    pattern[pad].store (v, std::memory_order_relaxed);
+}
+
+void DrumMachineProcessor::toggleStep (int pad, int step) noexcept
+{
+    setStep (pad, step, ! getStep (pad, step));
+}
+
+void DrumMachineProcessor::clearPattern() noexcept
+{
+    for (auto& p : pattern) p.store (0, std::memory_order_relaxed);
+}
 
 // ---------------------------------------------------------------------------
 // Synthesiser sound + voice (procedural drum synthesis)
@@ -214,8 +270,9 @@ DrumMachineProcessor::DrumMachineProcessor()
         synth.addVoice (new DrumVoice (params));
 }
 
-void DrumMachineProcessor::prepareToPlay (double sampleRate, int)
+void DrumMachineProcessor::prepareToPlay (double sr, int)
 {
+    sampleRate = (sr > 0.0) ? sr : 44100.0;
     synth.setCurrentPlaybackSampleRate (sampleRate);
 }
 
@@ -229,24 +286,270 @@ void DrumMachineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     params.snareTone.store (pSnareTone != nullptr ? pSnareTone->load() : 0.5f,  std::memory_order_relaxed);
     params.hatDecay .store (pHatDecay  != nullptr ? pHatDecay->load()  : 1.0f,  std::memory_order_relaxed);
 
+    const int n = buffer.getNumSamples();
+
+    // Merge: incoming MIDI (played notes) + audition + step-sequencer triggers.
+    juce::MidiBuffer play;
+    play.addEvents (midi, 0, n, 0);
+
+    // Editor audition (message thread sets it; we consume once, lock-free).
+    const int aud = auditionReq.exchange (-1, std::memory_order_relaxed);
+    if (aud >= 0 && aud < kNumPads)
+        play.addEvent (juce::MidiMessage::noteOn (10, padNote (aud), 1.0f), 0);
+
+    // Transport-synced sequencer: schedule pad hits on the 16th-note grid that
+    // fall inside this block, sample-accurate, driven by the host playhead.
+    if (seqOn.load (std::memory_order_relaxed))
+    {
+        bool running = false;
+        if (auto* ph = getPlayHead())
+        {
+            if (auto pos = ph->getPosition())
+            {
+                if (pos->getIsPlaying() && pos->getPpqPosition().hasValue() && pos->getBpm().hasValue()
+                    && *pos->getBpm() > 0.0 && sampleRate > 0.0)
+                {
+                    running = true;
+                    const double bpm   = *pos->getBpm();
+                    const double ppq0  = *pos->getPpqPosition();
+                    const double ppqPerSample = (bpm / 60.0) / sampleRate;
+                    const double ppqEnd = ppq0 + ppqPerSample * n;
+                    constexpr double stepPpq = 0.25;   // 16th notes
+
+                    long k = (long) std::ceil (ppq0 / stepPpq - 1.0e-9);
+                    for (; k * stepPpq < ppqEnd; ++k)
+                    {
+                        const double boundary = k * stepPpq;
+                        const int offset = (int) std::llround ((boundary - ppq0) / ppqPerSample);
+                        if (offset < 0 || offset >= n) continue;
+
+                        const int step = (int) (((k % kNumSteps) + kNumSteps) % kNumSteps);
+                        uiStep.store (step, std::memory_order_relaxed);
+
+                        for (int pad = 0; pad < kNumPads; ++pad)
+                            if (pattern[pad].load (std::memory_order_relaxed) & (juce::uint16) (1u << step))
+                                play.addEvent (juce::MidiMessage::noteOn (10, padNote (pad), 1.0f), offset);
+                    }
+                }
+            }
+        }
+        if (! running)
+            uiStep.store (-1, std::memory_order_relaxed);
+    }
+    else
+    {
+        uiStep.store (-1, std::memory_order_relaxed);
+    }
+
     buffer.clear();   // instrument has no input — start from silence
-    synth.renderNextBlock (buffer, midi, 0, buffer.getNumSamples());
+    synth.renderNextBlock (buffer, play, 0, n);
 }
 
 void DrumMachineProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+
+    // Persist the sequencer pattern + on/off alongside the parameters.
+    juce::String pat;
+    for (int i = 0; i < kNumPads; ++i)
+        pat << (i ? "," : "") << juce::String::toHexString ((int) pattern[i].load (std::memory_order_relaxed));
+    state.setProperty ("drumPattern", pat, nullptr);
+    state.setProperty ("seqOn", seqOn.load (std::memory_order_relaxed), nullptr);
+
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void DrumMachineProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
-        if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    {
+        if (! xml->hasTagName (apvts.state.getType()))
+            return;
+
+        auto tree = juce::ValueTree::fromXml (*xml);
+        apvts.replaceState (tree);
+
+        clearPattern();
+        const auto toks = juce::StringArray::fromTokens (tree.getProperty ("drumPattern").toString(), ",", "");
+        for (int i = 0; i < kNumPads && i < toks.size(); ++i)
+            pattern[i].store ((juce::uint16) toks[i].getHexValue32(), std::memory_order_relaxed);
+        seqOn.store ((bool) tree.getProperty ("seqOn", false), std::memory_order_relaxed);
+    }
 }
 
 void DrumMachineProcessor::fillInPluginDescription (juce::PluginDescription& desc) const
 {
     desc = BuiltInPluginFormat::getDescriptionFor ("Aizana Drums");
+}
+
+// ---------------------------------------------------------------------------
+// Editor — Ultrabeat-style pad grid + step sequencer
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    class DrumEditor : public juce::AudioProcessorEditor, private juce::Timer
+    {
+    public:
+        DrumEditor (DrumMachineProcessor& p, juce::AudioProcessorValueTreeState& s)
+            : juce::AudioProcessorEditor (p), proc (p)
+        {
+            title.setText ("Aizana Drums", juce::dontSendNotification);
+            title.setFont (juce::Font (16.0f, juce::Font::bold));
+            addAndMakeVisible (title);
+
+            seqButton.setButtonText ("Sequencer");
+            seqButton.setClickingTogglesState (true);
+            seqButton.setToggleState (proc.isSeqEnabled(), juce::dontSendNotification);
+            seqButton.onClick = [this] { proc.setSeqEnabled (seqButton.getToggleState()); };
+            addAndMakeVisible (seqButton);
+
+            clearButton.setButtonText ("Clear");
+            clearButton.onClick = [this] { proc.clearPattern(); repaint(); };
+            addAndMakeVisible (clearButton);
+
+            hint.setText ("Klick = Step · Klick auf den Namen = anhören", juce::dontSendNotification);
+            hint.setFont (juce::Font (11.0f));
+            hint.setColour (juce::Label::textColourId, juce::Colours::grey);
+            addAndMakeVisible (hint);
+
+            addKnob (s, "level",     "Level");
+            addKnob (s, "kickDecay", "Kick");
+            addKnob (s, "snareTone", "Snare");
+            addKnob (s, "hatDecay",  "Hat");
+
+            setSize (660, 400);
+            startTimerHz (30);
+        }
+
+        ~DrumEditor() override { stopTimer(); }
+
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (juce::Colour (0xff1e2126));
+
+            const auto grid = cellBounds();
+            const int cur   = proc.getCurrentStep();
+            const float cellW = grid.getWidth()  / (float) DrumMachineProcessor::kNumSteps;
+            const float rowH  = grid.getHeight() / (float) DrumMachineProcessor::kNumPads;
+
+            for (int pad = 0; pad < DrumMachineProcessor::kNumPads; ++pad)
+            {
+                g.setColour (juce::Colours::lightgrey);
+                g.setFont (12.0f);
+                g.drawText (DrumMachineProcessor::padName (pad),
+                            gridArea.getX(), (int) (grid.getY() + pad * rowH),
+                            kLabelW - 6, (int) rowH, juce::Justification::centredRight);
+
+                for (int step = 0; step < DrumMachineProcessor::kNumSteps; ++step)
+                {
+                    juce::Rectangle<float> cell (grid.getX() + step * cellW,
+                                                 grid.getY() + pad * rowH, cellW, rowH);
+                    auto c = cell.reduced (2.0f);
+                    const bool on = proc.getStep (pad, step);
+                    juce::Colour base = ((step / 4) % 2 == 0) ? juce::Colour (0xff2a2e35)
+                                                              : juce::Colour (0xff24282f);
+                    if (step == cur) base = base.brighter (0.30f);
+                    g.setColour (on ? juce::Colour (0xff4aa3ff) : base);
+                    g.fillRoundedRectangle (c, 3.0f);
+                    if (step == cur)
+                    {
+                        g.setColour (juce::Colours::white.withAlpha (0.45f));
+                        g.drawRoundedRectangle (c, 3.0f, 1.0f);
+                    }
+                }
+            }
+        }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (10);
+            title.setBounds (r.removeFromTop (24));
+
+            auto ctrl = r.removeFromBottom (98);
+            gridArea = r;
+
+            auto top = ctrl.removeFromTop (26);
+            seqButton.setBounds (top.removeFromLeft (110));
+            top.removeFromLeft (8);
+            clearButton.setBounds (top.removeFromLeft (70));
+            top.removeFromLeft (12);
+            hint.setBounds (top);
+
+            ctrl.removeFromTop (6);
+            const int kw = ctrl.getWidth() / 4;
+            for (int i = 0; i < knobs.size(); ++i)
+            {
+                juce::Rectangle<int> cell (ctrl.getX() + i * kw, ctrl.getY(), kw, ctrl.getHeight());
+                labels[i]->setBounds (cell.removeFromTop (14));
+                knobs[i]->setBounds (cell);
+            }
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            const auto grid = cellBounds();
+            const float rowH = grid.getHeight() / (float) DrumMachineProcessor::kNumPads;
+
+            // Name column → audition that pad.
+            if (e.x >= gridArea.getX() && e.x < gridArea.getX() + kLabelW
+                && e.y >= grid.getY() && e.y < grid.getBottom())
+            {
+                const int pad = (int) ((e.y - grid.getY()) / rowH);
+                if (pad >= 0 && pad < DrumMachineProcessor::kNumPads)
+                    proc.auditionPad (pad);
+                return;
+            }
+
+            if (grid.contains (e.getPosition()))
+            {
+                const float cellW = grid.getWidth() / (float) DrumMachineProcessor::kNumSteps;
+                const int step = (int) ((e.x - grid.getX()) / cellW);
+                const int pad  = (int) ((e.y - grid.getY()) / rowH);
+                if (pad >= 0 && pad < DrumMachineProcessor::kNumPads
+                    && step >= 0 && step < DrumMachineProcessor::kNumSteps)
+                {
+                    proc.toggleStep (pad, step);
+                    repaint();
+                }
+            }
+        }
+
+    private:
+        static constexpr int kLabelW = 60;
+
+        juce::Rectangle<int> cellBounds() const { return gridArea.withTrimmedLeft (kLabelW); }
+
+        void timerCallback() override { repaint (cellBounds()); }
+
+        void addKnob (juce::AudioProcessorValueTreeState& s, const juce::String& id, const juce::String& text)
+        {
+            auto* k = new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow);
+            k->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 14);
+            addAndMakeVisible (k);
+            knobs.add (k);
+            atts.add (new juce::AudioProcessorValueTreeState::SliderAttachment (s, id, *k));
+
+            auto* l = new juce::Label(); l->setText (text, juce::dontSendNotification);
+            l->setJustificationType (juce::Justification::centred);
+            addAndMakeVisible (l);
+            labels.add (l);
+        }
+
+        DrumMachineProcessor& proc;
+        juce::Label title, hint;
+        juce::TextButton seqButton, clearButton;
+        juce::Rectangle<int> gridArea;
+        juce::OwnedArray<juce::Slider> knobs;
+        juce::OwnedArray<juce::Label>  labels;
+        juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment> atts;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumEditor)
+    };
+}
+
+juce::AudioProcessorEditor* DrumMachineProcessor::createEditor()
+{
+    return new DrumEditor (*this, apvts);
 }

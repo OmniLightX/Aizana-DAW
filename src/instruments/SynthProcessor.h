@@ -44,28 +44,32 @@ public:
     bool   isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 2.0; }
 
-    int  getNumPrograms() override { return 1; }
-    int  getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    // Factory presets exposed as AudioProcessor programs (Bass/Lead/Pad/…).
+    int  getNumPrograms() override;
+    int  getCurrentProgram() override { return currentProgram; }
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
-    juce::AudioProcessorEditor* createEditor() override { return new juce::GenericAudioProcessorEditor (*this); }
+    juce::AudioProcessorEditor* createEditor() override;   // preset combo + knobs
     bool hasEditor() const override { return true; }
 
     void fillInPluginDescription (juce::PluginDescription&) const override;
 
     static juce::StringArray waveChoices() { return { "Saw", "Square", "Triangle", "Sine" }; }
+    static juce::StringArray presetNames();
 
 private:
     juce::AudioProcessorValueTreeState apvts;
     juce::Synthesiser synth;
     Params params;
+    int currentProgram = 0;
 
     void syncParams();
+    void applyProgram (int index);   // writes a preset's values into the APVTS
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SynthProcessor)
 };

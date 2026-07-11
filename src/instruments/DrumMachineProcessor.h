@@ -30,6 +30,24 @@ public:
         std::atomic<float> hatDecay  { 1.0f };   // 0.3..2.0 multiplier
     };
 
+    // --- built-in step sequencer (Ultrabeat-style: pads × 16 steps) -----------
+    static constexpr int kNumPads  = 8;
+    static constexpr int kNumSteps = 16;
+
+    static juce::String padName (int pad);       // "Kick" .. "Tom Hi"
+    static int          padNote (int pad);       // GM note the pad triggers
+
+    bool getStep (int pad, int step) const noexcept;
+    void setStep (int pad, int step, bool on) noexcept;
+    void toggleStep (int pad, int step) noexcept;
+    void clearPattern() noexcept;
+
+    void setSeqEnabled (bool on) noexcept  { seqOn.store (on, std::memory_order_relaxed); }
+    bool isSeqEnabled() const noexcept     { return seqOn.load (std::memory_order_relaxed); }
+
+    int  getCurrentStep() const noexcept   { return uiStep.load (std::memory_order_relaxed); }  // -1 = not running
+    void auditionPad (int pad) noexcept     { auditionReq.store (pad, std::memory_order_relaxed); }
+
     // -------------------------------------------------------------------------
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -51,7 +69,7 @@ public:
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
-    juce::AudioProcessorEditor* createEditor() override { return new juce::GenericAudioProcessorEditor (*this); }
+    juce::AudioProcessorEditor* createEditor() override;   // pad grid + step sequencer
     bool hasEditor() const override { return true; }
 
     void fillInPluginDescription (juce::PluginDescription&) const override;
@@ -65,6 +83,14 @@ private:
     std::atomic<float>* pKickDecay = nullptr;
     std::atomic<float>* pSnareTone = nullptr;
     std::atomic<float>* pHatDecay  = nullptr;
+
+    double sampleRate = 44100.0;   // stored in prepareToPlay — getSampleRate() is 0 until the host sets it
+
+    // Sequencer state — 16-bit step mask per pad; transport-synced in processBlock.
+    std::atomic<juce::uint16> pattern[kNumPads] {};
+    std::atomic<bool> seqOn      { false };
+    std::atomic<int>  uiStep     { -1 };
+    std::atomic<int>  auditionReq { -1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumMachineProcessor)
 };
