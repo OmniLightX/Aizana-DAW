@@ -169,9 +169,13 @@ juce_add_gui_app(Aizana
     PRODUCT_NAME                    "Aizana"
     BUNDLE_ID                       "com.aizanagi.aizana"
     VERSION                         "0.1.0"
+    ICON_BIG                        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AizanaIcon.png"
     MICROPHONE_PERMISSION_ENABLED   TRUE
     MICROPHONE_PERMISSION_TEXT      "Aizana needs microphone access to record audio tracks."
 )
+
+# Brand assets embedded in the binary (splash / about) — BinaryData::AizanaIcon_png
+juce_add_binary_data(AizanaBrand SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AizanaIcon.png")
 
 target_sources(Aizana PRIVATE
     src/app/Main.cpp
@@ -338,6 +342,7 @@ target_link_libraries(Aizana PRIVATE
     tracktion::tracktion_engine
     ebur128
     demucs_inference
+    AizanaBrand
     "$<$<PLATFORM_ID:Darwin>:-framework AVFoundation>"
 )
 

@@ -4,6 +4,7 @@
 #include "LegacyMigration.h"
 #include "plugins/OutOfProcessPluginScanner.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
+#include "BinaryData.h"
 
 //==============================================================================
 /**
@@ -76,6 +77,17 @@ public:
         // merge-move of ~/Library/Cloudes (settings, plugin library, models, training)
         // has to happen first. Idempotent no-op once migrated.
         aizana::legacy::migrateAppData();
+
+        // Brand splash — show the Aizana logo while the engine + window load.
+        // SplashScreen self-owns and self-deletes after the delay.
+        if (auto logo = juce::ImageCache::getFromMemory (BinaryData::AizanaIcon_png,
+                                                         BinaryData::AizanaIcon_pngSize);
+            logo.isValid())
+        {
+            auto* splash = new juce::SplashScreen ("Aizana",
+                logo.rescaled (300, 300, juce::Graphics::highResamplingQuality), true);
+            splash->deleteAfterDelay (juce::RelativeTime::seconds (2.2), false);
+        }
 
         // Defer permission request to the first run-loop tick so NSApplication
         // is fully active before AVCaptureDevice shows the system dialog.
