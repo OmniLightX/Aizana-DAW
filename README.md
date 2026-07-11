@@ -16,25 +16,74 @@ GPL3-or-later/Commercial. Public Aizana releases therefore need to comply with
 the applicable copyleft obligations for those components. See
 `THIRD_PARTY_NOTICES.md` for the dependency and model-weight notices.
 
-## Features
+## Highlights
 
-- Multi-track recording, editing, and mixing
-- **AI mixing (heuristic co-pilot):** one "AI Mix" button proposes gain staging,
-  EQ, compression, de-essing, panning, and sub-bus routing as named, jargon-free,
-  reviewable moves — Beginner applies instantly, Pro reviews each move; one undo step
-- **AI stem separation:** split a full song into stems (drums, bass, vocals, guitar,
-  piano, synths) and get a ready-routed session — one undo step
-- **AI session setup:** import stems, instruments are detected and grouped with
-  routing and gain staging applied automatically
-- **Local-first AI:** inference runs on-device via ONNX Runtime + CoreML (Apple
+### ⭐ Aizana AI Studio — an AI assistant *inside* the DAW
+
+A chat panel in the transport bar that connects to your locally installed
+**Claude Code** or **Codex CLI** (local-first, no API key handled by Aizana) and
+acts on your session:
+
+- **Mix by conversation:** the assistant controls the *running* session over a
+  local loopback bridge — track volumes/pan, mute/solo, EQ, compressors,
+  de-essers, reverb sends, bus creation (14 live tools). Every batch is one
+  undo step.
+- **Generate real plugins from a text description:** the assistant writes
+  Faust DSP, Aizana compiles it to a universal **CLAP** plugin with a working
+  parameter GUI, and it lands in your plugin library under "Aizana" —
+  persistent and reusable like any other plugin. No cloud compile, no account.
+
+### AI mixing & session setup
+
+- **AI Mix button (heuristic co-pilot):** proposes gain staging, EQ,
+  compression, de-essing, panning, and sub-bus routing as named, jargon-free,
+  reviewable moves — Beginner applies instantly, Pro reviews each move; one
+  undo step.
+- **AI stem separation:** split a full song into stems (drums, bass, vocals,
+  guitar, piano, synths) locally via Demucs v4 and get a ready-routed session.
+- **AI session setup:** drop in stems, instruments are detected and grouped
+  with routing and gain staging applied automatically.
+- **Reference system:** learn tonal balance and level targets from a reference
+  track (or genre preset); nudges gain staging and gently tilts the master EQ —
+  guidance, never forced.
+- **Local-first AI:** inference runs on-device (ONNX Runtime + CoreML / Apple
   Neural Engine); no audio leaves your computer. A local training-data flywheel
-  records reviewed mix decisions so the AI can learn your taste over time
-- VST3 / AU / **CLAP** plugin hosting with floating editors
-- Parametric EQ, Compressor, Reverb, Limiter, and a split-band De-Esser built-in
-- Piano Roll with MIDI editing and velocity lanes
-- Automation lanes with Read / Touch / Latch / Write modes
-- Clip timestretch: conform any clip to the song tempo (SoundTouch)
-- Export to WAV / AIFF (mixdown and stems)
+  records reviewed mix decisions so the AI can learn your taste over time.
+
+### Instruments & built-in FX
+
+- **Aizana Drums:** drum machine with 8×16 step sequencer, pad grid, and a
+  **WAV sampler** — load your own kick/snare/hats per pad or map a whole kit
+  folder; patterns run transport-synced and persist with the session.
+- **Aizana Synth:** 2-oscillator subtractive synth (filter env, ADSR, 16
+  voices) with factory presets.
+- **8 built-in effects:** parametric EQ (with spectrum analyzer), Compressor
+  (with sidechain), Reverb, Limiter, split-band De-Esser, tempo-synced Delay
+  (ping-pong), Gate (with sidechain key), and a Tape/Tube/Soft Saturator.
+
+### Recording, editing & mixing
+
+- Multi-track recording with loop **takes and comping**, punch in/out, and
+  input monitoring
+- Studio One-style **docked editor** (Edit | Mix | Browse) with dedicated
+  audio-clip and MIDI editing workspaces
+- **Audio bend/warp** (transient-snapped warp markers), **tempo track** with
+  time-signature changes, and **tempo-map extraction** from freely played audio
+- **Vocal tuning** (offline, scale-snapped pitch correction), clip timestretch
+  ("conform to song tempo"), and **clip gain envelopes**
+- Piano Roll with velocity lanes, scale lock, CC lane, and a **quantize bar**
+  (grid / strength / swing)
+- Automation for **every plugin parameter** (Read / Touch / Latch / Write),
+  fades, crossfades, clip trim/gain, edit groups, bounce-in-place
+- Full mixing console: buses, FX channels with sends (incl. bus→bus),
+  VCAs, sidechain routing, **cue mixes** to separate hardware outputs
+  (pre-fader), LUFS/peak/RMS metering
+- Adaptive interface: **Beginner and Pro views** over the same session, with a
+  first-run wizard so you never start on a blank screen
+- VST3 / AU / **CLAP** plugin hosting with floating editors; experimental
+  **out-of-process hosting** (crash- and hang-isolated plugins, opt-in via
+  environment flag)
+- Export to WAV / AIFF (mixdown and stems) at 44.1/48/96 kHz
 
 ## Requirements
 
@@ -44,6 +93,10 @@ the applicable copyleft obligations for those components. See
 | Xcode | 14+ | macOS toolchain (Command Line Tools sufficient) |
 | JUCE | 8.x | Included as submodule at `extern/JUCE` |
 | Tracktion Engine | 3.x | Included as submodule at `extern/tracktion_engine` |
+
+Optional, for the AI Studio assistant: a locally installed
+[Claude Code](https://claude.com/claude-code) or Codex CLI. Optional, for
+generating plugins: the [Faust](https://faust.grame.fr) compiler.
 
 ## Building
 
@@ -75,20 +128,22 @@ defined no-op and Aizana falls back to its heuristics).
 
 ## Known Limitations
 
-- **macOS only** (CoreAudio; no Windows/Linux build).
+- **macOS only** (CoreAudio; no Windows/Linux build). Prebuilt binaries are
+  currently Apple Silicon (arm64) — Intel Macs need a universal rebuild (see
+  above).
 - **Public alpha** — expect rough edges; session-format stability is not yet
   guaranteed across versions. Keep backups; don't use on irreplaceable client work yet.
 - **AI mixing is heuristic** today (Grammy-informed rules). A trained local model is
   in progress — the inference seam is in place but ships without a bundled model, so
   mixing currently runs on the heuristics.
 - **Plugin compatibility** across the full VST3/AU/CLAP ecosystem is not yet
-  exhaustively tested.
+  exhaustively tested; out-of-process hosting is experimental and off by default.
 - **Model weights are not bundled** (see below) — stem separation downloads them on
   first use.
 
 ## AI Model Weights
 
-Aizana' stem separation uses the Demucs v4 hybrid-transformer models
+Aizana's stem separation uses the Demucs v4 hybrid-transformer models
 (© Meta / Facebook Research, [facebookresearch/demucs](https://github.com/facebookresearch/demucs)),
 run locally through the MIT-licensed [demucs.cpp](https://github.com/sevagh/demucs.cpp)
 inference library (vendored at `extern/demucs_cpp`).
@@ -110,14 +165,23 @@ code only and does not extend to the model weights.
 
 ```
 src/
-  app/        — MainComponent, application entry
-  ai/         — StemAnalyzer, SessionPlanner, StemImport/SeparationEngine
-  audio/      — AudioEngine, recording
-  engine/     — MixerEngine, ClipEditor, ExportPipeline, AICommandBridge
-  fx/         — EQ, Compressor, Reverb, Limiter DSP
-  ui/         — ArrangementView, MixerView, PianoRoll, Automation
+  app/         — application entry, main shell, legacy migration
+  ai/          — StemAnalyzer, SessionPlanner, StemImport/SeparationEngine,
+                 MixingEngine, AiAgentBridge, live-session AI server
+  audio/       — AudioEngine, recording
+  engine/      — MixerEngine, ClipEditor, TempoEngine, WarpEngine,
+                 VocalTuner, ExportPipeline, AICommandBridge
+  fx/          — 8 built-in effects (EQ, Comp, Reverb, Limiter, De-Esser,
+                 Delay, Gate, Saturator)
+  instruments/ — Aizana Drums (sequencer + sampler), Aizana Synth
+  generator/   — text → Faust → CLAP plugin generator
+  plugins/     — plugin scanning/hosting, out-of-process hosting
+  mcp/         — aizana-mcp server (AI Studio tool backend)
+  metering/    — LUFS/peak/RMS metering
+  ui/          — arrangement, mixer, docked editor, piano roll, AI Studio,
+                 beginner view, onboarding, comping, automation
 extern/
   JUCE/
   tracktion_engine/
-  demucs_cpp/ — vendored MIT inference library for stem separation
+  demucs_cpp/  — vendored MIT inference library for stem separation
 ```
