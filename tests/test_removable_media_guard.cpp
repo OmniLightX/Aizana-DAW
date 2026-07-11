@@ -15,7 +15,7 @@ TEST_CASE ("M12: pathLooksFragile — pure Volume-Heuristik", "[m12][removable]"
 {
     CHECK (aizana::pathLooksFragile ("/Volumes/ExternalMedia/TestSong.tracktion"));
     CHECK (aizana::pathLooksFragile ("/Volumes/USB/x.wav"));
-    CHECK_FALSE (aizana::pathLooksFragile ("/Users/developer/Music/Aizana/song.wav"));
+    CHECK_FALSE (aizana::pathLooksFragile ("/Users/alice/Music/Aizana/song.wav"));
     CHECK_FALSE (aizana::pathLooksFragile ("/tmp/render.wav"));
     CHECK_FALSE (aizana::pathLooksFragile ("/private/tmp/x.aiff"));
     // Kein falscher Prefix-Match:
