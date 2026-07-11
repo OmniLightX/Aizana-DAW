@@ -79,6 +79,7 @@ target_sources(engine_tests PRIVATE
     test_delay_dsp.cpp
     test_gate_dsp.cpp
     test_saturator_dsp.cpp
+    test_instruments_dsp.cpp
     test_bounce_in_place.cpp
     test_clip_gain_envelope.cpp
     test_tempo_map.cpp
@@ -154,6 +155,9 @@ target_sources(engine_tests PRIVATE
     ../src/fx/DelayProcessor.cpp
     ../src/fx/GateProcessor.cpp
     ../src/fx/SaturatorProcessor.cpp
+    # Built-in instruments (P0)
+    ../src/instruments/DrumMachineProcessor.cpp
+    ../src/instruments/SynthProcessor.cpp
     # Metering + Export implementations (plan 01-07)
     ../src/metering/MeterProcessor.cpp
     ../src/engine/ExportPipeline.cpp

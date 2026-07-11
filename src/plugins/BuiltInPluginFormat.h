@@ -19,10 +19,18 @@ public:
 
     juce::String getName() const override { return "Built-in"; }
 
-    /** Populates descriptions for all 4 built-in FX. */
+    /** Populates descriptions for the built-in FX only (no instruments) — this is
+        what the mixer/channel insert menus offer. */
     static void getBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results);
 
-    /** Returns a PluginDescription for a specific built-in FX by display name. */
+    /** Populates descriptions for the built-in INSTRUMENTS only (Aizana Drums / Synth). */
+    static void getBuiltInInstrumentDescriptions (juce::OwnedArray<juce::PluginDescription>& results);
+
+    /** FX + instruments together — used to register everything with the engine's
+        knownPluginList so ExternalPlugin::findMatchingPlugin() can locate them. */
+    static void getAllBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results);
+
+    /** Returns a PluginDescription for a specific built-in (FX or instrument) by display name. */
     static juce::PluginDescription getDescriptionFor (const juce::String& fxName);
 
     // ---------------------------------------------------------------------------

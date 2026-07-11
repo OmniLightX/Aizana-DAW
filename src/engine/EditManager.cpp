@@ -28,7 +28,7 @@ EditManager::EditManager()
     // — which is a separate object from PluginScanner::knownPlugins. Without this, getAudioPluginInstance()
     // returns null and FloatingPluginWindow shows "No editor available".
     juce::OwnedArray<juce::PluginDescription> builtIns;
-    BuiltInPluginFormat::getBuiltInDescriptions (builtIns);
+    BuiltInPluginFormat::getAllBuiltInDescriptions (builtIns);   // FX + instruments
     for (auto* desc : builtIns)
         engine.getPluginManager().knownPluginList.addType (*desc);
 

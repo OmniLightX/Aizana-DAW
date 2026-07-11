@@ -7,6 +7,8 @@
 #include "fx/DelayProcessor.h"
 #include "fx/GateProcessor.h"
 #include "fx/SaturatorProcessor.h"
+#include "instruments/DrumMachineProcessor.h"
+#include "instruments/SynthProcessor.h"
 
 // ---------------------------------------------------------------------------
 // Static description helpers
@@ -19,38 +21,40 @@ namespace
         const char* name;
         const char* category;
         const char* identifier;
+        bool        isInstrument;
     };
 
-    // Single source of truth for all built-in FX — descriptions, scan results
-    // and instantiation all derive from this table.
+    // Single source of truth for all built-ins — descriptions, scan results and
+    // instantiation all derive from this table. isInstrument=true entries are
+    // synths (MIDI in, no audio input) and are kept OUT of the FX insert menus.
     constexpr BuiltInEntry kBuiltIns[] =
     {
-        { "Aizana EQ",         "EQ",         "aizana.eq" },
-        { "Aizana Compressor", "Dynamics",   "aizana.compressor" },
-        { "Aizana Reverb",     "Reverb",     "aizana.reverb" },
-        { "Aizana Limiter",    "Dynamics",   "aizana.limiter" },
-        { "Aizana De-Esser",   "Dynamics",   "aizana.deesser" },
-        { "Aizana Delay",      "Delay",      "aizana.delay" },
-        { "Aizana Gate",       "Dynamics",   "aizana.gate" },
-        { "Aizana Saturator",  "Distortion", "aizana.saturator" },
+        { "Aizana EQ",         "EQ",         "aizana.eq",         false },
+        { "Aizana Compressor", "Dynamics",   "aizana.compressor", false },
+        { "Aizana Reverb",     "Reverb",     "aizana.reverb",     false },
+        { "Aizana Limiter",    "Dynamics",   "aizana.limiter",    false },
+        { "Aizana De-Esser",   "Dynamics",   "aizana.deesser",    false },
+        { "Aizana Delay",      "Delay",      "aizana.delay",      false },
+        { "Aizana Gate",       "Dynamics",   "aizana.gate",       false },
+        { "Aizana Saturator",  "Distortion", "aizana.saturator",  false },
+        { "Aizana Drums",      "Instrument", "aizana.drums",      true  },
+        { "Aizana Synth",      "Instrument", "aizana.synth",      true  },
     };
 }
 
-static juce::PluginDescription makeDesc (const juce::String& name,
-                                          const juce::String& category,
-                                          const juce::String& identifier)
+static juce::PluginDescription makeDesc (const BuiltInEntry& e)
 {
     juce::PluginDescription desc;
-    desc.name             = name;
-    desc.pluginFormatName = "Built-in";
-    desc.manufacturerName = "Aizana";
-    desc.category         = category;
-    desc.fileOrIdentifier = identifier;
-    desc.uniqueId         = identifier.hashCode();
-    desc.isInstrument     = false;
-    desc.numInputChannels = 2;
+    desc.name              = e.name;
+    desc.pluginFormatName  = "Built-in";
+    desc.manufacturerName  = "Aizana";
+    desc.category          = e.category;
+    desc.fileOrIdentifier  = e.identifier;
+    desc.uniqueId          = juce::String (e.identifier).hashCode();
+    desc.isInstrument      = e.isInstrument;
+    desc.numInputChannels  = e.isInstrument ? 0 : 2;   // instruments have no audio input
     desc.numOutputChannels = 2;
-    desc.version          = "1.0";
+    desc.version           = "1.0";
     return desc;
 }
 
@@ -61,16 +65,30 @@ static juce::PluginDescription makeDesc (const juce::String& name,
 void BuiltInPluginFormat::getBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results)
 {
     for (const auto& e : kBuiltIns)
-        results.add (new juce::PluginDescription (makeDesc (e.name, e.category, e.identifier)));
+        if (! e.isInstrument)
+            results.add (new juce::PluginDescription (makeDesc (e)));
+}
+
+void BuiltInPluginFormat::getBuiltInInstrumentDescriptions (juce::OwnedArray<juce::PluginDescription>& results)
+{
+    for (const auto& e : kBuiltIns)
+        if (e.isInstrument)
+            results.add (new juce::PluginDescription (makeDesc (e)));
+}
+
+void BuiltInPluginFormat::getAllBuiltInDescriptions (juce::OwnedArray<juce::PluginDescription>& results)
+{
+    for (const auto& e : kBuiltIns)
+        results.add (new juce::PluginDescription (makeDesc (e)));
 }
 
 juce::PluginDescription BuiltInPluginFormat::getDescriptionFor (const juce::String& fxName)
 {
     for (const auto& e : kBuiltIns)
         if (fxName == e.name)
-            return makeDesc (e.name, e.category, e.identifier);
+            return makeDesc (e);
 
-    jassertfalse;  // Unknown built-in FX name
+    jassertfalse;  // Unknown built-in name
     return {};
 }
 
@@ -83,7 +101,7 @@ void BuiltInPluginFormat::findAllTypesForFile (juce::OwnedArray<juce::PluginDesc
 {
     for (const auto& e : kBuiltIns)
         if (fileOrIdentifier == e.identifier)
-            results.add (new juce::PluginDescription (makeDesc (e.name, e.category, e.identifier)));
+            results.add (new juce::PluginDescription (makeDesc (e)));
 }
 
 bool BuiltInPluginFormat::fileMightContainThisPluginType (const juce::String& fileOrIdentifier)
@@ -122,6 +140,10 @@ void BuiltInPluginFormat::createPluginInstance (const juce::PluginDescription& d
         instance = std::make_unique<GateProcessor>();
     else if (desc.fileOrIdentifier == "aizana.saturator")
         instance = std::make_unique<SaturatorProcessor>();
+    else if (desc.fileOrIdentifier == "aizana.drums")
+        instance = std::make_unique<DrumMachineProcessor>();
+    else if (desc.fileOrIdentifier == "aizana.synth")
+        instance = std::make_unique<SynthProcessor>();
 
     if (instance != nullptr)
     {

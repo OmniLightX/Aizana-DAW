@@ -769,6 +769,10 @@ void TrackHeader::toggleTrackStereo()
 
 void TrackHeader::showContextMenu()
 {
+    juce::PopupMenu instrumentMenu;
+    instrumentMenu.addItem (30, "Drums (Drum Machine)");
+    instrumentMenu.addItem (31, "Synth (Poly)");
+
     juce::PopupMenu builtInMenu;
     builtInMenu.addItem (10, "EQ (4-Band Parametric)");
     builtInMenu.addItem (11, "Compressor");
@@ -784,6 +788,7 @@ void TrackHeader::showContextMenu()
     populateColourMenu (colourMenu);
 
     juce::PopupMenu menu;
+    menu.addSubMenu ("Instrument", instrumentMenu);
     menu.addSubMenu ("Built-in FX", builtInMenu);
     menu.addSeparator();
     menu.addItem (1, "Add Plugin...");
@@ -853,6 +858,8 @@ void TrackHeader::showContextMenu()
                 case 15: handleInsertBuiltInFX ("Aizana Gate");       break;
                 case 16: handleInsertBuiltInFX ("Aizana Saturator");  break;
                 case 17: handleInsertBuiltInFX ("Aizana De-Esser");   break;
+                case 30: handleInsertBuiltInFX ("Aizana Drums");      break;
+                case 31: handleInsertBuiltInFX ("Aizana Synth");      break;
                 case 98: handleCustomColourPicker();                   break;
                 case 99: handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
                 default: break;
