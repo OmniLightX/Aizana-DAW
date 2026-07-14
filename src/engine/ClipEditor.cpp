@@ -476,6 +476,136 @@ te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool 
 }
 
 //==============================================================================
+te::Clip* ClipEditor::mergeClips (const juce::Array<te::Clip*>& clips)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr || clips.size() < 2)
+        return nullptr;
+
+    // All clips must live on the SAME track of the current edit.
+    auto* track = dynamic_cast<te::AudioTrack*> (clips.getFirst() != nullptr
+                                                     ? clips.getFirst()->getClipTrack()
+                                                     : nullptr);
+    if (track == nullptr)
+        return nullptr;
+
+    for (auto* c : clips)
+        if (c == nullptr || &c->edit != edit || c->getClipTrack() != track)
+            return nullptr;
+
+    juce::Array<te::MidiClip*> midiClips;
+    juce::Array<te::WaveAudioClip*> waveClips;
+    for (auto* c : clips)
+    {
+        if (auto* mc = dynamic_cast<te::MidiClip*> (c))
+            midiClips.add (mc);
+        else if (auto* wc = dynamic_cast<te::WaveAudioClip*> (c))
+            waveClips.add (wc);
+    }
+
+    auto& um = editManager.getUndoManager();
+
+    // ---- All MIDI: combine the note lists, no render needed ----
+    if (midiClips.size() == clips.size())
+    {
+        // Snapshot the track's clips so the merged one can be identified afterwards
+        // (TE's mergeMidiClips inserts the new clip and removes the originals but
+        // doesn't return it).
+        juce::Array<te::Clip*> before;
+        for (auto* c : track->getClips())
+            before.add (c);
+
+        um.beginNewTransaction ("Events verbinden");
+        if (te::mergeMidiClips (midiClips, nullptr).failed())
+            return nullptr;
+
+        for (auto* c : track->getClips())
+            if (! before.contains (c))
+                return c;
+        return nullptr;
+    }
+
+    // ---- All audio: render the union range event-only (S1 "Events verkleben") ----
+    if (waveClips.size() != clips.size())
+        return nullptr;   // mixed MIDI+audio selection — nothing sensible to merge
+
+    const int trackIndex = te::getAllTracks (*edit).indexOf (track);
+    if (trackIndex < 0)
+        return nullptr;
+
+    auto unionRange = waveClips.getFirst()->getPosition().time;
+    te::WaveAudioClip* firstClip = waveClips.getFirst();
+    for (auto* wc : waveClips)
+    {
+        unionRange = unionRange.getUnionWith (wc->getPosition().time);
+        if (wc->getPosition().getStart() < firstClip->getPosition().getStart())
+            firstClip = wc;   // earliest event names the merge result
+    }
+    if (unionRange.getLength().inSeconds() <= 0.0)
+        return nullptr;
+
+    const auto sessionFile = editManager.getCurrentFile();
+    auto bounceDir = sessionFile.existsAsFile()
+        ? sessionFile.getParentDirectory().getChildFile ("Bounces")
+        : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("AizanaBounces");
+    bounceDir.createDirectory();
+
+    const auto outFile = bounceDir
+        .getChildFile (juce::File::createLegalFileName (firstClip->getName()) + " Merged.wav")
+        .getNonexistentSibling();
+
+    double sampleRate = edit->engine.getDeviceManager().getSampleRate();
+    if (sampleRate < 8000.0)
+        sampleRate = 44100.0;   // headless / no device open
+
+    te::Renderer::Parameters params (*edit);
+    params.destFile           = outFile;
+    params.audioFormat        = edit->engine.getAudioFileFormatManager().getWavFormat();
+    params.bitDepth           = 24;
+    params.sampleRateForAudio = sampleRate;
+    params.blockSizeForAudio  = 512;
+    params.time               = unionRange;
+    params.realTimeRender     = false;
+    params.usePlugins         = false;         // event-only: no track inserts baked
+    params.useMasterPlugins   = false;         // merge ≠ mixdown — master stays live
+    params.checkNodesForAudio = false;
+    params.tracksToDo.setBit (trackIndex);
+    for (auto* wc : waveClips)
+        params.allowedClips.add (wc);          // only the selected events render
+
+    const auto rendered = te::Renderer::renderToFile ("Events verbinden", params);
+    const auto resultFile = rendered.existsAsFile() ? rendered : params.destFile;
+    if (! resultFile.existsAsFile())
+        return nullptr;
+
+    // Swap the originals for the merged render — ONE undo step.
+    juce::Array<te::Clip::Ptr> keepAlive;
+    for (auto* wc : waveClips)
+        keepAlive.add (wc);
+
+    um.beginNewTransaction ("Events verbinden");
+
+    te::ClipPosition pos { unionRange, {} };
+    auto* newClipBase = track->insertNewClip (te::TrackItem::Type::wave,
+                                              firstClip->getName() + " (Merged)",
+                                              pos, nullptr);
+    auto* newClip = dynamic_cast<te::WaveAudioClip*> (newClipBase);
+    if (newClip == nullptr)
+        return nullptr;
+
+    newClip->getSourceFileReference().setToDirectFileReference (resultFile, false);
+
+    for (auto& c : keepAlive)
+    {
+        juce::ValueTree parent = c->state.getParent();
+        if (parent.isValid())
+            parent.removeChild (c->state, &um);
+    }
+
+    return newClip;
+}
+
+//==============================================================================
 te::Clip* ClipEditor::duplicateClip (te::Clip& clip)
 {
     auto* edit = editManager.getEdit();

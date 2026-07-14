@@ -7,4 +7,4 @@
  * can include it without creating a circular dependency (ArrangementView.h
  * includes ClipComponent.h, so ClipComponent.h cannot include ArrangementView.h).
  */
-enum class EditTool { Pointer, RangeSelect, Scissors, Marquee, Eraser };
+enum class EditTool { Pointer, RangeSelect, Scissors, Marquee, Eraser, Mute };

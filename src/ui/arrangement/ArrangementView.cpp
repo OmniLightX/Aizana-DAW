@@ -232,8 +232,9 @@ namespace
         { EditTool::RangeSelect, AizanaIcon::Range    },
         { EditTool::Scissors,    AizanaIcon::Scissors },
         { EditTool::Eraser,      AizanaIcon::Erase    },
+        { EditTool::Mute,        AizanaIcon::Mute     },
     };
-    constexpr int kNumToolCells = 4;
+    constexpr int kNumToolCells = 5;
     constexpr int kToolCellMaxW = 34;
 }
 
@@ -1418,6 +1419,14 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         return true;
     }
 
+    // Cmd+J — merge/"verkleben" the selected events into one clip
+    // (S1 "Events verbinden", Logic "Join"; MIDI merges notes, audio renders)
+    if (key.getModifiers().isCommandDown() && (key.getKeyCode() == 'j' || key.getKeyCode() == 'J'))
+    {
+        mergeSelectedClips();
+        return true;
+    }
+
     return false;
 }
 
@@ -1590,6 +1599,11 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
         case EditTool::Eraser:
             // Eraser on empty timeline: nothing to delete (clip clicks are handled in
             // ClipComponent). No-op here.
+            break;
+
+        case EditTool::Mute:
+            // Mute tool on empty timeline: nothing to mute (clip clicks are handled
+            // in ClipComponent). No-op here.
             break;
 
         case EditTool::Pointer:
@@ -1923,6 +1937,8 @@ juce::MouseCursor ArrangementView::getMouseCursor()
             return juce::MouseCursor (juce::MouseCursor::IBeamCursor);
         case EditTool::Eraser:
             // No eraser cursor in JUCE — crosshair signals a precise clip-acting tool.
+            return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
+        case EditTool::Mute:
             return juce::MouseCursor (juce::MouseCursor::CrosshairCursor);
     }
     return juce::MouseCursor (juce::MouseCursor::NormalCursor);
@@ -2875,6 +2891,27 @@ void ArrangementView::deleteSelectedClips()
     selectedClips.clear();
 
     clipEditor.deleteClips (clips);   // one undo step for the whole batch
+
+    juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+    repaint();
+}
+
+void ArrangementView::mergeSelectedClips()
+{
+    if (selectedClips.size() < 2)
+        return;
+
+    // Same dangling-pointer discipline as deleteSelectedClips: collect the
+    // engine-side clips FIRST, then drop the component selection — the merge
+    // removes clip state and the resulting rebuild destroys the ClipComponents.
+    juce::Array<te::Clip*> clips;
+    for (auto* cc : selectedClips)
+        if (cc != nullptr)
+            clips.add (&cc->getClip());
+
+    selectedClips.clear();
+
+    clipEditor.mergeClips (clips);    // one undo step (insert merged + remove originals)
 
     juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
     repaint();

@@ -140,6 +140,10 @@ public:
     /** Deletes ALL selected clips in one undo step (multi-selection delete). */
     void deleteSelectedClips();
 
+    /** Merges/"verklebt" the selected clips of one track into a single clip
+        (Cmd+J, clip context menu) — one undo step. See ClipEditor::mergeClips. */
+    void mergeSelectedClips();
+
     /** Selection-aware delete (Delete/Backspace, also forwarded from MainComponent):
         active time-range > selected clips > selected track. Returns true if it
         deleted something. */

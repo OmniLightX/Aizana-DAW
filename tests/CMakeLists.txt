@@ -81,6 +81,7 @@ target_sources(engine_tests PRIVATE
     test_saturator_dsp.cpp
     test_instruments_dsp.cpp
     test_bounce_in_place.cpp
+    test_clip_merge.cpp
     test_clip_gain_envelope.cpp
     test_tempo_map.cpp
     test_warp_bend.cpp

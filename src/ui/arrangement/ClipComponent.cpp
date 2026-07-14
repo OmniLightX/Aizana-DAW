@@ -58,8 +58,15 @@ ClipComponent::~ClipComponent()
     thumbnail.removeChangeListener (this);
 }
 
-void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& prop)
 {
+    // Mute changes (mute tool, dock editor, undo) redraw the dimmed look immediately.
+    if (tree == clip.state && prop == te::IDs::mute)
+    {
+        repaint();
+        return;
+    }
+
     if (thumbnailLoaded || tree != clip.state) return;
 
     if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
@@ -103,6 +110,12 @@ void ClipComponent::paint (juce::Graphics& g)
     if (dynamic_cast<te::MidiClip*> (&clip) != nullptr)
         baseColour = baseColour.withHue (baseColour.getHue() + 0.08f)
                                .withSaturation (juce::jmin (1.0f, baseColour.getSaturation() + 0.05f));
+
+    // Muted clips (mute tool / dock editor) draw grey and dimmed — the Studio One
+    // "event inactive" look. All derived colours below inherit the desaturation.
+    const bool clipMuted = (bool) clip.state.getProperty (te::IDs::mute, false);
+    if (clipMuted)
+        baseColour = baseColour.withSaturation (0.12f).withBrightness (0.42f);
 
     const juce::Colour headerColour = baseColour.darker (0.18f);
 
@@ -625,6 +638,19 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    // ---- Mute tool (Studio One parity): a left-click toggles the clip's mute state.
+    // I-03: TE clip mute lives in the state property — write through the UndoManager
+    // so every click is one undo step (same mechanic as the dock editor's Mute button). ----
+    if (activeTool_ == EditTool::Mute && e.mods.isLeftButtonDown())
+    {
+        auto& um = clip.edit.getUndoManager();
+        um.beginNewTransaction ("Clip-Mute");
+        const bool muted = (bool) clip.state.getProperty (te::IDs::mute, false);
+        clip.state.setProperty (te::IDs::mute, ! muted, &um);
+        repaint();
+        return;
+    }
+
     // ---- Fade handle hit test (audio clips only, all tools) ----
     // Must be checked BEFORE any existing drag logic so fade drags don't
     // accidentally start a clip move.  Fade handles have highest priority —
@@ -679,6 +705,15 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         menu.addSeparator();
         menu.addItem (3, "Copy");
         menu.addItem (4, "Split at Playhead");
+        {
+            // Merge/"verkleben" needs 2+ selected clips including this one — the
+            // engine enforces same-track/same-type, the menu only gates on count.
+            auto* avMerge = findParentComponentOfClass<ArrangementView>();
+            const bool canMerge = avMerge != nullptr
+                                  && avMerge->isClipSelected (this)
+                                  && avMerge->getNumSelectedClips() >= 2;
+            menu.addItem (12, juce::String::fromUTF8 ("Events verbinden (\xe2\x8c\x98J)"), canMerge);
+        }
         if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
         {
             menu.addItem (6, juce::String::fromUTF8 ("Tempo aus Clip erkennen…"));
@@ -851,6 +886,14 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                 {
                     if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
                         showVocalTuningDialog();
+                }
+                else if (result == 12)
+                {
+                    // Merge rebuilds the track rows and destroys THIS component —
+                    // hand off to the view and touch nothing afterwards.
+                    if (auto* av = findParentComponentOfClass<ArrangementView>())
+                        av->mergeSelectedClips();
+                    return;
                 }
                 else if (result >= 100)
                 {
@@ -1106,6 +1149,9 @@ void ClipComponent::mouseDrag (const juce::MouseEvent& e)
     // Scissors tool: no drag behaviour (click-only for splitting)
     if (activeTool_ == EditTool::Scissors) return;
 
+    // Mute tool: click-only (mouseDown toggled the mute) — never start a clip move.
+    if (activeTool_ == EditTool::Mute) return;
+
     // Click Zone Marquee drag — forward to ArrangementView.
     if (inMarqueeZoneDrag)
     {
@@ -1305,6 +1351,11 @@ juce::MouseCursor ClipComponent::getMouseCursor()
 
 void ClipComponent::mouseDoubleClick (const juce::MouseEvent& e)
 {
+    // Mute tool: both clicks of a fast double-click already toggled in mouseDown —
+    // never fall through to Piano Roll / range split.
+    if (activeTool_ == EditTool::Mute)
+        return;
+
     // Marquee OR Pointer tool on an audio clip: double-click splits at active range boundaries.
     // Pointer tool is included so the workflow "draw range → switch to Pointer →
     // double-click inside range" works without needing to stay in Marquee mode.

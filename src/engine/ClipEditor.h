@@ -251,6 +251,27 @@ public:
     te::WaveAudioClip* bounceClipInPlace (te::WaveAudioClip& clip, bool withTrackFX = true);
 
     /**
+     * Merge/"verkleben" (S1 "Events verbinden", Logic "Join"): combine 2+ clips
+     * of the SAME track into one clip.
+     *
+     *  - All-MIDI selection: note lists are trimmed to each clip's visible
+     *    window, offset to the union start and combined into one new MidiClip
+     *    (TE's mergeMidiClips) — no render, fully non-destructive.
+     *  - All-audio selection: the union range is rendered event-only (like
+     *    "Bounce in Place (nur Event)" — no track inserts, no master); fades,
+     *    crossfades, clip gain and stretch are baked, gaps between the events
+     *    become silence in the new file. The file lands next to the session in
+     *    Bounces/ (temp dir for unsaved sessions).
+     *  - Mixed MIDI+audio or clips on different tracks: rejected (nullptr).
+     *
+     * The whole merge — insert new clip + remove originals — is ONE undo step.
+     * Must be called from the message thread (render invariant, I-10).
+     *
+     * Returns the merged clip, or nullptr if nothing was merged.
+     */
+    te::Clip* mergeClips (const juce::Array<te::Clip*>& clips);
+
+    /**
      * Import an audio file as a new WaveAudioClip on the given track.
      *
      * The clip's start time is startTimeSecs. Its duration is determined from
