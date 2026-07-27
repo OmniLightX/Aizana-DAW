@@ -75,6 +75,9 @@ acts on your session:
   (grid / strength / swing)
 - Automation for **every plugin parameter** (Read / Touch / Latch / Write),
   fades, crossfades, clip trim/gain, edit groups, bounce-in-place
+- Arrangement tools: pointer, range, scissors, eraser and **mute tool**, plus
+  **merge events** (⌘J) — glues clips into one, natively for MIDI and via an
+  event-only render for audio, in a single undo step
 - Full mixing console: buses, FX channels with sends (incl. bus→bus),
   VCAs, sidechain routing, **cue mixes** to separate hardware outputs
   (pre-fader), LUFS/peak/RMS metering
