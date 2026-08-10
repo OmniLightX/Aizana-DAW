@@ -1,5 +1,6 @@
 #include "DrumMachineProcessor.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include "InstrumentOutput.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
 
@@ -330,7 +331,9 @@ namespace
                     }
                 }
 
-                s *= amp * level;
+                // Kalibrierung: bringt die lauteste Stimme (Kick) auf -6 dBFS, ohne
+                // die interne Kit-Balance zu veraendern. Siehe InstrumentOutput.h.
+                s *= amp * level * aizana::instrument::kDrumVoiceTrim;
                 amp *= ampCoeff;
                 ++sampleAge;
 
@@ -476,6 +479,10 @@ void DrumMachineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     buffer.clear();   // instrument has no input — start from silence
     synth.renderNextBlock (buffer, play, 0, n);
+
+    // Faengt das lineare Summieren gleichzeitiger Pads und laute User-Samples ab:
+    // unterhalb -3 dBFS transparent, darueber weich gegen 1.0 statt hartem Clipping.
+    aizana::instrument::softClipBuffer (buffer);
 }
 
 void DrumMachineProcessor::getStateInformation (juce::MemoryBlock& destData)

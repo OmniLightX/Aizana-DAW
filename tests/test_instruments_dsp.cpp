@@ -4,7 +4,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <instruments/DrumMachineProcessor.h>
 #include <instruments/SynthProcessor.h>
+#include <instruments/InstrumentOutput.h>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -284,4 +286,109 @@ TEST_CASE ("Aizana Drums: step sequencer triggers a loaded sample", "[instrument
     CHECK (buf.getMagnitude (0, kBlock) > 0.2f);    // sampled kick fired from the pattern
     drums.setPlayHead (nullptr);
     wav.deleteFile();
+}
+
+// ---------------------------------------------------------------------------
+// Gain-Staging (Regression, 2026-08-10)
+//
+// Befund beim Vorbereiten des Live-Testlaufs: die Instrumente lieferten mit
+// Werkseinstellungen Pegel weit ueber Vollaussteuerung — eine EINZELNE Kick-Note
+// stand bei 1.458 (+3,2 dB), ein Vierklang am Synth bei bis zu 2.52 (+8 dB).
+// Ein frisch geladenes Instrument verzerrte also beim ersten Ton.
+//
+// Gefunden wurde das NICHT von den Tests, obwohl es sie gab: alle pruefen nur
+// Untergrenzen ("nicht still") und relative Aussagen ("laut > leise"). Eine
+// OBERGRENZE prueft keiner — genau deshalb stehen die folgenden Faelle hier.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+    // Rendert gleichzeitig anliegende Noten und liefert den Spitzenpegel.
+    float renderStackPeak (juce::AudioProcessor& p, const std::vector<int>& notes,
+                           float vel, int blocks)
+    {
+        p.prepareToPlay (kSR, kBlock);
+        float peak = 0.0f;
+        for (int b = 0; b < blocks; ++b)
+        {
+            juce::AudioBuffer<float> buf (2, kBlock);
+            buf.clear();
+            juce::MidiBuffer midi;
+            if (b == 0)
+                for (int n : notes)
+                    midi.addEvent (juce::MidiMessage::noteOn (1, n, vel), 0);
+            p.processBlock (buf, midi);
+            peak = std::max (peak, buf.getMagnitude (0, kBlock));
+        }
+        return peak;
+    }
+}
+
+TEST_CASE ("Aizana Drums: kein Pad uebersteuert bei voller Velocity", "[instrument][drums][gain]")
+{
+    for (int pad = 0; pad < DrumMachineProcessor::kNumPads; ++pad)
+    {
+        DrumMachineProcessor drums;
+        const float peak = renderPeak (drums, DrumMachineProcessor::padNote (pad), 1.0f, 64);
+        INFO ("Pad " << pad << " (" << DrumMachineProcessor::padName (pad) << ") Peak " << peak);
+        CHECK (peak > 0.005f);      // klingt ueberhaupt
+        CHECK (peak < 1.0f);        // und uebersteuert nicht
+    }
+}
+
+TEST_CASE ("Aizana Drums: gleichzeitige Pads bleiben unter Vollaussteuerung", "[instrument][drums][gain]")
+{
+    // Kick + Snare + beide Hats + Clap auf demselben Schlag: mehr passiert in
+    // einem echten Pattern nicht gleichzeitig.
+    DrumMachineProcessor drums;
+    std::vector<int> notes;
+    for (int pad = 0; pad < 5; ++pad)
+        notes.push_back (DrumMachineProcessor::padNote (pad));
+
+    const float peak = renderStackPeak (drums, notes, 1.0f, 64);
+    INFO ("5 Pads gleichzeitig, Peak " << peak);
+    CHECK (peak < 1.0f);
+}
+
+TEST_CASE ("Aizana Synth: Einzelnote und Akkord bleiben unter Vollaussteuerung",
+           "[instrument][synth][gain]")
+{
+    SynthProcessor probe;
+    for (int i = 0; i < probe.getNumPrograms(); ++i)
+    {
+        SynthProcessor single, chord;
+        single.setCurrentProgram (i);
+        chord .setCurrentProgram (i);
+
+        const float onePeak  = renderStackPeak (single, { 60 }, 0.8f, 64);
+        const float fourPeak = renderStackPeak (chord, { 48, 55, 60, 64 }, 0.8f, 64);
+
+        INFO ("Preset " << probe.getProgramName (i) << ": 1 Note " << onePeak
+              << ", 4 Noten " << fourPeak);
+        CHECK (onePeak  > 0.02f);     // jedes Preset klingt
+        CHECK (onePeak  < 1.0f);
+        CHECK (fourPeak < 1.0f);      // der Vierklang war der eigentliche Ausreisser
+        CHECK (fourPeak > onePeak);   // Polyphonie summiert weiterhin hoerbar
+    }
+}
+
+TEST_CASE ("Instrument-Ausgangsstufe: weiche Begrenzung", "[instrument][gain]")
+{
+    using namespace aizana::instrument;
+
+    // Unterhalb der Schwelle voellig transparent — kein Faerben leiser Signale.
+    for (float v : { 0.0f, 0.1f, 0.35f, 0.5f, 0.69f })
+    {
+        CHECK (softClip (v)  == v);
+        CHECK (softClip (-v) == -v);
+    }
+
+    // Darueber monoton steigend, aber nie bis zur Vollaussteuerung.
+    CHECK (softClip (0.8f) > 0.7f);
+    CHECK (softClip (2.5f) < 1.0f);
+    CHECK (softClip (50.0f) < 1.0f);
+    CHECK (softClip (2.5f) > softClip (1.2f));
+
+    // Symmetrisch: kein DC-Versatz durch die Begrenzung.
+    CHECK (softClip (-2.5f) == -softClip (2.5f));
 }

@@ -80,6 +80,9 @@ target_sources(engine_tests PRIVATE
     test_gate_dsp.cpp
     test_saturator_dsp.cpp
     test_instruments_dsp.cpp
+    # Hoer-Pakete fuer den Live-Testlauf. Alle Cases tragen "[.artifacts]" und
+    # laufen daher NICHT im normalen Suite-Lauf — Aufruf: engine_tests "[artifacts]"
+    render_artifacts.cpp
     test_bounce_in_place.cpp
     test_clip_merge.cpp
     test_clip_gain_envelope.cpp

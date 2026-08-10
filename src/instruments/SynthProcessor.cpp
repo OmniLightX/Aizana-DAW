@@ -1,5 +1,6 @@
 #include "SynthProcessor.h"
 #include "plugins/BuiltInPluginFormat.h"
+#include "InstrumentOutput.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
 
@@ -124,7 +125,10 @@ namespace
                 const float lp = v2;
 
                 const float a = ampEnv.getNextSample();
-                const float s = lp * a * vel * vol;
+                // Kalibrierung: polyphone Instrumente muessen den Akkord einkalkulieren,
+                // nicht die Einzelnote — sonst summiert ein Vierklang ueber Vollaussteuerung.
+                // Siehe InstrumentOutput.h.
+                const float s = lp * a * vel * vol * aizana::instrument::kSynthVoiceTrim;
 
                 for (int ch = 0; ch < numCh; ++ch)
                     out.addSample (ch, startSample + i, s);
@@ -222,6 +226,10 @@ void SynthProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     syncParams();
     buffer.clear();
     synth.renderNextBlock (buffer, midi, 0, buffer.getNumSamples());
+
+    // Faengt dichte Akkorde ab: unterhalb -3 dBFS transparent, darueber weich
+    // gegen 1.0 statt hartem Clipping.
+    aizana::instrument::softClipBuffer (buffer);
 }
 
 void SynthProcessor::getStateInformation (juce::MemoryBlock& destData)
