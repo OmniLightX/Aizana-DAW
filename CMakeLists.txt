@@ -12,7 +12,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # External dependencies via submodules
 # ---------------------------------------------------------------------------
 
-# JUCE 8.0.12 — CMake-native since JUCE 6; provides audio I/O, DSP, MIDI, GUI
+# JUCE 8.0.6 — CMake-native since JUCE 6; provides audio I/O, DSP, MIDI, GUI
+# Version comes from the pinned submodule (extern/JUCE, commit 19edd538), NOT from
+# this comment — read modules/juce_core/juce_core.h if in doubt.
 # Must be added BEFORE tracktion_engine modules, which use JUCE targets.
 add_subdirectory(extern/JUCE)
 
