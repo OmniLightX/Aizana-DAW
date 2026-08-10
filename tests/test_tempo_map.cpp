@@ -190,3 +190,67 @@ TEST_CASE ("TempoMap: end-to-end from an imported click clip", "[tempomap][P7a]"
 
     tempDir.deleteRecursively();
 }
+
+// ---------------------------------------------------------------------------
+// Regression 2026-08-10: Tempo-Erkennung auf DICHTEM Material.
+//
+// Befund aus der Messreihe auf echter Musik (Hip-Hop, 121 BPM): der Detektor
+// fand auf KEINER von sieben Quellen das richtige Tempo — und lag dabei nicht
+// unsicher daneben, sondern rastete ueberzeugt falsch ein (auf der Gitarre
+// sassen 87 % der Beats sauber auf einem 103-BPM-Raster). Ursache war die
+// Onset-Erkennung ueber breitbandige Energie plus eine 1/sqrt(lag)-Heuristik,
+// die systematisch auf Unterteilungen zog.
+//
+// Die alten Klicktrack-Tests fingen das nicht, weil ein einzelner Klick pro
+// Beat der einfachste denkbare Fall ist. Dieser Test bildet nach, woran der
+// Detektor real scheiterte: Schlaege auf JEDEM ACHTEL, aber nur jedes zweite
+// ist ein "Beat" (laut), dazwischen leisere HiHat-artige Anschlaege. Wer die
+// metrische Ebene verwechselt, landet bei doppeltem Tempo.
+// ---------------------------------------------------------------------------
+TEST_CASE ("BeatTracking: dichtes Achtel-Material wird nicht doppelt so schnell getrackt",
+           "[tempomap][P7a]")
+{
+    constexpr double bpm     = 121.0;
+    constexpr double beatSec = 60.0 / bpm;
+
+    juce::AudioBuffer<float> buf (1, (int) (25.0 * kSr));
+    buf.clear();
+
+    // Laute Schlaege auf den Vierteln, leise auf den Achteln dazwischen.
+    for (int i = 0; i * (beatSec / 2.0) < 24.0; ++i)
+    {
+        const double t      = 0.20 + i * (beatSec / 2.0);
+        const bool   onBeat = (i % 2) == 0;
+        const float  amp    = onBeat ? 0.9f : 0.35f;
+        const double freq   = onBeat ? 200.0 : 6000.0;   // Kick-artig vs. HiHat-artig
+
+        const int start = (int) (t * kSr);
+        const int len   = (int) ((onBeat ? 0.030 : 0.010) * kSr);
+        for (int s = 0; s < len && start + s < buf.getNumSamples(); ++s)
+        {
+            const double env = std::exp (-6.0 * s / (double) len);
+            buf.addSample (0, start + s, amp * (float) (env * std::sin (
+                2.0 * juce::MathConstants<double>::pi * freq * s / kSr)));
+        }
+    }
+
+    // Stufe 1: die globale Schaetzung muss die Viertel treffen, nicht die Achtel.
+    const double detected = TempoDetector::detectBpm (buf, kSr);
+    INFO ("detectBpm = " << detected);
+    CHECK_THAT (detected, Catch::Matchers::WithinAbs (bpm, 4.0));
+
+    // Stufe 2: die Beat-Abstaende muessen Viertel sein. Genau hier lief der
+    // Tracker vorher im Achtelraster (157 von 181 Abstaenden waren Achtel).
+    const auto beats = TempoDetector::detectBeats (buf, kSr);
+    REQUIRE (beats.size() >= 20);
+
+    int quarters = 0, eighths = 0;
+    for (int i = 1; i < beats.size(); ++i)
+    {
+        const double d = beats[i] - beats[i - 1];
+        if (std::abs (d - beatSec) < 0.05)             ++quarters;
+        else if (std::abs (d - beatSec / 2.0) < 0.04)  ++eighths;
+    }
+    INFO ("Viertel " << quarters << ", Achtel " << eighths);
+    CHECK (quarters > eighths * 4);        // eindeutig auf der Viertel-Ebene
+}
