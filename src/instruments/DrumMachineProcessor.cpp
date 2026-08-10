@@ -232,7 +232,11 @@ namespace
                 case Drum::ClosedHat: ampCoeff = decay (0.045f * hd); hpC = poleCoeff (8000.0f, sr); break;
                 case Drum::OpenHat:   ampCoeff = decay (0.34f  * hd); hpC = poleCoeff (8000.0f, sr); break;
                 case Drum::Clap:      ampCoeff = decay (0.20f);       hpC = poleCoeff (1000.0f, sr); lpC = poleCoeff (3000.0f, sr); break;
-                case Drum::Rim:       startFreq = 1700.0; baseFreq = 1700.0; pitchCoeff = 1.0; ampCoeff = decay (0.028f); break;
+                // Rim/Sidestick ist ein leiser Akzent, kein Hauptschlag. Er hatte als
+                // einzige Stimme GAR KEINEN Pegelfaktor und lag damit nur ~1 dB unter
+                // der Kick (User-Hoerurteil 2026-08-10: "muss deutlich weiter runter").
+                // 0.35 setzt ihn rund 10 dB unter die Kick — zwischen Hats und Toms.
+                case Drum::Rim:       startFreq = 1700.0; baseFreq = 1700.0; pitchCoeff = 1.0; ampCoeff = decay (0.028f); level *= 0.35f; break;
                 case Drum::TomLo:     startFreq = 150.0; baseFreq = 110.0; pitchCoeff = decay (0.060f); ampCoeff = decay (0.30f); break;
                 case Drum::TomHi:     startFreq = 240.0; baseFreq = 180.0; pitchCoeff = decay (0.050f); ampCoeff = decay (0.26f); break;
                 case Drum::Crash:     ampCoeff = decay (1.10f); hpC = poleCoeff (6000.0f, sr); level *= 0.7f; break;

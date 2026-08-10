@@ -162,6 +162,40 @@ TEST_CASE ("Artefakt: Drums - Beat aus MIDI-Noten", "[.artifacts][drums]")
                        + ". Erwartung: Kick/Snare/HiHat klar unterscheidbar, Timing tight.");
 }
 
+// Sidestick-Variante: derselbe Groove, aber mit Rim statt Snare. Der Rim lag
+// vorher nur ~1 dB unter der Kick (kein Pegelfaktor) und dominierte damit den
+// Beat; seit 2026-08-10 sitzt er rund 10 dB darunter, also auf Akzent-Hoehe.
+TEST_CASE ("Artefakt: Drums - Beat mit Sidestick statt Snare", "[.artifacts][drums]")
+{
+    auto dir = artifactDir().getChildFile ("01_drums");
+    dir.createDirectory();
+
+    const int kick = padByName ("Kick");
+    const int rim  = padByName ("Rim");
+    const int hat  = padByName ("Hat");
+    REQUIRE (rim >= 0);
+
+    std::vector<Event> ev;
+    auto addHit = [&ev] (int pad, int step, float vel)
+    {
+        const int note = DrumMachineProcessor::padNote (pad);
+        ev.push_back ({ step * kStepSamples, juce::MidiMessage::noteOn (1, note, vel) });
+        ev.push_back ({ step * kStepSamples + 200, juce::MidiMessage::noteOff (1, note) });
+    };
+
+    for (int s : { 0, 10, 16, 22, 26 }) addHit (kick, s, 1.0f);
+    for (int s : { 4, 12, 20, 28 })     addHit (rim,  s, 0.9f);
+    for (int s = 0; s < 32; s += 2)     addHit (hat,  s, (s % 4 == 0) ? 0.8f : 0.5f);
+
+    DrumMachineProcessor drums;
+    const float peak = renderToWav (drums, ev, 4.5, dir.getChildFile ("c_beat_sidestick.wav"));
+
+    CHECK (peak > 0.1f);
+    appendBefund (dir, "c_beat_sidestick.wav - gleicher Groove, Rim statt Snare. Peak "
+                       + juce::String (peak, 3)
+                       + ". Erwartung: der Sidestick ist ein leiser Akzent, kein Hauptschlag.");
+}
+
 TEST_CASE ("Artefakt: Drums - derselbe Beat aus dem Step-Sequencer", "[.artifacts][drums][seq]")
 {
     auto dir = artifactDir().getChildFile ("01_drums");
