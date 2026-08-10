@@ -83,6 +83,8 @@ target_sources(engine_tests PRIVATE
     # Hoer-Pakete fuer den Live-Testlauf. Alle Cases tragen "[.artifacts]" und
     # laufen daher NICHT im normalen Suite-Lauf — Aufruf: engine_tests "[artifacts]"
     render_artifacts.cpp
+    # Dito auf ECHTEM Material: engine_tests "[realmaterial]" mit AIZANA_MATERIAL_DIR
+    render_artifacts_real.cpp
     test_bounce_in_place.cpp
     test_clip_merge.cpp
     test_clip_gain_envelope.cpp
