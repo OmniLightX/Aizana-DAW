@@ -101,6 +101,33 @@ namespace
         WARN (line.toStdString());
     }
 
+
+    // Sucht den lautesten zusammenhaengenden Abschnitt. Feste Zeitmarken sind
+    // untauglich: in der Rap-Spur war der Ausschnitt ab 0:40 komplett STUMM
+    // (RMS 0) — eine Messung darauf sagt nichts, sieht aber nach Ergebnis aus.
+    double loudestOffsetSecs (const juce::AudioBuffer<float>& src, double sr, double lengthSecs)
+    {
+        const int win  = juce::jmax (1, (int) (lengthSecs * sr));
+        const int step = juce::jmax (1, (int) (0.5 * sr));
+        if (src.getNumSamples() <= win)
+            return 0.0;
+
+        double bestRms = -1.0;
+        int    bestPos = 0;
+        for (int pos = 0; pos + win <= src.getNumSamples(); pos += step)
+        {
+            double sum = 0.0;
+            for (int ch = 0; ch < src.getNumChannels(); ++ch)
+            {
+                const float* d = src.getReadPointer (ch) + pos;
+                for (int i = 0; i < win; i += 16)          // grob genug, viel schneller
+                    sum += (double) d[i] * d[i];
+            }
+            if (sum > bestRms) { bestRms = sum; bestPos = pos; }
+        }
+        return (double) bestPos / sr;
+    }
+
     juce::AudioBuffer<float> toMono (const juce::AudioBuffer<float>& src)
     {
         juce::AudioBuffer<float> mono (1, src.getNumSamples());
@@ -290,11 +317,22 @@ TEST_CASE ("Real: Vocal-Tuning zieht eine echte Gesangsspur auf die Skala", "[.r
     double sr = 0.0;
     REQUIRE (readAudio (vox, full, sr));
 
-    // 15 s aus der Mitte: dort singt jemand, am Anfang ist oft Stille.
-    auto part = excerpt (full, sr, 40.0, 15.0);
+    // Lauteste 15 s statt einer festen Zeitmarke — siehe loudestOffsetSecs().
+    const double off = loudestOffsetSecs (full, sr, 15.0);
+    auto part = excerpt (full, sr, off, 15.0);
     auto mono = toMono (part);
 
     auto dir = outDir ("11_tuning");
+
+    // RIEGEL: niemals auf Stille messen. Genau das ist am 2026-08-10 passiert —
+    // der Ausschnitt lag auf einer Sprechpause, die Hoerprobe enthielt nur zwei
+    // isolierte Impulse in Stille (klingt wie Klicken), und die Cent-Zahlen
+    // sahen trotzdem nach einem Ergebnis aus. Ein stiller Ausschnitt ist ein
+    // FEHLER im Messaufbau, kein Messergebnis.
+    const float partPeak = part.getMagnitude (0, part.getNumSamples());
+    INFO ("Ausschnitt ab " << off << " s, Peak " << partPeak);
+    REQUIRE (partPeak > 0.01f);
+
     writeWav (dir.getChildFile ("a_original.wav"), part, sr);
 
     PitchDetector::Settings ps;                 // hopSize steckt in den Settings
@@ -332,7 +370,8 @@ TEST_CASE ("Real: Vocal-Tuning zieht eine echte Gesangsspur auf die Skala", "[.r
     const double offBefore = centsOffGrid (pitchBefore);
     const double offAfter  = centsOffGrid (pitchAfter);
 
-    note (dir, "Quelle: " + vox.getFileName() + " (15 s ab 0:40)");
+    note (dir, "Quelle: " + vox.getFileName() + " (lauteste 15 s, ab "
+               + juce::String (off, 1) + " s)");
     note (dir, "Median-Tonhoehe vorher " + juce::String (medBefore, 1) + " Hz");
     note (dir, "Mittlere Abweichung vom Halbton-Raster: vorher "
                + juce::String (offBefore, 1) + " Cent, nachher "
@@ -420,5 +459,86 @@ TEST_CASE ("Diagnose: Tempo-Schaetzung auf Klicktracks", "[.diag][tempo]")
         const auto   beats = TempoDetector::detectBeats (buf, sr);
         WARN ("Klick " + std::to_string ((int) bpm) + " BPM -> detectBpm "
               + std::to_string (got) + " | Beats " + std::to_string (beats.size()));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagnose P8: der User hoerte im getunten Rendering durchgehend Klicken und
+// Verzerrung — die Cent-Messung sah das nicht (naeher am Raster sagt nichts
+// ueber Artefakte). Drei Renderings trennen die moeglichen Ursachen:
+//   A) Korrekturkurve konstant 0  -> laeuft das Geruest ueberhaupt sauber?
+//   B) Korrekturkurve konstant +1 -> stoert ein Pitch-Shift an sich?
+//   C) die echte, sich aendernde Kurve -> stoert das staendige Nachfuehren?
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Diagnose: woher kommen die Artefakte im Vocal-Tuning", "[.diag][tune]")
+{
+    juce::File vox;
+    if (auto p = juce::SystemStats::getEnvironmentVariable ("AIZANA_VOCAL_FILE", {}); p.isNotEmpty())
+        vox = juce::File (p);
+    if (! vox.existsAsFile())
+        SKIP ("AIZANA_VOCAL_FILE setzen");
+
+    juce::AudioBuffer<float> full;
+    double sr = 0.0;
+    REQUIRE (readAudio (vox, full, sr));
+    const double off = loudestOffsetSecs (full, sr, 8.0);
+    auto mono = toMono (excerpt (full, sr, off, 8.0));
+    WARN ("lauteste 8 s ab " + std::to_string (off) + " s");
+
+    auto dir = outDir ("11_tuning");
+
+    // Klick-Mass: Spruenge von Sample zu Sample, die weit ueber dem ueblichen
+    // Mass liegen. Ein sauberes Signal hat praktisch keine.
+    auto clickScore = [] (const juce::AudioBuffer<float>& b)
+    {
+        const float* d = b.getReadPointer (0);
+        const int n = b.getNumSamples();
+        std::vector<double> diffs;
+        diffs.reserve ((size_t) n);
+        for (int i = 1; i < n; ++i)
+            diffs.push_back (std::abs ((double) d[i] - d[i - 1]));
+        auto sorted = diffs;
+        std::sort (sorted.begin(), sorted.end());
+        const double med = sorted[sorted.size() / 2];
+        const double thresh = juce::jmax (0.02, med * 40.0);
+        int jumps = 0;
+        for (double v : diffs) if (v > thresh) ++jumps;
+        return std::make_pair (jumps, sorted.back());
+    };
+
+    PitchDetector::Settings ps;
+    const auto pitch = PitchDetector::detectPitchHz (mono.getReadPointer (0),
+                                                     mono.getNumSamples(), sr, ps);
+    VocalTuner::Settings vs;
+    const auto realCurve = VocalTuner::buildCorrectionSemitones (pitch, vs, sr / ps.hopSize);
+
+    juce::Array<float> zero, constUp;
+    for (int i = 0; i < realCurve.size(); ++i) { zero.add (0.0f); constUp.add (1.0f); }
+
+    WARN ("Ausschnitt: " + std::to_string (mono.getNumSamples()) + " Samples, RMS "
+          + std::to_string (mono.getRMSLevel (0, 0, mono.getNumSamples()))
+          + ", Peak " + std::to_string (mono.getMagnitude (0, mono.getNumSamples())));
+    const auto orig = clickScore (mono);
+    WARN ("Original                  Spruenge " + std::to_string (orig.first)
+          + " | groesster " + std::to_string (orig.second));
+
+    struct Case { const char* name; const juce::Array<float>* curve; const char* file; };
+    const Case cases[] = {
+        { "A Kurve konstant 0 ", &zero,      "diag_a_kurve_null.wav" },
+        { "B Kurve konstant +1", &constUp,   "diag_b_konstant_plus1.wav" },
+        { "C echte Kurve      ", &realCurve, "diag_c_echte_kurve.wav" },
+    };
+
+    for (const auto& c : cases)
+    {
+        juce::AudioBuffer<float> outBuf;
+        REQUIRE (VocalTuner::renderCorrected (mono, outBuf, sr, *c.curve, ps.hopSize));
+        const auto s = clickScore (outBuf);
+        WARN (juce::String (c.name).toStdString() + " RMS "
+              + std::to_string (outBuf.getRMSLevel (0, 0, outBuf.getNumSamples()))
+              + " Peak " + std::to_string (outBuf.getMagnitude (0, outBuf.getNumSamples())));
+        WARN (juce::String (c.name).toStdString() + "       Spruenge " + std::to_string (s.first)
+              + " | groesster " + std::to_string (s.second));
+        writeWav (dir.getChildFile (c.file), outBuf, sr);
     }
 }
