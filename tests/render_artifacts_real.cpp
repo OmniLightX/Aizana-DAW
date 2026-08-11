@@ -595,7 +595,7 @@ TEST_CASE ("Diagnose: haengen die Artefakte an der Aenderungsrate", "[.diag][tun
     WARN ("Original: " + std::to_string (clickScore (mono)) + " Knicke");
 
     // Dieselbe Kurve, aber nur alle N Frames aktualisiert (dazwischen gehalten).
-    for (int hold : { 1, 4, 16, 64 })
+    for (int hold : { 1, 8, 32, 128, 512 })
     {
         juce::Array<float> held;
         for (int i = 0; i < curve.size(); ++i)
@@ -657,4 +657,61 @@ TEST_CASE ("Diagnose: was steht ueberhaupt in der Korrekturkurve", "[.diag][curv
           + " | groesster Sprung zwischen zwei Frames " + std::to_string (maxJump)
           + " | Frames mit |Korrektur| > 3 Halbtoene: " + std::to_string (big)
           + " von " + std::to_string (curve.size()));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagnose P8 (3): objektives Knacks-Mass.
+// Eingang ist ein REINER Sinus. Ein Pitch-Shift daraus ist wieder ein Sinus —
+// alles oberhalb ist Artefakt. Klicks sind breitbandig, also messbar als
+// Hochfrequenz-Energie. Verglichen werden: konstante Korrektur (laut Hoerurteil
+// sauber) gegen eine, die um NULL schwankt (dort kreuzt SoundTouchs Rate die 1.0).
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Diagnose: Knacks-Energie bei Nulldurchgang der Korrektur", "[.diag][crossover]")
+{
+    constexpr double sr = 44100.0;
+    const int n = (int) (4.0 * sr);
+
+    juce::AudioBuffer<float> in (1, n);
+    for (int i = 0; i < n; ++i)
+        in.setSample (0, i, 0.4f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                     * 220.0 * i / sr));
+
+    // Energie oberhalb ~3 kHz, gemessen ueber die dritte Differenz (starke
+    // Hochpasswirkung), relativ zum Gesamtpegel.
+    auto hfRatio = [] (const juce::AudioBuffer<float>& b)
+    {
+        const float* d = b.getReadPointer (0);
+        const int m = b.getNumSamples();
+        double hf = 0.0, total = 0.0;
+        for (int i = 3; i < m; ++i)
+        {
+            const double x = d[i] - 3.0 * d[i-1] + 3.0 * d[i-2] - d[i-3];
+            hf += x * x;
+            total += (double) d[i] * d[i];
+        }
+        return total > 0.0 ? std::sqrt (hf / total) : 0.0;
+    };
+
+    const int frames = n / 512 + 2;
+    juce::Array<float> constant, oscillating;
+    for (int i = 0; i < frames; ++i)
+    {
+        constant.add (0.4f);
+        // schwankt um NULL -> Rate kreuzt staendig die 1.0
+        oscillating.add (0.4f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                  * 2.0 * i * 512.0 / sr));
+    }
+
+    juce::AudioBuffer<float> outConst, outOsc;
+    REQUIRE (VocalTuner::renderCorrected (in, outConst, sr, constant,    512));
+    REQUIRE (VocalTuner::renderCorrected (in, outOsc,   sr, oscillating, 512));
+
+    const double base = hfRatio (in);
+    const double c    = hfRatio (outConst);
+    const double o    = hfRatio (outOsc);
+
+    WARN ("HF-Anteil  Original " + std::to_string (base)
+          + " | konstante Korrektur " + std::to_string (c)
+          + " | um Null schwankend " + std::to_string (o)
+          + "  -> Faktor " + std::to_string (c > 0.0 ? o / c : 0.0));
 }

@@ -183,6 +183,15 @@ target_compile_definitions(engine_tests PRIVATE
     TRACKTION_ENABLE_REWIRE=0
     # Timestretch backend — must match the Aizana app target (Phase 3, Task 0)
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
+    # KNACKEN BEIM TUNING (gefunden 2026-08-11): SoundTouch haengt in
+    # calcEffectiveRateAndTempo() seine interne Verarbeitungskette UM, je nachdem ob
+    # die Rate ueber oder unter 1.0 liegt, und kopiert dabei Puffer um. Eine
+    # Tonhoehen-Korrektur schwankt genau um 0 Halbtoene, also um Rate 1.0 — bei jeder
+    # Nulldurchquerung entstand dadurch ein hoerbarer Knacks. SoundTouchs eigener
+    # Schutzschalter dagegen heisst woertlich so und war schlicht nicht gesetzt; er
+    # haelt die Kettenreihenfolge fest. Muss auf JEDEM Target stehen, das das
+    # Tracktion-Modul mitkompiliert (die Modul-Quellen werden pro Target uebersetzt).
+    SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER=1
     # Offline-Render headless: AizanaUIBehaviour pumpt den Message-Loop nur mit
     # diesem Define — ohne es schlaeft der Message-Thread und te::callBlocking
     # in der Render-Initialisierung laeuft in den Timeout (Bounce/Freeze-Tests).

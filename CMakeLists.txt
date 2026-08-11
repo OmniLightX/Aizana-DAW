@@ -317,6 +317,15 @@ target_compile_definitions(Aizana PRIVATE
     # Without a backend, setAutoTempo/setTimeStretchMode/WarpTimeManager are silent no-ops.
     # Elastique stays off (commercial licence). Must match the engine_tests definition.
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
+    # KNACKEN BEIM TUNING (gefunden 2026-08-11): SoundTouch haengt in
+    # calcEffectiveRateAndTempo() seine interne Verarbeitungskette UM, je nachdem ob
+    # die Rate ueber oder unter 1.0 liegt, und kopiert dabei Puffer um. Eine
+    # Tonhoehen-Korrektur schwankt genau um 0 Halbtoene, also um Rate 1.0 — bei jeder
+    # Nulldurchquerung entstand dadurch ein hoerbarer Knacks. SoundTouchs eigener
+    # Schutzschalter dagegen heisst woertlich so und war schlicht nicht gesetzt; er
+    # haelt die Kettenreihenfolge fest. Muss auf JEDEM Target stehen, das das
+    # Tracktion-Modul mitkompiliert (die Modul-Quellen werden pro Target uebersetzt).
+    SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER=1
     # Enable VST3 + AU hosting in Aizana' OWN juce_audio_processors compilation so the
     # plugin-browser scanner (PluginScanner) can actually register and find them. Without
     # these, addDefaultFormats() adds nothing for the format and the user's library never

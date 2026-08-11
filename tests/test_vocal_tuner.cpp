@@ -304,3 +304,71 @@ TEST_CASE ("VocalTuner: konstante Korrektur bleibt ueber die Laenge stabil", "[t
     CHECK (std::abs (early - expected) < expected * 0.03f);
     CHECK (std::abs (late  - expected) < expected * 0.03f);
 }
+
+// ---------------------------------------------------------------------------
+// Regression 2026-08-11: Knacken bei jedem Nulldurchgang der Korrektur.
+//
+// Der User hoerte "durchgehend Knacken und Verzerrung" — aber NUR bei der
+// echten, schwankenden Korrekturkurve. Konstant 0 und konstant +1 Halbton
+// klangen sauber, obwohl +1 mehr Verschiebung verlangt als die echte Kurve je
+// tat (die lag zwischen -0.45 und +0.45).
+//
+// Ursache im SoundTouch-Quelltext (calcEffectiveRateAndTempo): die interne
+// Verarbeitungskette wird UMGEHAENGT, je nachdem ob die Rate ueber oder unter
+// 1.0 liegt, und dabei werden Puffer umkopiert. Eine Tonhoehen-Korrektur
+// schwankt genau um 0 Halbtoene — also um Rate 1.0 — und loeste das bei jeder
+// Nulldurchquerung aus. SoundTouchs eigener Schutzschalter dagegen heisst
+// woertlich SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER und war nicht gesetzt.
+//
+// Gemessen an genau diesem Test: OHNE den Schalter hatte der schwankende Fall
+// den 461-fachen Hochfrequenz-Anteil des konstanten. MIT dem Schalter liegt er
+// darunter. Faellt dieser Test, ist der Schalter aus der Build-Konfiguration
+// verschwunden — dann knackt jedes Tuning wieder.
+// ---------------------------------------------------------------------------
+TEST_CASE ("VocalTuner: Korrektur um Null herum erzeugt keine Knacks-Energie", "[tune][P8]")
+{
+    constexpr double sr = 44100.0;
+    const int n = (int) (4.0 * sr);
+
+    // Reiner Sinus: ein Pitch-Shift daraus ist wieder ein Sinus. Alles im
+    // Hochtonbereich ist damit nachweislich Artefakt und nicht Nutzsignal.
+    juce::AudioBuffer<float> in (1, n);
+    for (int i = 0; i < n; ++i)
+        in.setSample (0, i, 0.4f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                     * 220.0 * i / sr));
+
+    auto hfRatio = [] (const juce::AudioBuffer<float>& b)
+    {
+        const float* d = b.getReadPointer (0);
+        const int m = b.getNumSamples();
+        double hf = 0.0, total = 0.0;
+        for (int i = 3; i < m; ++i)
+        {
+            const double x = d[i] - 3.0 * d[i-1] + 3.0 * d[i-2] - d[i-3];   // starker Hochpass
+            hf += x * x;
+            total += (double) d[i] * d[i];
+        }
+        return total > 0.0 ? std::sqrt (hf / total) : 0.0;
+    };
+
+    const int frames = n / 512 + 2;
+    juce::Array<float> constant, oscillating;
+    for (int i = 0; i < frames; ++i)
+    {
+        constant.add (0.4f);                       // Referenz: nie ein Nulldurchgang
+        oscillating.add (0.4f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                  * 2.0 * i * 512.0 / sr));   // kreuzt staendig
+    }
+
+    juce::AudioBuffer<float> outConst, outOsc;
+    REQUIRE (VocalTuner::renderCorrected (in, outConst, sr, constant,    512));
+    REQUIRE (VocalTuner::renderCorrected (in, outOsc,   sr, oscillating, 512));
+
+    const double c = hfRatio (outConst);
+    const double o = hfRatio (outOsc);
+    INFO ("HF-Anteil konstant " << c << ", um Null schwankend " << o
+          << " (ohne Schutzschalter war der Faktor 461)");
+
+    REQUIRE (c > 0.0);
+    CHECK (o < c * 5.0);
+}
