@@ -85,6 +85,9 @@ target_sources(engine_tests PRIVATE
     render_artifacts.cpp
     # Dito auf ECHTEM Material: engine_tests "[realmaterial]" mit AIZANA_MATERIAL_DIR
     render_artifacts_real.cpp
+    # Dito, aber mit einer ECHTEN Session (Renderer/Bounce/Warp/Merge):
+    # engine_tests "[session]" mit AIZANA_MATERIAL_DIR
+    render_artifacts_session.cpp
     test_bounce_in_place.cpp
     test_clip_merge.cpp
     test_clip_gain_envelope.cpp
