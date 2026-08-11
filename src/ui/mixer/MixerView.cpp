@@ -23,6 +23,7 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
     addChannelButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
     addChannelButton.onClick = [this] { showAddChannelMenu (&addChannelButton); };
     addAndMakeVisible (addChannelButton);
+    addChannelButton.setTitle (juce::String::fromUTF8 ("Kanal hinzufuegen"));   // "+" allein ist mehrdeutig
 
     // Register ValueTree listener so we rebuild on track add/remove
     if (auto* edit = appState.editManager.getEdit())

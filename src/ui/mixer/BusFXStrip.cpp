@@ -477,6 +477,10 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     }
 
     track.state.addListener (this);
+
+    // Namen fuer Bedienungshilfen/Automatisierung sofort setzen (refresh()
+    // erledigt das mit; beim Aufbau laeuft es sonst nicht).
+    refresh();
 }
 
 BusFXStrip::~BusFXStrip()
@@ -571,6 +575,18 @@ void BusFXStrip::rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels)
 
 void BusFXStrip::refresh()
 {
+    // Namen mit dem Kanalnamen qualifizieren (siehe ChannelStrip) — sonst heisst
+    // auf jedem Bus- und FX-Zug alles gleich.
+    {
+        const auto n = track.getName();
+        setTitle (juce::String::fromUTF8 ("Kanalzug ") + n);
+        volumeFader  .setTitle (juce::String::fromUTF8 ("Lautstaerke ") + n);
+        soloButton   .setTitle ("Solo " + n);
+        muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n);
+        outputButton .setTitle (juce::String::fromUTF8 ("Ausgang ") + n);
+        trackNameLabel.setTitle (juce::String::fromUTF8 ("Kanalname ") + n);
+    }
+
     soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
     muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
 

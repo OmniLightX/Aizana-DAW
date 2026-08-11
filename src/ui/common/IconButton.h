@@ -17,7 +17,24 @@
 class IconButton : public juce::Button
 {
 public:
-    explicit IconButton (AizanaIcon icon) : juce::Button ({}), iconId (icon) {}
+    /**
+     * @param icon            gezeichnetes Symbol
+     * @param accessibleName  Name, unter dem das Element vom System angesprochen wird
+     *                        (VoiceOver liest ihn vor, Automatisierung adressiert ihn).
+     *
+     * Ein Icon-Button hat keinen Text — ohne diesen Namen taucht er im
+     * Bedienungshilfen-Baum als "ohne Namen" auf und ist weder vorlesbar noch
+     * zuverlaessig ansprechbar (nur ueber Bildschirmkoordinaten, was bei jeder
+     * Layout-Aenderung still ins Leere klickt). JUCE bevorzugt setTitle() und
+     * faellt sonst auf den Button-Text zurueck (ButtonAccessibilityHandler);
+     * gezeichnet wird der Titel NICHT, die Optik bleibt also unveraendert.
+     */
+    explicit IconButton (AizanaIcon icon, const juce::String& accessibleName = {})
+        : juce::Button ({}), iconId (icon)
+    {
+        if (accessibleName.isNotEmpty())
+            setTitle (accessibleName);
+    }
 
     void setIcon (AizanaIcon i) { iconId = i; repaint(); }
 

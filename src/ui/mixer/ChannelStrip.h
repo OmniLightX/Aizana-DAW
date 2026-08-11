@@ -257,6 +257,10 @@ private:
     // Sync outputButton label from current engine routing state
     void refreshOutputButton();
 
+    /** Namen fuer Bedienungshilfen/Automatisierung, mit dem Kanalnamen
+        qualifiziert. Bei jedem refresh() erneuert, damit Umbenennen durchschlaegt. */
+    void updateAccessibleNames();
+
     // Format pan value as "L33", "C", or "R48" (absolute percent 0-100)
     static juce::String formatPanValue (double pan);
 

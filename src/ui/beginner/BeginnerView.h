@@ -75,7 +75,14 @@ private:
     struct IconButton : public juce::Button
     {
         enum class Icon { Undo, Redo };
-        explicit IconButton (Icon i) : juce::Button ({}), icon (i) {}
+        /** accessibleName: ohne ihn steht der Knopf im Bedienungshilfen-Baum
+            als "ohne Namen" (Icon-Button hat keinen Text). Optik unveraendert. */
+        explicit IconButton (Icon i, const juce::String& accessibleName = {})
+            : juce::Button ({}), icon (i)
+        {
+            if (accessibleName.isNotEmpty())
+                setTitle (accessibleName);
+        }
         void paintButton (juce::Graphics&, bool, bool) override;
         Icon icon;
     };
@@ -106,8 +113,8 @@ private:
 
     // Sandbox safety net (Phase 2, Block C) — beginners undo/redo without keyboard.
     // Drawn as juce::Path icons (see IconButton) — no font glyph dependency.
-    IconButton undoButton { IconButton::Icon::Undo };
-    IconButton redoButton { IconButton::Icon::Redo };
+    IconButton undoButton { IconButton::Icon::Undo, juce::String::fromUTF8 ("Rueckgaengig") };
+    IconButton redoButton { IconButton::Icon::Redo, juce::String::fromUTF8 ("Wiederholen") };
 
     // Coach rail (Slice 3) — proactive feedback + 1-click intents + command bar.
     juce::TextButton act1 { "Nach vorne holen" };

@@ -750,6 +750,10 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     // rebuildStrips() creates new ChannelStrips after routing changes; the constructor
     // defaults to "▶ Master" which is wrong if the track is already routed to a bus.
     refreshOutputButton();
+
+    // Namen fuer Bedienungshilfen/Automatisierung sofort setzen — refresh()
+    // laeuft beim Aufbau nicht zwingend.
+    updateAccessibleNames();
 }
 
 ChannelStrip::~ChannelStrip()
@@ -903,8 +907,28 @@ void ChannelStrip::followAutomation()
     }
 }
 
+void ChannelStrip::updateAccessibleNames()
+{
+    // Mit dem KANALNAMEN qualifizieren: "S"/"M" allein ist auf zwanzig Zuegen
+    // zwanzigmal dasselbe — fuer VoiceOver nichtssagend und fuer eine
+    // Automatisierung mehrdeutig (ein Klick trifft irgendeinen davon, ohne dass
+    // es auffaellt). Sichtbar aendert sich nichts, setTitle zeichnet nicht.
+    const auto n = track.getName();
+    setTitle (juce::String::fromUTF8 ("Kanalzug ") + n);
+    volumeFader  .setTitle (juce::String::fromUTF8 ("Lautstaerke ") + n);
+    panKnob      .setTitle (juce::String::fromUTF8 ("Panorama ") + n);
+    soloButton   .setTitle ("Solo " + n);
+    muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n);
+    outputButton .setTitle (juce::String::fromUTF8 ("Ausgang ") + n);
+    trackNameLabel.setTitle (juce::String::fromUTF8 ("Kanalname ") + n);
+    insertSlotPanel.setTitle (juce::String::fromUTF8 ("Insert-Plaetze ") + n);
+    sendSlotPanel .setTitle (juce::String::fromUTF8 ("Sends ") + n);
+}
+
 void ChannelStrip::refresh()
 {
+    updateAccessibleNames();
+
     // Pull current engine state and update all controls without firing callbacks.
     // Called from valueTreePropertyChanged (via callAsync) and from MixerView
     // keyPressed() after S/M keyboard shortcuts so visuals never diverge from TE.

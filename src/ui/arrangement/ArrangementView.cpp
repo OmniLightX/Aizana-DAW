@@ -404,6 +404,13 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
     // Zoom buttons — header strip, top-right corner
     // These provide discoverability and a keyboard-alternative to pinch/Ctrl+scroll.
     addAndMakeVisible (zoomInButton);
+    // Eindeutige Namen: "+" / "-" / "F" gibt es mehrfach in der App.
+    zoomInButton .setTitle (juce::String::fromUTF8 ("Zeitachse vergroessern"));
+    zoomOutButton.setTitle (juce::String::fromUTF8 ("Zeitachse verkleinern"));
+    snapButton   .setTitle (juce::String::fromUTF8 ("Raster einrasten"));
+    gridCombo    .setTitle (juce::String::fromUTF8 ("Rasterweite"));
+    autoScrollButton.setTitle (juce::String::fromUTF8 ("Ansicht folgt Abspielkopf"));
+    addTrackButton.setTitle (juce::String::fromUTF8 ("Spur hinzufuegen"));
     addAndMakeVisible (zoomOutButton);
     zoomInButton.setTooltip  ("Zoom in (Ctrl + scroll up)");
     zoomOutButton.setTooltip ("Zoom out (Ctrl + scroll down)");

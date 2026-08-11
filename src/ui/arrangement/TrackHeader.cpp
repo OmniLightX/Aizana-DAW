@@ -130,6 +130,10 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
         levelClientAdded = true;
         startTimerHz (30);
     }
+
+    // Namen fuer Bedienungshilfen/Automatisierung sofort setzen — refresh()
+    // laeuft beim Aufbau nicht zwingend, sonst blieben die Knoepfe namenlos.
+    updateAccessibleNames();
 }
 
 TrackHeader::~TrackHeader()
@@ -419,8 +423,29 @@ void TrackHeader::setSelected (bool shouldBeSelected)
     }
 }
 
+void TrackHeader::updateAccessibleNames()
+{
+    // Namen mit dem SPURNAMEN qualifizieren. Ein blosses "M" auf jeder Spur ist
+    // fuer VoiceOver nutzlos ("Taste M" — welche?) und fuer eine Automatisierung
+    // mehrdeutig: bei zwoelf Spuren gibt es zwoelf gleichnamige Elemente, und ein
+    // Klick trifft irgendeines davon, ohne dass es auffaellt.
+    // Der sichtbare Text bleibt "M"/"S"/"REC"/"I" — setTitle zeichnet nichts.
+    const auto n = track.getName();
+    muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n);
+    soloButton   .setTitle ("Solo " + n);
+    armButton    .setTitle (juce::String::fromUTF8 ("Aufnahmebereit ") + n);
+    monitorButton.setTitle (juce::String::fromUTF8 ("Eingang mithoeren ") + n);
+    inputButton  .setTitle (juce::String::fromUTF8 ("Eingang waehlen ") + n);
+    stereoButton .setTitle (juce::String::fromUTF8 ("Mono/Stereo ") + n);
+    volumeSlider .setTitle (juce::String::fromUTF8 ("Lautstaerke ") + n);
+    trackNameLabel.setTitle (juce::String::fromUTF8 ("Spurname ") + n);
+    setTitle (juce::String::fromUTF8 ("Spur ") + n);
+}
+
 void TrackHeader::refresh()
 {
+    updateAccessibleNames();
+
     muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
     soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
 

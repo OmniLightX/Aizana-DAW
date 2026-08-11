@@ -180,6 +180,11 @@ private:
     void assignMidiInput (te::MidiInputDevice* midiIn);
     /** Sync inputButton text from the currently assigned input device (audio or MIDI). */
     void refreshInputButton();
+
+    /** Setzt die Namen fuer Bedienungshilfen/Automatisierung, mit dem Spurnamen
+        qualifiziert ("Stumm Vocals" statt zwoelfmal "M"). Wird bei jedem
+        refresh() aufgerufen, damit ein Umbenennen der Spur durchschlaegt. */
+    void updateAccessibleNames();
     /** Open the Named Input Bus manager (from the "Manage Buses…" dropdown entry). */
     void handleManageBuses();
 

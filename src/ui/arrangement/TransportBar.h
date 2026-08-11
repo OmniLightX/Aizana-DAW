@@ -47,29 +47,29 @@ private:
     ApplicationState& appState;
 
     // Transport controls — vector-icon buttons (Sketch 005 Pro-UI polish; no text labels).
-    IconButton rewindButton    { AizanaIcon::Rewind };     // Return to start (|◀)
-    IconButton playButton      { AizanaIcon::Play };
-    IconButton stopButton      { AizanaIcon::Stop };
-    IconButton recordButton    { AizanaIcon::Record };
+    IconButton rewindButton    { AizanaIcon::Rewind, juce::String::fromUTF8 ("Zum Anfang") };     // Return to start (|◀)
+    IconButton playButton      { AizanaIcon::Play, juce::String::fromUTF8 ("Wiedergabe") };
+    IconButton stopButton      { AizanaIcon::Stop, juce::String::fromUTF8 ("Stopp") };
+    IconButton recordButton    { AizanaIcon::Record, juce::String::fromUTF8 ("Aufnahme") };
 
     /** Enables/disables the metronome click track. */
-    IconButton metronomeButton { AizanaIcon::Metronome };
+    IconButton metronomeButton { AizanaIcon::Metronome, juce::String::fromUTF8 ("Metronom") };
 
     /** Enables/disables loop playback; lit when transport.looping is true. */
-    IconButton loopButton { AizanaIcon::Loop };
+    IconButton loopButton { AizanaIcon::Loop, juce::String::fromUTF8 ("Schleife") };
 
     /** Tap Tempo — average of last 4 taps; >2s gap resets sequence. */
-    IconButton tapTempoButton { AizanaIcon::Tap };
+    IconButton tapTempoButton { AizanaIcon::Tap, juce::String::fromUTF8 ("Tempo tippen") };
 
     /** Metronome settings ▾ — opens a popover bundling Vorzähler (count-in),
      *  Pre-Roll, Downbeat accent and click level (Sketch 006 A, Studio One pattern).
      *  Sits right of the metronome toggle as a split-button affordance. */
-    IconButton metroMenuButton { AizanaIcon::Chevron };
+    IconButton metroMenuButton { AizanaIcon::Chevron, juce::String::fromUTF8 ("Metronom-Einstellungen") };
     void showMetronomeMenu();
 
     /** Auto-Punch — icon toggle; recording only happens within the Loop In/Out
      *  markers (te::Edit::recordingPunchInOut, persisted). Red when armed. */
-    IconButton autoPunchButton { AizanaIcon::Punch };
+    IconButton autoPunchButton { AizanaIcon::Punch, juce::String::fromUTF8 ("Auto-Punch") };
     void toggleAutoPunch();
     void updateAutoPunchButton();
 

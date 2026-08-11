@@ -72,6 +72,22 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
         repaint();
     };
     addAndMakeVisible (zoomInButton);
+    // Der Dock-Editor hat eigene "+"/"-"-Knoepfe — ohne eindeutige Namen sind sie
+    // von denen der Zeitachse nicht zu unterscheiden.
+    zoomInButton .setTitle (juce::String::fromUTF8 ("Editor vergroessern"));
+    zoomOutButton.setTitle (juce::String::fromUTF8 ("Editor verkleinern"));
+    zoomFitButton.setTitle (juce::String::fromUTF8 ("Editor einpassen"));
+    gainSlider   .setTitle (juce::String::fromUTF8 ("Clip-Verstaerkung"));
+    toolPointerBtn.setTitle (juce::String::fromUTF8 ("Werkzeug Pfeil"));
+    toolSplitBtn .setTitle (juce::String::fromUTF8 ("Werkzeug Teilen"));
+    toolRangeBtn .setTitle (juce::String::fromUTF8 ("Werkzeug Bereich"));
+    snapBtn      .setTitle (juce::String::fromUTF8 ("Editor-Raster einrasten"));
+    muteBtn      .setTitle (juce::String::fromUTF8 ("Clip stummschalten"));
+    autoBtn      .setTitle (juce::String::fromUTF8 ("Automationsspur"));
+    takesBtn     .setTitle (juce::String::fromUTF8 ("Takes anzeigen"));
+    gainEnvBtn   .setTitle (juce::String::fromUTF8 ("Verstaerkungskurve"));
+    bendBtn      .setTitle (juce::String::fromUTF8 ("Audio-Bend"));
+    rangeCutBtn  .setTitle (juce::String::fromUTF8 ("Bereich entfernen"));
     addAndMakeVisible (zoomOutButton);
     addAndMakeVisible (zoomFitButton);
 

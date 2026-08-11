@@ -332,6 +332,11 @@ MasterStrip::MasterStrip (te::Edit& edit_,
     , pluginScanner (pluginScanner_)
     , insertPanel (edit_, pluginWindowManager_, pluginScanner_)
 {
+    // Eindeutige Namen fuer Bedienungshilfen/Automatisierung (Optik unveraendert).
+    setTitle (juce::String::fromUTF8 ("Summenkanal Master"));
+    volumeFader.setTitle (juce::String::fromUTF8 ("Lautstaerke Master"));
+    insertPanel.setTitle (juce::String::fromUTF8 ("Insert-Plaetze Master"));
+
     // ---- Volume fader ----
     volumeFader.setSliderStyle    (juce::Slider::LinearVertical);
     volumeFader.setTextBoxStyle   (juce::Slider::TextBoxBelow, false, 65, 16);
