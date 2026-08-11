@@ -33,6 +33,7 @@
 #include "engine/MixerEngine.h"
 #include "engine/ClipGainEnvelope.h"
 #include "engine/WarpEngine.h"
+#include "engine/ExportPipeline.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
 #include "plugins/BuiltInPluginFormat.h"
@@ -616,6 +617,81 @@ TEST_CASE ("Session P1: Sidechain duckt den 809-Bass auf die Kick", "[.session][
     CHECK (medAfter > 1.0e-5);
     CHECK (medAfter > medBefore * 2.0);
 
+    // Der Bass ALLEIN als Bezugsgroesse. Ohne ihn ist die Absenkung nicht in dB
+    // anzugeben: in der Summe dominiert direkt nach dem Schlag die KICK, eine
+    // Absenkung des Basses verschwindet dort fast vollstaendig. (Genau darauf
+    // bin ich zuerst hereingefallen — die erste Fassung dieser Messung ergab
+    // 0,2 dB und haette den Sidechain faelschlich als wirkungslos ausgewiesen.)
+    // Der Sidechain ist hier bereits geloest, der Kompressor arbeitet also
+    // selbstgesteuert — genau der Zustand, gegen den verglichen wird.
+    const auto bassOnlyFile = renderRange (*edit, dir.getChildFile ("d_bass_allein_ohne_sidechain.wav"),
+                                           0.0, kLen, trackBits (*edit, { bassTrack }));
+    REQUIRE (bassOnlyFile.existsAsFile());
+
+    juce::AudioBuffer<float> bassSolo;
+    double srBass = 0.0;
+    REQUIRE (readAudio (bassOnlyFile, bassSolo, srBass));
+    REQUIRE (srBass == srA);
+    REQUIRE (bassSolo.getMagnitude (0, bassSolo.getNumSamples()) > 0.001f);
+
+    // Der Unterschied zwischen den beiden Summen betrifft AUSSCHLIESSLICH den
+    // Bass (die Kick ist in beiden identisch und kuerzt sich weg). Also ist
+    // "Bass mit Sidechain" = "Bass allein" + diese Differenz.
+    juce::AudioBuffer<float> bassDucked (1, juce::jmin (bassSolo.getNumSamples(), n));
+    bassDucked.copyFrom (0, 0, bassSolo, 0, 0, bassDucked.getNumSamples());
+    bassDucked.addFrom  (0, 0, diff,     0, 0, bassDucked.getNumSamples(), 1.0f);
+
+    writeAbFile (dir.getChildFile ("HOERPROBE_bass_allein_ohne_dann_mit_sidechain.wav"),
+                 bassSolo, bassDucked, srA);
+
+    // ── Was einen Mix-Engineer wirklich interessiert ──────────────────────
+    // Nicht "es duckt", sondern WIE TIEF und WIE SCHNELL ZURUECK. Genau das
+    // entscheidet, ob die Kick sich in den Bass einbettet und wieder heraus-
+    // federt ("Trampolin") oder ob es nur pumpt. Gemessen wird der Pegel des
+    // Basses MIT gegen OHNE Sidechain in kurzen Fenstern nach jedem Schlag —
+    // das ist die tatsaechliche Absenkung in dB, nicht ein Ersatzmass.
+    {
+        std::vector<double> depth, recovery;
+        for (double t : hits)
+        {
+            if (t < 0.3 || t > n / srA - 0.6) continue;
+
+            const double a0 = rmsRange (bassSolo,   srA, t + 0.005, t + 0.035);
+            const double b0 = rmsRange (bassDucked, srA, t + 0.005, t + 0.035);
+            if (a0 <= 1.0e-6) continue;
+            depth.push_back (20.0 * std::log10 (b0 / a0));      // negativ = Absenkung
+
+            // Wann ist der Bass wieder oben? Erstes 20-ms-Fenster, das wieder
+            // innerhalb von 1 dB am ungeduckten Pegel liegt.
+            for (double dt = 0.02; dt < 0.5; dt += 0.02)
+            {
+                const double a1 = rmsRange (bassSolo,   srA, t + dt, t + dt + 0.02);
+                const double b1 = rmsRange (bassDucked, srA, t + dt, t + dt + 0.02);
+                if (a1 > 1.0e-6 && 20.0 * std::log10 (b1 / a1) > -1.0)
+                {
+                    recovery.push_back (dt);
+                    break;
+                }
+            }
+        }
+
+        if (! depth.empty())
+        {
+            note (dir, "Absenkung des Basses am Schlag: im Mittel "
+                       + juce::String (median (depth), 1) + " dB"
+                       + " (tiefster Schlag " + juce::String (*std::min_element (depth.begin(), depth.end()), 1) + " dB)");
+            if (! recovery.empty())
+                note (dir, "Rueckkehr auf Normalpegel nach im Mittel "
+                           + juce::String (median (recovery) * 1000.0, 0) + " ms"
+                           + " — das ist das Federn, auf das es klanglich ankommt");
+
+            // Es muss ueberhaupt hoerbar absenken (mehr als 1 dB) und wieder
+            // zurueckkommen — ein Kompressor, der unten bleibt, pumpt nicht.
+            CHECK (median (depth) < -1.0);
+            CHECK (! recovery.empty());
+        }
+    }
+
     // Und der gemessene Effekt muss deutlich ueber dem liegen, was zwei
     // identische Durchgaenge ohnehin auseinanderliegen — sonst misst man
     // Render-Rauschen statt Sidechain.
@@ -804,15 +880,31 @@ TEST_CASE ("Session P3: Bounce in Place ist deckungsgleich mit dem Live-Render",
     const double snr  = err > 0.0 ? 20.0 * std::log10 (sig / err) : 999.0;
     const double peak = d.getMagnitude (0, n);
 
+    // HOERPROBE mit einer EINSTELLUNG, DIE MAN WIRKLICH FAEHRT.
+    // Fuer den Nachweis oben steht der Drive absichtlich hoch (sonst liegt der
+    // Effekt zu nah an der Nachweisgrenze) — zum Beurteilen taugt das nicht,
+    // das klingt uebertrieben. Deshalb hier zusaetzlich ein Paar mit
+    // moderatem Tape-Drive.
+    if (auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin))
+        if (auto* inst = ext->getAudioPluginInstance())
+        {
+            setHostParam (*inst, "drive", 9.0f);
+            setHostParam (*inst, "type",  0.0f);      // Tape
+        }
+
+    const auto musicalFile = renderRange (*edit, dir.getChildFile ("e_moderat_saturiert.wav"),
+                                          range.getStart().inSeconds(), range.getEnd().inSeconds(),
+                                          trackBits (*edit, { track }), false, nullptr, true, bounceRate);
+    {
+        juce::AudioBuffer<float> dry, musical;
+        double s1 = 0.0, s2 = 0.0;
+        if (readAudio (dryFile, dry, s1) && readAudio (musicalFile, musical, s2))
+            writeAbFile (dir.getChildFile ("HOERPROBE_ohne_dann_mit_saturator.wav"), dry, musical, s2);
+    }
+
     juce::AudioBuffer<float> copy (b);
     writeWav (dir.getChildFile ("b_bounce.wav"), copy, srB);
     writeWav (dir.getChildFile ("c_differenz.wav"), d, srA);
-    {
-        juce::AudioBuffer<float> dry;
-        double srDry2 = 0.0;
-        if (readAudio (dryFile, dry, srDry2))
-            writeAbFile (dir.getChildFile ("HOERPROBE_ohne_dann_mit_saturator.wav"), dry, copy, srB);
-    }
 
     note (dir, "Laengen: Live-Render " + juce::String (a.getNumSamples())
                + " Samples, Bounce " + juce::String (b.getNumSamples()));
@@ -1208,3 +1300,127 @@ TEST_CASE ("Session ET: Merged minus Original ist Stille", "[.session][et]")
     work.deleteRecursively();
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNABHAENGIGE GEGENPRUEFUNG der beiden Fixes vom 2026-08-11.
+//
+// Dieser Fall behauptet NICHTS. Er baut die Lage nach, in der die Fehler
+// auftraten (Session haengt am Geraet, zustandsbehaftete Plugins in der Kette),
+// fuehrt die Aktionen ZWEIMAL aus und legt die Ergebnisse als Dateien ab.
+// Das Urteil faellt danach ausserhalb: shasum vergleicht die Dateien, ffprobe
+// liest die Samplerate. Damit haengt die Aussage nicht an meinen eigenen
+// Assertions — genau darum geht es bei einer Gegenpruefung.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Verify: Bounce/Merge/Export zweimal — Dateien zum externen Vergleich", "[.verify]")
+{
+    if (! materialDir().isDirectory())
+        SKIP ("Kein Material — AIZANA_MATERIAL_DIR setzen");
+
+    const auto stem = pickAudibleStem ({ "Chorus Main 1", "chords", "Plucks", "Guitar" });
+    if (! stem.existsAsFile())
+        SKIP ("Kein ausreichend lauter Stem gefunden");
+
+    auto dir  = outDir ("30_gegenpruefung");
+    auto work = workDir();
+
+    double srcFrom = 0.0;
+    const auto src = makeLoudExcerptFile (stem, 6.0, work, "quelle.wav", srcFrom);
+    REQUIRE (src.existsAsFile());
+
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    ClipEditor clipEditor (em);
+    PluginScanner scanner;
+    PluginManager pm (scanner, em);
+
+    auto* track = te::getAudioTracks (*edit)[0];
+    auto* clip = clipEditor.importAudioFile (src, *track, 0.0);
+    REQUIRE (clip != nullptr);
+
+    // Zwei zustandsbehaftete Plugins in der Kette: der Kompressor fuehrt eine
+    // Huellkurve mit, die Roehrensaettigung eine DC-Sperre. Genau diese Zustaende
+    // wurden vorher vom Live-Signalweg verfaelscht.
+    for (const char* name : { "Aizana Compressor", "Aizana Saturator" })
+        if (auto* p = pm.insertPlugin (*track, BuiltInPluginFormat::getDescriptionFor (name), -1))
+            if (auto* ext = dynamic_cast<te::ExternalPlugin*> (p))
+            {
+                ext->initialiseFully();
+                if (auto* inst = ext->getAudioPluginInstance())
+                {
+                    setHostParam (*inst, "threshold", -30.0f);
+                    setHostParam (*inst, "ratio",       6.0f);
+                    setHostParam (*inst, "drive",      12.0f);
+                }
+            }
+
+    // DIE Bedingung, unter der die Fehler auftraten: die Session haengt am Geraet.
+    edit->getTransport().ensureContextAllocated();
+    REQUIRE (edit->getTransport().isPlayContextActive());
+
+    auto copyTo = [&dir] (const juce::File& from, const juce::String& name)
+    {
+        auto to = dir.getChildFile (name);
+        to.deleteFile();
+        from.copyFileTo (to);
+        return to;
+    };
+
+    // --- Bounce, zweimal ---
+    auto* b1 = clipEditor.bounceClipInPlace (*clip, true);
+    REQUIRE (b1 != nullptr);
+    copyTo (b1->getSourceFileReference().getFile(), "bounce_1.wav");
+
+    em.getUndoManager().undo();
+    auto* clipAgain = dynamic_cast<te::WaveAudioClip*> (track->getClips()[0]);
+    REQUIRE (clipAgain != nullptr);
+    auto* b2 = clipEditor.bounceClipInPlace (*clipAgain, true);
+    REQUIRE (b2 != nullptr);
+    copyTo (b2->getSourceFileReference().getFile(), "bounce_2.wav");
+    em.getUndoManager().undo();
+
+    // --- Merge, zweimal (Clip teilen, verbinden, zurueck, nochmal) ---
+    for (int pass = 1; pass <= 2; ++pass)
+    {
+        auto* c = dynamic_cast<te::WaveAudioClip*> (track->getClips()[0]);
+        REQUIRE (c != nullptr);
+        auto* right = clipEditor.cutClip (*c, 2.5);
+        REQUIRE (right != nullptr);
+        auto* merged = dynamic_cast<te::WaveAudioClip*> (clipEditor.mergeClips ({ c, right }));
+        REQUIRE (merged != nullptr);
+        copyTo (merged->getSourceFileReference().getFile(),
+                "merge_" + juce::String (pass) + ".wav");
+        em.getUndoManager().undo();   // Merge zurueck
+        em.getUndoManager().undo();   // Split zurueck
+    }
+
+    // --- Export (Mixdown), zweimal ---
+    for (int pass = 1; pass <= 2; ++pass)
+    {
+        ExportOptions options;
+        options.outputFile = work.getChildFile ("export_" + juce::String (pass) + ".wav");
+        options.format     = ExportFormat::WAV;
+        options.sampleRate = 44100.0;
+        options.bitDepth   = 24;
+
+        ExportPipeline pipeline;
+        const auto err = pipeline.exportMixdown (*edit, options);
+        REQUIRE (err.isEmpty());
+        REQUIRE (options.outputFile.existsAsFile());
+        copyTo (options.outputFile, "export_" + juce::String (pass) + ".wav");
+    }
+
+    // Die Quelle mit ablegen, damit die Samplerate von aussen vergleichbar ist
+    copyTo (src, "quelle.wav");
+
+    // Nach allem muss die Session wieder spielbereit sein — sonst waere nach
+    // jedem Export Stille, und der Fix haette einen neuen Fehler eingebaut.
+    CHECK (edit->getTransport().isPlayContextActive());
+
+    note (dir, "Quelle: " + stem.getFileName() + " (6 s ab " + juce::String (srcFrom, 1) + " s)");
+    note (dir, "Geraeterate waehrend des Laufs: "
+               + juce::String (edit->engine.getDeviceManager().getSampleRate(), 0) + " Hz");
+    note (dir, "Dateien abgelegt — Urteil faellt extern (shasum/ffprobe).");
+
+    work.deleteRecursively();
+}
