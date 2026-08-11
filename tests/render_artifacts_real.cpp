@@ -542,3 +542,119 @@ TEST_CASE ("Diagnose: woher kommen die Artefakte im Vocal-Tuning", "[.diag][tune
         writeWav (dir.getChildFile (c.file), outBuf, sr);
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagnose P8 (2): User-Hoerurteil grenzt die Ursache ein — Kurve konstant 0
+// und konstant +1 klingen SAUBER, nur die sich aendernde Kurve knackt. Der
+// Pitch-Shift an sich ist also in Ordnung; es sind die AENDERUNGEN.
+// Hier wird die Aenderungsrate variiert, um den Zusammenhang zu belegen.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Diagnose: haengen die Artefakte an der Aenderungsrate", "[.diag][tune2]")
+{
+    juce::File vox;
+    if (auto p = juce::SystemStats::getEnvironmentVariable ("AIZANA_VOCAL_FILE", {}); p.isNotEmpty())
+        vox = juce::File (p);
+    if (! vox.existsAsFile())
+        SKIP ("AIZANA_VOCAL_FILE setzen");
+
+    juce::AudioBuffer<float> full;
+    double sr = 0.0;
+    REQUIRE (readAudio (vox, full, sr));
+    const double off = loudestOffsetSecs (full, sr, 8.0);
+    auto mono = toMono (excerpt (full, sr, off, 8.0));
+    REQUIRE (mono.getMagnitude (0, mono.getNumSamples()) > 0.01f);
+
+    auto dir = outDir ("11_tuning");
+
+    // Klick-Mass ueber die ZWEITE Differenz: ein Knacks ist ein Knick im
+    // Signalverlauf, kein blosser Anstieg. Isolierte Ausreisser der zweiten
+    // Ableitung treffen genau das (die erste Ableitung war nicht trennscharf,
+    // weil steile Nutzsignal-Flanken sie mit ausloesen).
+    auto clickScore = [] (const juce::AudioBuffer<float>& b)
+    {
+        const float* d = b.getReadPointer (0);
+        const int n = b.getNumSamples();
+        std::vector<double> dd;
+        dd.reserve ((size_t) n);
+        for (int i = 2; i < n; ++i)
+            dd.push_back (std::abs ((double) d[i] - 2.0 * d[i - 1] + d[i - 2]));
+        auto sorted = dd;
+        std::sort (sorted.begin(), sorted.end());
+        const double med = juce::jmax (1.0e-9, sorted[sorted.size() / 2]);
+        int spikes = 0;
+        for (double v : dd) if (v > med * 60.0) ++spikes;
+        return spikes;
+    };
+
+    PitchDetector::Settings ps;
+    const auto pitch = PitchDetector::detectPitchHz (mono.getReadPointer (0),
+                                                     mono.getNumSamples(), sr, ps);
+    VocalTuner::Settings vs;
+    const auto curve = VocalTuner::buildCorrectionSemitones (pitch, vs, sr / ps.hopSize);
+
+    WARN ("Original: " + std::to_string (clickScore (mono)) + " Knicke");
+
+    // Dieselbe Kurve, aber nur alle N Frames aktualisiert (dazwischen gehalten).
+    for (int hold : { 1, 4, 16, 64 })
+    {
+        juce::Array<float> held;
+        for (int i = 0; i < curve.size(); ++i)
+            held.add (curve[(i / hold) * hold]);
+
+        juce::AudioBuffer<float> outBuf;
+        REQUIRE (VocalTuner::renderCorrected (mono, outBuf, sr, held, ps.hopSize));
+        WARN ("Aenderung alle " + std::to_string (hold) + " Frames ("
+              + std::to_string ((int) (hold * 1000.0 * ps.hopSize / sr)) + " ms): "
+              + std::to_string (clickScore (outBuf)) + " Knicke");
+        writeWav (dir.getChildFile ("diag2_hold" + juce::String (hold) + ".wav"), outBuf, sr);
+    }
+
+    // Referenz: konstant (klang laut User sauber)
+    juce::Array<float> constant;
+    for (int i = 0; i < curve.size(); ++i) constant.add (1.0f);
+    juce::AudioBuffer<float> constOut;
+    REQUIRE (VocalTuner::renderCorrected (mono, constOut, sr, constant, ps.hopSize));
+    WARN ("Konstant +1 (Referenz, klingt sauber): "
+          + std::to_string (clickScore (constOut)) + " Knicke");
+}
+
+TEST_CASE ("Diagnose: was steht ueberhaupt in der Korrekturkurve", "[.diag][curve]")
+{
+    juce::File vox (juce::SystemStats::getEnvironmentVariable ("AIZANA_VOCAL_FILE", {}));
+    if (! vox.existsAsFile()) SKIP ("AIZANA_VOCAL_FILE setzen");
+
+    juce::AudioBuffer<float> full; double sr = 0.0;
+    REQUIRE (readAudio (vox, full, sr));
+    const double off = loudestOffsetSecs (full, sr, 8.0);
+    auto mono = toMono (excerpt (full, sr, off, 8.0));
+
+    PitchDetector::Settings ps;
+    const auto pitch = PitchDetector::detectPitchHz (mono.getReadPointer (0),
+                                                     mono.getNumSamples(), sr, ps);
+    int voiced = 0;
+    float pMin = 1.0e9f, pMax = 0.0f;
+    for (auto hz : pitch) if (hz > 0.0f) { ++voiced; pMin = std::min (pMin, hz); pMax = std::max (pMax, hz); }
+    WARN ("Pitch-Kurve: " + std::to_string (pitch.size()) + " Frames, davon voiced "
+          + std::to_string (voiced) + " | Bereich " + std::to_string (pMin) + ".."
+          + std::to_string (pMax) + " Hz");
+
+    VocalTuner::Settings vs;
+    const auto curve = VocalTuner::buildCorrectionSemitones (pitch, vs, sr / ps.hopSize);
+
+    float cMin = 1.0e9f, cMax = -1.0e9f, maxJump = 0.0f;
+    double absSum = 0.0;
+    int big = 0;
+    for (int i = 0; i < curve.size(); ++i)
+    {
+        cMin = std::min (cMin, curve[i]);
+        cMax = std::max (cMax, curve[i]);
+        absSum += std::abs (curve[i]);
+        if (std::abs (curve[i]) > 3.0f) ++big;
+        if (i > 0) maxJump = std::max (maxJump, std::abs (curve[i] - curve[i - 1]));
+    }
+    WARN ("Korrekturkurve: Bereich " + std::to_string (cMin) + " .. " + std::to_string (cMax)
+          + " Halbtoene | Mittel(abs) " + std::to_string (absSum / curve.size())
+          + " | groesster Sprung zwischen zwei Frames " + std::to_string (maxJump)
+          + " | Frames mit |Korrektur| > 3 Halbtoene: " + std::to_string (big)
+          + " von " + std::to_string (curve.size()));
+}

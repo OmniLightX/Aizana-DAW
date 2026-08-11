@@ -84,6 +84,103 @@ juce::Array<float> VocalTuner::buildCorrectionSemitones (const juce::Array<float
     return corr;
 }
 
+namespace
+{
+    // Rendert EINEN Abschnitt mit KONSTANTER Tonhoehe.
+    //
+    // Warum konstant: SoundTouch rechnet bei jedem setSpeedAndPitch seine Rate
+    // und Tempo-Parameter neu und setzt dabei interne Puffer zurueck. Die alte
+    // Fassung fuehrte die Tonhoehe pro Hop nach (86x pro Sekunde) — das ergab
+    // eine Stoerung im Millisekundentakt. Der User hoerte "durchgehend Knacken
+    // und Verzerrung", waehrend derselbe Weg mit KONSTANTER Korrektur (auch
+    // +1 Halbton, also mehr als die echte Kurve je verlangt) sauber klang.
+    // Genau dieser Vergleich hat die Ursache festgenagelt (2026-08-11).
+    //
+    // srcStart/srcLen beziehen sich auf `in`; das Ergebnis liegt in `dest` und
+    // ist auf srcStart ausgerichtet. Gibt die Zahl gueltiger Samples zurueck.
+    int renderConstantPitch (const juce::AudioBuffer<float>& in,
+                             int srcStart, int srcLen,
+                             float semitones, double sampleRate,
+                             juce::AudioBuffer<float>& dest)
+    {
+        const int numChannels = in.getNumChannels();
+        if (srcLen <= 0 || numChannels < 1)
+            return 0;
+
+        te::TimeStretcher ts;
+        ts.initialise (sampleRate, 512, numChannels, te::TimeStretcher::soundtouchBetter, {}, false);
+        if (! ts.isInitialised())
+            return 0;
+
+        ts.setSpeedAndPitch (1.0f, semitones);      // EINMAL, danach nie wieder
+
+        dest.setSize (numChannels, srcLen, false, false, true);
+        dest.clear();
+
+        juce::AudioBuffer<float> feed (numChannels, 8192);
+        juce::AudioBuffer<float> chunk (numChannels, 512);
+
+        std::vector<const float*> ins ((size_t) numChannels);
+        std::vector<float*>       outs ((size_t) numChannels);
+        for (int c = 0; c < numChannels; ++c)
+            outs[(size_t) c] = chunk.getWritePointer (c);
+
+        int inPos = 0, outPos = 0;
+        bool flushing = false;
+        int guard = 0;
+        const int maxIterations = 8 * (srcLen / 512 + 64);
+
+        while (outPos < srcLen && ++guard < maxIterations)
+        {
+            int produced = 0;
+
+            if (! flushing)
+            {
+                const int needed = ts.getFramesNeeded();
+                if (needed > 0)
+                {
+                    if (needed > feed.getNumSamples())
+                        feed.setSize (numChannels, needed, false, false, true);
+                    feed.clear();
+
+                    const int give = juce::jmin (needed, srcLen - inPos);
+                    for (int c = 0; c < numChannels; ++c)
+                    {
+                        if (give > 0)
+                            feed.copyFrom (c, 0, in, c, srcStart + inPos, give);
+                        ins[(size_t) c] = feed.getReadPointer (c);
+                    }
+
+                    produced = ts.processData (ins.data(), needed, outs.data());
+                    inPos += needed;
+
+                    if (inPos >= srcLen)
+                        flushing = true;
+                }
+                else
+                {
+                    produced = ts.processData (ins.data(), 0, outs.data());
+                    if (produced <= 0)
+                        flushing = true;
+                }
+            }
+            else
+            {
+                produced = ts.flush (outs.data());
+                if (produced <= 0)
+                    break;
+            }
+
+            const int take = juce::jmin (produced, srcLen - outPos);
+            for (int c = 0; c < numChannels && take > 0; ++c)
+                dest.copyFrom (c, outPos, chunk, c, 0, take);
+            outPos += juce::jmax (0, take);
+        }
+
+        return outPos;
+    }
+}
+
 bool VocalTuner::renderCorrected (const juce::AudioBuffer<float>& in,
                                   juce::AudioBuffer<float>& out,
                                   double sampleRate,
@@ -95,82 +192,75 @@ bool VocalTuner::renderCorrected (const juce::AudioBuffer<float>& in,
     if (numChannels < 1 || numSamples < 1 || sampleRate <= 0.0 || hopSize < 1)
         return false;
 
-    te::TimeStretcher ts;
-    ts.initialise (sampleRate, 512, numChannels, te::TimeStretcher::soundtouchBetter, {}, false);
-    if (! ts.isInitialised())
-        return false;
-
     out.setSize (numChannels, numSamples);
     out.clear();
 
-    juce::AudioBuffer<float> feed (numChannels, 8192);      // Input-Häppchen (ggf. 0-gepolstert)
-    juce::AudioBuffer<float> chunk (numChannels, 512);      // Output-Block des Stretchers
+    // Abschnittsweise konstante Tonhoehe, ueberblendet statt umgeschaltet.
+    // 120 ms sind fein genug, damit die Korrektur der Stimme folgt (menschliches
+    // Vibrato liegt bei 5-7 Hz), und grob genug, dass pro Abschnitt nur EINE
+    // Parameteraenderung noetig ist. Die Ueberblendung verdeckt den Schnitt.
+    const int segLen   = juce::jmax (256, (int) (0.120 * sampleRate));
+    const int fadeLen  = juce::jmax (64,  (int) (0.030 * sampleRate));
+    // Vorlauf: SoundTouch braucht Anlauf, bis der Ausgang gefuellt ist. Dieser
+    // Teil wird verworfen, damit der Abschnitt zeitrichtig sitzt.
+    const int preRoll  = juce::jmax (128, (int) (0.060 * sampleRate));
 
-    std::vector<const float*> ins ((size_t) numChannels);
-    std::vector<float*>       outs ((size_t) numChannels);
-    for (int c = 0; c < numChannels; ++c)
-        outs[(size_t) c] = chunk.getWritePointer (c);
+    juce::AudioBuffer<float> piece;
+    bool wroteAnything = false;
 
-    int inPos = 0, outPos = 0;
-    bool flushing = false;
-    int guard = 0;
-    const int maxIterations = 8 * (numSamples / 512 + 64);   // hartes Abbruch-Budget
-
-    while (outPos < numSamples && ++guard < maxIterations)
+    for (int segStart = 0; segStart < numSamples; segStart += segLen)
     {
-        int produced = 0;
+        const int wanted = juce::jmin (segLen + fadeLen, numSamples - segStart);
+        if (wanted <= 0)
+            break;
 
-        if (! flushing)
+        // Mittlere Korrektur ueber den Abschnitt (die Kurve ist bereits
+        // geglaettet, deshalb genuegt der Mittelwert).
+        double sum = 0.0;
+        int    n   = 0;
+        for (int s = segStart; s < segStart + wanted; s += hopSize)
         {
-            const int needed = ts.getFramesNeeded();
-
-            if (needed > 0)
+            const int f = juce::jlimit (0, juce::jmax (0, correctionSemitones.size() - 1), s / hopSize);
+            if (! correctionSemitones.isEmpty())
             {
-                if (needed > feed.getNumSamples())
-                    feed.setSize (numChannels, needed, false, false, true);
-                feed.clear();
+                sum += correctionSemitones[f];
+                ++n;
+            }
+        }
+        const float semis = n > 0 ? (float) (sum / n) : 0.0f;
 
-                const int give = juce::jmin (needed, numSamples - inPos);
-                for (int c = 0; c < numChannels; ++c)
+        const int ctx      = juce::jmin (preRoll, segStart);
+        const int produced = renderConstantPitch (in, segStart - ctx, ctx + wanted,
+                                                  semis, sampleRate, piece);
+        if (produced <= ctx)
+            continue;
+
+        const int avail = juce::jmin (wanted, produced - ctx);
+        for (int c = 0; c < numChannels; ++c)
+        {
+            const float* src = piece.getReadPointer (c) + ctx;
+            float*       dst = out.getWritePointer (c) + segStart;
+
+            for (int i = 0; i < avail; ++i)
+            {
+                if (segStart > 0 && i < fadeLen)
                 {
-                    if (give > 0)
-                        feed.copyFrom (c, 0, in, c, inPos, give);
-                    ins[(size_t) c] = feed.getReadPointer (c);
+                    // Gleichleistungs-Ueberblendung mit dem vorigen Abschnitt:
+                    // haelt die Lautstaerke ueber den Schnitt konstant.
+                    const float t = (float) i / (float) fadeLen;
+                    dst[i] = dst[i] * std::cos (t * juce::MathConstants<float>::halfPi)
+                           + src[i] * std::sin (t * juce::MathConstants<float>::halfPi);
                 }
-
-                // Pitch-Shift dem Input-Fortschritt entlang nachführen
-                const int frame = juce::jlimit (0, juce::jmax (0, correctionSemitones.size() - 1),
-                                                inPos / hopSize);
-                ts.setSpeedAndPitch (1.0f, correctionSemitones.isEmpty() ? 0.0f
-                                                                         : correctionSemitones[frame]);
-
-                produced = ts.processData (ins.data(), needed, outs.data());
-                inPos += needed;
-
-                if (inPos >= numSamples)
-                    flushing = true;
-            }
-            else
-            {
-                produced = ts.processData (ins.data(), 0, outs.data());
-                if (produced <= 0)
-                    flushing = true;
+                else
+                {
+                    dst[i] = src[i];
+                }
             }
         }
-        else
-        {
-            produced = ts.flush (outs.data());
-            if (produced <= 0)
-                break;
-        }
-
-        const int take = juce::jmin (produced, numSamples - outPos);
-        for (int c = 0; c < numChannels && take > 0; ++c)
-            out.copyFrom (c, outPos, chunk, c, 0, take);
-        outPos += juce::jmax (0, take);
+        wroteAnything = true;
     }
 
-    return outPos > 0;
+    return wroteAnything;
 }
 
 //==============================================================================

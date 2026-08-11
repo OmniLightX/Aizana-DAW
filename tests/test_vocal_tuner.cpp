@@ -203,3 +203,104 @@ TEST_CASE ("VocalTuner: guards — stretched clips and silence refuse politely",
     CHECK (dynamic_cast<te::WaveAudioClip*> (track->getClips()[0])
                ->getSourceFileReference().getFile() == silentWav);
 }
+
+// ---------------------------------------------------------------------------
+// Regression 2026-08-11: das Rendering knackte, sobald sich die Korrektur AENDERTE.
+//
+// User-Hoerurteil auf echtem Material war eindeutig und hat die Ursache
+// eingegrenzt: Korrekturkurve konstant 0 -> sauber. Konstant +1 Halbton ->
+// sauber, Tuning hoerbar. Die echte, sich aendernde Kurve -> "durchgehend
+// Knacken und Verzerrung" — obwohl sie nur zwischen -0.45 und +0.45 Halbtoenen
+// lag, also WENIGER verlangte als die saubere konstante Variante.
+//
+// Ursache: die alte Fassung rief setSpeedAndPitch pro Hop auf (86x/s).
+// SoundTouch rechnet dabei Rate und Tempo neu und setzt interne Puffer zurueck
+// — eine Stoerung im Millisekundentakt. Jetzt: konstante Tonhoehe je Abschnitt,
+// ueberblendet.
+//
+// Kein Messwert der damaligen Testreihe zeigte das an (weder Cent-Abweichung
+// noch Klick-Zaehlungen ueber erste oder zweite Ableitung). Die folgenden zwei
+// Faelle pruefen deshalb, was maschinell tatsaechlich pruefbar ist: dass der
+// Weg TRANSPARENT ist, wenn nichts zu korrigieren ist, und dass er zeitrichtig
+// bleibt. Beides waere bei fehlerhafter Abschnitts-Ueberblendung sofort kaputt.
+// ---------------------------------------------------------------------------
+TEST_CASE ("VocalTuner: Korrektur 0 gibt das Original unveraendert zurueck", "[tune][P8]")
+{
+    constexpr double sr = 44100.0;
+    const int n = (int) (2.0 * sr);
+
+    // Gemischtes Signal: Grundton + Oberton + Amplitudenverlauf. Ein reiner
+    // Sinus wuerde eine Fehlausrichtung der Abschnitte verzeihen.
+    juce::AudioBuffer<float> in (1, n);
+    for (int i = 0; i < n; ++i)
+    {
+        const double t = i / sr;
+        const double env = 0.5 + 0.5 * std::sin (2.0 * juce::MathConstants<double>::pi * 1.7 * t);
+        in.setSample (0, i, (float) (env * (0.4 * std::sin (2.0 * juce::MathConstants<double>::pi * 220.0 * t)
+                                          + 0.2 * std::sin (2.0 * juce::MathConstants<double>::pi * 660.0 * t))));
+    }
+
+    juce::Array<float> zero;
+    for (int i = 0; i < n / 512 + 2; ++i) zero.add (0.0f);
+
+    juce::AudioBuffer<float> out;
+    REQUIRE (VocalTuner::renderCorrected (in, out, sr, zero, 512));
+    REQUIRE (out.getNumSamples() == n);
+
+    // Pegel muss erhalten bleiben: eine falsche Ueberblendung wuerde an jeder
+    // Abschnittsgrenze einen Einbruch erzeugen.
+    const float rmsIn  = in .getRMSLevel (0, 0, n);
+    const float rmsOut = out.getRMSLevel (0, 0, n);
+    INFO ("RMS rein " << rmsIn << ", raus " << rmsOut);
+    CHECK (rmsOut > rmsIn * 0.9f);
+    CHECK (rmsOut < rmsIn * 1.1f);
+
+    // Und es darf keine Stelle geben, an der das Signal einbricht — genau das
+    // waere eine Luecke zwischen zwei Abschnitten.
+    const int win = (int) (0.05 * sr);
+    float quietest = 1.0e9f;
+    for (int pos = 0; pos + win <= n; pos += win / 2)
+        quietest = std::min (quietest, out.getRMSLevel (0, pos, win));
+    const float quietestIn = [&]
+    {
+        float q = 1.0e9f;
+        for (int pos = 0; pos + win <= n; pos += win / 2)
+            q = std::min (q, in.getRMSLevel (0, pos, win));
+        return q;
+    }();
+    INFO ("leisestes Fenster rein " << quietestIn << ", raus " << quietest);
+    CHECK (quietest > quietestIn * 0.5f);
+}
+
+TEST_CASE ("VocalTuner: konstante Korrektur bleibt ueber die Laenge stabil", "[tune][P8]")
+{
+    constexpr double sr = 44100.0;
+    const int n = (int) (2.0 * sr);
+
+    juce::AudioBuffer<float> in (1, n);
+    for (int i = 0; i < n; ++i)
+        in.setSample (0, i, 0.4f * (float) std::sin (2.0 * juce::MathConstants<double>::pi
+                                                     * 220.0 * i / sr));
+
+    juce::Array<float> up;
+    for (int i = 0; i < n / 512 + 2; ++i) up.add (1.0f);      // +1 Halbton
+
+    juce::AudioBuffer<float> out;
+    REQUIRE (VocalTuner::renderCorrected (in, out, sr, up, 512));
+
+    // Die Tonhoehe muss ueber die GANZE Laenge gleich bleiben — driftet die
+    // Abschnitts-Ausrichtung, wandert sie.
+    PitchDetector::Settings ps;
+    auto measure = [&] (int from, int len)
+    {
+        return PitchDetector::medianPitchHz (
+            PitchDetector::detectPitchHz (out.getReadPointer (0) + from, len, sr, ps));
+    };
+    const float expected = (float) VocalTuner::midiToHz (VocalTuner::hzToMidi (220.0) + 1.0);
+    const float early = measure (0, n / 3);
+    const float late  = measure (n * 2 / 3, n / 3);
+
+    INFO ("erwartet " << expected << ", frueh " << early << ", spaet " << late);
+    CHECK (std::abs (early - expected) < expected * 0.03f);
+    CHECK (std::abs (late  - expected) < expected * 0.03f);
+}
