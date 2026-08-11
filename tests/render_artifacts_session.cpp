@@ -127,6 +127,32 @@ namespace
                 w->writeFromAudioSampleBuffer (buf, 0, buf.getNumSamples());
     }
 
+    /** Zwei Fassungen hintereinander in EINE Datei, mit Pause dazwischen.
+        Zum Beurteilen ist das der bequemste Weg: eine Datei doppelklicken statt
+        zwei Dateien manuell umzuschalten. Beide bekommen die GLEICHE Verstaerkung
+        (gemeinsame Spitze), sonst wuerde die Normalisierung genau den
+        Pegelunterschied wegbuegeln, um den es bei A/B oft geht. */
+    void writeAbFile (const juce::File& out, const juce::AudioBuffer<float>& a,
+                      const juce::AudioBuffer<float>& b, double sr, float targetPeak = 0.5f)
+    {
+        const int ch  = juce::jmin (a.getNumChannels(), b.getNumChannels());
+        const int gap = (int) (0.6 * sr);
+        juce::AudioBuffer<float> outBuf (ch, a.getNumSamples() + gap + b.getNumSamples());
+        outBuf.clear();
+        for (int c = 0; c < ch; ++c)
+        {
+            outBuf.copyFrom (c, 0, a, c, 0, a.getNumSamples());
+            outBuf.copyFrom (c, a.getNumSamples() + gap, b, c, 0, b.getNumSamples());
+        }
+
+        const float peak = juce::jmax (a.getMagnitude (0, a.getNumSamples()),
+                                       b.getMagnitude (0, b.getNumSamples()));
+        if (peak > 1.0e-6f)
+            outBuf.applyGain (targetPeak / peak);
+
+        writeWav (out, outBuf, sr);
+    }
+
     /** Schneidet einen Ausschnitt aus einem Stem in eine eigene Datei.
         Die Stems sind je 164 s lang — ein Render darauf dauert unnoetig lange,
         und die Messfenster waeren unuebersichtlich. */
@@ -337,11 +363,18 @@ namespace
                             double fromSecs, double toSecs,
                             const juce::BigInteger& tracksToDo,
                             bool useMasterPlugins = true,
-                            te::Clip* onlyThisClip = nullptr)
+                            te::Clip* onlyThisClip = nullptr,
+                            bool usePlugins = true,
+                            double forceSampleRate = 0.0)
     {
         outFile.deleteFile();
 
-        double sampleRate = edit.engine.getDeviceManager().getSampleRate();
+        // Standard ist die Geraeterate; Vergleiche gegen Bounce/Merge muessen
+        // aber DEREN Regel spiegeln (Rate des Quellmaterials), sonst vergleicht
+        // man zwei verschiedene Raten und der Test faellt aus formalen Gruenden.
+        double sampleRate = forceSampleRate;
+        if (sampleRate < 8000.0)
+            sampleRate = edit.engine.getDeviceManager().getSampleRate();
         if (sampleRate < 8000.0)
             sampleRate = 44100.0;                 // headless: kein Geraet offen
 
@@ -354,13 +387,17 @@ namespace
         params.time               = TimeRng (TimePos::fromSeconds (fromSecs),
                                              TimePos::fromSeconds (toSecs));
         params.realTimeRender     = false;
-        params.usePlugins         = true;
+        params.usePlugins         = usePlugins;
         params.useMasterPlugins   = useMasterPlugins;
         params.checkNodesForAudio = false;
         params.tracksToDo         = tracksToDo;
         if (onlyThisClip != nullptr)
             params.allowedClips.add (onlyThisClip);
 
+        // Wie die App: Playback-Kontext fuer die Dauer des Renders loesen, sonst
+        // funkt der Live-Graph zustandsbehafteten Plugins dazwischen (Befund
+        // 2026-08-11 — genau hier aufgefallen).
+        const te::Edit::ScopedRenderStatus srs (edit, true);
         const auto rendered = te::Renderer::renderToFile ("Session-Testlauf", params);
         return rendered.existsAsFile() ? rendered : outFile;
     }
@@ -493,11 +530,41 @@ TEST_CASE ("Session P1: Sidechain duckt den 809-Bass auf die Kick", "[.session][
                                      0.0, kLen, bits);
     REQUIRE (fileNo.existsAsFile());
 
-    juce::AudioBuffer<float> withSc, without;
-    double srA = 0.0, srWithout = 0.0;
+    // KONTROLLE: derselbe Zustand ein zweites Mal gerendert. Ohne diesen Riegel
+    // waere die gemessene Differenz nicht zuzuordnen — sie koennte auch von
+    // Render-Rauschen kommen. Zwei Durchgaenge im GLEICHEN Zustand muessen
+    // deckungsgleich sein, sonst ist die ganze Messmethode wertlos.
+    const auto fileNo2 = renderRange (*edit, work.getChildFile ("kontrolle.wav"),
+                                      0.0, kLen, bits);
+    REQUIRE (fileNo2.existsAsFile());
+
+    juce::AudioBuffer<float> withSc, without, control;
+    double srA = 0.0, srWithout = 0.0, srCtl = 0.0;
     REQUIRE (readAudio (fileSC, withSc, srA));
     REQUIRE (readAudio (fileNo, without, srWithout));
+    REQUIRE (readAudio (fileNo2, control, srCtl));
     REQUIRE (srA == srWithout);
+    REQUIRE (srA == srCtl);
+
+    double ctlRmsSettled = 0.0;
+    {
+        const int cn = juce::jmin (without.getNumSamples(), control.getNumSamples());
+        juce::AudioBuffer<float> cd (1, cn);
+        cd.copyFrom (0, 0, without, 0, 0, cn);
+        cd.addFrom  (0, 0, control, 0, 0, cn, -1.0f);
+
+        // Getrennt nach Anfang und Rest: ein Unterschied NUR am Anfang ist der
+        // Zustand, den das Plugin aus dem vorherigen Durchgang mitbringt
+        // (Huellkurve laeuft nicht bei null los). Ein ueber die ganze Datei
+        // verteilter Unterschied waere etwas anderes und muesste untersucht
+        // werden — deshalb wird hier verortet, nicht nur gemessen.
+        const double ctlAll   = rmsRange (cd, srA, 0.0, cn / srA);
+        const double ctlStart = rmsRange (cd, srA, 0.0, 0.25);
+        ctlRmsSettled         = rmsRange (cd, srA, 0.25, cn / srA);
+        note (dir, "Kontrolle: zwei Durchgaenge im GLEICHEN Zustand — Abweichung gesamt "
+                   + db (ctlAll) + ", davon erste 0,25 s " + db (ctlStart)
+                   + ", danach " + db (ctlRmsSettled));
+    }
 
     const int n = juce::jmin (withSc.getNumSamples(), without.getNumSamples());
     REQUIRE (n > (int) (srA * 5.0));
@@ -510,6 +577,7 @@ TEST_CASE ("Session P1: Sidechain duckt den 809-Bass auf die Kick", "[.session][
         diff.addFrom  (ch, 0, without, ch, 0, n, -1.0f);
     }
     writeWav (dir.getChildFile ("c_differenz_nur_das_ducking.wav"), diff, srA);
+    writeAbFile (dir.getChildFile ("HOERPROBE_ohne_dann_mit_sidechain.wav"), without, withSc, srA);
 
     const double diffRms = rmsRange (diff, srA, 0.0, n / srA);
     note (dir, "Material: " + kickStem.getFileName() + " + " + bassStem.getFileName()
@@ -547,6 +615,14 @@ TEST_CASE ("Session P1: Sidechain duckt den 809-Bass auf die Kick", "[.session][
     // darf zwischen den Schlaegen nicht passieren.
     CHECK (medAfter > 1.0e-5);
     CHECK (medAfter > medBefore * 2.0);
+
+    // Und der gemessene Effekt muss deutlich ueber dem liegen, was zwei
+    // identische Durchgaenge ohnehin auseinanderliegen — sonst misst man
+    // Render-Rauschen statt Sidechain.
+    const double abstandZurKontrolle = 20.0 * std::log10 (medAfter / juce::jmax (1.0e-12, ctlRmsSettled));
+    note (dir, "Abstand des gemessenen Duckings zur Kontrolle: "
+               + juce::String (abstandZurKontrolle, 1) + " dB");
+    CHECK (abstandZurKontrolle > 40.0);
 
     work.deleteRecursively();
 }
@@ -600,18 +676,88 @@ TEST_CASE ("Session P3: Bounce in Place ist deckungsgleich mit dem Live-Render",
     if (auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin))
     {
         ext->initialiseFully();
+        // Deutlich aufgedreht, mit Absicht: bei zaghaften 6 dB Drive lag der
+        // Effekt auf leisem Material 40 dB unter dem Signal — die Kontrolle
+        // "wirken die Inserts ueberhaupt" waere damit fast auch dann gruen
+        // gewesen, wenn beide Wege die Inserts ignorieren. Ein Nachweis, der
+        // nur knapp ueber der Nachweisgrenze liegt, ist kein Nachweis.
         if (auto* inst = ext->getAudioPluginInstance())
-            setHostParam (*inst, "drive", 6.0f);   // hoerbar, aber nicht am Anschlag
+        {
+            setHostParam (*inst, "drive", 30.0f);
+            setHostParam (*inst, "type",   1.0f);   // Tube — deutlich hoerbar
+        }
     }
 
     const auto range = clip->getPosition().time;
+
+    // KONTROLLE ZUERST: wirkt die Insert-Kette ueberhaupt? Ohne diesen Nachweis
+    // waere ein "beide Wege identisch" auch dann gruen, wenn BEIDE die Inserts
+    // stillschweigend ignorieren — der Test wuerde dann nichts ueber den Bounce
+    // aussagen, sondern nur ueber zwei gleich kaputte Wege.
+    // Rate wie der Bounce sie waehlt (Regel: Rate des Quellmaterials) — sonst
+    // vergleicht der Test 48 kHz gegen 44,1 kHz und faellt aus formalen Gruenden.
+    const double bounceRate = ClipEditor::renderSampleRateFor (*edit, { clip });
+    note (dir, "Render-Rate " + juce::String (bounceRate, 0)
+               + " Hz (Geraet: " + juce::String (edit->engine.getDeviceManager().getSampleRate(), 0) + " Hz)");
+
+    const auto dryFile = renderRange (*edit, dir.getChildFile ("d_ohne_insert_fx.wav"),
+                                      range.getStart().inSeconds(), range.getEnd().inSeconds(),
+                                      trackBits (*edit, { track }), false, clip, false, bounceRate);
+    REQUIRE (dryFile.existsAsFile());
 
     // Referenz ueber den normalen Renderer — gleiche Parameter wie der Bounce-Weg
     // (nur diese Spur, nur dieser Clip, Master bleibt aussen vor).
     const auto refFile = renderRange (*edit, dir.getChildFile ("a_live_render.wav"),
                                       range.getStart().inSeconds(), range.getEnd().inSeconds(),
-                                      trackBits (*edit, { track }), false, clip);
+                                      trackBits (*edit, { track }), false, clip, true, bounceRate);
     REQUIRE (refFile.existsAsFile());
+
+    // KONTROLLE: Wiederholbarkeit. Zweimal dasselbe rendern muss zweimal
+    // dasselbe ergeben — einmal ohne und einmal MIT Plugins. Genau hier fiel am
+    // 2026-08-11 auf, dass der Live-Graph waehrend des Renders dieselben
+    // Plugin-Instanzen weiterverarbeitet und deren Zustand verfaelscht (Fix:
+    // te::Edit::ScopedRenderStatus in Bounce/Merge/Export). Ohne Plugins war
+    // alles bitgleich, mit Plugins 35 dB auseinander — deshalb beide Faelle.
+    {
+        const auto dry1 = renderRange (*edit, work.getChildFile ("dry1.wav"),
+                                       range.getStart().inSeconds(), range.getEnd().inSeconds(),
+                                       trackBits (*edit, { track }), false, clip, false, bounceRate);
+        const auto dry2 = renderRange (*edit, work.getChildFile ("dry2.wav"),
+                                       range.getStart().inSeconds(), range.getEnd().inSeconds(),
+                                       trackBits (*edit, { track }), false, clip, false, bounceRate);
+        juce::AudioBuffer<float> x, y;
+        double sx = 0.0, sy = 0.0;
+        if (readAudio (dry1, x, sx) && readAudio (dry2, y, sy))
+        {
+            const int xn = juce::jmin (x.getNumSamples(), y.getNumSamples());
+            juce::AudioBuffer<float> xd (1, xn);
+            xd.copyFrom (0, 0, x, 0, 0, xn);
+            xd.addFrom  (0, 0, y, 0, 0, xn, -1.0f);
+            const double dryRepeat = rmsRange (xd, sx, 0.0, xn / sx);
+            note (dir, "Kontrolle: ohne Plugins zweimal gerendert — Abweichung " + db (dryRepeat));
+            REQUIRE (dryRepeat < 1.0e-9);
+        }
+    }
+
+    // Und dasselbe MIT der Insert-Kette: das ist der Fall, der vorher scheiterte.
+    const auto refFile2 = renderRange (*edit, work.getChildFile ("ref2.wav"),
+                                       range.getStart().inSeconds(), range.getEnd().inSeconds(),
+                                       trackBits (*edit, { track }), false, clip, true, bounceRate);
+    {
+        juce::AudioBuffer<float> r1, r2;
+        double s1 = 0.0, s2 = 0.0;
+        if (readAudio (refFile, r1, s1) && readAudio (refFile2, r2, s2))
+        {
+            const int rn = juce::jmin (r1.getNumSamples(), r2.getNumSamples());
+            juce::AudioBuffer<float> rd (1, rn);
+            rd.copyFrom (0, 0, r1, 0, 0, rn);
+            rd.addFrom  (0, 0, r2, 0, 0, rn, -1.0f);
+            const double fxRepeat = rmsRange (rd, s1, 0.0, rn / s1);
+            note (dir, "Kontrolle: MIT Insert-Kette zweimal gerendert — Abweichung "
+                       + db (fxRepeat) + " (vor dem Fix: -69 dB)");
+            REQUIRE (fxRepeat < 1.0e-9);
+        }
+    }
 
     auto* bounced = clipEditor.bounceClipInPlace (*clip, true);
     REQUIRE (bounced != nullptr);
@@ -635,6 +781,24 @@ TEST_CASE ("Session P3: Bounce in Place ist deckungsgleich mit dem Live-Render",
         d.addFrom  (ch, 0, b, ch, 0, n, -1.0f);
     }
 
+    // Die Kontrolle auswerten: der Render OHNE Inserts muss sich deutlich
+    // unterscheiden — sonst sagt der Vergleich oben nichts ueber die FX aus.
+    {
+        juce::AudioBuffer<float> dry;
+        double srDry = 0.0;
+        REQUIRE (readAudio (dryFile, dry, srDry));
+        REQUIRE (srDry == srA);
+        const int dn = juce::jmin (n, dry.getNumSamples());
+        juce::AudioBuffer<float> fxDelta (1, dn);
+        fxDelta.copyFrom (0, 0, a,   0, 0, dn);
+        fxDelta.addFrom  (0, 0, dry, 0, 0, dn, -1.0f);
+        const double fxRms  = rmsRange (fxDelta, srA, 0.0, dn / srA);
+        const double dryRms = rmsRange (dry,     srA, 0.0, dn / srA);
+        note (dir, "Kontrolle: Insert-FX veraendern das Signal um " + db (fxRms)
+                   + " (Trockensignal " + db (dryRms) + ") — der Saturator wirkt also wirklich");
+        REQUIRE (fxRms > dryRms * 0.05);   // mind. 26 dB unter dem Signal = unstrittig
+    }
+
     const double sig  = rmsRange (a, srA, 0.0, n / srA);
     const double err  = rmsRange (d, srA, 0.0, n / srA);
     const double snr  = err > 0.0 ? 20.0 * std::log10 (sig / err) : 999.0;
@@ -643,12 +807,30 @@ TEST_CASE ("Session P3: Bounce in Place ist deckungsgleich mit dem Live-Render",
     juce::AudioBuffer<float> copy (b);
     writeWav (dir.getChildFile ("b_bounce.wav"), copy, srB);
     writeWav (dir.getChildFile ("c_differenz.wav"), d, srA);
+    {
+        juce::AudioBuffer<float> dry;
+        double srDry2 = 0.0;
+        if (readAudio (dryFile, dry, srDry2))
+            writeAbFile (dir.getChildFile ("HOERPROBE_ohne_dann_mit_saturator.wav"), dry, copy, srB);
+    }
 
     note (dir, "Laengen: Live-Render " + juce::String (a.getNumSamples())
                + " Samples, Bounce " + juce::String (b.getNumSamples()));
     note (dir, "Signal " + db (sig) + " | Differenz " + db (err)
                + " | Abstand " + juce::String (snr, 1) + " dB | groesste Einzelabweichung "
                + juce::String (peak, 6));
+
+    // Verorten statt bewerten: sitzt eine Abweichung nur am ANFANG, ist es der
+    // Einschwingvorgang der Insert-Kette (Kompressor-Huellkurve, DC-Sperre der
+    // Roehrensaettigung) — der Bounce startet das Plugin kalt, die Wiedergabe
+    // nicht. Verteilt sie sich ueber die ganze Datei, waere es etwas anderes.
+    for (double t : { 0.1, 0.25, 0.5, 1.0 })
+    {
+        const double head = rmsRange (d, srA, 0.0, t);
+        const double tail = rmsRange (d, srA, t, n / srA);
+        note (dir, "   davon erste " + juce::String (t, 2) + " s: " + db (head)
+                   + " | danach: " + db (tail));
+    }
 
     // Beide Wege muessen dasselbe Ergebnis liefern; 60 dB Abstand ist deutlich
     // unter jeder Hoerschwelle und laesst Raum fuer 24-Bit-Rundung.
@@ -726,6 +908,11 @@ TEST_CASE ("Session P5: Clip-Gain-Kurve wirkt im Render wie gezeichnet", "[.sess
     REQUIRE (srA == srB);
     REQUIRE (plain.getMagnitude (0, plain.getNumSamples()) > 0.01f);
 
+    // KONTROLLE: das Messverfahren muss einen Unterschied ueberhaupt sehen
+    // koennen. Der Plateau-Bereich MUSS deutlich unter den 0-dB-Bereichen liegen —
+    // waere die Kurve wirkungslos, kaeme hier ueberall dasselbe heraus.
+    writeAbFile (dir.getChildFile ("HOERPROBE_ohne_dann_mit_kurve.wav"), plain, curved, srA);
+
     struct Window { double from, to, sollDb; const char* name; };
     const Window windows[] = {
         { 0.5, 2.3, 0.0,   "vor der Absenkung " },
@@ -735,6 +922,7 @@ TEST_CASE ("Session P5: Clip-Gain-Kurve wirkt im Render wie gezeichnet", "[.sess
 
     note (dir, "Quelle: " + stem.getFileName() + " (lauteste " + juce::String (kLen, 0)
                + " s ab " + juce::String (srcFrom, 1) + " s)");
+    std::vector<double> gemessen;
     for (const auto& w : windows)
     {
         const double a = rmsRange (plain,  srA, w.from, w.to);
@@ -748,7 +936,14 @@ TEST_CASE ("Session P5: Clip-Gain-Kurve wirkt im Render wie gezeichnet", "[.sess
         // 1,5 dB Toleranz: die Rampen reichen minimal in die Fenster hinein und
         // TE glaettet die Automation blockweise.
         CHECK (std::abs (gotDb - w.sollDb) < 1.5);
+        gemessen.push_back (gotDb);
     }
+
+    REQUIRE (gemessen.size() == 3);
+    const double spanne = std::max (gemessen[0], gemessen[2]) - gemessen[1];
+    note (dir, "Kontrolle: Unterschied 0-dB-Bereich zu Plateau = "
+               + juce::String (spanne, 1) + " dB (eine wirkungslose Kurve waere 0)");
+    CHECK (spanne > 10.0);
 
     work.deleteRecursively();
 }
@@ -846,6 +1041,7 @@ TEST_CASE ("Session P7b: Audio-Bend verschiebt eine echte Transiente", "[.sessio
     juce::AudioBuffer<float> srcCopy (srcBuf);
     writeWav (dir.getChildFile ("a_original.wav"), srcCopy, sr);
     writeWav (dir.getChildFile ("b_gebendet.wav"), outBuf, osr);
+    writeAbFile (dir.getChildFile ("HOERPROBE_original_dann_gebendet.wav"), srcCopy, outBuf, osr);
 
     note (dir, "Quelle: " + stem.getFileName() + " (lauteste 6 s ab "
                + juce::String (srcFrom, 1) + " s), "
@@ -858,6 +1054,17 @@ TEST_CASE ("Session P7b: Audio-Bend verschiebt eine echte Transiente", "[.sessio
     // 25 ms Toleranz: SoundTouch schmiert die Flanke leicht, die Onset-Erkennung
     // arbeitet in 5-ms-Schritten.
     CHECK (best < 0.025);
+
+    // KONTROLLE: an der ALTEN Stelle darf jetzt nichts mehr liegen. Ohne das
+    // waere der Test auch dann gruen, wenn der Bend gar nichts getan haette und
+    // rein zufaellig ein anderer Schlag in die Naehe des Ziels faellt.
+    double stillAtOld = 1.0e9;
+    for (double t : hitsAfter)
+        stillAtOld = std::min (stillAtOld, std::abs (t - target));
+    note (dir, "Kontrolle: naechste Transiente zur ALTEN Position ("
+               + juce::String (target, 3) + " s) liegt "
+               + juce::String (stillAtOld * 1000.0, 1) + " ms entfernt");
+    CHECK (stillAtOld > 0.040);
 
     // Der erste Schlag vor dem Marker darf NICHT mitgewandert sein.
     double firstShift = 1.0e9;
@@ -915,8 +1122,10 @@ TEST_CASE ("Session ET: Merged minus Original ist Stille", "[.session][et]")
     // einen Render derselben Strecke ist er es, und die Aussage wird sogar
     // schaerfer: verglichen wird "geteilt und wieder verbunden" gegen "nie
     // angefasst", bei sonst identischem Weg.
+    const double mergeRate = ClipEditor::renderSampleRateFor (*edit, { clip });
     const auto refFile = renderRange (*edit, dir.getChildFile ("a_ungeteilt.wav"),
-                                      0.0, kLen, trackBits (*edit, { track }), false, clip);
+                                      0.0, kLen, trackBits (*edit, { track }), false, clip,
+                                      true, mergeRate);
     REQUIRE (refFile.existsAsFile());
 
     auto* right = clipEditor.cutClip (*clip, kSplit);
@@ -961,15 +1170,33 @@ TEST_CASE ("Session ET: Merged minus Original ist Stille", "[.session][et]")
 
     writeWav (dir.getChildFile ("b_merged.wav"), out, srB);
     writeWav (dir.getChildFile ("c_differenz.wav"), d, srA);
+    writeAbFile (dir.getChildFile ("HOERPROBE_ungeteilt_dann_verbunden.wav"), ref, out, srA);
 
     note (dir, "Quelle: " + stem.getFileName() + " (lauteste " + juce::String (kLen, 0)
                + " s ab " + juce::String (srcFrom, 1) + " s), Schnitt bei "
                + juce::String (kSplit, 1) + " s");
-    note (dir, "Session-Rate " + juce::String (srA, 0) + " Hz (Material 44100 Hz)");
+    note (dir, "Render-Rate " + juce::String (srA, 0) + " Hz — Rate des Quellmaterials, "
+               "Geraet laeuft auf " + juce::String (edit->engine.getDeviceManager().getSampleRate(), 0) + " Hz");
     note (dir, "Laengen: ungeteilt " + juce::String (ref.getNumSamples())
                + " Samples, verbunden " + juce::String (out.getNumSamples()));
     note (dir, "Signal " + db (sig) + " | Rest " + db (err) + " | Abstand "
                + juce::String (snr, 1) + " dB | Rest an der Schnittstelle " + db (errAtSeam));
+
+    // KONTROLLE: kann dieses Mass ueberhaupt etwas SEHEN? Derselbe Vergleich mit
+    // einem einzigen Sample Versatz muss zusammenbrechen. Ohne diesen Riegel
+    // waere "Rest exakt null" auch dann gruen, wenn beide Seiten aus derselben
+    // Datei stammen oder beide still waeren.
+    {
+        const int m = n - 1;
+        juce::AudioBuffer<float> shifted (1, m);
+        shifted.copyFrom (0, 0, ref, 0, 0, m);
+        shifted.addFrom  (0, 0, out, 0, 1, m, -1.0f);   // 1 Sample versetzt
+        const double shiftedErr = rmsRange (shifted, srA, 0.0, m / srA);
+        const double shiftedSnr = shiftedErr > 0.0 ? 20.0 * std::log10 (sig / shiftedErr) : 999.0;
+        note (dir, "Kontrolle: schon 1 Sample Versatz ergibt nur noch "
+                   + juce::String (shiftedSnr, 1) + " dB Abstand — das Mass ist also scharf");
+        REQUIRE (shiftedSnr < 60.0);
+    }
 
     CHECK (snr > 60.0);
     CHECK (std::abs (ref.getNumSamples() - out.getNumSamples()) <= 64);

@@ -251,6 +251,28 @@ public:
     te::WaveAudioClip* bounceClipInPlace (te::WaveAudioClip& clip, bool withTrackFX = true);
 
     /**
+     * Sample-Rate, mit der Bounce/Merge rendern.
+     *
+     * Regel: die Rate des QUELLMATERIALS, wenn sie eindeutig ist — sonst die
+     * Geraeterate (headless: 44100). Grund: vorher lief beides pauschal auf der
+     * Geraeterate, ein 44,1-kHz-Clip wurde also auf einem 48-kHz-Interface bei
+     * JEDEM Bounce/Merge still resampelt, und das summiert sich, wenn ein
+     * bereits gebouncter Clip nochmal gebounct wird. Niemand hat danach
+     * gefragt, und in der Datei ist es nicht mehr rueckgaengig zu machen.
+     * Ein Clip in Originalrate wird beim Abspielen ohnehin von TE angepasst —
+     * das kostet aber nichts Dauerhaftes.
+     *
+     * Uneinheitliche Quellen (Merge ueber Clips mit verschiedenen Raten) und
+     * unbekannte Raten fallen bewusst auf die Geraeterate zurueck: dort gibt es
+     * keine verlustfreie Wahl, also die des Abspielwegs.
+     *
+     * Derselbe Grundsatz, den der Warp-Render schon anwendet (er rendert in der
+     * Rate der Originaldatei).
+     */
+    static double renderSampleRateFor (te::Edit& edit,
+                                       const juce::Array<const te::WaveAudioClip*>& sources);
+
+    /**
      * Merge/"verkleben" (S1 "Events verbinden", Logic "Join"): combine 2+ clips
      * of the SAME track into one clip.
      *

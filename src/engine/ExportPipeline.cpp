@@ -128,6 +128,16 @@ juce::String ExportPipeline::exportMixdown(te::Edit& edit, const ExportOptions& 
     if (onProgress)
         onProgress(0.0f);
 
+    // Playback-Kontext fuer die Dauer des Renders loesen. Ohne das verarbeitet
+    // der LIVE-Graph waehrend des Exports dieselben Plugin-Instanzen weiter und
+    // stoert deren Zustand (DC-Sperren, Kompressor-Huellkurven, Hall-Fahnen) —
+    // der Mixdown ist dann nicht reproduzierbar und weicht von dem ab, was man
+    // gehoert hat. TE erwartet ScopedRenderStatus ausdruecklich (sonst
+    // jassertfalse + "Rendering whilst attached to audio device"). Real gemessen
+    // am Bounce-Pfad: 35 dB Abweichung zwischen zwei Durchgaengen (2026-08-11).
+    // Message-Thread-Pflicht — deckt sich mit der Export-Invariante (I-10).
+    const te::Edit::ScopedRenderStatus srs (edit, true);
+
     juce::File renderedFile = te::Renderer::renderToFile ("Aizana Mixdown Export", params);
 
     if (onProgress)
@@ -172,6 +182,11 @@ juce::String ExportPipeline::exportStems(te::Edit& edit, const ExportOptions& op
 
     int trackIndex = 0;
     const int totalTracks = tracks.size();
+
+    // Ein ScopedRenderStatus fuer den GESAMTEN Stem-Durchlauf (nicht pro Stem):
+    // der Playback-Kontext bleibt waehrend aller Renders geloest, sonst gilt
+    // dieselbe Zustandsstoerung wie beim Mixdown fuer jeden einzelnen Stem.
+    const te::Edit::ScopedRenderStatus srs (edit, true);
 
     for (auto* track : tracks)
     {

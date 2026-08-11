@@ -399,6 +399,32 @@ te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
 }
 
 //==============================================================================
+double ClipEditor::renderSampleRateFor (te::Edit& edit,
+                                        const juce::Array<const te::WaveAudioClip*>& sources)
+{
+    double deviceRate = edit.engine.getDeviceManager().getSampleRate();
+    if (deviceRate < 8000.0)
+        deviceRate = 44100.0;            // headless / kein Geraet offen
+
+    double sourceRate = 0.0;
+    for (auto* c : sources)
+    {
+        if (c == nullptr)
+            return deviceRate;
+
+        const double r = c->getAudioFile().getSampleRate();
+        if (r < 8000.0)
+            return deviceRate;           // Rate unbekannt (Datei fehlt/kein Reader)
+
+        if (sourceRate <= 0.0)
+            sourceRate = r;
+        else if (std::abs (sourceRate - r) > 0.5)
+            return deviceRate;           // uneinheitliche Quellen — keine verlustfreie Wahl
+    }
+
+    return sourceRate > 0.0 ? sourceRate : deviceRate;
+}
+
 te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool withTrackFX)
 {
     auto* edit = editManager.getEdit();
@@ -429,9 +455,7 @@ te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool 
         .getChildFile (juce::File::createLegalFileName (clip.getName()) + " Bounce.wav")
         .getNonexistentSibling();
 
-    double sampleRate = edit->engine.getDeviceManager().getSampleRate();
-    if (sampleRate < 8000.0)
-        sampleRate = 44100.0;   // headless / no device open
+    const double sampleRate = renderSampleRateFor (*edit, { &clip });
 
     te::Renderer::Parameters params (*edit);
     params.destFile           = outFile;
@@ -446,6 +470,22 @@ te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool 
     params.checkNodesForAudio = false;
     params.tracksToDo.setBit (trackIndex);
     params.allowedClips.add (&clip);   // only THIS event renders, siblings stay out
+
+    // Der Edit haengt beim Bouncen am Audio-Geraet, und der LIVE-Graph
+    // verarbeitet dieselben Plugin-Instanzen weiter, waehrend offline gerendert
+    // wird. Zustandsbehaftete Plugins (DC-Sperre der Roehrensaettigung,
+    // Kompressor-Huellkurven, Hall-Fahnen, Delays) bekommen dadurch mitten im
+    // Render fremde Bloecke untergeschoben — der Bounce ist dann weder
+    // reproduzierbar noch identisch mit dem, was man gehoert hat.
+    // Real gemessen (2026-08-11): zwei Bounces derselben Stelle wichen um 35 dB
+    // voneinander ab, sichtbar als DC-Spruenge, die exakt mit der Zeitkonstante
+    // der DC-Sperre abklingen — 75 Stueck in 10 Sekunden.
+    // te::Edit::ScopedRenderStatus loest den Playback-Kontext fuer die Dauer des
+    // Renders und stellt ihn danach wieder her; TE erwartet das ausdruecklich
+    // (sonst: jassertfalse + "Rendering whilst attached to audio device") und
+    // benutzt es an seinen eigenen Render-Stellen ebenso (z.B. Track-Freeze).
+    // Message-Thread-Pflicht — dieselbe Invariante wie fuer den Render selbst (I-10).
+    const te::Edit::ScopedRenderStatus srs (*edit, true);
 
     const auto rendered = te::Renderer::renderToFile ("Bounce in Place", params);
     const auto resultFile = rendered.existsAsFile() ? rendered : params.destFile;
@@ -554,9 +594,10 @@ te::Clip* ClipEditor::mergeClips (const juce::Array<te::Clip*>& clips)
         .getChildFile (juce::File::createLegalFileName (firstClip->getName()) + " Merged.wav")
         .getNonexistentSibling();
 
-    double sampleRate = edit->engine.getDeviceManager().getSampleRate();
-    if (sampleRate < 8000.0)
-        sampleRate = 44100.0;   // headless / no device open
+    juce::Array<const te::WaveAudioClip*> rateSources;
+    for (auto* wc : waveClips)
+        rateSources.add (wc);
+    const double sampleRate = renderSampleRateFor (*edit, rateSources);
 
     te::Renderer::Parameters params (*edit);
     params.destFile           = outFile;
@@ -572,6 +613,11 @@ te::Clip* ClipEditor::mergeClips (const juce::Array<te::Clip*>& clips)
     params.tracksToDo.setBit (trackIndex);
     for (auto* wc : waveClips)
         params.allowedClips.add (wc);          // only the selected events render
+
+    // Playback-Kontext fuer die Dauer des Renders loesen — sonst schiebt der
+    // Live-Graph zustandsbehafteten Plugins waehrend des Renders eigene Bloecke
+    // unter. Ausfuehrlich begruendet in bounceClipInPlace().
+    const te::Edit::ScopedRenderStatus srs (*edit, true);
 
     const auto rendered = te::Renderer::renderToFile ("Events verbinden", params);
     const auto resultFile = rendered.existsAsFile() ? rendered : params.destFile;

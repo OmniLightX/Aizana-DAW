@@ -32,7 +32,15 @@ struct ExportOptions
 // ExportPipeline — stereo mixdown and per-stem export (EXP-01, EXP-02, EXP-04)
 //
 // Uses te::Renderer::renderToFile() for offline rendering (blocking).
-// Call from a background thread — not the audio or message thread.
+//
+// MESSAGE THREAD ONLY (I-10). Der Kommentar an dieser Stelle behauptete frueher
+// das Gegenteil ("call from a background thread") — das war falsch und stand im
+// Widerspruch zur einzigen Aufrufstelle (ExportDialog, direkt aus dem
+// Button-Klick) wie auch zur Invariante. Zwei Gruende, warum nur der
+// Message-Thread geht: te::Renderer delegiert an
+// AizanaUIBehaviour::runTaskWithProgressBar (pumpt den Message-Loop), und der
+// Export loest ueber te::Edit::ScopedRenderStatus den Playback-Kontext, was TE
+// ausdruecklich nur auf dem Message-Thread erlaubt.
 //
 // Thread model: not thread-safe; one export at a time per instance.
 // ---------------------------------------------------------------------------

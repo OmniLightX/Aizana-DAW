@@ -198,3 +198,88 @@ TEST_CASE ("MergeClips: guards — different tracks, <2 clips, mixed types", "[m
 
     tempDir.deleteRecursively();
 }
+
+// ---------------------------------------------------------------------------
+// Sample-Rate-Regel (Befund 2026-08-11, zusammen mit Bounce gefixt):
+// der Merge rendert in der Rate des Quellmaterials, wenn sie EINDEUTIG ist.
+// Bei uneinheitlichen Quellen gibt es keine verlustfreie Wahl — dann gilt die
+// Geraeterate, also die des Abspielwegs.
+// ---------------------------------------------------------------------------
+namespace
+{
+    juce::File writeSineWavAtRate (const juce::File& dir, const juce::String& name, double rate)
+    {
+        auto file = dir.getChildFile (name);
+        juce::WavAudioFormat wav;
+        auto stream = file.createOutputStream();
+        REQUIRE (stream != nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer (
+            wav.createWriterFor (stream.get(), rate, 1, 16, {}, 0));
+        REQUIRE (writer != nullptr);
+        stream.release();
+
+        juce::AudioBuffer<float> buf (1, (int) (kSourceSecs * rate));
+        for (int i = 0; i < buf.getNumSamples(); ++i)
+            buf.setSample (0, i, 0.5f * std::sin (2.0 * juce::MathConstants<double>::pi
+                                                  * 440.0 * i / rate));
+        REQUIRE (writer->writeFromAudioSampleBuffer (buf, 0, buf.getNumSamples()));
+        return file;
+    }
+}
+
+TEST_CASE ("MergeClips: renders at the source rate, device rate only when ambiguous", "[merge][raterule]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    ClipEditor clipEditor (em);
+
+    double deviceRate = edit->engine.getDeviceManager().getSampleRate();
+    if (deviceRate < 8000.0)
+        deviceRate = 44100.0;
+    if (std::abs (deviceRate - kSampleRate) < 0.5)
+        SKIP ("Geraeterate entspricht der Quellrate — der Fall ist hier nicht pruefbar");
+
+    auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("aizana_merge_rate_test");
+    tempDir.createDirectory();
+
+    auto* track = te::getAudioTracks (*edit)[0];
+
+    SECTION ("einheitliche Quellrate gewinnt")
+    {
+        const auto a = writeSineWavAtRate (tempDir, "a.wav", kSampleRate);
+        const auto b = writeSineWavAtRate (tempDir, "b.wav", kSampleRate);
+        auto* c1 = clipEditor.importAudioFile (a, *track, 0.0);
+        auto* c2 = clipEditor.importAudioFile (b, *track, 2.0);
+        REQUIRE (c1 != nullptr);
+        REQUIRE (c2 != nullptr);
+
+        CHECK (ClipEditor::renderSampleRateFor (*edit, { c1, c2 }) == kSampleRate);
+
+        auto* merged = dynamic_cast<te::WaveAudioClip*> (clipEditor.mergeClips ({ c1, c2 }));
+        REQUIRE (merged != nullptr);
+
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (
+            fm.createReaderFor (merged->getSourceFileReference().getFile()));
+        REQUIRE (reader != nullptr);
+        CHECK (reader->sampleRate == kSampleRate);
+    }
+
+    SECTION ("uneinheitliche Quellen fallen auf die Geraeterate zurueck")
+    {
+        const auto a = writeSineWavAtRate (tempDir, "a441.wav", kSampleRate);
+        const auto b = writeSineWavAtRate (tempDir, "b48.wav",  48000.0);
+        auto* c1 = clipEditor.importAudioFile (a, *track, 0.0);
+        auto* c2 = clipEditor.importAudioFile (b, *track, 2.0);
+        REQUIRE (c1 != nullptr);
+        REQUIRE (c2 != nullptr);
+        REQUIRE (c1->getAudioFile().getSampleRate() != c2->getAudioFile().getSampleRate());
+
+        CHECK (ClipEditor::renderSampleRateFor (*edit, { c1, c2 }) == deviceRate);
+    }
+
+    tempDir.deleteRecursively();
+}
