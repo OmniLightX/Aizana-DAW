@@ -1,0 +1,80 @@
+# E-V13 — Quantize-Bar im PianoRoll (E7).
+#
+# Messgroesse: die X-Position der NoteComponent, abgelesen ueber ihren Namen
+# ("Note C-2"). Damit ist "rastet aufs Raster" eine ZAHL und kein Bildeindruck.
+# Voraussetzung dafuer war, Noten ueberhaupt zu benennen (NoteComponent::refreshTitle).
+#
+# Ablauf: Note per Klick anlegen (landet aufs 1/16-Raster) -> per Drag um wenige
+# Pixel daneben ziehen (der Noten-Drag rastet NICHT) -> Q muss sie zurueckholen.
+#
+# GEGENKONTROLLE am Schluss: Q auf eine bereits saubere Note darf NICHTS bewegen.
+# Ohne sie wuerde ein Q, das Noten pauschal auf x0 setzt, genauso bestehen.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/14-block-e-quantize.txt
+
+vorn
+warte 2500
+
+# ---------------------------------------------------- MIDI-Spur mit 4-Takt-Clip
+klick Spur hinzufuegen
+warte 1000
+klick MIDI
+warte 400
+klick Add
+warte 2000
+
+# Der Clip liegt zum Teil unter dem Dock; find meldet nur den sichtbaren Streifen,
+# der Doppelklick trifft daher trotzdem.
+dklick Clip MIDI Clip
+warte 2500
+
+# Quantize-Bar muss da sein (E-V13, erster Teil)
+> find Quantize-Raster
+> find Quantize-Staerke
+> find Quantize-Swing
+> find Quantisieren
+bild E13-00-pianoroll
+
+# ---------------------------------------------------- Note anlegen (auf Raster)
+klickin Notenraster @ 0.35 0.55
+warte 800
+bild E13-01-note-auf-raster
+# x0 merken
+> find Note C-2
+
+# ---------------------------------------------------- daneben ziehen
+# +7 px = knapp unter einem halben Rasterschritt (ein 1/16 ist hier 20 px breit),
+# also muss Q auf DENSELBEN Rasterpunkt zurueckrunden, nicht auf den naechsten.
+ziehe Note C-2 7 0
+warte 800
+bild E13-02-note-daneben
+# x1 = x0 + 7 erwartet
+> find Note C-2
+
+# ---------------------------------------------------- Q
+klick Quantisieren
+warte 1000
+bild E13-03-nach-q
+# Erwartung: wieder exakt x0
+> find Note C-2
+
+# ---------------------------------------------------- EIN Undo
+menu 2 101
+warte 1000
+# Erwartung: wieder x1 (der Versatz ist zurueck)
+> find Note C-2
+
+# ---------------------------------------------------- Taste Q statt Knopf
+taste q
+warte 1000
+# Erwartung: wieder x0 — der Shortcut macht dasselbe wie der Knopf
+> find Note C-2
+
+# ---------------------------------------------------- GEGENKONTROLLE
+# Die Note liegt jetzt sauber. Ein weiteres Q darf sie NICHT bewegen.
+klick Quantisieren
+warte 1000
+bild E13-04-gegenkontrolle
+# Erwartung: unveraendert x0
+> find Note C-2

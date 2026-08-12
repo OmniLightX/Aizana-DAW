@@ -12,6 +12,16 @@ NoteComponent::NoteComponent (te::MidiNote& note_,
       editManager (editManager_)
 {
     setRepaintsOnMouseActivity (true);
+    refreshTitle();
+}
+
+void NoteComponent::refreshTitle()
+{
+    // Ohne Namen ist die Note weder fuer VoiceOver noch fuer einen Testlauf
+    // adressierbar — und ihre Position damit nicht messbar. Mehrere Noten
+    // derselben Tonhoehe teilen den Namen; find meldet das als mehrdeutig,
+    // statt stillschweigend die erstbeste zu nehmen.
+    setTitle ("Note " + juce::MidiMessage::getMidiNoteName (note.getNoteNumber(), true, true, 3));
 }
 
 void NoteComponent::setInScale (bool inScaleFlag)

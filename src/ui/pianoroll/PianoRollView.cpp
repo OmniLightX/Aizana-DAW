@@ -230,6 +230,8 @@ void PianoRollView::TakesPanel::mouseDown (const juce::MouseEvent&) {}
 PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
     : clip (clip_), editManager (editManager_)
 {
+    setTitle ("Notenraster");   // benannt = ansprechbar (VoiceOver, Testlauf)
+
     // ---- Header controls ----
     // Key selector: C through B
     keySelector.addItem ("C",  1);
@@ -300,6 +302,15 @@ PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
                                           "50 % = halber Weg (nat\xc3\xbcrlicher)"));
     setupQSlider (qSwing, 0.0,
                   juce::String::fromUTF8 ("Swing — verschiebt jede zweite Rasterlinie nach hinten"));
+
+    // Benennung wie bei der uebrigen Editor-Oberflaeche: sonst sind diese Regler
+    // weder fuer VoiceOver noch fuer einen Testlauf ansprechbar (nur ueber
+    // Koordinaten, und ein Koordinatenklick meldet auch dann Erfolg, wenn er
+    // danebengeht).
+    quantizeGrid.setTitle ("Quantize-Raster");
+    qStrength   .setTitle ("Quantize-Staerke");
+    qSwing      .setTitle ("Quantize-Swing");
+    qApplyBtn   .setTitle ("Quantisieren");
 
     qApplyBtn.setClickingTogglesState (false);   // I-04
     qApplyBtn.setTooltip (juce::String::fromUTF8 ("Quantisieren (Q) — selektierte Noten, sonst alle; 1 Undo-Schritt"));
@@ -816,6 +827,8 @@ void PianoRollView::updateNoteComponentBounds (NoteComponent& nc)
 
     nc.setBounds (static_cast<int> (x), static_cast<int> (y),
                   juce::jmax (4, static_cast<int> (w)), static_cast<int> (h));
+
+    nc.refreshTitle();   // Tonhoehe kann sich per Drag geaendert haben
 }
 
 void PianoRollView::updateAllNoteScaleColors()

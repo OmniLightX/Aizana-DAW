@@ -111,6 +111,23 @@ def vorn():
                    capture_output=True)
 
 
+def bildschirm_gesperrt():
+    """True, wenn die Bildschirmsperre aktiv ist.
+
+    Reine Abfrage ueber ioreg (IOConsoleUsers -> CGSSessionScreenIsLocked); kein
+    Eingriff, keine Berechtigung noetig. Laesst sich ioreg nicht lesen, wird NICHT
+    blockiert — das Werkzeug soll nicht an einem Hilfsprogramm scheitern.
+    """
+    try:
+        out = subprocess.run(["ioreg", "-n", "Root", "-d1", "-a"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return False
+
+    i = out.find("CGSSessionScreenIsLocked")
+    return i >= 0 and "<true/>" in out[i:i + 120]
+
+
 def zeige(zeilen, einzug="  "):
     for z in zeilen:
         print(einzug + z)
@@ -131,6 +148,19 @@ def main():
     # tot und jeder Befehl liefe ins Leere, ohne dass es auffiele.
     if subprocess.run(["pgrep", "-x", "Aizana"], capture_output=True).returncode == 0:
         print("ABBRUCH: es laeuft bereits eine Aizana-Instanz. Erst beenden.")
+        return 1
+
+    # Bei GESPERRTEM Bildschirm kommt das Fenster nicht in den Vordergrund und
+    # Klicks bleiben wirkungslos — die Befehle melden aber weiterhin brav "OK",
+    # weil sie nur bestaetigen, dass das Ereignis abgeschickt wurde. Ein Lauf in
+    # diesem Zustand liefert also lauter Fehlbefunde, die wie Messergebnisse
+    # aussehen (real passiert am 12.08.: "Quantize greift nicht" — in Wahrheit
+    # war der Bildschirm gesperrt, derselbe Code lief entsperrt einwandfrei).
+    # Deshalb hier abbrechen statt messen.
+    if bildschirm_gesperrt():
+        print("ABBRUCH: der Bildschirm ist gesperrt. Klicks blieben wirkungslos und der\n"
+              "         Lauf wuerde Fehlbefunde liefern, die wie Messwerte aussehen.\n"
+              "         Erst entsperren, dann erneut starten.")
         return 1
 
     quelle = sys.stdin if sys.argv[2] == "-" else open(sys.argv[2], encoding="utf-8")

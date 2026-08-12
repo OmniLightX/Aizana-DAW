@@ -39,6 +39,15 @@ public:
     /** Called by PianoRollView when scale settings change so colour can update. */
     void setInScale (bool inScale);
 
+    /**
+     * Sets the accessible title to "Note <name>" (e.g. "Note C3").
+     *
+     * Called from PianoRollView::updateNoteComponentBounds, so the title follows
+     * a note whose pitch was changed by dragging. VoiceOver reads it, and GUI test
+     * runs address notes by it — a namenless component is invisible to both.
+     */
+    void refreshTitle();
+
     /** Selection state — highlighted with a brighter fill when selected. */
     void setSelected (bool shouldBeSelected);
     bool isSelected() const noexcept { return selected; }
