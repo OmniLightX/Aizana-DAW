@@ -323,9 +323,12 @@ def main():
                 py = lambda fy: ziel["top"] + float(fy) * ziel["h"]
                 p = int(ziel["peer"])
                 if befehl == "ziehein":
+                    # Optionaler fuenfter Wert = Modifier (cmd = Marquee-Zeitbereich).
+                    # drag erwartet ihn HINTER der Schrittzahl (Index 7 im Rohbefehl).
+                    zmods = zahlen[4] if len(zahlen) > 4 else "-"
                     ok, zeilen = hook.send(
                         f"drag {p} {px(zahlen[0])} {py(zahlen[1])} "
-                        f"{px(zahlen[2])} {py(zahlen[3])} 24", 60)
+                        f"{px(zahlen[2])} {py(zahlen[3])} 24 {zmods}", 60)
                 elif befehl == "dropin":
                     ok, zeilen = hook.send(
                         f"drop {p} {int(px(zahlen[0]))} {int(py(zahlen[1]))} {pfad}", 40)

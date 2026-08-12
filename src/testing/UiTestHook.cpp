@@ -152,6 +152,62 @@ void dumpTree (const juce::Component& c, int depth, int maxDepth, int& budget, j
 // ausschliesslich dort angefasst).
 //==============================================================================
 
+/*
+    WARUM DIE TASTATUR-MODIFIER EXTRA GESETZT WERDEN MUESSEN — am JUCE-Quelltext
+    nachgelesen, nicht vermutet:
+
+    handleMouseEvent reicht seinen mods-Parameter AUSSCHLIESSLICH an
+    MouseInputSourceImpl::setButtons weiter, wo er zu buttonState wird. Was ein
+    MouseEvent spaeter als e.mods traegt, baut JUCE dagegen so zusammen
+    (juce_MouseInputSourceImpl.h:59):
+
+        ModifierKeys::currentModifiers.withoutMouseButtons()
+                                      .withFlags (buttonState.getRawFlags());
+
+    Die MAUSTASTEN kommen also aus dem Parameter, die TASTATUR-Bits aus dem
+    globalen Static — und withoutMouseButtons() wirft die Tastatur-Bits des
+    Parameters vorher weg. Ein per Parameter uebergebenes cmd erreicht mouseDown
+    deshalb NIE: Cmd+Klick verhielt sich wie ein gewoehnlicher Klick und ersetzte
+    die Auswahl, statt sie zu erweitern; das Gummiband liess sich nicht ausloesen.
+
+    currentModifiers ist ein prozesslokaler Static (juce_ModifierKeys.cpp:38), auf
+    macOS sonst von der echten NSEvent-Behandlung gepflegt. Ihn hier zu setzen
+    verlaesst den Prozess nicht — es ist eine Zuweisung, kein Systemaufruf.
+
+    Wiederhergestellt wird IMMER (auch bei Ausnahmen): bliebe ein Modifier
+    haengen, verfaelschte er jede spaetere Geste — und niemand saehe es, weil
+    nichts abstuerzt. Genau die Fehlerklasse, die diese Runde gekostet hat.
+*/
+struct ScopedKeyboardModifiers
+{
+    explicit ScopedKeyboardModifiers (juce::ModifierKeys mods)
+        : vorher (juce::ModifierKeys::currentModifiers)
+    {
+        juce::ModifierKeys::currentModifiers =
+            vorher.withoutMouseButtons()
+                  .withoutFlags (juce::ModifierKeys::allKeyboardModifiers)
+                  .withFlags (mods.getRawFlags() & juce::ModifierKeys::allKeyboardModifiers);
+    }
+
+    ~ScopedKeyboardModifiers() { juce::ModifierKeys::currentModifiers = vorher; }
+
+    const juce::ModifierKeys vorher;
+};
+
+juce::String beschreibeMods (juce::ModifierKeys m)
+{
+    juce::StringArray teile;
+
+    if (m.isShiftDown())          teile.add ("shift");
+    if (m.isCtrlDown())           teile.add ("ctrl");
+    if (m.isAltDown())            teile.add ("alt");
+    if (m.isCommandDown())        teile.add ("cmd");
+    if (m.isLeftButtonDown())     teile.add ("links");
+    if (m.isRightButtonDown())    teile.add ("rechts");
+
+    return teile.isEmpty() ? juce::String ("-") : teile.joinIntoString ("+");
+}
+
 juce::String sendMouse (int peerIndex, float x, float y, juce::ModifierKeys mods)
 {
     auto* peer = peerAt (peerIndex);
@@ -159,12 +215,24 @@ juce::String sendMouse (int peerIndex, float x, float y, juce::ModifierKeys mods
     if (peer == nullptr)
         return "ERR kein Fenster mit Index " + juce::String (peerIndex);
 
-    peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
-                            { x, y },
-                            mods,
-                            juce::MouseInputSource::defaultPressure,
-                            juce::MouseInputSource::defaultOrientation,
-                            juce::Time::currentTimeMillis());
+    juce::String gesehen;
+
+    {
+        const ScopedKeyboardModifiers halteTasten (mods);
+
+        peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                                { x, y },
+                                mods,
+                                juce::MouseInputSource::defaultPressure,
+                                juce::MouseInputSource::defaultOrientation,
+                                juce::Time::currentTimeMillis());
+
+        // GEMESSEN statt zugesichert: exakt der Wert, den ein MouseEvent als
+        // e.mods traegt (MouseInputSource::getCurrentModifiers delegiert an
+        // dieselbe Zeile). Damit ist in der Antwort ablesbar, was in der
+        // Component wirklich ankam — nicht, was der Harness gemeint hat.
+        gesehen = beschreibeMods (juce::Desktop::getInstance().getMainMouseSource().getCurrentModifiers());
+    }
 
     // Stolperdraht auf genau die Bedingung, die zum Zeiger-Warp fuehren wuerde.
     // Wenn das je anspricht, ist eine Annahme ueber JUCE gekippt — dann lieber
@@ -172,7 +240,7 @@ juce::String sendMouse (int peerIndex, float x, float y, juce::ModifierKeys mods
     if (juce::Desktop::getInstance().getMainMouseSource().isUnboundedMouseMovementEnabled())
         return "ERR unbounded-mouse-mode aktiv — Geste abgebrochen, sonst springt der echte Zeiger";
 
-    return "OK";
+    return "OK mods=" + gesehen;
 }
 
 juce::String cmdPeers()

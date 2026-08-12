@@ -1,0 +1,79 @@
+# Block D (2) — Auswahl-Mechanik mit GEGENKONTROLLE.
+#
+# Warum dieses Drehbuch existiert: der erste Anlauf am 12.08. meldete, Cmd+Klick
+# greife nicht. Ursache war der Hook, nicht die App (Tastatur-Modifier kommen in
+# JUCE aus ModifierKeys::currentModifiers, nicht aus dem handleMouseEvent-Parameter
+# — siehe UiTestHook.cpp). Damit dieser Test nicht dasselbe nochmal behauptet,
+# traegt er eine GEGENKONTROLLE: derselbe Ablauf OHNE cmd muss ein ANDERES
+# Ergebnis liefern. Tut er das nicht, misst der Test nicht die Auswahl.
+#
+# Messgroesse durchgehend: "find Clip testmaterial_kurz" — mehrdeutig MIT Anzahl,
+# solange mehrere gleichnamige Clips existieren. Zaehlen ohne zu raten.
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/13-block-d-auswahl.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+dropin Spurbereich Track 1 @ 0.06 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.36 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.66 0.5 $AIZANA_TESTKURZ
+warte 3000
+# Erwartung: mehrdeutig, 3x
+> find Clip testmaterial_kurz
+
+# --------------------------------------------- GEGENKONTROLLE: EIN Klick, KEIN cmd
+# Wenn hier ebenfalls alle drei verschwinden, prueft der Test nicht die Auswahl,
+# sondern loescht pauschal — dann ist auch das cmd-Ergebnis wertlos.
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 500
+taste delete
+warte 1500
+bild D10-gegenkontrolle-ein-klick
+# Erwartung: mehrdeutig, 2x  (NICHT 0 — sonst misst der Test nichts)
+> find Clip testmaterial_kurz
+
+menu 2 101
+warte 1500
+# Erwartung: wieder 3x
+> find Clip testmaterial_kurz
+
+# --------------------------------------------- D1: Cmd+Klick erweitert die Auswahl
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 400
+klickin Spurbereich Track 1 @ 0.40 0.5 cmd
+warte 400
+klickin Spurbereich Track 1 @ 0.70 0.5 cmd
+warte 800
+bild D11-drei-ausgewaehlt
+taste delete
+warte 1500
+# Erwartung: nicht gefunden (0) — gegen die Gegenkontrolle oben (2) trennscharf
+> find Clip testmaterial_kurz
+
+menu 2 101
+warte 1500
+# Ein Undo holt ALLE drei zurueck
+> find Clip testmaterial_kurz
+
+# --------------------------------------------- D3: Gummiband (Pointer, ohne Taste)
+# Startpunkt MUSS leer sein, sonst wird gezogen statt aufgezogen. Die Clips liegen
+# um 0.10 / 0.40 / 0.70 und sind ~0.17 breit; 0.26 ist die Luecke dazwischen.
+# Das Rechteck 0.26..0.78 schneidet Clip 2 und 3, aber NICHT Clip 1.
+ziehein Spurbereich Track 1 @ 0.26 0.30 0.78 0.72
+warte 800
+bild D12-gummiband
+taste delete
+warte 1500
+bild D13-nach-gummiband-delete
+# Erwartung: GENAU EINER uebrig -> find meldet OK (eindeutig), nicht mehrdeutig
+> find Clip testmaterial_kurz
+
+menu 2 101
+warte 1500
+> find Clip testmaterial_kurz
