@@ -1,0 +1,80 @@
+# Sammellauf Dock-Editor: E-V7 (Delete mit/ohne Bereich), P5-L (Verstaerkungskurve),
+# P7b-L (Audio-Bend).
+#
+# Messgroessen:
+#   E-V7  — die Clipbreite (Bereich weg = schmaler) UND die Clipzahl (die
+#           Arrangement-Auswahl darf NICHT geloescht werden). Beides zusammen ist
+#           der Punkt: die Taste muss den Bereich treffen, nicht die Selektion.
+#   P5-L  — die amber Kurve, die der Arrangement-Clip zeichnet: Pixel gezaehlt.
+#   P7b-L — die gesetzten Warp-Marker im gespeicherten Session-Inhalt.
+#
+# Aufruf:
+#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/28-dock-block.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+dropin Spurbereich Track 1 @ 0.10 0.5 $AIZANA_TESTWAV
+warte 3000
+dropin Spurbereich Track 1 @ 0.55 0.5 $AIZANA_TESTWAV
+warte 4000
+> find Clip testmaterial_laut
+
+# ================================================== E-V7 Delete mit Bereich
+# Beide Clips auswaehlen, dann im Dock einen Bereich aufziehen. Die Delete-Taste
+# muss den BEREICH treffen — waere sie global, waeren danach beide Clips weg.
+klickin Spurbereich Track 1 @ 0.12 0.5
+warte 600
+klickin Spurbereich Track 1 @ 0.58 0.5 cmd
+warte 800
+wennfehlt Werkzeug Pfeil @ Unten Editor
+warte 2500
+bild EV7-00-dock-offen
+
+klick Werkzeug Bereich
+warte 500
+ziehein Editor-Wellenform @ 0.35 0.5 0.50 0.5
+warte 900
+bild EV7-01-bereich
+taste backspace
+warte 1800
+# Erwartung: BEIDE Clips existieren noch, einer ist schmaler geworden
+> find Clip testmaterial_laut
+bild EV7-02-nach-delete
+menu 2 101
+warte 1500
+> find Clip testmaterial_laut
+bild EV7-03-nach-undo
+
+# ================================================== P5-L Verstaerkungskurve
+klick Werkzeug Pfeil
+warte 500
+klick Verstaerkungskurve
+warte 1000
+bild P5-00-env-an
+klickin Editor-Wellenform @ 0.30 0.30
+warte 700
+klickin Editor-Wellenform @ 0.50 0.80
+warte 700
+klickin Editor-Wellenform @ 0.70 0.30
+warte 1200
+bild P5-01-kurve-gezeichnet
+menu 2 101
+warte 1200
+bild P5-02-nach-undo
+
+# ================================================== P7b-L Audio-Bend
+klick Audio-Bend
+warte 1000
+bild P7B-00-bend-an
+klickin Editor-Wellenform @ 0.40 0.5
+warte 2500
+bild P7B-01-marker-gesetzt
+ziehein Editor-Wellenform @ 0.40 0.5 0.50 0.5
+warte 4000
+bild P7B-02-marker-gezogen
+
+menu 1 3
+warte 3000
+> peers

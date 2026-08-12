@@ -2,7 +2,7 @@
 #
 # Zwei Messgroessen:
 #   * WERKZEUG: die Zellen der Werkzeugleiste sind gezeichnet und tragen seit dieser
-#     Runde Namen, die den aktiven Zustand mitfuehren ("Werkzeug Stumm (aktiv)").
+#     Runde Namen, die den aktiven Zustand mitfuehren ("Arrangement-Werkzeug Stumm (aktiv)").
 #     Ohne das waere "welches Werkzeug ist aktiv" nur an einer FARBE ablesbar.
 #   * STUMMER CLIP: der Clip wird gedimmt gezeichnet — gemessen wird die MITTLERE
 #     HELLIGKEIT seines Rechtecks in den drei Bildern (Auswertung nach dem Lauf,
@@ -25,15 +25,15 @@ warte 3000
 
 # ------------------------------------------- Werkzeugwechsel
 # GEGENKONTROLLE: vorher ist der Pfeil aktiv, das Mute-Werkzeug NICHT.
-> find Werkzeug Pfeil (aktiv)
-> find Werkzeug Stumm (aktiv)
+> find Arrangement-Werkzeug Pfeil (aktiv)
+> find Arrangement-Werkzeug Stumm (aktiv)
 > bild 0 /tmp/aizana_gui_et/et-00-vor-mute.png
 
-klick Werkzeug Stumm
+klick Arrangement-Werkzeug Stumm
 warte 1000
 # Erwartung: jetzt umgekehrt
-> find Werkzeug Stumm (aktiv)
-> find Werkzeug Pfeil (aktiv)
+> find Arrangement-Werkzeug Stumm (aktiv)
+> find Arrangement-Werkzeug Pfeil (aktiv)
 
 # ------------------------------------------- Clip stummschalten
 klickin Spurbereich Track 1 @ 0.10 0.5
@@ -46,9 +46,9 @@ warte 1500
 > bild 0 /tmp/aizana_gui_et/et-02-nach-undo.png
 
 # Zurueck auf den Pfeil, sonst stummt jeder weitere Klick.
-klick Werkzeug Pfeil
+klick Arrangement-Werkzeug Pfeil
 warte 800
-> find Werkzeug Pfeil (aktiv)
+> find Arrangement-Werkzeug Pfeil (aktiv)
 
 # ------------------------------------------- Merge MIDI (Cmd+J)
 # Der Audio-Clip muss weg, sonst faengt Cmd+A ihn spaeter mit ein und die Auswahl

@@ -423,6 +423,14 @@ void ChannelStrip::InsertSlotPanel::refresh()
             slot->plugin = userPlugins[i];  // occupied
         // else plugin == nullptr → empty "+" slot
 
+        // Der Slot-Text wird GEZEICHNET — ohne diesen Namen ist ein Insert-Platz
+        // weder fuer VoiceOver noch fuer eine Adressierung ueber Namen vorhanden,
+        // und ob er belegt ist, waere nur am Bild ablesbar.
+        slot->setTitle ("Insert " + juce::String (i + 1) + " " + track.getName()
+                        + (slot->plugin != nullptr
+                             ? ": " + slot->plugin->getName()
+                             : juce::String (" (leer)")));
+
         const int slotIndex = i;
 
         slot->onClick = [this, slotIndex]

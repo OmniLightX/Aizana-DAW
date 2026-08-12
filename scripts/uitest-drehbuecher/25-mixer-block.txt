@@ -1,0 +1,77 @@
+# Sammellauf Mixer/Insert: P2-L (8 Built-ins), P1-L (Sidechain-Quelle), P6-L (Cue),
+# DYN-L (die neuen Dynamik-Parameter stehen in der Automationsliste).
+#
+# Messgroessen sind durchweg LISTEN aus dem Component-Baum, keine Bildeindruecke:
+# die Eintraege des Insert-Menues, des Sidechain-Untermenues und des
+# Automations-Dropdowns. Der Klang bleibt beim Menschen.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/25-mixer-block.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+
+# ================================================== P2-L: Insert-Menue, 8 Built-ins
+wennfehlt Kanalzug Track 1 @ Mix
+warte 2000
+klick Insert 1 Track 1 (leer)
+warte 1500
+> peers
+# Erwartung: Aizana EQ · Compressor · Reverb · Limiter · De-Esser · Delay · Gate ·
+# Saturator (8 Stueck)
+> tree 1 6
+bild P2-00-insert-menue
+
+# Aizana Delay einsetzen (damit spaeter etwas zum Sidechain-Ziel da ist)
+> press Aizana EQ
+warte 3000
+klick close
+warte 1200
+bild P2-01-eq-im-slot
+
+# ================================================== DYN-L: Automationsliste
+# Die 26 neuen Parameter (je Band Dynamik/Schwelle/Ratio + Attack/Release) muessen
+# als automatisierbare Eintraege auftauchen — genau der Weg, den eine Automations-
+# kurve nimmt.
+wennfehlt Spurbereich Track 1 @ Edit
+warte 1500
+klick A
+warte 1500
+klick Automations-Parameter Track 1
+warte 1500
+> tree 1 6
+bild DYN-00-automationsliste
+taste escape
+warte 800
+
+# ================================================== P1-L: Sidechain-Quelle
+# Erst einen Kompressor einsetzen (nur der kann einen Key-Bus haben), dann
+# Rechtsklick auf den Slot.
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+klick Insert 2 Track 1 (leer)
+warte 1500
+> press Aizana Compressor
+warte 3000
+klick close
+warte 1200
+rklick Insert 2 Track 1: Aizana Compressor
+warte 1500
+> tree 1 6
+bild P1-00-slot-menue
+
+# ================================================== P6-L: Cue-Kanal
+taste escape
+warte 800
+klick Kanal hinzufuegen
+warte 1500
+> tree 1 6
+> press Add Cue Channel
+warte 2500
+# Erwartung: ein neuer Kanalzug "Cue 1"
+> find Kanalzug Cue 1
+> find Kanalname Cue 1
+> find Ausgang Cue 1
+bild P6-00-cue-strip

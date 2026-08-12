@@ -213,6 +213,13 @@ void MasterStrip::MasterInsertSlotPanel::refresh()
         if (i < userPlugins.size())
             slot->plugin = userPlugins[i];
 
+        // Gezeichneter Slot-Text -> ohne Namen weder fuer VoiceOver noch ueber
+        // Namen adressierbar; der Name traegt zugleich, ob der Platz belegt ist.
+        slot->setTitle ("Insert " + juce::String (i + 1) + " " + juce::String ("Master")
+                        + (slot->plugin != nullptr
+                             ? ": " + slot->plugin->getName()
+                             : juce::String (" (leer)")));
+
         const int slotIndex = i;
 
         slot->onClick = [this, slotIndex]

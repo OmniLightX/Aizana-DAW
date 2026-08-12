@@ -1,0 +1,108 @@
+# Sammellauf Clip-Kontextmenue: ET-L Merge AUDIO (Cmd+J), P3-L Bounce in Place,
+# P8-L Vocal-Tuning, P7a-L Tempo-Map.
+#
+# Messgroesse ist durchweg der NAME des Clips samt Rechteck (aus find) bzw. die
+# angezeigte BPM. Was gerendert wird, ist engine-belegt (Bounce 163 dB Abstand zum
+# Live-Render, Tuning 445 Hz → 440 Hz, Merge Rest exakt null) — hier zaehlt, dass die
+# Geste im Programm ankommt, den Clip TAUSCHT und genau EIN Undo zurueckfuehrt.
+#
+# Zwei Dateien noetig:
+#   AIZANA_TESTKURZ  — kurzer Ausschnitt (Merge/Bounce/Tuning)
+#   AIZANA_TESTBEAT  — Material MIT stabilem Puls (Tempo-Map). Auf dem kurzen
+#                      Schnipsel meldet die Erkennung zu Recht "kein stabiler Puls".
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#   AIZANA_TESTBEAT=/tmp/kick121.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/27-clip-menue-block.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+dropin Spurbereich Track 1 @ 0.06 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.36 0.5 $AIZANA_TESTKURZ
+warte 3000
+# Erwartung: mehrdeutig, 2x
+> find Clip testmaterial_kurz
+bild C-00-zwei-clips
+
+# ================================================== ET-L Merge AUDIO (Cmd+J)
+# Erst in einen Clip klicken: ohne Tastaturfokus im Arrangement kommen Cmd+A und
+# Cmd+J gar nicht an (der Befehl meldet dann "Taste nicht angenommen").
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 800
+taste a cmd
+warte 1000
+taste j cmd
+warte 8000
+# Der Audio-Weg RENDERT, der zusammengefasste Clip heisst deshalb "… (Merged)".
+> find Clip testmaterial_kurz (Merged)
+> find Clip testmaterial_kurz
+bild C-01-merged
+menu 2 101
+warte 2500
+# Erwartung: beide Originale zurueck, der Merge-Clip weg
+> find Clip testmaterial_kurz
+> find Clip testmaterial_kurz (Merged)
+bild C-02-merge-undo
+
+# ================================================== P3-L Bounce in Place
+rklickin Spurbereich Track 1 @ 0.10 0.5
+warte 1500
+> tree 1 6
+> press Bounce in Place (mit Insert-FX)
+warte 8000
+# Erwartung: an derselben Stelle steht jetzt "testmaterial_kurz (Bounce)"
+> find Clip testmaterial_kurz (Bounce)
+bild C-03-nach-bounce
+menu 2 101
+warte 2500
+> find Clip testmaterial_kurz (Bounce)
+> find Clip testmaterial_kurz
+bild C-04-bounce-undo
+
+# ================================================== P8-L Vocal-Tuning
+rklickin Spurbereich Track 1 @ 0.10 0.5
+warte 1500
+> press Vocal-Tuning…
+warte 2500
+> peers
+bild C-05-tuning-dialog
+klick Tunen
+warte 12000
+# Erwartung: der Clip ist getauscht — "… (Tuned)"
+> find Clip testmaterial_kurz (Tuned)
+bild C-06-nach-tuning
+menu 2 101
+warte 2500
+> find Clip testmaterial_kurz (Tuned)
+> find Clip testmaterial_kurz
+bild C-07-tuning-undo
+
+# ================================================== P7a-L Tempo-Map
+# Jetzt Material MIT Puls auf die zweite Spur. Vorher steht die Session auf 120 BPM.
+klick Spur hinzufuegen
+warte 1200
+klick Audio
+warte 600
+klick Add
+warte 2500
+dropin Spurbereich Audio @ 0.02 0.5 $AIZANA_TESTBEAT
+warte 4000
+> find 120.0 BPM
+bild C-08-beat-importiert
+
+rklickin Spurbereich Audio @ 0.05 0.5
+warte 1500
+> press Tempo-Map aus Clip extrahieren…
+warte 15000
+> tree 1
+bild C-09-tempomap-dialog
+klick OK
+warte 2000
+# Erwartung: das Songtempo steht NICHT mehr auf 120.0 — die Datei hat 121 BPM.
+> find 120.0 BPM
+> tree 0 2
+bild C-10-nach-tempomap

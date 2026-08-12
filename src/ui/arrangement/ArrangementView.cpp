@@ -295,9 +295,14 @@ void ArrangementView::ToolSelectorStrip::refreshCellTitles()
 {
     // Ohne den Zustand im Namen waere "welches Werkzeug ist aktiv" nur an einer FARBE
     // ablesbar — fuer VoiceOver gar nicht, fuer einen Testlauf nur per Pixelvergleich.
+    // Mit "Arrangement-" qualifiziert, weil der Dock-Editor eine EIGENE Werkzeug-
+    // leiste mit Pfeil/Bereich hat. Gleiche Namen fuer zwei verschiedene Leisten
+    // waeren fuer VoiceOver wie fuer jede Adressierung ueber Namen mehrdeutig —
+    // und ein Klick, der die falsche Leiste trifft, meldet trotzdem Erfolg.
     static const char* kNames[kNumToolCells] {
-        "Werkzeug Pfeil", "Werkzeug Bereich", "Werkzeug Schere",
-        "Werkzeug Radierer", "Werkzeug Stumm"
+        "Arrangement-Werkzeug Pfeil", "Arrangement-Werkzeug Bereich",
+        "Arrangement-Werkzeug Schere", "Arrangement-Werkzeug Radierer",
+        "Arrangement-Werkzeug Stumm"
     };
 
     for (int i = 0; i < cellProxies.size() && i < kNumToolCells; ++i)

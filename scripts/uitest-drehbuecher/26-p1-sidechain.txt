@@ -1,0 +1,54 @@
+# P1-L — Sidechain-Quelle ueber das Insert-Slot-Menue setzen.
+#
+# Messgroesse: der INHALT der gespeicherten Session. Der Haken im Untermenue steht
+# nur im Accessibility-ZUSTAND, nicht im Namen — er waere also nicht ablesbar. Die
+# Zuweisung landet dagegen im Plugin-State und ist im Dateiinhalt nachweisbar.
+#
+# GEGENKONTROLLE: derselbe Lauf ohne den letzten Schritt (Drehbuch mit
+# AIZANA_P1_NUR_VORBEREITEN=1, siehe unten) speichert eine Session OHNE Zuweisung.
+# Beide Dateien werden nach dem Lauf verglichen.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/26-p1-sidechain.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+
+# ---------------------------------------------------- zweite Spur als Key-Quelle
+klick Spur hinzufuegen
+warte 1200
+klick Audio
+warte 600
+klick Add
+warte 2500
+> find Spur Audio
+
+# ---------------------------------------------------- Kompressor auf Spur 1
+wennfehlt Kanalzug Track 1 @ Mix
+warte 2000
+klick Insert 1 Track 1 (leer)
+warte 1500
+> press Aizana Compressor
+warte 3000
+klick close
+warte 1500
+
+# ---------------------------------------------------- Sidechain-Quelle waehlen
+rklick Insert 1 Track 1: Aizana Compressor
+warte 1500
+> press Sidechain-Quelle
+warte 1500
+# Erwartung: "(Keine)" + die ANDERE Spur, nicht die eigene (eine Spur kann sich
+# nicht selbst keyen).
+> tree 1 6
+bild P1-01-untermenue
+> press Audio
+warte 2000
+
+# ---------------------------------------------------- speichern und nachsehen
+menu 1 3
+warte 3000
+> peers
+bild P1-02-nach-save
