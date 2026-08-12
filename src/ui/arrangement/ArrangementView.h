@@ -426,6 +426,10 @@ private:
     // Helper: map Y in timelineContainer coords to track row index (clamped to valid range)
     int yContainerToTrackIndex (int yInContainer) const;
 
+    /** ArrangementView-y → y im Track-Rows-Container, inkl. vertikalem Scroll.
+        Einzige Quelle dieser Umrechnung — siehe Kommentar in der Implementierung. */
+    int viewYToContainerY (int yInView) const;
+
     void setSelectedTrackHeader (TrackHeader* header);
 
     // ---- Marker lane (named song markers) — sits above the ruler ----

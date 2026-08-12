@@ -65,8 +65,15 @@ private:
     bool isDraggingLength = false;  // True when dragging the right edge to resize
     bool isDraggingNote   = false;  // True when dragging the body to move
 
-    // State captured at mouseDown for delta calculations
-    juce::Point<float> mouseDownPos;
+    // State captured at mouseDown for delta calculations.
+    //
+    // In ELTERN-Koordinaten, nicht in eigenen: waehrend des Ziehens wandert diese
+    // Component mit der Note, verschiebt also ihr eigenes Bezugssystem. Ein Delta
+    // aus e.position waere dann rueckgekoppelt und die Note bliebe hinter der Maus
+    // zurueck (gemessen: nur ~57 % des Mausweges). Das fiel frueher nicht auf, weil
+    // die Anzeige der Notenposition ueberhaupt nicht folgte — ein Fehler verdeckte
+    // den anderen.
+    juce::Point<float> mouseDownPosInParent;
     double noteStartBeatAtDrag   = 0.0;
     int    notePitchAtDrag       = 0;
     double noteLengthBeatsAtDrag = 0.0;

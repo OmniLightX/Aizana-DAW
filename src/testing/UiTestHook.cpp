@@ -103,7 +103,7 @@ int indexOfPeer (const juce::ComponentPeer* peer)
     return -1;
 }
 
-juce::String describe (const juce::Component& c)
+juce::String describe (juce::Component& c)
 {
     auto label = c.getTitle();
 
@@ -111,8 +111,22 @@ juce::String describe (const juce::Component& c)
         label = c.getName();
 
     if (label.isEmpty())
-        if (auto* b = dynamic_cast<const juce::Button*> (&c))
+        if (auto* b = dynamic_cast<juce::Button*> (&c))
             label = b->getButtonText();
+
+    // Letzter Ausweg: der Titel des Accessibility-Handlers. Damit werden vor allem
+    // POPUPMENU-EINTRAEGE ansprechbar — deren Text liegt weder in getTitle noch in
+    // getName, sondern nur in ItemAccessibilityHandler::getTitle (juce_PopupMenu.cpp),
+    // das item.text zurueckgibt. Ohne das bliebe fuer Kontextmenues nur der
+    // Koordinatenklick, also genau die Fehlerklasse, gegen die die Benennung gebaut ist.
+    //
+    // Das ist KEIN Zugriff auf die Bedienungshilfen des Systems: getAccessibilityHandler
+    // liefert ein gewoehnliches C++-Objekt DIESES Prozesses. Es gibt keinen
+    // AXUIElement-Aufruf und keine Freigabe — das Werkzeugverbot bleibt gewahrt
+    // (uitest-guard-check prueft das an der Symboltabelle).
+    if (label.isEmpty())
+        if (auto* handler = c.getAccessibilityHandler())
+            label = handler->getTitle();
 
     return label;
 }
@@ -127,7 +141,7 @@ void collectMatches (juce::Component& c, const juce::String& name, juce::Array<j
             collectMatches (*child, name, out);
 }
 
-void dumpTree (const juce::Component& c, int depth, int maxDepth, int& budget, juce::StringArray& out)
+void dumpTree (juce::Component& c, int depth, int maxDepth, int& budget, juce::StringArray& out)
 {
     if (budget <= 0 || depth > maxDepth)
         return;
@@ -341,6 +355,50 @@ juce::String cmdFind (const juce::String& name)
              + " top=" + juce::String (tl.y, 1)
              + " w=" + juce::String (screen.getWidth(), 1)
              + " h=" + juce::String (screen.getHeight(), 1);
+}
+
+juce::String cmdPress (const juce::String& name)
+{
+    /*
+        POPUPMENUS SIND PER MAUS NICHT BEDIENBAR — gemessen und im JUCE-Quelltext
+        belegt: MenuWindow::MouseSourceState::timerCallback und isOver() fragen
+        source.getScreenPosition() ab, das ueber getRawScreenPosition() auf
+        MouseInputSource::getCurrentRawMousePosition() geht — die ECHTE
+        Systemmausposition, die synthetische Ereignisse nie bewegen. Folge: das
+        Menue verfolgt den echten Zeiger; ein Klick auf "Duplicate" blieb wirkungslos
+        und ein Untermenue ging weder per Klick noch per Verweilen auf.
+        Den echten Zeiger zu bewegen ist verboten (CGWarp, Riegel 5).
+
+        Ausweg ist derselbe wie bei der nativen Menueleiste (cmdMenu): den Eintrag
+        direkt am Modell ausloesen statt ihn anzuklicken. JUCE bietet dafuer genau
+        eine Aktion an — AccessibilityActionType::press ruft bei einem gewoehnlichen
+        Eintrag triggerCurrentlyHighlightedItem und bei einem Untermenue
+        showSubMenuFor (juce_PopupMenu.cpp, getAccessibilityActions).
+
+        Das ist ein Methodenaufruf IN DIESEM PROZESS: kein AXUIElement, keine
+        Freigabe der Bedienungshilfen, kein Systemzugriff.
+    */
+    juce::Array<juce::Component*> hits;
+
+    for (int i = 0; i < juce::ComponentPeer::getNumPeers(); ++i)
+        if (auto* peer = juce::ComponentPeer::getPeer (i))
+            collectMatches (peer->getComponent(), name, hits);
+
+    if (hits.isEmpty())
+        return "ERR nicht gefunden: " + name;
+
+    if (hits.size() > 1)
+        return "ERR mehrdeutig: " + juce::String (hits.size()) + "x \"" + name + "\"";
+
+    auto* handler = hits.getFirst()->getAccessibilityHandler();
+
+    if (handler == nullptr)
+        return "ERR \"" + name + "\" hat keinen Accessibility-Handler";
+
+    if (! handler->getActions().invoke (juce::AccessibilityActionType::press))
+        return "ERR \"" + name + "\" kennt keine press-Aktion (deaktiviert oder kein Bedienelement?)";
+
+    return "OK";
 }
 
 juce::String cmdSnapshot (int peerIndex, const juce::String& path)
@@ -637,7 +695,7 @@ struct Hook::Impl : public juce::Thread
 
         //----------------------------------------------------------------------
         if (cmd == "hilfe" || cmd == "help")
-            return "| peers | tree <peer> [tiefe] | find <name> | front <peer>\n"
+            return "| peers | tree <peer> [tiefe] | find <name> | press <name> | front <peer>\n"
                    "| move/down/up <peer> <x> <y> [mods] | click|dblclick <peer> <x> <y> [mods]\n"
                    "| drag <peer> <x1> <y1> <x2> <y2> [schritte] [mods]\n"
                    "| drop <peer> <x> <y> <pfad[|pfad]> | key <peer> <taste> [mods] | text <peer> <text>\n"
@@ -655,6 +713,13 @@ struct Hook::Impl : public juce::Thread
             const auto name = tail (1);
             return name.isEmpty() ? juce::String ("ERR find <name>")
                                   : onMessageThread ([name] { return cmdFind (name); });
+        }
+
+        if (cmd == "press")
+        {
+            const auto name = tail (1);
+            return name.isEmpty() ? juce::String ("ERR press <name>")
+                                  : onMessageThread ([name] { return cmdPress (name); });
         }
 
         if (cmd == "front")

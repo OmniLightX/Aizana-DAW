@@ -982,3 +982,45 @@ void PianoRollView::valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, i
 {
     juce::MessageManager::callAsync ([this] { rebuildNoteComponents(); repaint(); });
 }
+
+void PianoRollView::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+{
+    // Bis hierher war diese Methode LEER — Noten hinzufuegen/loeschen loeste einen
+    // Rebuild aus, eine geaenderte Noten-POSITION dagegen nichts. Folge: beim Ziehen
+    // blieb die Note optisch stehen und sprang erst, wenn irgendein anderes Ereignis
+    // die Bounds neu setzte (Scrollen, Zoom, eine weitere Note). Dasselbe galt fuer
+    // Quantisieren und fuer Undo.
+    //
+    // Gemessen (GUI-Lauf 12.08.): Note bei x=440, Drag um +60 px -> Anzeige weiter
+    // 440; nach erzwungenem Rebuild stand sie bei exakt 500. Die Engine hatte die
+    // Note also korrekt bewegt, nur die Anzeige hing hinterher.
+    if (tree.hasType (te::IDs::NOTE))
+        scheduleNoteBoundsUpdate();
+}
+
+void PianoRollView::scheduleNoteBoundsUpdate()
+{
+    // Ein Drag feuert pro Mausereignis; ohne Zusammenfassen liefe das Bounds-Update
+    // fuer ALLE Noten dutzendfach pro Geste.
+    if (noteBoundsUpdatePending)
+        return;
+
+    noteBoundsUpdatePending = true;
+
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<PianoRollView> (this)]
+    {
+        if (safe == nullptr)
+            return;
+
+        safe->noteBoundsUpdatePending = false;
+
+        for (auto* nc : safe->noteComponents)
+            safe->updateNoteComponentBounds (*nc);
+
+        safe->repaint();
+
+        // Die Velocity-Balken haengen an den Notenpositionen und muessen mitwandern.
+        if (safe->velocityLane != nullptr)
+            safe->velocityLane->repaint();
+    });
+}

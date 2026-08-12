@@ -16,6 +16,12 @@
 vorn
 warte 2500
 
+# Der Ansichtsmodus ist PERSISTIERT: nach einem Lauf, der im Einsteiger-Modus
+# endete, startet die App wieder dort — und dann gibt es kein "Spur hinzufuegen".
+# Zustand herstellen, nicht voraussetzen.
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
 # ---------------------------------------------------- MIDI-Spur mit 4-Takt-Clip
 klick Spur hinzufuegen
 warte 1000
@@ -71,10 +77,25 @@ warte 1000
 # Erwartung: wieder x0 — der Shortcut macht dasselbe wie der Knopf
 > find Note C-2
 
-# ---------------------------------------------------- GEGENKONTROLLE
+# ---------------------------------------------------- GEGENKONTROLLE 1
 # Die Note liegt jetzt sauber. Ein weiteres Q darf sie NICHT bewegen.
 klick Quantisieren
 warte 1000
 bild E13-04-gegenkontrolle
 # Erwartung: unveraendert x0
+> find Note C-2
+
+# ---------------------------------------------------- GEGENKONTROLLE 2 (die schaerfere)
+# "Q holt die Note auf x0 zurueck" ist auch dann erfuellt, wenn Q gar nicht rundet,
+# sondern nur den Drag rueckgaengig macht. Deshalb jetzt WEITER als einen halben
+# Rasterschritt ziehen (ein 1/16 ist 20 px): Q muss dann VORWAERTS auf den naechsten
+# Rasterpunkt rasten (x0 + 20), nicht zurueck auf x0.
+ziehe Note C-2 14 0
+warte 1000
+# Erwartung: rund x0 + 14
+> find Note C-2
+klick Quantisieren
+warte 1000
+bild E13-05-vorwaerts-gerastet
+# Erwartung: x0 + 20 — NICHT x0
 > find Note C-2

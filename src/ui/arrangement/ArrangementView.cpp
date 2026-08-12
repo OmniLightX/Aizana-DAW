@@ -1673,8 +1673,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
             rangeStartSecs      = rangeDragOriginSecs;
             rangeEndSecs        = rangeDragOriginSecs;
             // Record which track the drag starts on for track-aware selection
-            const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
-                                     + timelineViewport.getViewPositionY();
+            const int yInContainer = viewYToContainerY (e.y);
             rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
             rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
             break;
@@ -2417,10 +2416,8 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int dropX, i
     double dropTimeSecs = juce::jmax (0.0, (double)absoluteTimelineX / pixelsPerSecond);
 
     // Determine which track row the drop landed on.
-    // dropY is relative to ArrangementView; subtract the header strip height and
-    // ruler strip height to get the y within the track-rows area.
     // Walk track rows to find which row the drop Y falls into, respecting trackHeightScale.
-    int rowY      = dropY - kHeaderStripHeight - kRulerHeight;
+    int rowY      = viewYToContainerY (dropY);
     int trackIndex = 0;
     {
         int cumY = 0;
@@ -2569,7 +2566,7 @@ void ArrangementView::itemDragMove (
 {
     // Calculate which row the drag is over for the drop indicator line.
     // Walk scaled row heights so the indicator stays accurate at all zoom levels.
-    const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
+    const int y = viewYToContainerY (details.localPosition.y);
     {
         int cumY = 0, idx = 0;
         for (int ri = 0; ri < trackRows.size(); ++ri)
@@ -2604,7 +2601,7 @@ void ArrangementView::itemDropped (
     if (edit == nullptr) return;
 
     // Determine drop index from y position, walking scaled row heights.
-    const int y = details.localPosition.y - kHeaderStripHeight - kRulerHeight;
+    const int y = viewYToContainerY (details.localPosition.y);
     int dropIndex = 0;
     {
         int cumY = 0;
@@ -2654,6 +2651,21 @@ void ArrangementView::itemDropped (
     // valueTreeChildOrderChanged listener will call rebuildTrackRows() asynchronously
 }
 
+int ArrangementView::viewYToContainerY (int yInView) const
+{
+    // EINE Stelle fuer diese Umrechnung. Sie existierte vorher fuenfmal als Kopie
+    // "y - kHeaderStripHeight - kRulerHeight" — und diese Kopien liessen die
+    // Marker- und die Tempo-Lane aus, also 18 + 26 = 44 px. Bei 88 px Spurhoehe ist
+    // das eine halbe Spur: ein Datei-Drop in die untere Haelfte einer Spur landete
+    // auf der NAECHSTEN (gemessen 12.08.: zwei Drops auf zwei verschiedene Spuren
+    // landeten beide auf der zweiten). Der vertikale Scroll fehlte an denselben
+    // Stellen ebenfalls, waehrend die x-Rechnung ihn korrekt addierte.
+    //
+    // Der Timeline-Viewport beginnt bei kTimelineTopY (siehe resized()) — das ist
+    // der Bezugspunkt, nicht die Summe zweier der vier Streifen.
+    return (yInView - kTimelineTopY) + timelineViewport.getViewPositionY();
+}
+
 int ArrangementView::yContainerToTrackIndex (int yInContainer) const
 {
     int cumY = 0;
@@ -2692,8 +2704,7 @@ void ArrangementView::startRangeSelectionFromClickZone (const juce::MouseEvent& 
     rangeStartSecs      = rangeDragOriginSecs;
     rangeEndSecs        = rangeDragOriginSecs;
 
-    const int yInContainer = (e.y - kHeaderStripHeight - kRulerHeight)
-                             + timelineViewport.getViewPositionY();
+    const int yInContainer = viewYToContainerY (e.y);
     rangeDragTrackIndex = yContainerToTrackIndex (yInContainer);
     rangeTrackStart = rangeTrackEnd = rangeDragTrackIndex;
 

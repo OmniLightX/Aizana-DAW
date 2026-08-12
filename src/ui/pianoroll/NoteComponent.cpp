@@ -91,7 +91,7 @@ void NoteComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    mouseDownPos = e.position;
+    mouseDownPosInParent  = e.getEventRelativeTo (&parent).position;
     noteStartBeatAtDrag   = note.getStartBeat().inBeats();
     notePitchAtDrag       = note.getNoteNumber();
     noteLengthBeatsAtDrag = note.getLengthBeats().inBeats();
@@ -115,8 +115,12 @@ void NoteComponent::mouseDrag (const juce::MouseEvent& e)
     if (e.mods.isRightButtonDown())
         return;
 
-    const float dx = e.position.x - mouseDownPos.x;
-    const float dy = e.position.y - mouseDownPos.y;
+    // Beide Deltas im ELTERN-Raum messen — siehe mouseDownPosInParent: diese
+    // Component wandert waehrend des Ziehens mit, ihr eigener Ursprung ist also
+    // kein fester Bezugspunkt.
+    const auto  posInParent = e.getEventRelativeTo (&parent).position;
+    const float dx = posInParent.x - mouseDownPosInParent.x;
+    const float dy = posInParent.y - mouseDownPosInParent.y;
 
     if (isDraggingLength)
     {
