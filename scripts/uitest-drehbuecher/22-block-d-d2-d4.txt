@@ -1,0 +1,145 @@
+# Block D — D2 (Rechtsklick→Delete auf einer Mehrfachauswahl) und D4 (Delete im
+# Textfeld loescht Text, nie Clips).
+#
+# Messgroesse wie in Drehbuch 12/13: "find Clip testmaterial_kurz" meldet MEHRDEUTIG
+# mit Anzahl, solange mehrere gleichnamige Clips da sind — die Clipzahl ist damit
+# ablesbar, ohne zu raten.
+#
+# D2 ohne Gegenkontrolle waere wertlos: ein pauschales "Delete loescht alles" bestuende
+# den Test genauso. Deshalb ZUERST derselbe Handgriff mit nur EINEM ausgewaehlten Clip
+# (muss genau einen loeschen, zwei stehen lassen), erst danach die Mehrfachauswahl.
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/22-block-d-d2-d4.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+dropin Spurbereich Track 1 @ 0.06 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.36 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.66 0.5 $AIZANA_TESTKURZ
+warte 3000
+# Erwartung: mehrdeutig, 3x
+> find Clip testmaterial_kurz
+bild D2-00-drei-clips
+
+# ------------------------------------------- GEGENKONTROLLE: EIN Clip ausgewaehlt
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 800
+rklickin Spurbereich Track 1 @ 0.10 0.5
+warte 1200
+> press Delete
+warte 1500
+# Erwartung: 2 uebrig — nur der geklickte ist weg
+> find Clip testmaterial_kurz
+bild D2-01-einzeln-geloescht
+
+menu 2 101
+warte 1500
+# Erwartung: wieder 3
+> find Clip testmaterial_kurz
+
+# ------------------------------------------- D2: alle drei ausgewaehlt
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 500
+klickin Spurbereich Track 1 @ 0.40 0.5 cmd
+warte 500
+klickin Spurbereich Track 1 @ 0.70 0.5 cmd
+warte 1000
+bild D2-02-drei-ausgewaehlt
+rklickin Spurbereich Track 1 @ 0.10 0.5
+warte 1200
+> press Delete
+warte 1500
+# Erwartung: KEIN Clip mehr — die ganze Auswahl, nicht nur der geklickte
+> find Clip testmaterial_kurz
+bild D2-03-alle-geloescht
+
+# EIN Undo muss alle drei zurueckholen
+menu 2 101
+warte 1500
+> find Clip testmaterial_kurz
+bild D2-04-nach-einem-undo
+
+# ------------------------------------------- D3a: Delete nach Klick in den Mixer
+# Die drei Clips bleiben ausgewaehlt; dazwischen wird in den MIXER geklickt (der
+# Tastaturfokus wandert also weg vom Arrangement). Erwartung: die Delete-Taste
+# wirkt trotzdem — das ist der "globale Forward".
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 500
+klickin Spurbereich Track 1 @ 0.40 0.5 cmd
+warte 500
+klickin Spurbereich Track 1 @ 0.70 0.5 cmd
+warte 1000
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+klickin Kanalzug Track 1 @ 0.5 0.2
+warte 1000
+taste delete
+warte 1500
+# Erwartung: kein Clip mehr, obwohl zuletzt im Mixer geklickt wurde
+> find Clip testmaterial_kurz
+bild D3-00-delete-nach-mixerklick
+menu 2 101
+warte 1500
+> find Clip testmaterial_kurz
+
+# ------------------------------------------- D3b: Spur ausgewaehlt + Delete
+# Reihenfolge in deleteSelection(): Zeitbereich > ausgewaehlte Clips > ausgewaehlte
+# Spur. Damit die SPUR drankommt, darf kein Clip ausgewaehlt sein — deshalb erst in
+# eine leere Stelle klicken, dann den Spurkopf.
+klickin Spurbereich Track 1 @ 0.95 0.5
+warte 600
+klick Spur Track 1
+warte 800
+taste delete
+warte 1500
+# Erwartung: Spur weg (und mit ihr die Clips)
+> find Spur Track 1
+> find Clip testmaterial_kurz
+bild D3-01-spur-geloescht
+menu 2 101
+warte 2000
+# Erwartung: Spur und alle drei Clips zurueck — ein Undo
+> find Spur Track 1
+> find Clip testmaterial_kurz
+bild D3-02-spur-zurueck
+
+# ------------------------------------------- D4: Delete im Textfeld
+# Umbenannt wird ueber das LABEL im Spurkopf ("Spurname Track 1", editierbar per
+# Doppelklick) — ein Doppelklick auf den Spurkopf selbst trifft es nicht.
+# Erwartung: der Name verliert zwei Zeichen, die CLIPS bleiben vollzaehlig (3).
+#
+# Warum dieser Punkt ueberhaupt scharf ist: ohne offenes Textfeld sind "T", "e", "s"
+# lauter Arrangement-Kuerzel und die Delete-Taste loescht die AUSWAHL. Genau das ist
+# hier beim ersten Anlauf passiert (Doppelklick auf den Kopf statt aufs Label): die
+# ganze Spur war weg.
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 500
+klickin Spurbereich Track 1 @ 0.40 0.5 cmd
+warte 500
+klickin Spurbereich Track 1 @ 0.70 0.5 cmd
+warte 800
+dklick Spurname Track 1
+warte 1200
+tippe Testname
+warte 800
+# ACHTUNG: "taste delete" ist die VORWAERTS-Loeschtaste. Die Taste, die auf einem
+# MacBook "Delete" heisst, sendet BACKSPACE — genau der Punkt, um den es in D1 geht.
+# Mit dem Cursor am Textende tut Vorwaerts-Loeschen nichts (erster Anlauf: Name blieb
+# ungekuerzt und der Punkt sah faelschlich nach "greift nicht" aus).
+taste backspace
+warte 400
+taste backspace
+warte 400
+bild D4-00-im-textfeld
+taste return
+warte 1500
+# Erwartung: Spur heisst "Testna", alle drei Clips stehen noch
+> find Spurname Testna
+> find Clip testmaterial_kurz
+bild D4-01-nach-rename

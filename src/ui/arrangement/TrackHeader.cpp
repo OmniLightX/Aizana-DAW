@@ -35,6 +35,12 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     trackNameLabel.onTextChange = [this]
     {
         track.setName (trackNameLabel.getText());
+
+        // Die Namen der Bedienelemente sind mit dem SPURNAMEN qualifiziert ("Stumm
+        // Gitarre"). Ohne diesen Aufruf bleiben sie nach dem Umbenennen auf dem ALTEN
+        // Namen stehen — VoiceOver sagt dann den falschen an, und jede Adressierung
+        // ueber den Namen greift ins Leere. Gefunden beim GUI-Nachweis D4 (2026-08-12).
+        updateAccessibleNames();
     };
     // Forward label clicks to TrackHeader::mouseDown so clicking the track name
     // sets selectedTrackHeader + calls grabKeyboardFocus(ArrangementView).

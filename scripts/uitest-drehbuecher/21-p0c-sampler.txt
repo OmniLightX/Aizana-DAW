@@ -1,0 +1,74 @@
+# P0c-L WAV-Sampler — eine eigene WAV auf eine Pad-Zeile ziehen.
+#
+# Gemessene Groesse: der NAME der Pad-Zeile. Die Pad-Zeilen sind gezeichnet, nicht
+# aus Komponenten gebaut; sie tragen seit dieser Runde Stellvertreter, die nur den
+# Namen halten (kein Bild, keine Maus) — genau der Zustand, den die Anzeige als
+# teales "●" zeigt, steht damit auch im Namen: "Pad Snare" vs "Pad Snare (Sample)".
+#
+# Gegenkontrollen, ohne die der Lauf nichts belegen wuerde:
+#   * VOR dem Drop darf "Pad Snare (Sample)" NICHT existieren.
+#   * NACH dem Drop auf die SNARE-Zeile muss "Pad Kick" unveraendert bleiben —
+#     sonst waere die y→Pad-Rechnung kaputt und trotzdem alles "OK".
+#   * Der Hook meldet einen Drop nur als OK, wenn ein Ziel ihn ANGENOMMEN hat
+#     (handleDragDrop == true), nicht schon fuers Abschicken.
+#
+# Nicht maschinell (bleibt beim Menschen): "Kit…" und "Sample laden…" oeffnen einen
+# nativen NSOpenPanel, den der Hook nicht bedienen kann. Das Entfernen geht wieder,
+# weil es ein reiner Menueeintrag ist.
+#
+# Aufruf:
+#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/21-p0c-sampler.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
+# ---------------------------------------------------- Drums auf Spur 1
+rklick Spur Track 1
+warte 1000
+> press Instrument
+warte 1000
+> press Drums (Drum Machine)
+warte 3000
+
+# Ausgangsstand: acht Pads, keines mit Sample.
+> find Pad Kick
+> find Pad Snare
+# GEGENKONTROLLE (muss FEHLSCHLAGEN, sonst misst der Lauf nichts):
+> find Pad Snare (Sample)
+bild P0C-01-vor-drop
+
+# ---------------------------------------------------- WAV auf die SNARE-Zeile
+dropin Pad Snare @ 0.5 0.5 $AIZANA_TESTWAV
+warte 1500
+
+# Erwartung: Snare hat jetzt ein Sample, Kick NICHT (y→Pad-Rechnung).
+> find Pad Snare (Sample)
+> find Pad Kick
+> find Pad Kick (Sample)
+bild P0C-02-nach-drop
+
+# ---------------------------------------------------- Sample wieder entfernen
+# Der Name traegt den Zustand, also heisst die Zeile jetzt anders — das ist der
+# Beleg und zugleich der Grund, warum hier nicht mehr "Pad Snare" steht.
+rklick Pad Snare (Sample)
+warte 1200
+> press Sample entfernen
+warte 1200
+> find Pad Snare
+> find Pad Snare (Sample)
+bild P0C-03-nach-entfernen
+
+# ---------------------------------------------------- erneut droppen + speichern
+dropin Pad Snare @ 0.5 0.5 $AIZANA_TESTWAV
+warte 1500
+> find Pad Snare (Sample)
+klick close
+warte 1000
+menu 1 3
+warte 3000
+# Erwartung: KEIN zweites Fenster (sonst kam der native Save-As-Dialog).
+> peers
+bild P0C-04-nach-save

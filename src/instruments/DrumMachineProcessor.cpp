@@ -585,6 +585,21 @@ namespace
             addKnob (s, "snareTone", "Snare");
             addKnob (s, "hatDecay",  "Hat");
 
+            // Die Pad-Zeilen sind GEZEICHNET, nicht aus Komponenten gebaut — fuer die
+            // Bedienungshilfen (und damit fuer alles, was Elemente ueber ihren Namen
+            // adressiert) waeren sie damit unsichtbar. Diese Stellvertreter tragen nur
+            // den Namen: sie zeichnen nichts und nehmen keine Maus an
+            // (setInterceptsMouseClicks(false,false)), Klick, Rechtsklick und Datei-Drop
+            // laufen unveraendert an den Editor darunter.
+            for (int pad = 0; pad < DrumMachineProcessor::kNumPads; ++pad)
+            {
+                auto* c = new juce::Component();
+                c->setInterceptsMouseClicks (false, false);
+                addAndMakeVisible (c);
+                padProxies.add (c);
+            }
+            refreshPadTitles();
+
             setSize (660, 400);
             startTimerHz (30);
         }
@@ -637,6 +652,7 @@ namespace
 
             auto ctrl = r.removeFromBottom (98);
             gridArea = r;
+            layoutPadProxies();
 
             auto top = ctrl.removeFromTop (26);
             seqButton.setBounds (top.removeFromLeft (110));
@@ -696,7 +712,39 @@ namespace
 
         juce::Rectangle<int> cellBounds() const { return gridArea.withTrimmedLeft (kLabelW); }
 
-        void timerCallback() override { repaint (cellBounds()); }
+        void timerCallback() override
+        {
+            repaint (cellBounds());
+            refreshPadTitles();
+        }
+
+        void layoutPadProxies()
+        {
+            const auto grid = cellBounds();
+            const float rowH = grid.getHeight() / (float) DrumMachineProcessor::kNumPads;
+            for (int pad = 0; pad < padProxies.size(); ++pad)
+                padProxies[pad]->setBounds (gridArea.getX(), (int) (grid.getY() + pad * rowH),
+                                            kLabelW - 6, (int) rowH);
+        }
+
+        // Der Name traegt den Zustand: nur so ist "dieses Pad spielt jetzt ein eigenes
+        // Sample" ueberhaupt ablesbar — gezeichnet wird er als teales "●".
+        void refreshPadTitles()
+        {
+            juce::uint32 mask = 0;
+            for (int pad = 0; pad < padProxies.size(); ++pad)
+                if (proc.padHasSample (pad))
+                    mask |= (1u << pad);
+
+            if (mask == padSampleMask && titlesSet)
+                return;
+
+            padSampleMask = mask;
+            titlesSet = true;
+            for (int pad = 0; pad < padProxies.size(); ++pad)
+                padProxies[pad]->setTitle ("Pad " + DrumMachineProcessor::padName (pad)
+                                           + (((mask >> pad) & 1u) != 0 ? " (Sample)" : ""));
+        }
 
         void addKnob (juce::AudioProcessorValueTreeState& s, const juce::String& id, const juce::String& text)
         {
@@ -783,6 +831,9 @@ namespace
         juce::Label title, hint;
         juce::TextButton seqButton, clearButton, kitButton;
         juce::Rectangle<int> gridArea;
+        juce::OwnedArray<juce::Component> padProxies;   // nur Namenstraeger, kein Bild, keine Maus
+        juce::uint32 padSampleMask = 0;
+        bool titlesSet = false;
         juce::OwnedArray<juce::Slider> knobs;
         juce::OwnedArray<juce::Label>  labels;
         juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment> atts;
