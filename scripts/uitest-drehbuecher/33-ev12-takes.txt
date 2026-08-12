@@ -1,0 +1,38 @@
+# E-V12 — Loop-Aufnahme mit mehreren Takes und die Takes-Spuren im Dock.
+#
+# Der Schleifenbereich steht per Vorgabe auf 0…5 s, es muss also nichts gezogen
+# werden. Aufgenommen wird ueber den eingebauten Eingang; WAS dabei ankommt, ist
+# egal — geprueft wird, dass mehrere Durchlaeufe mehrere TAKES ergeben und dass
+# der Dock-Editor sie als Spuren zeigt.
+#
+# Messgroessen: der Clip-Name traegt die Take-Zahl ("T2/3"), und der Knopf
+# "Takes anzeigen" existiert nur fuer Clips MIT mehreren Takes.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/33-ev12-takes.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2500
+
+klick Aufnahmebereit Track 1
+warte 1500
+klick Schleife
+warte 2000
+klick Aufnahme
+warte 18000
+klick Stopp
+warte 4000
+> tree 0 3
+bild EV12-01-nach-loop-aufnahme
+
+# Der aufgenommene Clip im Dock — dort muessen die Takes-Spuren erreichbar sein.
+klick Clip Track 1 Recording 1
+warte 1000
+wennfehlt Werkzeug Pfeil @ Unten Editor
+warte 2500
+> find Takes anzeigen
+klick Takes anzeigen
+warte 2000
+bild EV12-02-takes-spuren
+> tree 0 4

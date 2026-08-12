@@ -1023,25 +1023,32 @@ void MainComponent::handleFileOpen()
         {
             const auto result = fc.getResult();
             if (result.existsAsFile())
-            {
-                if (appState.editManager.loadEdit (result))
-                {
-                    appState.editManager.setCurrentFile (result);
-                    menuItemsChanged();
-                }
-                else
-                {
-                    // Parse failure keeps the current session intact — tell the
-                    // user instead of silently doing nothing (or crashing).
-                    juce::AlertWindow::showMessageBoxAsync (
-                        juce::MessageBoxIconType::WarningIcon,
-                        "Open Session",
-                        juce::String::fromUTF8 ("Die Datei konnte nicht als Aizana-Session gelesen werden:\n")
-                            + result.getFullPathName());
-                }
-            }
+                openSessionFile (result);
+
             fileChooser.reset();
         });
+}
+
+bool MainComponent::openSessionFile (const juce::File& file)
+{
+    if (! file.existsAsFile())
+        return false;
+
+    if (appState.editManager.loadEdit (file))
+    {
+        appState.editManager.setCurrentFile (file);
+        menuItemsChanged();
+        return true;
+    }
+
+    // Parse failure keeps the current session intact — tell the
+    // user instead of silently doing nothing (or crashing).
+    juce::AlertWindow::showMessageBoxAsync (
+        juce::MessageBoxIconType::WarningIcon,
+        "Open Session",
+        juce::String::fromUTF8 ("Die Datei konnte nicht als Aizana-Session gelesen werden:\n")
+            + file.getFullPathName());
+    return false;
 }
 
 void MainComponent::handleFileSave()

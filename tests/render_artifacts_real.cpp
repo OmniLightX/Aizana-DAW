@@ -16,6 +16,8 @@
 // die Datei auf jedem Rechner uebersetzt und harmlos bleibt.
 #include <catch2/catch_test_macros.hpp>
 
+#include "fx/EQProcessor.h"
+#include "plugins/BuiltInPluginFormat.h"
 #include "engine/TempoDetector.h"
 #include "engine/PitchDetector.h"
 #include "engine/VocalTuner.h"
@@ -595,3 +597,217 @@ TEST_CASE ("Diagnose: was steht ueberhaupt in der Korrekturkurve", "[.diag][curv
 // alles oberhalb ist Artefakt. Klicks sind breitbandig, also messbar als
 // Hochfrequenz-Energie. Verglichen werden: konstante Korrektur (laut Hoerurteil
 // sauber) gegen eine, die um NULL schwankt (dort kreuzt SoundTouchs Rate die 1.0).
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DYN — Dynamik-EQ auf echtem Material (Hoerpaket).
+//
+// Was der Klang belegen soll: das Band senkt NUR ab, wenn seine Frequenz zu laut
+// wird. Deshalb drei Dateien auf demselben Ausschnitt:
+//   a_original      — unbehandelt
+//   b_statisch      — dasselbe Band als KLASSISCHER Schnitt (immer aktiv)
+//   c_dynamisch     — dasselbe Band dynamisch (nur ueber der Schwelle)
+// Der Unterschied b→c ist die ganze Behauptung: bei c bleiben die leisen Stellen
+// unangetastet. Maschinell gemessen wird genau das — der Pegelunterschied im
+// LAUTEN gegen den im LEISEN Abschnitt.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Real: Dynamik-EQ greift nur in den lauten Stellen", "[.realmaterial][dyneq]")
+{
+    if (! materialDir().isDirectory())
+    {
+        WARN ("AIZANA_MATERIAL_DIR nicht gesetzt — uebersprungen");
+        return;
+    }
+
+    auto stem = findStem ("809");                    // Bass-Stem: viel Energie unten
+    if (! stem.existsAsFile()) stem = findStem ("Kick");
+    REQUIRE (stem.existsAsFile());
+
+    juce::AudioBuffer<float> src;
+    double sr = 0.0;
+    REQUIRE (readAudio (stem, src, sr));
+
+    auto teil = excerpt (src, sr, loudestOffsetSecs (src, sr, 12.0), 12.0);
+
+    // Die Schwelle MUSS aus dem Material kommen. Erster Anlauf mit geratenen -24 dB:
+    // der Detektor hoert das BAND, nicht die Summe, und lag durchgehend darunter —
+    // die Dynamik senkte um 0,08 dB ab, also praktisch gar nicht. Also den Pegel im
+    // Band messen und die Schwelle 8 dB darunter legen.
+    const float bandSchwelleDB = [&]
+    {
+        auto mono = toMono (teil);
+        juce::dsp::IIR::Filter<float> bp;
+        bp.coefficients = juce::dsp::IIR::Coefficients<float>::makeBandPass (sr, 90.0, 1.5);
+        bp.prepare ({ sr, (juce::uint32) mono.getNumSamples(), 1 });
+
+        float spitze = 0.0f;
+        auto* d = mono.getWritePointer (0);
+        for (int i = 0; i < mono.getNumSamples(); ++i)
+            spitze = juce::jmax (spitze, std::abs (bp.processSample (d[i])));
+
+        return juce::Decibels::gainToDecibels (spitze) - 8.0f;
+    }();
+
+    auto machEQ = [&] (bool dynamisch)
+    {
+        EQProcessor eq;
+        for (int i = 0; i < EQProcessor::NumBands; ++i)
+        {
+            EQBand flat; flat.enabled = false; eq.setBand (i, flat);
+        }
+
+        EQBand b;
+        b.type           = EQBandType::Peak;
+        b.frequencyHz    = 90.0f;      // wo der Bass drueckt
+        b.Q              = 1.5f;
+        b.enabled        = true;
+        b.gainDB         = dynamisch ? 0.0f : -8.0f;   // statisch: fester Schnitt
+        b.dynOn          = dynamisch;
+        b.dynThresholdDB = bandSchwelleDB;
+        b.dynRatio       = 6.0f;
+        eq.setBand (2, b);
+        eq.setDynTimes (8.0f, 120.0f);
+
+        juce::AudioBuffer<float> out (teil);
+        juce::MidiBuffer m;
+        eq.prepareToPlay (sr, 512);
+        for (int pos = 0; pos < out.getNumSamples(); pos += 512)
+        {
+            const int len = juce::jmin (512, out.getNumSamples() - pos);
+            juce::AudioBuffer<float> blk (out.getArrayOfWritePointers(), out.getNumChannels(), pos, len);
+            eq.processBlock (blk, m);
+        }
+        return out;
+    };
+
+    const auto statisch  = machEQ (false);
+    const auto dynamisch = machEQ (true);
+
+    auto dir = outDir ("40_dyneq");
+    writeWav (dir.getChildFile ("a_original.wav"),  teil,      sr);
+    writeWav (dir.getChildFile ("b_statisch.wav"),  statisch,  sr);
+    writeWav (dir.getChildFile ("c_dynamisch.wav"), dynamisch, sr);
+
+    // Lautester und leisester Abschnitt (je 1 s) im Original suchen und dort
+    // vergleichen. Die Behauptung ist NICHT "leiser", sondern "leiser NUR dort".
+    const int fenster = (int) sr;
+
+    // IM BAND messen, nicht breitbandig. Ein Band von Q 1.5 bei 90 Hz aendert an der
+    // Gesamt-Energie wenig — der erste Anlauf mass -0,36 dB und sah nach "wirkt kaum"
+    // aus, obwohl im Band mehrere dB fehlten. Die Messung muss dieselbe Stelle
+    // anschauen, an der das Werkzeug arbeitet.
+    auto rms = [sr] (const juce::AudioBuffer<float>& b, int start, int len)
+    {
+        juce::dsp::IIR::Filter<float> bp;
+        bp.coefficients = juce::dsp::IIR::Coefficients<float>::makeBandPass (sr, 90.0, 1.5);
+        bp.prepare ({ sr, (juce::uint32) len, 1 });
+
+        double s = 0.0;
+        for (int i = 0; i < len; ++i)
+        {
+            float x = 0.0f;
+            for (int ch = 0; ch < b.getNumChannels(); ++ch)
+                x += b.getReadPointer (ch)[start + i];
+            x /= (float) b.getNumChannels();
+            const float y = bp.processSample (x);
+            s += (double) y * y;
+        }
+        return std::sqrt (s / (double) len);
+    };
+
+    int lautPos = 0, leisePos = 0;
+    double best = -1.0, worst = 1e9;
+    for (int pos = 0; pos + fenster <= teil.getNumSamples(); pos += fenster / 2)
+    {
+        const double r = rms (teil, pos, fenster);
+        if (r > best)  { best = r;  lautPos  = pos; }
+        if (r < worst) { worst = r; leisePos = pos; }
+    }
+
+    const double dynLaut  = 20.0 * std::log10 (rms (dynamisch, lautPos,  fenster) / juce::jmax (1.0e-9, rms (teil, lautPos,  fenster)));
+    const double dynLeise = 20.0 * std::log10 (rms (dynamisch, leisePos, fenster) / juce::jmax (1.0e-9, rms (teil, leisePos, fenster)));
+    const double statLaut = 20.0 * std::log10 (rms (statisch,  lautPos,  fenster) / juce::jmax (1.0e-9, rms (teil, lautPos,  fenster)));
+    const double statLeise= 20.0 * std::log10 (rms (statisch,  leisePos, fenster) / juce::jmax (1.0e-9, rms (teil, leisePos, fenster)));
+
+    note (dir, "Stem: " + stem.getFileName()
+               + "   Schwelle aus dem Material: " + juce::String (bandSchwelleDB, 1) + " dB");
+    note (dir, juce::String ("gemessen IM BAND (90 Hz, Q 1.5)"));
+    note (dir, juce::String ("statisch : laut ") + juce::String (statLaut, 2)
+               + " dB / leise " + juce::String (statLeise, 2) + " dB");
+    note (dir, juce::String ("dynamisch: laut ") + juce::String (dynLaut, 2)
+               + " dB / leise " + juce::String (dynLeise, 2) + " dB");
+
+    // Der statische Schnitt trifft BEIDE Stellen aehnlich stark; der dynamische
+    // greift in der lauten deutlich mehr als in der leisen. Genau das ist der
+    // Unterschied, den man hoeren soll.
+    // Die Behauptung ist nicht "leiser", sondern "leiser NUR dort".
+    CHECK (dynLaut < dynLeise);                       // greift in der lauten Stelle staerker
+    CHECK (dynLeise > statLeise);                     // laesst die leise Stelle mehr stehen als der feste Schnitt
+    CHECK (dynLaut  < -0.5);                          // und tut ueberhaupt etwas Hoerbares
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 — die drei neuen Built-ins auf echtem Material (Hoerpaket).
+// Kein Urteil, nur Vorher/Nachher: Delay, Gate und Saturator je einmal trocken
+// und einmal bearbeitet, damit der Unterschied direkt vergleichbar ist.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Real: Delay, Gate und Saturator auf echtem Material", "[.realmaterial][p2]")
+{
+    if (! materialDir().isDirectory())
+    {
+        WARN ("AIZANA_MATERIAL_DIR nicht gesetzt — uebersprungen");
+        return;
+    }
+
+    struct Fall { const char* stemFragment; const char* datei; };
+    const Fall faelle[] {
+        { "Kick",   "gate" },        // Gate an perkussivem Material
+        { "chords", "delay" },       // Delay an etwas Getragenem
+        { "809",    "saturator" },   // Saturator am Bass
+    };
+
+    auto dir = outDir ("41_p2_builtins");
+
+    for (const auto& f : faelle)
+    {
+        auto stem = findStem (f.stemFragment);
+        if (! stem.existsAsFile())
+            continue;
+
+        juce::AudioBuffer<float> src;
+        double sr = 0.0;
+        if (! readAudio (stem, src, sr))
+            continue;
+
+        auto teil = excerpt (src, sr, loudestOffsetSecs (src, sr, 10.0), 10.0);
+        writeWav (dir.getChildFile (juce::String (f.datei) + "_a_trocken.wav"), teil, sr);
+
+        auto desc = BuiltInPluginFormat::getDescriptionFor (
+                        juce::String ("Aizana ") + (juce::String (f.datei) == "gate"      ? "Gate"
+                                                  : juce::String (f.datei) == "delay"     ? "Delay"
+                                                                                          : "Saturator"));
+
+        juce::String err;
+        BuiltInPluginFormat fmt;
+        auto inst = fmt.createInstanceFromDescription (desc, sr, 512, err);
+        if (inst == nullptr)
+        {
+            note (dir, juce::String ("KEIN Plugin fuer ") + f.datei + ": " + err);
+            continue;
+        }
+
+        juce::AudioBuffer<float> out (teil);
+        juce::MidiBuffer m;
+        inst->prepareToPlay (sr, 512);
+        for (int pos = 0; pos < out.getNumSamples(); pos += 512)
+        {
+            const int len = juce::jmin (512, out.getNumSamples() - pos);
+            juce::AudioBuffer<float> blk (out.getArrayOfWritePointers(), out.getNumChannels(), pos, len);
+            inst->processBlock (blk, m);
+        }
+
+        writeWav (dir.getChildFile (juce::String (f.datei) + "_b_bearbeitet.wav"), out, sr);
+        note (dir, juce::String (f.datei) + ": " + stem.getFileName()
+                   + "  Spitze trocken " + juce::String (teil.getMagnitude (0, teil.getNumSamples()), 3)
+                   + " / bearbeitet "    + juce::String (out.getMagnitude (0, out.getNumSamples()), 3));
+    }
+}

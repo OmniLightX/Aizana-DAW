@@ -32,8 +32,63 @@ public:
             || cmd.contains (aizana::kPluginHostProcessUID);   // out-of-process plugin host worker
     }
 
+    /** Erste Session-Datei aus der Kommandozeile (Programmstart mit Argument,
+        `open -a Aizana song.tracktionedit`, Doppelklick im Finder). */
+    static bool istSession (const juce::File& f)
+    {
+        return f.existsAsFile() && (f.hasFileExtension ("tracktionedit")
+                                    || f.hasFileExtension ("tracktion"));
+    }
+
+    static juce::File sessionFileFrom (const juce::String& commandLine)
+    {
+        // Erst die ZEILE ALS GANZES pruefen: JUCE reicht die Argumente als einen
+        // String durch, und ein Sessionpfad enthaelt regelmaessig Leerzeichen
+        // ("Unsaved Recordings"). Zuerst zu zerlegen zerriss genau solche Pfade —
+        // die Datei wurde still ignoriert und die App zeigte die leere Startsession.
+        const auto ganz = commandLine.unquoted().trim();
+
+        if (istSession (juce::File (juce::File::isAbsolutePath (ganz)
+                                        ? ganz
+                                        : juce::File::getCurrentWorkingDirectory()
+                                              .getChildFile (ganz).getFullPathName())))
+            return juce::File (juce::File::isAbsolutePath (ganz)
+                                   ? ganz
+                                   : juce::File::getCurrentWorkingDirectory()
+                                         .getChildFile (ganz).getFullPathName());
+
+        // Sonst die einzelnen Argumente — auch mehrere, davon eines eine Session.
+        auto args = juce::JUCEApplicationBase::getCommandLineParameterArray();
+        args.addArray (juce::StringArray::fromTokens (commandLine, true));
+
+        for (const auto& tok : args)
+        {
+            const juce::File f (juce::File::isAbsolutePath (tok)
+                                    ? tok
+                                    : juce::File::getCurrentWorkingDirectory()
+                                          .getChildFile (tok).getFullPathName());
+
+            if (istSession (f))
+                return f;
+        }
+
+        return {};
+    }
+
+    /** Session oeffnen, sobald das Fenster steht. */
+    void openPendingSession()
+    {
+        if (mainWindow != nullptr && pendingSession.existsAsFile())
+        {
+            mainWindow->openSession (pendingSession);
+            pendingSession = juce::File();
+        }
+    }
+
     void initialise (const juce::String& commandLine) override
     {
+        pendingSession = sessionFileFrom (commandLine);
+
         // If this process was launched as a plugin-scan worker, run ONLY that — no
         // window, no audio engine, no mic prompt. Keep the handle alive for its lifetime.
         if (auto worker = startScannerSubprocessIfRequested (commandLine))
@@ -98,6 +153,7 @@ public:
             juce::MessageManager::callAsync ([this]
             {
                 mainWindow = std::make_unique<MainWindow> (getApplicationName());
+                openPendingSession();
             });
             return;
         }
@@ -121,6 +177,7 @@ public:
             requestMicrophonePermission ([this] (bool /*granted*/)
             {
                 mainWindow = std::make_unique<MainWindow> (getApplicationName());
+                openPendingSession();
             });
         });
     }
@@ -135,10 +192,18 @@ public:
         quit();
     }
 
-    void anotherInstanceStarted (const juce::String& /*commandLine*/) override {}
+    void anotherInstanceStarted (const juce::String& commandLine) override
+    {
+        // macOS schickt einen Doppelklick im Finder an die LAUFENDE Instanz
+        // (JUCE laesst nur eine zu). Ohne diese Zeile passierte gar nichts —
+        // die Datei liess sich nur ueber "Open Session…" oeffnen.
+        pendingSession = sessionFileFrom (commandLine);
+        openPendingSession();
+    }
 
 private:
     std::unique_ptr<MainWindow> mainWindow;
+    juce::File                  pendingSession;   // aus der Kommandozeile/vom Finder
     std::shared_ptr<void>       scannerWorker;      // alive only in the scan-worker subprocess
     std::shared_ptr<aizana::PluginHostWorkerHandle> pluginHostWorker;   // alive only in a plugin-host worker
 

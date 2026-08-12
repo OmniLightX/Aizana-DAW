@@ -81,6 +81,17 @@ void MainWindow::resized()
 #endif
 }
 
+bool MainWindow::openSession (const juce::File& file)
+{
+    // Ueber das Inhalts-Component, damit es EXAKT derselbe Weg ist wie der
+    // Menuepunkt (inklusive Fehlermeldung und Menue-Auffrischung) — eine zweite
+    // Kopie derselben Logik waere die naechste Stelle, die auseinanderlaeuft.
+    if (auto* mc = dynamic_cast<MainComponent*> (getContentComponent()))
+        return mc->openSessionFile (file);
+
+    return false;
+}
+
 void MainWindow::closeButtonPressed()
 {
     juce::JUCEApplication::getInstance()->systemRequestedQuit();

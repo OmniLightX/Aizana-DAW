@@ -1,0 +1,53 @@
+# OOP — Plugin im Kindprozess (E5.3c/E5.6) mit gesetztem Flag.
+#
+# Gefahren wird mit AIZANA_OOP_PLUGINS=1; generierte Aizana-CLAPs laufen dann im
+# Kindprozess statt in-process. Was hier maschinell pruefbar ist:
+#   * es entsteht ueberhaupt ein KINDPROZESS (Shell: pgrep waehrend des Laufs)
+#   * die App ueberlebt seinen harten Tod (kill -9 = Absturz des Plugins) und
+#     startet ihn NEU (neue PID) — das ist OOP-R
+#   * die Wiedergabe laeuft weiter (Zeitanzeige zaehlt weiter)
+# Nicht pruefbar bleibt der KLANG und die Plugin-eigene GUI (eigener Prozess).
+#
+# Aufruf:
+#   AIZANA_OOP_PLUGINS=1 ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/31-oop-kindprozess.txt
+# Parallel in einer zweiten Shell:
+#   pgrep -fl Aizana        # vor und nach dem kill
+#   kill -9 <Kind-PID>
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+dropin Spurbereich Track 1 @ 0.02 0.5 $AIZANA_TESTWAV
+warte 3500
+
+wennfehlt Kanalzug Track 1 @ Mix
+warte 2000
+klick Insert 1 Track 1 (leer)
+warte 1500
+> press Browse Plugins...
+warte 2500
+klick Row 1
+warte 1200
+# Row 8 = "Gain [CLAP]" (Row 1 ist die Rubrik "Aizana", darunter erst die vier
+# Built-ins, dann die generierten).
+dklick Row 8
+warte 5000
+# Der Slot-Name sagt, was wirklich eingesetzt wurde.
+> find Insert 1 Track 1: Gain
+bild OOP-00-plugin-drin
+
+klick Wiedergabe
+warte 3000
+> find 0:00:00.000
+bild OOP-01-laeuft
+
+# --- Zeitfenster fuer die Shell: Kind-PID holen und hart killen ---
+warte 30000
+
+# Danach: App lebt, Plugin ist wieder da, Wiedergabe laeuft weiter.
+> peers
+> find Insert 1 Track 1: Gain
+bild OOP-02-nach-dem-kill
+klick Stopp
+warte 1500
+> peers

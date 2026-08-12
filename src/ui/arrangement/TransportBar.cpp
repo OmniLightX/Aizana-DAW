@@ -1,4 +1,5 @@
 #include "TransportBar.h"
+#include "ArrangementView.h"
 #include "MetronomeSettingsPanel.h"
 
 //==============================================================================
@@ -110,6 +111,17 @@ TransportBar::TransportBar (ApplicationState& appState_)
         if (edit == nullptr) return;
         auto& transport = edit->getTransport();
         bool newLooping = ! transport.looping;
+
+        // Das Lineal ZEICHNET seine Schleifenmarken ab Werk bei 1 s / 5 s, aber die
+        // Engine erfuhr davon erst, wenn jemand eine Marke ZOG. Wer die Schleife
+        // einfach einschaltete, bekam damit einen LEEREN Bereich — und danach lief
+        // die Wiedergabe gar nicht mehr los (Zeit blieb exakt auf 0:00:00.000).
+        // Beim Einschalten also den angezeigten Bereich nachreichen, falls keiner steht.
+        if (newLooping && transport.getLoopRange().isEmpty())
+            transport.setLoopRange (tracktion::TimeRange (
+                tracktion::TimePosition::fromSeconds (ArrangementView::kDefaultLoopInSecs),
+                tracktion::TimePosition::fromSeconds (ArrangementView::kDefaultLoopOutSecs)));
+
         transport.looping = newLooping;
         loopButton.setToggleState (newLooping, juce::dontSendNotification);
     };

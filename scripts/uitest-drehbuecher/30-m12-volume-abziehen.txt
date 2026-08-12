@@ -1,0 +1,50 @@
+# M12-L — Datentraeger im laufenden Betrieb abziehen (SIGBUS-Haertung).
+#
+# Statt einer echten SSD ein Disk-Image: es haengt unter /Volumes/ und laesst sich
+# im Betrieb hart auswerfen — genau der Fall, den der RemovableMediaGuard abfangen
+# soll (Dateien unter /Volumes/ werden NIE gemmapt, sonst killt ein gezogener
+# Datentraeger den Prozess mit SIGBUS).
+#
+# Vorbereitung (Shell):
+#   hdiutil create -size 100m -fs HFS+ -volname AizanaSSD /tmp/aizana_ssd.dmg
+#   hdiutil attach /tmp/aizana_ssd.dmg
+#   cp <testwav> /Volumes/AizanaSSD/
+#
+# Waehrend des Laufs (zweite Shell, nach dem "warte 20000"):
+#   hdiutil detach -force /Volumes/AizanaSSD
+#
+# Messgroesse: der Prozess lebt danach noch UND antwortet weiter auf Kommandos.
+# Ein SIGBUS wuerde die Pipe schliessen und jeden Folgebefehl mit "die App ist
+# beendet" quittieren.
+#
+# Aufruf:
+#   AIZANA_TESTWAV=/Volumes/AizanaSSD/testmaterial_laut.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/30-m12-volume-abziehen.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+dropin Spurbereich Track 1 @ 0.02 0.5 $AIZANA_TESTWAV
+warte 4000
+> find Clip testmaterial_laut
+bild M12-00-vom-volume-geladen
+
+# Wiedergabe starten. Ueber den KNOPF, nicht ueber die Leertaste: die kam ohne
+# Tastaturfokus im Arrangement nicht an ("Taste nicht angenommen") — und ohne
+# laufendes Audio prueft der Lauf die riskante Stelle gar nicht.
+klick Wiedergabe
+warte 3000
+# Beleg, dass wirklich abgespielt wird: die Zeitanzeige TRAEGT ihren Wert im Namen.
+# Steht dort nicht mehr 0:00:00.000, laeuft der Abspielkopf.
+> find 0:00:00.000
+bild M12-00b-laeuft
+warte 20000
+
+# Ab hier ist der Datentraeger weg. Die App MUSS weiterlaufen.
+> peers
+> find Clip testmaterial_laut
+bild M12-01-nach-dem-abziehen
+klick Stopp
+warte 1500
+> peers
+bild M12-02-gestoppt

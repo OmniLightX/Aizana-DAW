@@ -76,6 +76,16 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
 
+    /**
+     * Oeffnet eine Session-Datei — derselbe Weg wie "Open Session…", nur ohne den
+     * Dateidialog. Wird auch beim Programmstart mit einer Datei als Argument und
+     * beim Doppelklick im Finder benutzt.
+     *
+     * Rueckgabe: false, wenn die Datei nicht als Session lesbar war (die laufende
+     * Session bleibt dann unangetastet).
+     */
+    bool openSessionFile (const juce::File& file);
+
     /** Access the PluginWindowManager for opening plugin editor windows. */
     PluginWindowManager& getPluginWindowManager() noexcept { return pluginWindowManager; }
 

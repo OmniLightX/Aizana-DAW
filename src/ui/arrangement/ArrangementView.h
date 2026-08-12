@@ -85,6 +85,13 @@ public:
     ~ArrangementView() override;
 
     void resized() override;
+
+    /** Vorgabe der Schleifenmarken im Lineal. Oeffentlich, weil die Transportleiste
+        beim Einschalten der Schleife denselben Bereich braucht: die Marken werden
+        gezeichnet, die Engine kannte sie aber nur nach einem Zieh-Vorgang — mit
+        leerem Bereich lief die Wiedergabe dann gar nicht los. */
+    static constexpr double kDefaultLoopInSecs  = 1.0;
+    static constexpr double kDefaultLoopOutSecs = 5.0;
     void paint (juce::Graphics& g) override;
     void paintOverChildren (juce::Graphics& g) override;
 
@@ -271,9 +278,9 @@ private:
         double& gridResolution;
         bool&   snapEnabled;
 
-        // Loop marker positions in seconds
-        double loopInSecs  = 1.0;
-        double loopOutSecs = 5.0;
+        // Loop marker positions in seconds — Vorgabe siehe kDefaultLoopIn/OutSecs
+        double loopInSecs  = ArrangementView::kDefaultLoopInSecs;
+        double loopOutSecs = ArrangementView::kDefaultLoopOutSecs;
 
         enum class DragTarget { None, LoopIn, LoopOut, Seek };
         DragTarget dragging = DragTarget::None;

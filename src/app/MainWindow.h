@@ -36,6 +36,10 @@ public:
     /** Access the application state (EditManager + AudioEngine) from any UI component. */
     ApplicationState& getApplicationState() { return *appState; }
 
+    /** Session-Datei oeffnen (Programmstart mit Argument, Doppelklick im Finder).
+        Geht durch dieselbe Tuer wie "Open Session…" — nur ohne Dateidialog. */
+    bool openSession (const juce::File& file);
+
 private:
     std::unique_ptr<ApplicationState> appState;
 

@@ -1,0 +1,39 @@
+# P0-L Session-Roundtrip, TEIL 2 — die gespeicherte Session beim Start OEFFNEN.
+#
+# Bis 13.08. war das die Grenze des Werkzeugs: "Open Session…" ist ein nativer
+# NSOpenPanel, den der Hook nicht bedienen kann, und die App las beim Start keine
+# Datei aus der Kommandozeile. Beides ist jetzt da (Doppelklick im Finder ging
+# vorher genauso wenig) — die Datei wird als Argument uebergeben.
+#
+# Das ist die riskanteste Klasse der ganzen Liste: beim Laden wird das alte Edit
+# zerstoert und ein neues gebaut. Genau dort sass der M6-Crash.
+#
+# Aufruf (Teil 1 vorher fahren, Drehbuch 19):
+#   AIZANA_UITEST_OPEN=~/Music/Aizana/"Unsaved Recordings"/Untitled.tracktionedit \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/29-p0-roundtrip-teil2.txt
+
+vorn
+warte 4000
+
+# 1. Die App lebt und hat ein Fenster (kein Absturz beim Laden).
+> peers
+
+# 2. Beide Spuren sind da — die Session wurde wirklich geladen und nicht die
+#    uebliche leere Startsession gezeigt.
+> find Spur Track 1
+> find Spur Audio
+bild P0-10-nach-neustart
+
+# 3. Die Instrumente sitzen wieder in ihren Slots. Der Slot-NAME traegt den
+#    Plugin-Namen — steht dort "(leer)", ist das Instrument nicht wiedergekommen.
+wennfehlt Kanalzug Track 1 @ Mix
+warte 2000
+> find Insert 1 Track 1: Aizana Drums
+> find Insert 1 Audio: Aizana Synth
+bild P0-11-instrumente-wieder-da
+
+# 4. Und sie lassen sich oeffnen (das Fenster traegt den Plugin-Namen).
+dklick Insert 1 Track 1: Aizana Drums
+warte 3000
+> peers
+bild P0-12-drums-editor

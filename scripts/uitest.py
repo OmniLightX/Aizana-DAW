@@ -31,8 +31,17 @@ LOG = Path(os.environ.get("AIZANA_UITEST_LOG", "/tmp/aizana_uitest.log"))
 class Hook:
     def __init__(self, app: Path, logfile):
         self.log = logfile
+        # Optional eine Session-Datei mitgeben (AIZANA_UITEST_OPEN). Die App oeffnet
+        # sie beim Start — derselbe Weg wie ein Doppelklick im Finder. Nur so ist der
+        # Session-Roundtrip pruefbar: "Open Session…" ist ein nativer Dialog, den der
+        # Hook nicht bedienen kann.
+        argv = [str(app)]
+        wenn_datei = os.environ.get("AIZANA_UITEST_OPEN", "")
+        if wenn_datei:
+            argv.append(wenn_datei)
+
         self.proc = subprocess.Popen(
-            [str(app)],
+            argv,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=logfile,
             env={**os.environ, "AIZANA_UITEST": "1"},
             text=True, bufsize=1)

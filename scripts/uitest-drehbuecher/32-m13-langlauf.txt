@@ -1,0 +1,51 @@
+# M13 — Langlauf: acht Minuten Loop-Wiedergabe, danach den Dropout-Log lesen.
+#
+# Der Verdacht war: alle ~2 min ein Komplett-Aussetzer, ausgeloest vom Autosave
+# (M13a hat den Autosave auf einen Hintergrund-Schnappschuss umgestellt; M12 hat
+# zusaetzlich das Memory-Mapping fuer /Volumes abgeschaltet). Beides muss sich in
+# einem langen Lauf zeigen — oder eben nicht.
+#
+# Messgroesse: die Zeilen in ~/Library/Aizana/logs/dropouts.log WAEHREND des Laufs.
+# Der Log schreibt bei jedem XRun Zeitstempel, Zaehler, Puffer, CPU und ob der
+# Transport lief ("playing pos=…" statt "stopped pos=0.00s").
+#
+# Aufruf:
+#   AIZANA_TESTWAV=<datei> ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/32-m13-langlauf.txt
+# Danach:
+#   grep playing ~/Library/Aizana/logs/dropouts.log
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+dropin Spurbereich Track 1 @ 0.02 0.5 $AIZANA_TESTWAV
+warte 3000
+dropin Spurbereich Track 1 @ 0.34 0.5 $AIZANA_TESTWAV
+warte 3000
+dropin Spurbereich Track 1 @ 0.67 0.5 $AIZANA_TESTWAV
+warte 4000
+
+# KEIN Schleifen-Knopf: im ersten Anlauf verschluckte er den anschliessenden
+# Play-Klick, der Transport stand still — und "keine Dropouts" waere dann ein
+# Fehlbefund gewesen, weil gar nichts lief. Stattdessen langes Material (2:44 je
+# Clip, drei hintereinander = ueber acht Minuten Dauerwiedergabe).
+klick Wiedergabe
+warte 4000
+# GEGENKONTROLLE: dieser find MUSS fehlschlagen. Findet er 0:00:00.000, steht der
+# Abspielkopf und der ganze Lauf misst nichts.
+> find 0:00:00.000
+bild M13-00-laeuft
+
+# Acht Minuten laufen lassen (der Autosave-Verdacht liegt bei ~2 min).
+warte 120000
+> peers
+warte 120000
+> peers
+warte 120000
+> peers
+warte 120000
+> peers
+
+klick Stopp
+warte 2000
+> peers
+bild M13-01-nach-acht-minuten
