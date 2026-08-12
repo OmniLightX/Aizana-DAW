@@ -6,6 +6,7 @@
 #include "ui/common/TrackColours.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "engine/TempoDetector.h"
+#include "testing/UiTestHook.h"   // nur fuer AIZANA_UITEST_HOOK (Diagnose im Testbuild)
 #include "engine/TempoEngine.h"
 #include "engine/VocalTuner.h"
 
@@ -56,6 +57,17 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
             thumbnail.setSource (new juce::FileInputSource (audioFile));
             thumbnailLoaded = true;
         }
+
+       #if AIZANA_UITEST_HOOK
+        // Nur im GUI-Testbuild: sagt, WARUM eine Wellenform fehlt. Ohne diese Zeile
+        // bleibt "Clip ist einfarbig" eine Beobachtung ohne Ursache — die Quelldatei
+        // kann unaufloesbar sein (I-07) oder der Thumbnail leer bleiben.
+        std::fprintf (stderr, "[uitest] Clip \"%s\": quelle=\"%s\" existiert=%d geladen=%d\n",
+                      clip.getName().toRawUTF8(),
+                      audioFile.getFullPathName().toRawUTF8(),
+                      (int) audioFile.existsAsFile(), (int) thumbnailLoaded);
+        std::fflush (stderr);
+       #endif
     }
 }
 
@@ -218,6 +230,23 @@ void ClipComponent::paint (juce::Graphics& g)
         g.drawText (badgeText, badgeRect.toNearestInt(), juce::Justification::centred, false);
         g.setFont (juce::FontOptions (11.0f)); // restore font for subsequent draw calls
     }
+
+   #if AIZANA_UITEST_HOOK
+    {
+        static int male = 0;
+        if (male++ < 6)
+        {
+            std::fprintf (stderr, "[uitest] paint \"%s\": geladen=%d laenge=%.3f bounds=%.0fx%.0f\n",
+                          clip.getName().toRawUTF8(), (int) thumbnailLoaded,
+                          thumbnail.getTotalLength(), bounds.getWidth(), bounds.getHeight());
+            std::fprintf (stderr, "[uitest]   fertig=%d samples=%lld kanaele=%d\n",
+                          (int) thumbnail.isFullyLoaded(),
+                          (long long) thumbnail.getNumSamplesFinished(),
+                          thumbnail.getNumChannels());
+            std::fflush (stderr);
+        }
+    }
+   #endif
 
     // ---- Waveform thumbnail (WaveAudioClip only) ----
     if (thumbnailLoaded && thumbnail.getTotalLength() > 0.0)

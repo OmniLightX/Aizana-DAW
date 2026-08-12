@@ -88,6 +88,10 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     gainEnvBtn   .setTitle (juce::String::fromUTF8 ("Verstaerkungskurve"));
     bendBtn      .setTitle (juce::String::fromUTF8 ("Audio-Bend"));
     rangeCutBtn  .setTitle (juce::String::fromUTF8 ("Bereich entfernen"));
+
+    waveAreaMarker.setTitle (juce::String::fromUTF8 ("Editor-Wellenform"));
+    waveAreaMarker.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (waveAreaMarker);
     addAndMakeVisible (zoomOutButton);
     addAndMakeVisible (zoomFitButton);
 
@@ -595,6 +599,10 @@ void AudioClipEditor::resized()
     rangeCutBtn.setBounds (toolbar.removeFromRight (86));
 
     hScroll.setBounds (area.removeFromBottom (kScrollH));
+
+    // Der Marker folgt der Wellenflaeche — auch wenn Automations- oder Takes-Spur
+    // eingeblendet werden und sie kleiner machen. waveArea() ist die eine Quelle.
+    waveAreaMarker.setBounds (waveArea());
 
     if (automationVisible && autoLane != nullptr)
         autoLane->setBounds (area.removeFromBottom (kAutoLaneH));

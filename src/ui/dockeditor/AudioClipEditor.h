@@ -104,6 +104,18 @@ private:
     Tool activeTool  = Tool::pointer;
     bool snapEnabled = true;
 
+    /**
+     * Unsichtbarer, klick-durchlaessiger Marker ueber waveArea().
+     *
+     * Die Wellenflaeche ist ein BERECHNETES Rechteck, keine Component — damit war sie
+     * fuer Namens-Zugriffe (Bedienungshilfen, GUI-Testlaeufe) nicht ansprechbar, und
+     * Gesten haetten auf Bildschirmkoordinaten gezielt, die bei jedem Zoom, Scroll oder
+     * eingeblendeter Automations-/Takes-Spur woanders liegen. Der Marker zeichnet nichts
+     * und faengt nichts ab (setInterceptsMouseClicks(false,false)); alle Ereignisse gehen
+     * weiter an den Editor.
+     */
+    juce::Component waveAreaMarker;
+
     juce::TextButton toolPointerBtn { juce::String::fromUTF8 ("Pfeil") };
     juce::TextButton toolSplitBtn   { "Split" };
     juce::TextButton toolRangeBtn   { "Range" };
