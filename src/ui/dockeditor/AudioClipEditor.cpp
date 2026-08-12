@@ -92,6 +92,10 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
     waveAreaMarker.setTitle (juce::String::fromUTF8 ("Editor-Wellenform"));
     waveAreaMarker.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (waveAreaMarker);
+
+    clipRegionMarker.setTitle (juce::String::fromUTF8 ("Editor-Clip"));
+    clipRegionMarker.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (clipRegionMarker);
     addAndMakeVisible (zoomOutButton);
     addAndMakeVisible (zoomFitButton);
 
@@ -172,6 +176,23 @@ double AudioClipEditor::sourceLenSecs()
 
     // No readable source — fall back to "no extension possible"
     return clipLenSecs() + clip.getPosition().getOffset().inSeconds();
+}
+
+juce::Rectangle<int> AudioClipEditor::clipRegion() const
+{
+    // Dieselbe Rechnung wie in paint(): der sichtbare Teil des Clips innerhalb der
+    // Wellenflaeche. Faellt er ganz aus dem Fenster, bleibt ein leeres Rechteck.
+    const auto wa   = waveArea();
+    const double len  = clipLenSecs();
+    const double visA = juce::jmax (0.0, viewStartSecs);
+    const double visB = juce::jmin (len, viewStartSecs + viewLenSecs);
+
+    if (visB <= visA)
+        return {};
+
+    const int x0 = (int) std::floor (localSecsToX (visA));
+    const int x1 = (int) std::ceil  (localSecsToX (visB));
+    return { x0, wa.getY(), juce::jmax (1, x1 - x0), wa.getHeight() };
 }
 
 juce::Rectangle<int> AudioClipEditor::waveArea() const
@@ -603,6 +624,7 @@ void AudioClipEditor::resized()
     // Der Marker folgt der Wellenflaeche — auch wenn Automations- oder Takes-Spur
     // eingeblendet werden und sie kleiner machen. waveArea() ist die eine Quelle.
     waveAreaMarker.setBounds (waveArea());
+    clipRegionMarker.setBounds (clipRegion());
 
     if (automationVisible && autoLane != nullptr)
         autoLane->setBounds (area.removeFromBottom (kAutoLaneH));
@@ -1429,6 +1451,12 @@ void AudioClipEditor::valueTreePropertyChanged (juce::ValueTree&, const juce::Id
 
 void AudioClipEditor::timerCallback()
 {
+    // Clip-Marker nachfuehren: die Clip-Region haengt an Zoom und Scroll, nicht an
+    // der Fenstergroesse — resized() allein wuerde sie veralten lassen. Nur setzen,
+    // wenn sie sich wirklich geaendert hat (setBounds loest sonst Repaints aus).
+    if (const auto r = clipRegion(); r != clipRegionMarker.getBounds())
+        clipRegionMarker.setBounds (r);
+
     // Cheap playhead-only repaint while playing
     if (auto* edit = editManager.getEdit())
         if (edit->getTransport().isPlaying())

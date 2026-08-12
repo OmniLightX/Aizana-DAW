@@ -155,7 +155,9 @@ def main():
 
         fehler = 0
         for roh in quelle:
-            zeile = roh.strip()
+            # Umgebungsvariablen aufloesen, damit Drehbuecher keine Rechner-Pfade
+            # festschreiben ($AIZANA_TESTWAV statt /tmp/... oder /Users/...).
+            zeile = os.path.expandvars(roh.strip())
             if not zeile or zeile.startswith("#"):
                 continue
             teile = zeile.split(None, 1)
@@ -236,6 +238,20 @@ def main():
                 ok, zeilen = hook.send(f"click {int(ziel['peer'])} {ziel['x']} {ziel['y']}", 40)
                 zeige(zeilen, "   ")
                 if not ok:
+                    fehler += 1
+                    continue
+
+                # NACHPRUEFEN: ein Klick, der nichts bewirkt, meldet trotzdem OK.
+                # Ohne diese Schleife laeuft das ganze Drehbuch im falschen Zustand
+                # weiter und jeder Folgeschritt scheitert aus scheinbar anderem Grund.
+                for _ in range(12):
+                    time.sleep(0.5)
+                    if hook.finde(pruef.strip()) is not None:
+                        print("   OK Zustand hergestellt")
+                        break
+                else:
+                    print(f"   ERR nach dem Klick auf \"{knopf.strip()}\" fehlt weiterhin "
+                          f"\"{pruef.strip()}\"")
                     fehler += 1
                 continue
 

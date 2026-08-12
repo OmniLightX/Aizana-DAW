@@ -1,0 +1,75 @@
+# Block A, zweiter Teil — E-V3 (Atmer/Range entfernen, 1 Undo), E-V10 (View-Anker),
+# E-V11 (Trim an echten Clip-Kanten).
+#
+# Aufruf:
+#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/11-block-a-atmer-anker-trim.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+dropin Spurbereich Track 1 @ 0.30 0.5 $AIZANA_TESTWAV
+warte 4000
+klick Clip testmaterial_laut
+warte 600
+wennfehlt Werkzeug Pfeil @ Unten Editor
+warte 2500
+
+# ---------------------------------------------------------- E-V3 Atmer entfernen
+# "Atmer" = das Einatmen in einer Gesangsspur: Bereich darueberziehen und loeschen.
+# Ausgangsbreite merken:
+> find Clip testmaterial_laut
+bild B00-vorher
+
+klick Werkzeug Bereich
+warte 400
+ziehein Editor-Wellenform @ 0.35 0.5 0.50 0.5
+warte 900
+bild B01-bereich-ueber-atmer
+klick Bereich entfernen
+warte 1500
+bild B02-bereich-entfernt
+> find Clip testmaterial_laut
+
+# EIN Undo muss den ganzen Eingriff zuruecknehmen (nicht zwei).
+menu 2 101
+warte 1500
+bild B03-nach-einem-undo
+> find Clip testmaterial_laut
+
+# ---------------------------------------------------------- E-V10 View-Anker
+klick Werkzeug Pfeil
+warte 400
+klick Editor vergroessern
+klick Editor vergroessern
+klick Editor vergroessern
+warte 1000
+bild B04-hineingezoomt
+klick Werkzeug Teilen
+warte 400
+klickin Editor-Wellenform @ 0.5 0.5
+warte 1500
+# Der Ausschnitt darf NICHT auf die neue Clip-Laenge springen.
+bild B05-nach-split-im-zoom
+menu 2 101
+warte 1200
+klick Werkzeug Pfeil
+warte 400
+klick Editor einpassen
+warte 800
+bild B06-eingepasst
+
+# ---------------------------------------------------------- E-V11 Trim
+# Rechte Clip-Kante im Editor nach links ziehen.
+# Die rechte Clip-Kante ist ueber "Editor-Clip" exakt adressierbar — sie liegt bei
+# Anteil 1.0 dieses Bereichs, unabhaengig von Zoom und Scroll.
+> find Clip testmaterial_laut
+> find Editor-Clip
+ziehein Editor-Clip @ 0.999 0.5 0.70 0.5
+warte 1500
+bild B07-nach-trim
+> find Clip testmaterial_laut
+menu 2 101
+warte 1200
+bild B08-trim-zurueck
+> find Clip testmaterial_laut

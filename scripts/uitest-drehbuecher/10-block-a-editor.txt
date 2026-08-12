@@ -1,0 +1,72 @@
+# Block A — Editor-Runde: E-V1, E-V2, E-V4, E-V6, E-V10
+#
+# Vorbereitung (Material nach PEGEL waehlen, nie auf Stille pruefen):
+#   ffmpeg -y -i "<stem>.wav" -ss 60 -t 8 "$AIZANA_TESTWAV"
+#   ffmpeg -i "$AIZANA_TESTWAV" -af volumedetect -f null /dev/null   # max_volume pruefen
+#
+# Aufruf:
+#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/10-block-a-editor.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# ---------------------------------------------------------------- Vorbereitung
+dropin Spurbereich Track 1 @ 0.30 0.5 $AIZANA_TESTWAV
+warte 4000
+klick Clip testmaterial_laut
+warte 600
+wennfehlt Werkzeug Pfeil @ Unten Editor
+warte 2500
+bild A00-ausgangslage
+
+# ---------------------------------------------------------------- E-V1 Toolbar
+# Alle Werkzeuge muessen ueber ihren Namen auffindbar sein.
+> find Werkzeug Pfeil
+> find Werkzeug Teilen
+> find Werkzeug Bereich
+> find Editor-Raster einrasten
+> find Clip stummschalten
+> find Automationsspur
+> find Verstaerkungskurve
+> find Audio-Bend
+> find Editor-Wellenform
+
+# ---------------------------------------------------------------- E-V2 Split
+klick Werkzeug Teilen
+warte 500
+klickin Editor-Wellenform @ 0.5 0.5
+warte 1500
+bild A01-nach-split
+# Beweis: aus einem Clip sind zwei geworden -> der Name ist jetzt MEHRDEUTIG.
+> find Clip testmaterial_laut
+
+# Zurueck auf einen Clip (Menue 2 = Edit, 101 = Undo)
+klick Werkzeug Pfeil
+menu 2 101
+warte 1200
+bild A02-nach-undo
+> find Clip testmaterial_laut
+
+# ---------------------------------------------------------------- E-V4 Mute
+klick Clip stummschalten
+warte 1200
+bild A03-clip-stumm
+menu 2 101
+warte 1000
+bild A04-mute-zurueck
+
+# ---------------------------------------------------------------- E-V6 Range + Esc
+klick Werkzeug Bereich
+warte 400
+ziehein Editor-Wellenform @ 0.30 0.5 0.55 0.5
+warte 1000
+bild A05-bereich-aufgezogen
+taste escape
+warte 800
+bild A06-nach-escape
+
+klick Werkzeug Pfeil
+warte 400
+bild A07-endzustand

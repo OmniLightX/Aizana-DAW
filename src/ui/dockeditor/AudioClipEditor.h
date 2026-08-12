@@ -116,6 +116,19 @@ private:
      */
     juce::Component waveAreaMarker;
 
+    /**
+     * Unsichtbarer, klick-durchlaessiger Marker ueber der CLIP-Region innerhalb der
+     * Wellenflaeche. Das Fenster darf ueber die Clip-Grenzen hinausragen (S1-Anker),
+     * der Clip fuellt die Flaeche also nicht zwangslaeufig aus. Ohne diesen Marker
+     * ist die Clip-KANTE — das Ziel fuer Trim und Fades — nur ueber Koordinaten
+     * erreichbar, die sich bei jedem Zoom und Scroll verschieben.
+     * Wird im Timer nachgefuehrt (30 Hz, derselbe wie fuer den Abspielkopf).
+     */
+    juce::Component clipRegionMarker;
+
+    /** Rechteck der Clip-Region in lokalen Koordinaten (dieselbe Rechnung wie paint). */
+    juce::Rectangle<int> clipRegion() const;
+
     juce::TextButton toolPointerBtn { juce::String::fromUTF8 ("Pfeil") };
     juce::TextButton toolSplitBtn   { "Split" };
     juce::TextButton toolRangeBtn   { "Range" };
