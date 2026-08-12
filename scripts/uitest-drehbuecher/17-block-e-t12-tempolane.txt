@@ -1,0 +1,40 @@
+# T1.2-L — Tempo-Lane gegenchecken (der User hat sie muendlich schon abgenommen).
+#
+# Messgroesse: die BPM-Anzeige der TransportBar. Sie ist ein Label, dessen Text im
+# Accessibility-Titel steht und daher ueber "find" adressierbar ist — "120.0 BPM"
+# gefunden = genau dieser Wert steht dort. Damit ist der Test eine ZAHL und kein
+# Bildeindruck: findet er den alten Wert nicht mehr, hat sich das Tempo geaendert.
+#
+# GEGENKONTROLLE: nach dem Undo muss EXAKT der Ausgangswert wieder da sein. Ein
+# Test, der nur "Wert hat sich geaendert" prueft, wuerde auch bestehen, wenn das
+# Ziehen den Wert zerschiesst.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/17-block-e-t12-tempolane.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
+# Ausgangswert
+> find 120.0 BPM
+> find Tempo-Lane
+bild T12-00-vorher
+
+# Den Tempopunkt bei t=0 nach oben ziehen = schneller.
+# Die Trefferzone eines Punktes ist +-6 px (tempoPointAtX). Bei 1045 px Lane-Breite
+# liegt Anteil 0.01 schon 10 px daneben — der erste Versuch griff deshalb ins Leere
+# und aenderte nichts. 0.003 trifft.
+ziehein Tempo-Lane @ 0.003 0.5 0.003 0.05
+warte 1200
+bild T12-01-nach-ziehen
+# Erwartung: 120.0 BPM ist WEG (anderer Wert steht dort)
+> find 120.0 BPM
+> tree 0 3
+
+# Gegenkontrolle: ein Undo stellt exakt 120.0 wieder her
+menu 2 101
+warte 1200
+bild T12-02-nach-undo
+> find 120.0 BPM

@@ -1,0 +1,71 @@
+# T1.1-L — Plugin-Parameter-Automation.
+#
+# Was T1.1 zusagt: die Automations-Lane automatisiert JEDEN AutomatableParameter,
+# nicht nur Volume/Pan — mit qualifizierten "plug:<itemID>:<paramID>"-IDs, damit
+# ZWEI Instanzen desselben Plugins getrennt bleiben. Ausserdem war ein latenter
+# Bug im Pan-Bereich (-1..1) mitgefixt.
+#
+# Messgroesse: der INHALT des Parameter-Dropdowns, ausgelesen ueber den
+# Component-Baum des Popup-Fensters. Damit ist "listet die Plugin-Parameter" eine
+# Liste und kein Bildeindruck.
+#
+# GEGENKONTROLLE: die Liste wird ZWEIMAL gelesen — einmal mit einem EQ auf der Spur
+# und einmal mit zweien. Kommen beim zweiten Mal keine zusaetzlichen Eintraege dazu,
+# unterscheidet die Liste die Instanzen nicht (genau der Fehler, den die
+# qualifizierten IDs verhindern sollen).
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/16-block-e-t11-plugin-automation.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
+# ---------------------------------------------------- erster Compressor auf die Spur
+# Bewusst NICHT der EQ: der haelt seinen Zustand als XML statt APVTS und hat
+# deshalb ausser Dry/Wet gar keine automatisierbaren Parameter (Befund 12.08.,
+# in REMAINING_WORK.md notiert). Der Compressor nutzt APVTS und ist damit der
+# richtige Zeuge fuer "listet ALLE Plugin-Parameter".
+rklick Spur Track 1
+warte 1000
+> press Built-in FX
+warte 1000
+> press Compressor
+warte 2500
+# Das Plugin-Fenster oeffnet sich automatisch — zu, sonst verschieben sich die
+# Fenster-Indizes und "tree <n>" liest das Falsche.
+klick close
+warte 1000
+bild T11-00-erster-eq
+
+# ---------------------------------------------------- Automations-Lane oeffnen
+# Der "A"-Knopf sitzt im Spurbereich.
+klick A
+warte 1500
+bild T11-01-lane-offen
+> find Automations-Parameter Track 1
+
+# Dropdown oeffnen und die Eintraege auslesen
+klick Automations-Parameter Track 1
+warte 1200
+> peers
+> tree 1 6
+
+# ---------------------------------------------------- zweiter Compressor
+taste escape
+warte 500
+rklick Spur Track 1
+warte 1000
+> press Built-in FX
+warte 1000
+> press Compressor
+warte 2500
+klick close
+warte 1000
+
+klick Automations-Parameter Track 1
+warte 1200
+bild T11-02-liste-zwei-eqs
+# Erwartung: dieselben Compressor-Parameter ein ZWEITES Mal (getrennte Instanzen)
+> tree 1 6

@@ -88,6 +88,9 @@ private:
     void valueTreeChildAdded      (juce::ValueTree&, juce::ValueTree&)         override;
     void valueTreeChildRemoved    (juce::ValueTree&, juce::ValueTree&, int)    override;
 
+    /** Baut die Parameterliste neu, wenn ein PLUGIN dazukam oder verschwand. */
+    void refreshParamChoicesIfPluginTree (const juce::ValueTree& child);
+
     // Coordinate helpers
     double xToTime   (float x)     const; // component-x → seconds
     float  timeToX   (double time) const; // seconds → component-x

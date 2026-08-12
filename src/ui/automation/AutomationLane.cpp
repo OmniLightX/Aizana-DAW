@@ -640,12 +640,35 @@ void AutomationLane::valueTreePropertyChanged (juce::ValueTree&, const juce::Ide
     repaint();
 }
 
-void AutomationLane::valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&)
+void AutomationLane::valueTreeChildAdded (juce::ValueTree&, juce::ValueTree& child)
 {
+    refreshParamChoicesIfPluginTree (child);
     repaint();
 }
 
-void AutomationLane::valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int)
+void AutomationLane::valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree& child, int)
 {
+    refreshParamChoicesIfPluginTree (child);
     repaint();
+}
+
+void AutomationLane::refreshParamChoicesIfPluginTree (const juce::ValueTree& child)
+{
+    // rebuildParamChoices lief bisher NUR im Konstruktor. Wer ein Plugin einfuegte,
+    // waehrend die Lane offen war, fand dessen Parameter nie im Dropdown — gemessen
+    // 12.08.: nach dem Einfuegen eines zweiten EQ blieb die Liste unveraendert.
+    //
+    // Nur auf PLUGIN-Kinder reagieren: derselbe Listener feuert auch fuer jeden
+    // Automationskurven-Punkt, und die ComboBox dabei jedes Mal komplett neu zu
+    // befuellen waere Unfug.
+    if (! child.hasType (te::IDs::PLUGIN))
+        return;
+
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<AutomationLane> (this)]
+    {
+        if (safe == nullptr)
+            return;
+
+        safe->rebuildParamChoices();
+    });
 }
