@@ -265,6 +265,44 @@ juce::String cmdFind (const juce::String& name)
              + " h=" + juce::String (screen.getHeight(), 1);
 }
 
+juce::String cmdSnapshot (int peerIndex, const juce::String& path)
+{
+    auto* peer = peerAt (peerIndex);
+
+    if (peer == nullptr)
+        return "ERR kein Fenster mit Index " + juce::String (peerIndex);
+
+    // Die App zeichnet ihr EIGENES Fenster in ein Bild. Kein screencapture, keine
+    // Bildschirmaufnahme-Berechtigung, kein Vordergrund noetig — und vor allem
+    // unabhaengig davon, auf welchem Space das Fenster gerade liegt. (Genau daran
+    // scheiterte der Weg ueber screencapture: der Vollbild-Schuss traf einen leeren
+    // Space, und "-R" meldete "could not create image from rect".)
+    // Was hier NICHT drauf ist: native Dialoge und die Menueleiste — die gehoeren
+    // AppKit, nicht JUCE. Die kann der Hook ohnehin nicht bedienen.
+    auto& comp = peer->getComponent();
+    const auto img = comp.createComponentSnapshot (comp.getLocalBounds(), false, 2.0f);
+
+    if (! img.isValid())
+        return "ERR Bild konnte nicht erzeugt werden";
+
+    juce::File ziel (path);
+    ziel.getParentDirectory().createDirectory();
+    ziel.deleteFile();
+
+    std::unique_ptr<juce::FileOutputStream> stream (ziel.createOutputStream());
+
+    if (stream == nullptr)
+        return "ERR Datei nicht beschreibbar: " + path;
+
+    juce::PNGImageFormat png;
+
+    if (! png.writeImageToStream (img, *stream))
+        return "ERR PNG konnte nicht geschrieben werden";
+
+    stream->flush();
+    return "OK " + juce::String (img.getWidth()) + "x" + juce::String (img.getHeight());
+}
+
 juce::String cmdDrop (int peerIndex, int x, int y, const juce::String& paths)
 {
     auto* peer = peerAt (peerIndex);
@@ -308,6 +346,14 @@ juce::String cmdKey (int peerIndex, const juce::String& keyName, juce::ModifierK
     else if (k == "space")                  { code = juce::KeyPress::spaceKey; text = ' '; }
     else if (keyName.length() == 1)         { code = (int) keyName[0]; text = keyName[0]; }
     else return "ERR unbekannte Taste: " + keyName;
+
+    // Tastendruecke gehen an die Component MIT Tastaturfokus. Ein Fenster, das nicht
+    // im Vordergrund steht, hat keinen — dann verpufft jeder Tastendruck. Den Fokus
+    // holen wir INNERHALB der App (grabKeyboardFocus), nicht ueber das System:
+    // peer->toFront() wuerde dem User mitten in der Arbeit das Fenster nach vorn
+    // reissen, und genau solchen Fokusklau soll dieser Weg vermeiden.
+    if (juce::Component::getCurrentlyFocusedComponent() == nullptr)
+        peer->getComponent().grabKeyboardFocus();
 
     return peer->handleKeyPress (juce::KeyPress (code, mods, text)) ? "OK" : "ERR Taste nicht angenommen";
 }
@@ -548,6 +594,17 @@ struct Hook::Impl : public juce::Thread
 
         if (cmd == "menu")
             return onMessageThread ([args] { return cmdMenu (args); });
+
+        if (cmd == "bild" || cmd == "snapshot")
+        {
+            const int  peer = (int) num (1);
+            const auto pfad = tail (2);
+
+            if (pfad.isEmpty())
+                return "ERR bild <peer> <pfad.png>";
+
+            return onMessageThread ([peer, pfad] { return cmdSnapshot (peer, pfad); }, 30000);
+        }
 
         if (cmd == "drop")
         {

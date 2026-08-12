@@ -1,6 +1,10 @@
 # Block A — E-V1/E-V2/E-V4/E-V10 + Nachfrage zur fehlenden Wellenform im Arrangement.
 # Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/03-editor-werkzeuge.txt
 
+# Ansicht HERSTELLEN, nicht voraussetzen: der Modus ist persistiert, und ein hart
+# beendeter Lauf schreibt ihn nicht zurueck. Blind auf 'Pro' zu klicken wuerde in
+# der Pro-Ansicht nichts finden und den Lauf abbrechen.
+wennfehlt Spurbereich Track 1 @ Pro
 warte 2500
 dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
 warte 3000
@@ -34,8 +38,11 @@ warte 1000
 bild 35-clip-stumm
 
 # Rueckgaengig, damit der Zustand fuer die naechsten Punkte sauber ist
-taste z cmd
+# Cmd-Kuerzel gehoeren auf macOS der NATIVEN Menueleiste — ein synthetischer
+# Tastendruck an JUCE erreicht sie nicht. Deshalb ueber das Menue-Modell:
+# Menue 2 = Edit, Punkt 101 = Undo.
+menu 2 101
 warte 800
-taste z cmd
+menu 2 101
 warte 800
 bild 36-nach-undo

@@ -164,6 +164,21 @@ def main():
             print("-> " + zeile)
 
             if befehl == "bild":
+                # Die App zeichnet ihr eigenes Fenster. Unabhaengig von Vordergrund,
+                # Space und Bildschirmaufnahme-Berechtigung — und sie kann nur sich
+                # selbst abbilden, nie fremde Fenster.
+                ziel = SHOTS / (rest + ".png")
+                ok, zeilen = hook.send(f"bild 0 {ziel}", 40)
+                if ok and ziel.exists():
+                    klein = SHOTS / (rest + "_klein.png")
+                    subprocess.run(["sips", "-Z", "1400", str(ziel), "--out", str(klein)],
+                                   capture_output=True)
+                    print(f"   {klein}   ({zeilen[-1]})")
+                else:
+                    print("   " + (zeilen[-1] if zeilen else "ERR kein Bild")); fehler += 1
+                continue
+
+            if befehl == "bildschirm":
                 vorn(); time.sleep(0.4)
                 ziel = SHOTS / (rest + ".png")
                 # Nur das Fenster ablichten, nicht den ganzen Bildschirm: sonst steht
