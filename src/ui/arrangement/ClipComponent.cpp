@@ -6,7 +6,6 @@
 #include "ui/common/TrackColours.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "engine/TempoDetector.h"
-#include "testing/UiTestHook.h"   // nur fuer AIZANA_UITEST_HOOK (Diagnose im Testbuild)
 #include "engine/TempoEngine.h"
 #include "engine/VocalTuner.h"
 
@@ -53,28 +52,20 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
         const juce::File audioFile = waveClip->getSourceFileReference().getFile();
         if (audioFile.existsAsFile())
         {
-            thumbnail.addChangeListener (this);
-            thumbnail.setSource (new juce::FileInputSource (audioFile));
+            // Aus dem Pool: eine Instanz je Quelldatei, die Neubauten dieser
+            // Component ueberlebt. setSource passiert dort genau einmal.
+            thumbnail = &thumbnailPool->forFile (audioFile);
+            thumbnail->addChangeListener (this);
             thumbnailLoaded = true;
         }
-
-       #if AIZANA_UITEST_HOOK
-        // Nur im GUI-Testbuild: sagt, WARUM eine Wellenform fehlt. Ohne diese Zeile
-        // bleibt "Clip ist einfarbig" eine Beobachtung ohne Ursache — die Quelldatei
-        // kann unaufloesbar sein (I-07) oder der Thumbnail leer bleiben.
-        std::fprintf (stderr, "[uitest] Clip \"%s\": quelle=\"%s\" existiert=%d geladen=%d\n",
-                      clip.getName().toRawUTF8(),
-                      audioFile.getFullPathName().toRawUTF8(),
-                      (int) audioFile.existsAsFile(), (int) thumbnailLoaded);
-        std::fflush (stderr);
-       #endif
     }
 }
 
 ClipComponent::~ClipComponent()
 {
     clip.state.removeListener (this);
-    thumbnail.removeChangeListener (this);
+    if (thumbnail != nullptr)
+        thumbnail->removeChangeListener (this);
 }
 
 void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& prop)
@@ -93,8 +84,8 @@ void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce:
         const juce::File audioFile = waveClip->getSourceFileReference().getFile();
         if (audioFile.existsAsFile())
         {
-            thumbnail.addChangeListener (this);
-            thumbnail.setSource (new juce::FileInputSource (audioFile));
+            thumbnail = &thumbnailPool->forFile (audioFile);
+            thumbnail->addChangeListener (this);
             thumbnailLoaded = true;
         }
     }
@@ -231,25 +222,8 @@ void ClipComponent::paint (juce::Graphics& g)
         g.setFont (juce::FontOptions (11.0f)); // restore font for subsequent draw calls
     }
 
-   #if AIZANA_UITEST_HOOK
-    {
-        static int male = 0;
-        if (male++ < 6)
-        {
-            std::fprintf (stderr, "[uitest] paint \"%s\": geladen=%d laenge=%.3f bounds=%.0fx%.0f\n",
-                          clip.getName().toRawUTF8(), (int) thumbnailLoaded,
-                          thumbnail.getTotalLength(), bounds.getWidth(), bounds.getHeight());
-            std::fprintf (stderr, "[uitest]   fertig=%d samples=%lld kanaele=%d\n",
-                          (int) thumbnail.isFullyLoaded(),
-                          (long long) thumbnail.getNumSamplesFinished(),
-                          thumbnail.getNumChannels());
-            std::fflush (stderr);
-        }
-    }
-   #endif
-
     // ---- Waveform thumbnail (WaveAudioClip only) ----
-    if (thumbnailLoaded && thumbnail.getTotalLength() > 0.0)
+    if (thumbnailLoaded && thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
     {
         // Sync currentGainDb from TE state when not dragging
         if (!gainDragActive)
@@ -280,12 +254,34 @@ void ClipComponent::paint (juce::Graphics& g)
             // Source-offset-aware: split clips show the correct waveform portion
             const double clipOffset     = clip.getPosition().getOffset().inSeconds();
             const double clipLengthSecs = clip.getPosition().getLength().inSeconds();
-            thumbnail.drawChannel (g,
-                                   waveArea,
-                                   clipOffset,
-                                   juce::jmax (0.001, clipOffset + clipLengthSecs),
-                                   0,    // channel 0 (left/mono)
-                                   1.0f * clampedGain);
+            // NUR DEN SICHTBAREN AUSSCHNITT zeichnen, nicht den ganzen Clip.
+            //
+            // Ein Clip ist so breit wie seine Dauer mal Zoom — bei einer 165-s-Datei
+            // sind das 16458 px, waehrend das Fenster ~670 zeigt. JUCEs AudioThumbnail
+            // rechnet dann eine Spalte je Pixel ueber die volle Breite; das kostete
+            // nicht nur unnoetig Zeit, sondern lieferte eine flache Linie
+            // (GUI-Testlauf 2026-08-12: Quelle aufgeloest, Thumbnail geladen, Laenge
+            // 164.628 s, Verstaerkung 0 dB — und trotzdem keine Ausschlaege, waehrend
+            // der Dock-Editor dieselbe Datei in ~1400 px sauber zeichnete).
+            //
+            // Der sichtbare Ausschnitt kommt aus dem Clip-Bereich des Graphics-Kontexts.
+            // Die Zeitgrenzen werden exakt mitgerechnet, damit die Wellenform an
+            // derselben Stelle steht wie zuvor.
+            const auto sichtbar = waveArea.getIntersection (g.getClipBounds());
+
+            if (! sichtbar.isEmpty())
+            {
+                const double sekProPixel = clipLengthSecs / (double) juce::jmax (1, waveArea.getWidth());
+                const double vonSek = clipOffset + (sichtbar.getX() - waveArea.getX()) * sekProPixel;
+                const double bisSek = vonSek + sichtbar.getWidth() * sekProPixel;
+
+                thumbnail->drawChannel (g,
+                                        sichtbar,
+                                        vonSek,
+                                        juce::jmax (vonSek + 0.001, bisSek),
+                                        0,    // channel 0 (left/mono)
+                                        1.0f * clampedGain);
+            }
         }
     }
 
@@ -984,8 +980,8 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
 
             // Left extension limit: offset can never go below 0
             trimMaxExtendLeft  = trimDragStartSecs - trimDragStartOffset;
-            // Right extension limit: source file end (thumbnail.getTotalLength() = full source duration)
-            const double sourceLen = thumbnailLoaded ? thumbnail.getTotalLength() : 3600.0;
+            // Right extension limit: source file end (thumbnail->getTotalLength() = full source duration)
+            const double sourceLen = thumbnailLoaded ? thumbnail->getTotalLength() : 3600.0;
             trimMaxExtendRight = trimDragStartSecs + (sourceLen - trimDragStartOffset);
 
             // Begin a single undo transaction — all setPosition() calls during drag

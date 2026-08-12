@@ -182,9 +182,13 @@ private:
     // ClipComponents are recreated on every rebuildTrackRows, and a per-component
     // cache restarted every waveform read from zero — with 20+ tracks the reads
     // never finished between rebuilds and clips stayed solid-colour.
+    // Das Thumbnail gehoert dem POOL, nicht dieser Component: ClipComponents werden
+    // bei jedem rebuildTrackRows neu gebaut (beim Import einer Datei gemessen 5x),
+    // und ein component-eigenes Thumbnail begann jedes Mal bei null zu lesen — bei
+    // langen Dateien wurde es deshalb nie fertig und der Clip blieb einfarbig.
+    // Der Zeiger ist nullptr, solange keine aufloesbare Quelldatei existiert.
     juce::SharedResourcePointer<AudioThumbnailPool> thumbnailPool;
-    juce::AudioThumbnail            thumbnail      { 512, thumbnailPool->formatManager,
-                                                          thumbnailPool->cache };
+    juce::AudioThumbnail*           thumbnail       { nullptr };
     bool                            thumbnailLoaded { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipComponent)

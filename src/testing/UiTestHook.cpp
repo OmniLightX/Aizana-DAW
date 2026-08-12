@@ -562,6 +562,13 @@ struct Hook::Impl : public juce::Thread
             const int idx = (int) num (1);
             return onMessageThread ([idx]() -> juce::String
             {
+                // Direkt gestartet (nicht ueber den Finder) behandelt macOS den Prozess
+                // als Hintergrund-App: das Fenster wird kaum gezeichnet und
+                // Nebenlaeufer wie der Thumbnail-Leser bekommen fast keine Rechenzeit.
+                // Beides verfaelscht jede visuelle Pruefung. makeForegroundProcess()
+                // erledigt das IM Prozess — kein Systemrecht, kein fremdes Fenster.
+                juce::Process::makeForegroundProcess();
+
                 if (auto* peer = peerAt (idx))
                 {
                     peer->toFront (true);

@@ -217,6 +217,9 @@ def main():
                 continue
 
             if befehl == "vorn":
+                # Erst IN der App (macht aus dem direkt gestarteten Prozess eine
+                # regulaere Vordergrund-App), dann ueber die Bedienungshilfen.
+                hook.send("front 0", 10)
                 vorn(); continue
 
             # wennfehlt <Pruefname> @ <Knopfname>
