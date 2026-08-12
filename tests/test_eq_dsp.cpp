@@ -4,6 +4,7 @@
 // within tolerance (±0.5 dB at test frequency).
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/catch_approx.hpp>
 #include <fx/EQProcessor.h>
 #include <cmath>
 
@@ -159,4 +160,148 @@ TEST_CASE("EQ: prepareToPlay at 96kHz succeeds without allocation", "[eq][FX-01]
 
     // Should not throw or crash
     REQUIRE_NOTHROW(eq.prepareToPlay(96000.0, 512));
+}
+
+//==============================================================================
+// EQ-Automation (08/2026): der EQ hatte gar keine AudioProcessorParameter, sein
+// Zustand lag nur im XML. Tracktion sah damit ein Plugin ohne automatisierbare
+// Parameter — ein Filter-Sweep war unmoeglich. Diese Faelle nageln fest, dass die
+// Bandwerte jetzt echte Parameter sind UND dass die Koeffizientenberechnung
+// dieselben Werte liefert wie vorher.
+//==============================================================================
+
+TEST_CASE ("EQ-Automation: jedes Band stellt An/Frequenz/Gain/Q als Parameter bereit", "[eq][automation]")
+{
+    EQProcessor eq;
+
+    const auto& params = eq.getParameters();
+
+    // 8 Baender x 4 Werte. Typ und Flankensteilheit sind bewusst KEINE Parameter
+    // (diskrete Umschaltungen, die niemand automatisiert).
+    REQUIRE (params.size() == EQProcessor::NumBands * 4);
+
+    int gefunden = 0;
+
+    for (auto* p : params)
+        if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*> (p))
+            for (int b = 0; b < EQProcessor::NumBands; ++b)
+                for (const char* suffix : { "on", "freq", "gain", "q" })
+                    if (withID->paramID == "b" + juce::String (b) + suffix)
+                        ++gefunden;
+
+    CHECK (gefunden == EQProcessor::NumBands * 4);
+}
+
+TEST_CASE ("EQ-Automation: ein Parameter bewegt den Filter hoerbar", "[eq][automation]")
+{
+    EQProcessor eq;
+
+    // Band 4 (Peak, 2.5 kHz) ueber seinen PARAMETER anheben — nicht ueber setBand.
+    // Genau diesen Weg nimmt eine Automationskurve.
+    juce::AudioParameterFloat* gain = nullptr;
+
+    for (auto* p : eq.getParameters())
+        if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*> (p))
+            if (withID->paramID == "b4gain")
+                gain = dynamic_cast<juce::AudioParameterFloat*> (p);
+
+    REQUIRE (gain != nullptr);
+
+    const float flach = computeMagnitudeAtFreq (eq, 2500.0f, 48000.0);
+
+    *gain = 12.0f;
+    const float angehoben = computeMagnitudeAtFreq (eq, 2500.0f, 48000.0);
+
+    // GEGENKONTROLLE: eine weit entfernte Frequenz darf sich NICHT mitbewegen —
+    // sonst wuerde der Test auch bestehen, wenn schlicht alles lauter wird.
+    const float weitWeg = computeMagnitudeAtFreq (eq, 60.0f, 48000.0);
+
+    CHECK (angehoben > flach + 6.0f);          // deutliche Anhebung an 2,5 kHz
+    CHECK (std::abs (weitWeg) < 3.0f);         // 60 Hz bleibt im Rahmen
+
+    // Und zurueck: der Parameter steuert in BEIDE Richtungen.
+    *gain = -12.0f;
+    const float abgesenkt = computeMagnitudeAtFreq (eq, 2500.0f, 48000.0);
+    CHECK (abgesenkt < flach - 6.0f);
+}
+
+TEST_CASE ("EQ-Automation: getBand folgt dem Parameter (Kurve im Editor stimmt)", "[eq][automation]")
+{
+    EQProcessor eq;
+
+    juce::AudioParameterFloat* freq = nullptr;
+
+    for (auto* p : eq.getParameters())
+        if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*> (p))
+            if (withID->paramID == "b2freq")
+                freq = dynamic_cast<juce::AudioParameterFloat*> (p);
+
+    REQUIRE (freq != nullptr);
+
+    *freq = 4000.0f;
+    CHECK (eq.getBand (2).frequencyHz == Catch::Approx (4000.0f).margin (1.0f));
+
+    // Umgekehrt: setBand (GUI/Preset) muss den Parameter mitziehen, sonst
+    // ueberschriebe der naechste Block die Aenderung wieder.
+    EQBand b = eq.getBand (2);
+    b.frequencyHz = 800.0f;
+    eq.setBand (2, b);
+    CHECK (freq->get() == Catch::Approx (800.0f).margin (1.0f));
+}
+
+TEST_CASE ("EQ-Automation: RT-Koeffizienten sind identisch mit JUCEs Referenz", "[eq][automation]")
+{
+    // Der Audio-Thread darf nicht allozieren, deshalb kommen die Koeffizienten aus
+    // juce::dsp::IIR::ArrayCoefficients (std::array auf dem Stack) statt aus
+    // IIR::Coefficients::makeXXX (referenzgezaehltes Objekt = Allokation).
+    // Hier wird festgenagelt, dass beide Wege DIESELBEN Zahlen liefern — sonst
+    // klaenge der EQ nach dem Umbau anders, ohne dass ein Test anschlaegt.
+    const double sr = 48000.0;
+
+    struct Fall { EQBandType typ; float f; float g; float q; };
+    const Fall faelle[] = {
+        { EQBandType::Peak,      1000.0f,  6.0f, 1.0f   },
+        { EQBandType::Peak,      3000.0f, -9.0f, 2.5f   },
+        { EQBandType::LowShelf,   120.0f,  4.0f, 0.707f },
+        { EQBandType::HighShelf, 8000.0f, -3.0f, 0.707f },
+        { EQBandType::LowPass,   5000.0f,  0.0f, 0.707f },
+        { EQBandType::HighPass,    80.0f,  0.0f, 0.707f },
+        { EQBandType::Notch,      500.0f,  0.0f, 4.0f   },
+    };
+
+    for (const auto& f : faelle)
+    {
+        EQBand b;
+        b.type = f.typ; b.frequencyHz = f.f; b.gainDB = f.g; b.Q = f.q; b.enabled = true;
+
+        const auto meins = EQProcessor::coefficientsForBand (b, sr);
+
+        const float gainFactor = std::pow (10.0f, f.g / 20.0f);
+        juce::dsp::IIR::Coefficients<float>::Ptr referenz;
+
+        switch (f.typ)
+        {
+            case EQBandType::Peak:      referenz = juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, f.f, f.q, gainFactor); break;
+            case EQBandType::LowShelf:  referenz = juce::dsp::IIR::Coefficients<float>::makeLowShelf   (sr, f.f, f.q, gainFactor); break;
+            case EQBandType::HighShelf: referenz = juce::dsp::IIR::Coefficients<float>::makeHighShelf  (sr, f.f, f.q, gainFactor); break;
+            case EQBandType::LowPass:   referenz = juce::dsp::IIR::Coefficients<float>::makeLowPass    (sr, f.f, f.q); break;
+            case EQBandType::HighPass:  referenz = juce::dsp::IIR::Coefficients<float>::makeHighPass   (sr, f.f, f.q); break;
+            case EQBandType::Notch:     referenz = juce::dsp::IIR::Coefficients<float>::makeNotch      (sr, f.f, f.q); break;
+        }
+
+        REQUIRE (referenz != nullptr);
+
+        // JUCE speichert FUENF Werte: a0 ist herausgeteilt. Genau diese
+        // Normalisierung muss writeCoefficients nachbilden.
+        REQUIRE (referenz->coefficients.size() == 5);
+
+        // Ziel-Objekt mit der richtigen Groesse besorgen und ueberschreiben lassen.
+        auto ziel = juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, 1000.0f, 1.0f, 1.0f);
+        EQProcessor::writeCoefficients (*ziel, meins);
+
+        REQUIRE (ziel->coefficients.size() == 5);
+
+        for (int k = 0; k < 5; ++k)
+            CHECK (ziel->coefficients[k] == Catch::Approx (referenz->coefficients[k]).margin (1.0e-5));
+    }
 }

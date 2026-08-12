@@ -81,6 +81,22 @@ public:
     // AudioPluginInstance interface
     void fillInPluginDescription (juce::PluginDescription& desc) const override;
 
+    /**
+     * Berechnet die Biquad-Werte fuer ein Band — reine Arithmetik, RT-tauglich.
+     *
+     * Oeffentlich, weil zustandslos: der Test vergleicht sie gegen JUCEs
+     * Referenzformeln (IIR::Coefficients::makeXXX). Ohne diesen Vergleich koennte
+     * der Umbau auf den alloc-freien Weg den Klang aendern, ohne dass etwas
+     * anschlaegt.
+     */
+    static std::array<float, 6> coefficientsForBand (const EQBand& b, double sampleRate);
+
+    /** Schreibt die Werte in ein bestehendes Coefficients-Objekt (kein Alloc).
+        Oeffentlich aus demselben Grund wie coefficientsForBand: der Test vergleicht
+        das Ergebnis gegen JUCEs Referenz. */
+    static void writeCoefficients (juce::dsp::IIR::Coefficients<float>& dest,
+                                   const std::array<float, 6>& src);
+
 private:
     // ProcessorDuplicator wraps the mono IIR::Filter for stereo (and beyond).
     // IIR::Filter<float> asserts numChannels==1 — using it directly in the chain
@@ -102,6 +118,63 @@ private:
     EQChain eqChain;
     std::array<EQBand, NumBands> bands;
     double currentSampleRate = 44100.0;
+
+    //==========================================================================
+    // Automatisierbare Parameter (pro Band: An, Frequenz, Gain, Q)
+    //
+    // Bis 08/2026 hatte der EQ ueberhaupt keine AudioProcessorParameter: sein
+    // Zustand lag nur im XML. Fuer Tracktion war er damit ein Plugin ohne
+    // automatisierbare Parameter — im Automations-Dropdown erschienen nur die
+    // Wrapper-Eintraege "Dry Level"/"Wet Level". Ein Filter-Sweep oder eine
+    // Band-Gain-Automation war unmoeglich, waehrend alle anderen Built-ins
+    // (APVTS) ihre Parameter vollstaendig anbieten.
+    //
+    // Typ und Flankensteilheit bleiben bewusst DRAUSSEN: es sind diskrete
+    // Umschaltungen, die niemand automatisiert, und sie wuerden die Liste pro
+    // Instanz um 16 Eintraege aufblaehen. Sie leben weiter im XML-State.
+    //==========================================================================
+    struct BandParams
+    {
+        juce::AudioParameterBool*  on   = nullptr;
+        juce::AudioParameterFloat* freq = nullptr;
+        juce::AudioParameterFloat* gain = nullptr;
+        juce::AudioParameterFloat* q    = nullptr;
+    };
+
+    std::array<BandParams, NumBands> bandParams;
+
+    /** Zuletzt in Koeffizienten umgesetzte Werte — Vergleich spart Rechenarbeit,
+        wenn sich nichts bewegt (der Normalfall ohne Automation). */
+    struct AppliedValues
+    {
+        float freq = -1.0f, gain = 0.0f, q = 0.0f;
+        int   type = -1, slope = -1;
+        bool  on   = false;
+        bool  valid = false;
+    };
+
+    std::array<AppliedValues, NumBands> applied;
+
+    /** Sample-Rate fuer den Audio-Thread (currentSampleRate wird vom
+        Message-Thread in prepareToPlay geschrieben). */
+    std::atomic<double> sampleRateForAudio { 44100.0 };
+
+    /** Legt die 32 Parameter an (nur aus dem Konstruktor). */
+    void createBandParameters();
+
+    /**
+     * Liest die Parameter und schreibt geaenderte Koeffizienten in die Filter.
+     *
+     * LAEUFT IM AUDIO-THREAD und ist alloc-frei: die Werte kommen von
+     * juce::dsp::ArrayCoefficients, das ein std::array<float,6> auf dem STACK
+     * liefert (im Gegensatz zu IIR::Coefficients::makeXXX, das jedes Mal ein
+     * referenzgezaehltes Objekt anlegt — genau das darf hier nicht passieren,
+     * denn unter Automation liefe es in JEDEM Block).
+     */
+    void refreshCoefficientsFromParameters();
+
+
+
 
     // Secondary IIR filters for HP/LP slope 24dB/oct (slopeOrder=4).
     // Each cascadeFilter[i] mirrors the coefficients of eqChain band i.

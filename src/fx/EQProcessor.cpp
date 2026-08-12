@@ -273,11 +273,173 @@ EQProcessor::EQProcessor()
     bands[5] = { EQBandType::Peak,      5000.0f, 0.0f, 0.707f, true };
     bands[6] = { EQBandType::HighShelf, 10000.0f, 0.0f, 0.707f, true };
     bands[7] = { EQBandType::LowPass,   20000.0f, 0.0f, 0.707f, true };
+
+    createBandParameters();
+}
+
+// ---------------------------------------------------------------------------
+// Automatisierbare Parameter
+// ---------------------------------------------------------------------------
+
+void EQProcessor::createBandParameters()
+{
+    for (int i = 0; i < NumBands; ++i)
+    {
+        const auto nr     = juce::String (i + 1);
+        const auto suffix = " " + nr;                    // "Band 3 Gain" liest sich besser als "b2gain"
+        const auto id     = "b" + juce::String (i);
+
+        // Frequenz logarithmisch (skew auf 1 kHz): sonst liegt die halbe
+        // Reglerstrecke ueber 10 kHz und die musikalisch wichtigen Bereiche
+        // kleben am linken Anschlag — dasselbe gilt fuer Automationskurven.
+        juce::NormalisableRange<float> freqRange { 20.0f, 20000.0f };
+        freqRange.setSkewForCentre (1000.0f);
+
+        auto* on = new juce::AudioParameterBool  ({ id + "on",   1 }, "Band" + suffix + " An",  bands[i].enabled);
+        auto* fr = new juce::AudioParameterFloat ({ id + "freq", 1 }, "Band" + suffix + " Frequenz",
+                                                  freqRange, bands[i].frequencyHz);
+        auto* gn = new juce::AudioParameterFloat ({ id + "gain", 1 }, "Band" + suffix + " Gain",
+                                                  juce::NormalisableRange<float> { -24.0f, 24.0f }, bands[i].gainDB);
+        auto* qq = new juce::AudioParameterFloat ({ id + "q",    1 }, "Band" + suffix + " Q",
+                                                  juce::NormalisableRange<float> { 0.1f, 18.0f }, bands[i].Q);
+
+        // AudioPluginInstance verlangt HostedParameter (addParameter ist dort privat).
+        // AudioParameterFloat/Bool erfuellen das ueber AudioProcessorParameterWithID.
+        addHostedParameter (std::unique_ptr<juce::AudioParameterBool>  (on));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (fr));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (gn));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (qq));
+
+        bandParams[i] = { on, fr, gn, qq };
+    }
+}
+
+void EQProcessor::writeCoefficients (juce::dsp::IIR::Coefficients<float>& dest,
+                                     const std::array<float, 6>& src)
+{
+    // ArrayCoefficients liefert SECHS Werte {b0,b1,b2,a0,a1,a2}; JUCE speichert
+    // intern aber nur FUENF — a0 wird herausgeteilt (assignImpl in
+    // juce_IIRFilter_impl.h). Dieselbe Normalisierung hier von Hand, sonst passt
+    // die Groesse nicht und es wuerde gar nichts geschrieben.
+    //
+    // (Genau das ist im ersten Anlauf passiert: die Groessenpruefung 5 != 6 hat
+    // stillschweigend abgebrochen, der Filter blieb auf dem alten Wert stehen und
+    // die Automation wirkte scheinbar nur in eine Richtung. Gefangen hat es der
+    // Vergleich gegen JUCEs Referenzformeln.)
+    if (dest.coefficients.size() != 5)
+        return;
+
+    const float a0 = src[3];
+
+    if (juce::approximatelyEqual (a0, 0.0f))
+        return;
+
+    const float inv = 1.0f / a0;
+    auto* raw = dest.coefficients.getRawDataPointer();
+
+    raw[0] = src[0] * inv;   // b0
+    raw[1] = src[1] * inv;   // b1
+    raw[2] = src[2] * inv;   // b2
+    raw[3] = src[4] * inv;   // a1
+    raw[4] = src[5] * inv;   // a2
+}
+
+std::array<float, 6> EQProcessor::coefficientsForBand (const EQBand& b, double sampleRate)
+{
+    using AC = juce::dsp::IIR::ArrayCoefficients<float>;
+
+    const float freq = juce::jlimit (20.0f, (float) (sampleRate * 0.499), b.frequencyHz);
+    const float q    = juce::jmax (0.1f, b.Q);
+    const float gain = std::pow (10.0f, b.gainDB / 20.0f);
+
+    // Ausgeschaltet = neutraler Peak (0 dB), exakt wie der bisherige Weg.
+    if (! b.enabled)
+        return AC::makePeakFilter (sampleRate, freq, q, 1.0f);
+
+    switch (b.type)
+    {
+        case EQBandType::LowShelf:  return AC::makeLowShelf  (sampleRate, freq, q, gain);
+        case EQBandType::HighShelf: return AC::makeHighShelf (sampleRate, freq, q, gain);
+        case EQBandType::LowPass:   return AC::makeLowPass   (sampleRate, freq, q);
+        case EQBandType::HighPass:  return AC::makeHighPass  (sampleRate, freq, q);
+        case EQBandType::Notch:     return AC::makeNotch     (sampleRate, freq, q);
+        case EQBandType::Peak:
+        default:                    return AC::makePeakFilter (sampleRate, freq, q, gain);
+    }
+}
+
+void EQProcessor::refreshCoefficientsFromParameters()
+{
+    const double sr = sampleRateForAudio.load (std::memory_order_relaxed);
+
+    if (sr <= 0.0)
+        return;
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        const auto& p = bandParams[i];
+
+        if (p.freq == nullptr)
+            continue;
+
+        EQBand b   = bands[i];          // Typ und Flanke kommen weiter aus dem State
+        b.enabled  = p.on->get();
+        b.frequencyHz = p.freq->get();
+        b.gainDB      = p.gain->get();
+        b.Q           = p.q->get();
+
+        auto& a = applied[i];
+
+        // Nur rechnen, wenn sich etwas bewegt hat. Ohne Automation ist das der
+        // Normalfall und der Block kostet dann gar nichts.
+        if (a.valid
+            && a.on    == b.enabled
+            && a.freq  == b.frequencyHz
+            && a.gain  == b.gainDB
+            && a.q     == b.Q
+            && a.type  == (int) b.type
+            && a.slope == b.slopeOrder)
+            continue;
+
+        const auto vals = coefficientsForBand (b, sr);
+
+        // Die Filterkette und die Kaskade teilen sich die Werte.
+        switch (i)
+        {
+            case 0: writeCoefficients (*eqChain.get<0>().state, vals); break;
+            case 1: writeCoefficients (*eqChain.get<1>().state, vals); break;
+            case 2: writeCoefficients (*eqChain.get<2>().state, vals); break;
+            case 3: writeCoefficients (*eqChain.get<3>().state, vals); break;
+            case 4: writeCoefficients (*eqChain.get<4>().state, vals); break;
+            case 5: writeCoefficients (*eqChain.get<5>().state, vals); break;
+            case 6: writeCoefficients (*eqChain.get<6>().state, vals); break;
+            case 7: writeCoefficients (*eqChain.get<7>().state, vals); break;
+            default: break;
+        }
+
+        writeCoefficients (*cascadeFilters[i].state, vals);
+        cascadeActive[i] = b.enabled
+                           && (b.type == EQBandType::LowPass || b.type == EQBandType::HighPass)
+                           && b.slopeOrder >= 4;
+
+        // Spiegel fuer getBand()/GUI: die Parameter sind die Quelle der Wahrheit,
+        // bands[] traegt zusaetzlich Typ und Flanke.
+        bands[i].enabled     = b.enabled;
+        bands[i].frequencyHz = b.frequencyHz;
+        bands[i].gainDB      = b.gainDB;
+        bands[i].Q           = b.Q;
+
+        a = { b.frequencyHz, b.gainDB, b.Q, (int) b.type, b.slopeOrder, b.enabled, true };
+    }
 }
 
 void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock)
 {
     currentSampleRate = sampleRate;
+    sampleRateForAudio.store (sampleRate, std::memory_order_relaxed);
+
+    for (auto& a : applied)
+        a.valid = false;   // erzwingt eine Neuberechnung im ersten Block
 
     juce::dsp::ProcessSpec spec;
     spec.sampleRate       = sampleRate;
@@ -304,6 +466,10 @@ void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     // Audio thread — zero dynamic allocations in this function.
     // -----------------------------------------------------------------------
     juce::ScopedNoDenormals noDenormals;
+
+    // Automation/GUI koennen die Parameter jederzeit veraendert haben. Alloc-frei,
+    // und rechnet nur, wenn sich wirklich etwas bewegt hat.
+    refreshCoefficientsFromParameters();
 
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::ProcessContextReplacing<float> ctx(block);
@@ -338,13 +504,39 @@ void EQProcessor::setBand(int bandIndex, const EQBand& band)
 {
     jassert(bandIndex >= 0 && bandIndex < NumBands);
     bands[bandIndex] = band;
+
+    // Die vier automatisierbaren Werte in die Parameter spiegeln, sonst wuesste
+    // weder der Host noch eine laufende Automation etwas von der Aenderung (und
+    // der naechste Block wuerde den alten Parameterwert zurueckschreiben).
+    // Laeuft nur vom Message-Thread: GUI, Presets, setStateInformation.
+    if (auto& p = bandParams[bandIndex]; p.freq != nullptr)
+    {
+        *p.on   = band.enabled;
+        *p.freq = band.frequencyHz;
+        *p.gain = band.gainDB;
+        *p.q    = band.Q;
+    }
+
     updateBandCoefficients(bandIndex);
 }
 
 EQBand EQProcessor::getBand(int bandIndex) const
 {
     jassert(bandIndex >= 0 && bandIndex < NumBands);
-    return bands[bandIndex];
+
+    EQBand b = bands[bandIndex];   // Typ und Flankensteilheit leben weiter hier
+
+    // Frequenz/Gain/Q/An aus den Parametern lesen, damit die Kurve im Editor
+    // auch dann stimmt, wenn eine Automation sie gerade bewegt.
+    if (const auto& p = bandParams[bandIndex]; p.freq != nullptr)
+    {
+        b.enabled     = p.on->get();
+        b.frequencyHz = p.freq->get();
+        b.gainDB      = p.gain->get();
+        b.Q           = p.q->get();
+    }
+
+    return b;
 }
 
 bool EQProcessor::getSpectrumData(std::vector<float>& magnitudesOut, int fftSize)
