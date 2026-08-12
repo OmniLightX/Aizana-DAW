@@ -176,20 +176,21 @@ TEST_CASE ("EQ-Automation: jedes Band stellt An/Frequenz/Gain/Q als Parameter be
 
     const auto& params = eq.getParameters();
 
-    // 8 Baender x 4 Werte. Typ und Flankensteilheit sind bewusst KEINE Parameter
-    // (diskrete Umschaltungen, die niemand automatisiert).
-    REQUIRE (params.size() == EQProcessor::NumBands * 4);
+    // 8 Baender x 7 Werte (An/Frequenz/Gain/Q + Dynamik An/Schwelle/Ratio) plus die
+    // beiden gerateweiten Zeitkonstanten. Typ und Flankensteilheit sind bewusst KEINE
+    // Parameter (diskrete Umschaltungen, die niemand automatisiert).
+    REQUIRE (params.size() == EQProcessor::NumBands * 7 + 2);
 
     int gefunden = 0;
 
     for (auto* p : params)
         if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*> (p))
             for (int b = 0; b < EQProcessor::NumBands; ++b)
-                for (const char* suffix : { "on", "freq", "gain", "q" })
+                for (const char* suffix : { "on", "freq", "gain", "q", "dynon", "dynth", "dynra" })
                     if (withID->paramID == "b" + juce::String (b) + suffix)
                         ++gefunden;
 
-    CHECK (gefunden == EQProcessor::NumBands * 4);
+    CHECK (gefunden == EQProcessor::NumBands * 7);
 }
 
 TEST_CASE ("EQ-Automation: ein Parameter bewegt den Filter hoerbar", "[eq][automation]")
@@ -304,4 +305,170 @@ TEST_CASE ("EQ-Automation: RT-Koeffizienten sind identisch mit JUCEs Referenz", 
         for (int k = 0; k < 5; ++k)
             CHECK (ziel->coefficients[k] == Catch::Approx (referenz->coefficients[k]).margin (1.0e-5));
     }
+}
+
+// ===========================================================================
+// Dynamik-EQ (Paket 2, 08/2026)
+//
+// Das Band senkt zusaetzlich ab, sobald SEINE Frequenz zu laut wird. Gemessen
+// wird der Pegel eines Sinus NACH dem EQ — einmal mit, einmal ohne Dynamik.
+// Ohne die Gegenprobe („leise bleibt unveraendert", „andere Frequenz loest
+// nicht aus") wuerde ein Band, das einfach immer absenkt, jeden Test bestehen.
+// ===========================================================================
+
+namespace
+{
+    /** Sinus durch den EQ schicken und den Pegel der zweiten Haelfte messen
+        (die erste Haelfte gehoert der Einschwingzeit der Huellkurve). */
+    float pegelNachEQ (EQProcessor& eq, float freqHz, float amplitude,
+                       double sampleRate = 44100.0, int numSamples = 44100)
+    {
+        juce::AudioBuffer<float> buf (2, numSamples);
+
+        for (int n = 0; n < numSamples; ++n)
+        {
+            const float s = amplitude * std::sin (2.0f * (float) M_PI * freqHz
+                                                   * (float) n / (float) sampleRate);
+            buf.setSample (0, n, s);
+            buf.setSample (1, n, s);
+        }
+
+        juce::MidiBuffer midi;
+        eq.prepareToPlay (sampleRate, 512);
+
+        for (int pos = 0; pos < numSamples; pos += 512)
+        {
+            const int len = juce::jmin (512, numSamples - pos);
+            juce::AudioBuffer<float> block (buf.getArrayOfWritePointers(), 2, pos, len);
+            eq.processBlock (block, midi);
+        }
+
+        const int start = numSamples / 2;
+        return buf.getMagnitude (0, start, numSamples - start);
+    }
+
+    EQBand dynBand (float freq, float thresholdDB, float ratio, bool dynOn)
+    {
+        EQBand b;
+        b.type           = EQBandType::Peak;
+        b.frequencyHz    = freq;
+        b.gainDB         = 0.0f;
+        b.Q              = 2.0f;
+        b.enabled        = true;
+        b.dynOn          = dynOn;
+        b.dynThresholdDB = thresholdDB;
+        b.dynRatio       = ratio;
+        return b;
+    }
+
+    void baenderAus (EQProcessor& eq, int ausser)
+    {
+        for (int i = 0; i < EQProcessor::NumBands; ++i)
+        {
+            if (i == ausser) continue;
+            EQBand flat;
+            flat.enabled = false;
+            eq.setBand (i, flat);
+        }
+    }
+}
+
+TEST_CASE ("Dynamik-EQ: lauter Ton wird abgesenkt, leiser bleibt stehen", "[eq][dyneq]")
+{
+    const float lautAmp  = 0.5f;    // ~ -6 dBFS, klar ueber der Schwelle
+    const float leiseAmp = 0.02f;   // ~ -34 dBFS, klar darunter
+
+    // --- laut, Dynamik AUS: das Band steht auf 0 dB, es darf nichts passieren
+    EQProcessor aus;
+    baenderAus (aus, 0);
+    aus.setBand (0, dynBand (1000.0f, -20.0f, 4.0f, false));
+    const float lautOhneDyn = pegelNachEQ (aus, 1000.0f, lautAmp);
+
+    // --- laut, Dynamik AN: dasselbe Signal muss messbar leiser herauskommen
+    EQProcessor an;
+    baenderAus (an, 0);
+    an.setBand (0, dynBand (1000.0f, -20.0f, 4.0f, true));
+    const float lautMitDyn = pegelNachEQ (an, 1000.0f, lautAmp);
+
+    CHECK (lautOhneDyn == Catch::Approx (lautAmp).margin (0.02f));   // unveraendert
+
+    // Gegen die RECHNUNG pruefen, nicht gegen "irgendwie leiser": Pegel -6,02 dBFS,
+    // Schwelle -20 dB, Ratio 4 ⇒ Absenkung (20 - 6,02) * (1 - 1/4) = 10,48 dB.
+    // Genau das kam heraus (0,500 → 0,1501). Eine blosse Untergrenze haette auch
+    // eine falsche Kennlinie durchgewinkt — die Lehre aus dem EQ-Umbau davor.
+    const float pegelDB    = juce::Decibels::gainToDecibels (lautAmp);
+    const float erwarteter = juce::Decibels::decibelsToGain (
+                                 pegelDB - (pegelDB - (-20.0f)) * (1.0f - 1.0f / 4.0f));
+    CHECK (lautMitDyn == Catch::Approx (erwarteter).margin (erwarteter * 0.12f));
+
+    // --- GEGENPROBE 1: leiser Ton unter der Schwelle bleibt unveraendert
+    EQProcessor leise;
+    baenderAus (leise, 0);
+    leise.setBand (0, dynBand (1000.0f, -20.0f, 4.0f, true));
+    const float leiseMitDyn = pegelNachEQ (leise, 1000.0f, leiseAmp);
+    CHECK (leiseMitDyn == Catch::Approx (leiseAmp).margin (leiseAmp * 0.1f));
+
+    // --- GEGENPROBE 2: derselbe laute Ton weit weg von der Bandfrequenz loest
+    //     nicht aus (der Detektor hoert nur sein eigenes Band)
+    EQProcessor daneben;
+    baenderAus (daneben, 0);
+    daneben.setBand (0, dynBand (8000.0f, -20.0f, 4.0f, true));
+    const float fremdeFrequenz = pegelNachEQ (daneben, 200.0f, lautAmp);
+    CHECK (fremdeFrequenz == Catch::Approx (lautAmp).margin (0.03f));
+}
+
+TEST_CASE ("Dynamik-EQ: hoehere Ratio senkt staerker ab", "[eq][dyneq]")
+{
+    const float amp = 0.5f;
+
+    EQProcessor sanft;
+    baenderAus (sanft, 0);
+    sanft.setBand (0, dynBand (1000.0f, -20.0f, 1.5f, true));
+    const float mitRatio15 = pegelNachEQ (sanft, 1000.0f, amp);
+
+    EQProcessor hart;
+    baenderAus (hart, 0);
+    hart.setBand (0, dynBand (1000.0f, -20.0f, 8.0f, true));
+    const float mitRatio8 = pegelNachEQ (hart, 1000.0f, amp);
+
+    CHECK (mitRatio8 < mitRatio15);
+    CHECK (mitRatio15 < amp);
+}
+
+TEST_CASE ("Dynamik-EQ: Zustand ueberlebt den Roundtrip, alte Sessions bleiben statisch",
+           "[eq][dyneq]")
+{
+    EQProcessor a;
+    a.setBand (2, dynBand (2500.0f, -14.5f, 3.5f, true));
+
+    juce::MemoryBlock mb;
+    a.getStateInformation (mb);
+
+    EQProcessor b;
+    b.setStateInformation (mb.getData(), (int) mb.getSize());
+
+    const auto band = b.getBand (2);
+    CHECK (band.dynOn);
+    CHECK (band.dynThresholdDB == Catch::Approx (-14.5f).margin (0.01f));
+    CHECK (band.dynRatio       == Catch::Approx (3.5f).margin (0.01f));
+
+    // Ein State OHNE Dynamik-Attribute (so sieht jede vor 08/2026 gespeicherte
+    // Session aus) muss das Band statisch lassen — sonst wuerde eine alte Session
+    // ploetzlich anders klingen.
+    juce::XmlElement alt ("EQState");
+    auto* bandXml = alt.createNewChildElement ("Band2");
+    bandXml->setAttribute ("type",    (int) EQBandType::Peak);
+    bandXml->setAttribute ("freq",    2500.0);
+    bandXml->setAttribute ("gain",    3.0);
+    bandXml->setAttribute ("q",       1.0);
+    bandXml->setAttribute ("enabled", 1);
+    bandXml->setAttribute ("slope",   2);
+
+    juce::MemoryBlock altMb;
+    EQProcessor::copyXmlToBinary (alt, altMb);
+
+    EQProcessor c;
+    c.setBand (2, dynBand (2500.0f, -14.5f, 3.5f, true));   // vorher AN …
+    c.setStateInformation (altMb.getData(), (int) altMb.getSize());
+    CHECK_FALSE (c.getBand (2).dynOn);                      // … danach AUS
 }

@@ -56,7 +56,8 @@ static const std::array<EQPreset, 3> kBuiltInPresets = {{
     }
 }};
 
-class EQEditor : public juce::AudioProcessorEditor
+class EQEditor : public juce::AudioProcessorEditor,
+                 private juce::Timer
 {
 public:
     EQEditor (EQProcessor& proc_)
@@ -83,14 +84,18 @@ public:
         addAndMakeVisible (saveButton);
 
         rebuildPresetCombo();
+        buildDynamicsBar();
 
-        setSize (700, 350 + kPresetBarH);
+        setSize (700, 350 + kPresetBarH + kDynBarH);
+        startTimerHz (10);
     }
+
+    ~EQEditor() override { stopTimer(); }
 
     void resized() override
     {
         const int w = getWidth();
-        const int eqH = getHeight() - kPresetBarH;
+        const int eqH = getHeight() - kPresetBarH - kDynBarH;
         eqComponent.setBounds (0, 0, w, eqH);
 
         // Preset bar: combo takes the left 3/4, save button the rest
@@ -98,15 +103,124 @@ public:
         const int saveW = 100;
         presetCombo.setBounds (4, barY + 4, w - saveW - 12, kPresetBarH - 8);
         saveButton.setBounds  (w - saveW - 4, barY + 4, saveW, kPresetBarH - 8);
+
+        // ---- Dynamik-Leiste ----
+        auto r = juce::Rectangle<int> (0, barY + kPresetBarH, w, kDynBarH).reduced (4, 3);
+        auto cell = [&r] (int width) { auto c = r.removeFromLeft (width); r.removeFromLeft (4); return c; };
+
+        dynBandCombo.setBounds  (cell (80));
+        dynOnButton .setBounds  (cell (84));
+        threshSlider.setBounds  (cell (140));
+        ratioSlider .setBounds  (cell (110));
+        attackSlider.setBounds  (cell (px (r.getWidth() / 2 - 2)));
+        releaseSlider.setBounds (r);
     }
 
 private:
+    static int px (int v) { return juce::jmax (60, v); }
+
     static constexpr int kPresetBarH = 28;
+    static constexpr int kDynBarH    = 30;
 
     EQProcessor&    proc;
     EQComponent     eqComponent;
     juce::ComboBox  presetCombo;
     juce::TextButton saveButton;
+
+    //==========================================================================
+    // Dynamik-Leiste
+    //
+    // Ohne Bedienelemente waere die Dynamik nur ueber Automation erreichbar — fuer
+    // einen Mix-Engineer also praktisch nicht vorhanden. Bewusst EINE Zeile mit
+    // Bandwahl statt acht Zeilen: der Platz gehoert der Kurve.
+    //==========================================================================
+    juce::ComboBox     dynBandCombo;
+    juce::ToggleButton dynOnButton;
+    juce::Slider       threshSlider  { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
+    juce::Slider       ratioSlider   { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
+    juce::Slider       attackSlider  { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
+    juce::Slider       releaseSlider { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
+
+    int selectedDynBand = 0;
+
+    void buildDynamicsBar()
+    {
+        for (int i = 0; i < EQProcessor::NumBands; ++i)
+            dynBandCombo.addItem ("Band " + juce::String (i + 1), i + 1);
+
+        dynBandCombo.setSelectedId (1, juce::dontSendNotification);
+        dynBandCombo.setTitle ("Dynamik Bandwahl");
+        dynBandCombo.onChange = [this]
+        {
+            selectedDynBand = juce::jlimit (0, EQProcessor::NumBands - 1,
+                                             dynBandCombo.getSelectedId() - 1);
+            refreshDynamicsFromProcessor();
+        };
+        addAndMakeVisible (dynBandCombo);
+
+        dynOnButton.setButtonText ("Dynamik");
+        dynOnButton.setTitle ("Dynamik An");
+        dynOnButton.onClick = [this] { pushDynamicsToProcessor(); };
+        addAndMakeVisible (dynOnButton);
+
+        auto setUp = [this] (juce::Slider& s, const juce::String& name,
+                             double lo, double hi, const juce::String& suffix)
+        {
+            s.setRange (lo, hi, 0.1);
+            s.setTextValueSuffix (suffix);
+            s.setTitle (name);
+            s.setTooltip (name);
+            s.onValueChange = [this] { pushDynamicsToProcessor(); };
+            addAndMakeVisible (s);
+        };
+
+        setUp (threshSlider,  "Dyn-Schwelle", -60.0,   0.0, " dB");
+        setUp (ratioSlider,   "Dyn-Ratio",      1.0,  10.0, ":1");
+        setUp (attackSlider,  "Dyn-Attack",     0.5, 100.0, " ms");
+        setUp (releaseSlider, "Dyn-Release",    5.0,1000.0, " ms");
+
+        refreshDynamicsFromProcessor();
+    }
+
+    /** Werte aus dem Prozessor holen — auch waehrend Automation laeuft (Timer). */
+    void refreshDynamicsFromProcessor()
+    {
+        const auto b = proc.getBand (selectedDynBand);
+
+        dynOnButton.setToggleState (b.dynOn, juce::dontSendNotification);
+
+        // Einen Regler, an dem gerade gezogen wird, NICHT ueberschreiben — sonst
+        // kaempft der Timer gegen die Hand des Users (I-02-Verwandtschaft).
+        if (! threshSlider.isMouseButtonDown())
+            threshSlider.setValue (b.dynThresholdDB, juce::dontSendNotification);
+        if (! ratioSlider.isMouseButtonDown())
+            ratioSlider.setValue (b.dynRatio, juce::dontSendNotification);
+
+        if (! attackSlider.isMouseButtonDown())
+            attackSlider.setValue (proc.getDynAttackMs(), juce::dontSendNotification);
+        if (! releaseSlider.isMouseButtonDown())
+            releaseSlider.setValue (proc.getDynReleaseMs(), juce::dontSendNotification);
+    }
+
+    void pushDynamicsToProcessor()
+    {
+        auto b = proc.getBand (selectedDynBand);
+        b.dynOn          = dynOnButton.getToggleState();
+        b.dynThresholdDB = (float) threshSlider.getValue();
+        b.dynRatio       = (float) ratioSlider.getValue();
+
+        // Ein ausgeschaltetes Band filtert nicht, also kann es auch nichts
+        // dynamisch absenken. Wer hier die Dynamik einschaltet, meint das Band —
+        // sonst haette der Haken keine Wirkung und niemand saehe, warum.
+        if (b.dynOn && ! b.enabled)
+            b.enabled = true;
+
+        proc.setBand (selectedDynBand, b);
+
+        proc.setDynTimes ((float) attackSlider.getValue(), (float) releaseSlider.getValue());
+    }
+
+    void timerCallback() override { refreshDynamicsFromProcessor(); }
 
     // User presets loaded from / saved to disk
     std::vector<EQPreset> userPresets;
@@ -303,15 +417,39 @@ void EQProcessor::createBandParameters()
         auto* qq = new juce::AudioParameterFloat ({ id + "q",    1 }, "Band" + suffix + " Q",
                                                   juce::NormalisableRange<float> { 0.1f, 18.0f }, bands[i].Q);
 
+        // Dynamik: Schwelle und Ratio in denselben Einheiten wie im Kompressor —
+        // der User denkt in "ab hier" und "wie stark", nicht in abstrakten Kurven.
+        auto* dOn = new juce::AudioParameterBool  ({ id + "dynon", 1 }, "Band" + suffix + " Dynamik",
+                                                   bands[i].dynOn);
+        auto* dTh = new juce::AudioParameterFloat ({ id + "dynth", 1 }, "Band" + suffix + " Dyn-Schwelle",
+                                                   juce::NormalisableRange<float> { -60.0f, 0.0f },
+                                                   bands[i].dynThresholdDB);
+        auto* dRa = new juce::AudioParameterFloat ({ id + "dynra", 1 }, "Band" + suffix + " Dyn-Ratio",
+                                                   juce::NormalisableRange<float> { 1.0f, 10.0f },
+                                                   bands[i].dynRatio);
+
         // AudioPluginInstance verlangt HostedParameter (addParameter ist dort privat).
         // AudioParameterFloat/Bool erfuellen das ueber AudioProcessorParameterWithID.
         addHostedParameter (std::unique_ptr<juce::AudioParameterBool>  (on));
         addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (fr));
         addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (gn));
         addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (qq));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterBool>  (dOn));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (dTh));
+        addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (dRa));
 
-        bandParams[i] = { on, fr, gn, qq };
+        bandParams[i] = { on, fr, gn, qq, dOn, dTh, dRa };
     }
+
+    // Attack/Release gelten geraeteweit: ein Regelverhalten fuer alle Baender.
+    auto* at = new juce::AudioParameterFloat ({ "dynattack", 1 }, "Dynamik Attack (ms)",
+                                              juce::NormalisableRange<float> { 0.5f, 100.0f }, 10.0f);
+    auto* rl = new juce::AudioParameterFloat ({ "dynrelease", 1 }, "Dynamik Release (ms)",
+                                              juce::NormalisableRange<float> { 5.0f, 1000.0f }, 120.0f);
+    addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (at));
+    addHostedParameter (std::unique_ptr<juce::AudioParameterFloat> (rl));
+    dynAttackMs  = at;
+    dynReleaseMs = rl;
 }
 
 void EQProcessor::writeCoefficients (juce::dsp::IIR::Coefficients<float>& dest,
@@ -387,6 +525,26 @@ void EQProcessor::refreshCoefficientsFromParameters()
         b.frequencyHz = p.freq->get();
         b.gainDB      = p.gain->get();
         b.Q           = p.q->get();
+        b.dynOn          = p.dynOn     != nullptr && p.dynOn->get();
+        b.dynThresholdDB = p.dynThresh != nullptr ? p.dynThresh->get() : b.dynThresholdDB;
+        b.dynRatio       = p.dynRatio  != nullptr ? p.dynRatio->get()  : b.dynRatio;
+
+        // Dynamik wirkt nur, wo es ueberhaupt einen Band-Gain gibt. Bei HP/LP/Notch
+        // gibt es nichts abzusenken, und ein ausgeschaltetes Band filtert gar nicht.
+        //
+        // WICHTIG: das darf nicht in den Wunsch des Users zurueckgeschrieben werden.
+        // Genau daran ist die erste Fassung aufgefallen — der Haken sprang beim
+        // Anklicken sofort wieder heraus, weil das Band noch aus war. Der Wunsch
+        // bleibt stehen, nur die WIRKUNG haengt am Zustand des Bandes.
+        const bool gainBearing = (b.type == EQBandType::Peak
+                                  || b.type == EQBandType::LowShelf
+                                  || b.type == EQBandType::HighShelf);
+        dynEffective[i] = b.dynOn && b.enabled && gainBearing;
+
+        bands[i].dynOn          = b.dynOn;
+        bands[i].dynThresholdDB = b.dynThresholdDB;
+        bands[i].dynRatio       = b.dynRatio;
+        b.dynOn                 = dynEffective[i];
 
         auto& a = applied[i];
 
@@ -398,24 +556,15 @@ void EQProcessor::refreshCoefficientsFromParameters()
             && a.gain  == b.gainDB
             && a.q     == b.Q
             && a.type  == (int) b.type
-            && a.slope == b.slopeOrder)
+            && a.slope == b.slopeOrder
+            && a.dyn   == b.dynOn)
             continue;
 
         const auto vals = coefficientsForBand (b, sr);
 
         // Die Filterkette und die Kaskade teilen sich die Werte.
-        switch (i)
-        {
-            case 0: writeCoefficients (*eqChain.get<0>().state, vals); break;
-            case 1: writeCoefficients (*eqChain.get<1>().state, vals); break;
-            case 2: writeCoefficients (*eqChain.get<2>().state, vals); break;
-            case 3: writeCoefficients (*eqChain.get<3>().state, vals); break;
-            case 4: writeCoefficients (*eqChain.get<4>().state, vals); break;
-            case 5: writeCoefficients (*eqChain.get<5>().state, vals); break;
-            case 6: writeCoefficients (*eqChain.get<6>().state, vals); break;
-            case 7: writeCoefficients (*eqChain.get<7>().state, vals); break;
-            default: break;
-        }
+        writeBandCoefficients (i, b.gainDB, sr);
+        dyn[i].appliedGain = b.gainDB;
 
         writeCoefficients (*cascadeFilters[i].state, vals);
         cascadeActive[i] = b.enabled
@@ -429,7 +578,139 @@ void EQProcessor::refreshCoefficientsFromParameters()
         bands[i].gainDB      = b.gainDB;
         bands[i].Q           = b.Q;
 
-        a = { b.frequencyHz, b.gainDB, b.Q, (int) b.type, b.slopeOrder, b.enabled, true };
+        a = { b.frequencyHz, b.gainDB, b.Q, (int) b.type, b.slopeOrder,
+              b.enabled, b.dynOn, true };
+    }
+
+    // ---- Dynamik-Vorbereitung: Detektor-Filter und Zeitkonstanten ----
+    anyDynamicActive = false;
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        if (! dynEffective[i])
+            continue;
+
+        anyDynamicActive = true;
+        auto& d = dyn[i];
+
+        // Der Detektor hoert genau das Band: Bandpass auf Frequenz und Q. Aendert
+        // sich einer der beiden (auch per Automation), wird er nachgezogen —
+        // wieder ueber ArrayCoefficients, also ohne Allokation.
+        if (d.detectorCoeffs != nullptr
+            && (d.detFreq != bands[i].frequencyHz || d.detQ != bands[i].Q))
+        {
+            // Ueber dieselbe Normalisierung wie die Bandfilter — ArrayCoefficients
+            // liefert SECHS Werte, JUCE speichert FUENF. Von Hand nachgebaut waere
+            // genau die Falle, die beim EQ-Umbau schon einmal zugeschlagen hat
+            // (Groessenpruefung schlaegt fehl, es wird still gar nichts geschrieben).
+            const auto bp = juce::dsp::IIR::ArrayCoefficients<float>::makeBandPass (
+                                sr, juce::jlimit (20.0f, (float) (sr * 0.45), bands[i].frequencyHz),
+                                juce::jmax (0.1f, bands[i].Q));
+            writeCoefficients (*d.detectorCoeffs, bp);
+
+            d.detFreq = bands[i].frequencyHz;
+            d.detQ    = bands[i].Q;
+        }
+    }
+
+    if (anyDynamicActive)
+    {
+        const float at = dynAttackMs  != nullptr ? dynAttackMs->get()  : 10.0f;
+        const float rl = dynReleaseMs != nullptr ? dynReleaseMs->get() : 120.0f;
+
+        if (at != dynCoeffSourceAttack || rl != dynCoeffSourceRelease)
+        {
+            // Ein Schritt = ein Teilblock. exp() steht damit einmal pro Block statt
+            // pro Sample im Weg — und nur, wenn sich Attack/Release bewegt haben.
+            const float dt = (float) (kDynSubBlock / sr);
+            dynAttackCoeff  = 1.0f - std::exp (-dt / juce::jmax (0.0001f, at * 0.001f));
+            dynReleaseCoeff = 1.0f - std::exp (-dt / juce::jmax (0.0001f, rl * 0.001f));
+            dynCoeffSourceAttack  = at;
+            dynCoeffSourceRelease = rl;
+        }
+    }
+}
+
+void EQProcessor::setDynTimes (float attackMs, float releaseMs)
+{
+    if (dynAttackMs  != nullptr) *dynAttackMs  = attackMs;
+    if (dynReleaseMs != nullptr) *dynReleaseMs = releaseMs;
+}
+
+float EQProcessor::getDynAttackMs()  const { return dynAttackMs  != nullptr ? dynAttackMs->get()  : 10.0f; }
+float EQProcessor::getDynReleaseMs() const { return dynReleaseMs != nullptr ? dynReleaseMs->get() : 120.0f; }
+
+void EQProcessor::writeBandCoefficients (int bandIndex, float gainDB, double sampleRate)
+{
+    EQBand b = bands[bandIndex];
+    b.gainDB = gainDB;
+
+    const auto vals = coefficientsForBand (b, sampleRate);
+
+    switch (bandIndex)
+    {
+        case 0: writeCoefficients (*eqChain.get<0>().state, vals); break;
+        case 1: writeCoefficients (*eqChain.get<1>().state, vals); break;
+        case 2: writeCoefficients (*eqChain.get<2>().state, vals); break;
+        case 3: writeCoefficients (*eqChain.get<3>().state, vals); break;
+        case 4: writeCoefficients (*eqChain.get<4>().state, vals); break;
+        case 5: writeCoefficients (*eqChain.get<5>().state, vals); break;
+        case 6: writeCoefficients (*eqChain.get<6>().state, vals); break;
+        case 7: writeCoefficients (*eqChain.get<7>().state, vals); break;
+        default: break;
+    }
+}
+
+void EQProcessor::updateDynamicsForSubBlock (const juce::AudioBuffer<float>& input,
+                                             int startSample, int numSamples)
+{
+    const double sr = sampleRateForAudio.load (std::memory_order_relaxed);
+
+    if (sr <= 0.0 || numSamples <= 0)
+        return;
+
+    // Mono-Summe des Teilblocks auf dem STACK — kDynSubBlock ist die Obergrenze.
+    float mono[kDynSubBlock];
+    const int numCh = juce::jmax (1, input.getNumChannels());
+
+    for (int s = 0; s < numSamples; ++s)
+    {
+        float sum = 0.0f;
+        for (int ch = 0; ch < numCh; ++ch)
+            sum += input.getSample (ch, startSample + s);
+        mono[s] = sum / (float) numCh;
+    }
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        if (! dynEffective[i])
+            continue;
+
+        auto& d = dyn[i];
+
+        // Spitzenwert dessen, was DIESES Band hoert.
+        float peak = 0.0f;
+        for (int s = 0; s < numSamples; ++s)
+            peak = juce::jmax (peak, std::abs (d.detector.processSample (mono[s])));
+
+        const float coeff = (peak > d.envelope) ? dynAttackCoeff : dynReleaseCoeff;
+        d.envelope += (peak - d.envelope) * coeff;
+
+        const float levelDB = juce::Decibels::gainToDecibels (d.envelope, -100.0f);
+        const float over    = levelDB - bands[i].dynThresholdDB;
+        const float ratio   = juce::jmax (1.0f, bands[i].dynRatio);
+        const float cutDB   = over > 0.0f ? over * (1.0f - 1.0f / ratio) : 0.0f;
+
+        // Nur nach UNTEN: das Band senkt ab, wenn seine Frequenz zu laut wird.
+        const float target = bands[i].gainDB - cutDB;
+
+        // 0,05 dB Schwelle: darunter ist die Aenderung unhoerbar, und jedes
+        // Nachschreiben kostet einen Koeffizientensatz.
+        if (std::abs (target - d.appliedGain) > 0.05f)
+        {
+            writeBandCoefficients (i, target, sr);
+            d.appliedGain = target;
+        }
     }
 }
 
@@ -458,6 +739,32 @@ void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPer
 
     // Prepare spectrum FIFO buffer (no reallocation needed if already correct size)
     spectrumBuffer.setSize(1, SpectrumFifoSize, false, true, false);
+
+    // ---- Dynamik: Detektoren aufsetzen (Message-Thread, hier darf alloziert werden) ----
+    juce::dsp::ProcessSpec monoSpec;
+    monoSpec.sampleRate       = sampleRate;
+    monoSpec.maximumBlockSize = static_cast<juce::uint32> (maximumExpectedSamplesPerBlock);
+    monoSpec.numChannels      = 1;
+
+    for (int i = 0; i < NumBands; ++i)
+    {
+        auto& d = dyn[i];
+
+        // EINMAL anlegen — danach werden nur noch die Zahlen darin ueberschrieben.
+        // Im Audio-Thread duerfte dieses Objekt nicht entstehen (I-01).
+        d.detectorCoeffs = new juce::dsp::IIR::Coefficients<float> (1.0f, 0.0f, 0.0f,
+                                                                    1.0f, 0.0f, 0.0f);
+        d.detector.coefficients = d.detectorCoeffs;
+        d.detector.prepare (monoSpec);
+        d.detector.reset();
+        d.envelope    = 0.0f;
+        d.appliedGain = bands[i].gainDB;
+        d.detFreq     = -1.0f;     // erzwingt Neuberechnung des Bandpasses
+        d.detQ        = -1.0f;
+    }
+
+    dynCoeffSourceAttack  = -1.0f;
+    dynCoeffSourceRelease = -1.0f;
 }
 
 void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -472,8 +779,28 @@ void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     refreshCoefficientsFromParameters();
 
     juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> ctx(block);
-    eqChain.process(ctx);
+
+    if (! anyDynamicActive)
+    {
+        // Kein Band regelt — der Block laeuft in EINEM Stueck durch, exakt wie vor
+        // der Dynamik-Erweiterung. Die Teilblock-Schleife kostet also nichts,
+        // solange niemand sie braucht.
+        juce::dsp::ProcessContextReplacing<float> ctx(block);
+        eqChain.process(ctx);
+    }
+    else
+    {
+        // Teilblockweise: erst hoeren (am EINGANG, vor dem Filter), dann filtern.
+        for (int pos = 0; pos < buffer.getNumSamples(); pos += kDynSubBlock)
+        {
+            const int len = juce::jmin (kDynSubBlock, buffer.getNumSamples() - pos);
+            updateDynamicsForSubBlock (buffer, pos, len);
+
+            auto sub = block.getSubBlock ((size_t) pos, (size_t) len);
+            juce::dsp::ProcessContextReplacing<float> ctx (sub);
+            eqChain.process (ctx);
+        }
+    }
 
     // Additional passes for HP/LP bands with slopeOrder=4 (24dB/oct = 2× 2nd-order)
     for (int i = 0; i < NumBands; ++i)
@@ -515,6 +842,13 @@ void EQProcessor::setBand(int bandIndex, const EQBand& band)
         *p.freq = band.frequencyHz;
         *p.gain = band.gainDB;
         *p.q    = band.Q;
+
+        if (p.dynOn != nullptr)
+        {
+            *p.dynOn     = band.dynOn;
+            *p.dynThresh = band.dynThresholdDB;
+            *p.dynRatio  = band.dynRatio;
+        }
     }
 
     updateBandCoefficients(bandIndex);
@@ -674,7 +1008,14 @@ void EQProcessor::getStateInformation (juce::MemoryBlock& destData)
         bandXml->setAttribute ("q",       (double) b.Q);
         bandXml->setAttribute ("enabled", b.enabled ? 1 : 0);
         bandXml->setAttribute ("slope",   b.slopeOrder);
+        bandXml->setAttribute ("dynOn",   b.dynOn ? 1 : 0);
+        bandXml->setAttribute ("dynTh",   (double) b.dynThresholdDB);
+        bandXml->setAttribute ("dynRa",   (double) b.dynRatio);
     }
+
+    // Attack/Release sind geraeteweit — sie haengen an keinem Band.
+    xml.setAttribute ("dynAttack",  dynAttackMs  != nullptr ? (double) dynAttackMs->get()  : 10.0);
+    xml.setAttribute ("dynRelease", dynReleaseMs != nullptr ? (double) dynReleaseMs->get() : 120.0);
 
     copyXmlToBinary (xml, destData);
 }
@@ -698,8 +1039,16 @@ void EQProcessor::setStateInformation (const void* data, int sizeInBytes)
         b.Q           = (float)      bandXml->getDoubleAttribute ("q",      0.707);
         b.enabled     =              bandXml->getIntAttribute    ("enabled", 0) != 0;
         b.slopeOrder  =              bandXml->getIntAttribute    ("slope",   2);
+        // Aeltere Sessions kennen die Dynamik nicht — Vorgabe "aus" macht sie
+        // wieder exakt zu dem statischen EQ, als der sie gespeichert wurden.
+        b.dynOn          =           bandXml->getIntAttribute    ("dynOn",   0) != 0;
+        b.dynThresholdDB = (float)   bandXml->getDoubleAttribute ("dynTh",  -18.0);
+        b.dynRatio       = (float)   bandXml->getDoubleAttribute ("dynRa",    2.0);
         setBand (i, b);
     }
+
+    if (dynAttackMs  != nullptr) *dynAttackMs  = (float) xml->getDoubleAttribute ("dynAttack",   10.0);
+    if (dynReleaseMs != nullptr) *dynReleaseMs = (float) xml->getDoubleAttribute ("dynRelease", 120.0);
 }
 
 // ---------------------------------------------------------------------------

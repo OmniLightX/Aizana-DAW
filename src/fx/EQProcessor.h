@@ -18,6 +18,12 @@ struct EQBand
     float Q              = 0.707f;
     bool  enabled        = true;
     int   slopeOrder     = 2;  // dB/oct slope for HP/LP: 2=12dB, 4=24dB/oct
+
+    // --- Dynamik (Paket 2, 08/2026): das Band senkt zusaetzlich ab, sobald SEINE
+    // Frequenz zu laut wird. Aus = klassischer statischer EQ, Bit fuer Bit wie vorher.
+    bool  dynOn          = false;
+    float dynThresholdDB = -18.0f;   // ab hier greift die Absenkung
+    float dynRatio       = 2.0f;     // 1 = keine Wirkung, 10 = fast Deckel
 };
 
 /**
@@ -48,6 +54,11 @@ public:
     /** Set band parameters (may be called from any thread). */
     void setBand(int bandIndex, const EQBand& band);
     EQBand getBand(int bandIndex) const;
+
+    /** Attack/Release der Dynamik — geraeteweit, nicht pro Band. Message-Thread. */
+    void  setDynTimes (float attackMs, float releaseMs);
+    float getDynAttackMs()  const;
+    float getDynReleaseMs() const;
 
     /**
      * Copy spectrum magnitude data (in dB) into magnitudesOut.
@@ -139,9 +150,18 @@ private:
         juce::AudioParameterFloat* freq = nullptr;
         juce::AudioParameterFloat* gain = nullptr;
         juce::AudioParameterFloat* q    = nullptr;
+
+        // Dynamik pro Band; Attack/Release gelten fuer alle Baender gemeinsam
+        // (ein Regelverhalten fuer das Geraet, wie bei einem Kompressor).
+        juce::AudioParameterBool*  dynOn     = nullptr;
+        juce::AudioParameterFloat* dynThresh = nullptr;
+        juce::AudioParameterFloat* dynRatio  = nullptr;
     };
 
     std::array<BandParams, NumBands> bandParams;
+
+    juce::AudioParameterFloat* dynAttackMs  = nullptr;
+    juce::AudioParameterFloat* dynReleaseMs = nullptr;
 
     /** Zuletzt in Koeffizienten umgesetzte Werte — Vergleich spart Rechenarbeit,
         wenn sich nichts bewegt (der Normalfall ohne Automation). */
@@ -150,6 +170,10 @@ private:
         float freq = -1.0f, gain = 0.0f, q = 0.0f;
         int   type = -1, slope = -1;
         bool  on   = false;
+        // Muss mitverglichen werden: schaltet die Dynamik AUS, hat sich an den
+        // statischen Werten nichts geaendert — ohne dieses Feld bliebe das Band
+        // auf dem zuletzt dynamisch geschriebenen Gain stehen.
+        bool  dyn  = false;
         bool  valid = false;
     };
 
@@ -159,7 +183,59 @@ private:
         Message-Thread in prepareToPlay geschrieben). */
     std::atomic<double> sampleRateForAudio { 44100.0 };
 
-    /** Legt die 32 Parameter an (nur aus dem Konstruktor). */
+    //==========================================================================
+    // Dynamik-Sektion
+    //
+    // Pro Band ein eigener Detektor: ein Bandpass auf Frequenz und Q des Bandes
+    // ("was hoert dieses Band?"), dahinter eine Huellkurve mit Attack/Release.
+    // Ueberschreitet sie die Schwelle, wird das Band um
+    //     (Pegel - Schwelle) * (1 - 1/Ratio)
+    // abgesenkt — dieselbe Rechnung wie im CompressorProcessor, nur dass das
+    // Ergebnis nicht die Lautstaerke, sondern den Band-Gain steuert.
+    //
+    // Der Detektor hoert den EINGANG des EQs, nicht seinen Ausgang: sonst regelt
+    // sich das Band an seiner eigenen Absenkung entlang und die Regelung schwingt.
+    //
+    // Koeffizienten werden in Teilbloecken von kDynSubBlock Samples nachgezogen —
+    // pro Sample waere zu teuer, pro Block (bei 512 Samples ~12 ms) zu grob fuer
+    // kurze Attacks.
+    //==========================================================================
+    static constexpr int kDynSubBlock = 32;
+
+    struct DynState
+    {
+        juce::dsp::IIR::Filter<float> detector;                     // mono
+        juce::dsp::IIR::Coefficients<float>::Ptr detectorCoeffs;    // einmal angelegt
+        float envelope     = 0.0f;   // linear, 0..1+
+        float appliedGain  = 0.0f;   // zuletzt in Koeffizienten geschriebener Gain (dB)
+        float detFreq      = -1.0f;  // wofuer der Bandpass zuletzt gerechnet wurde
+        float detQ         = -1.0f;
+    };
+
+    std::array<DynState, NumBands> dyn;
+
+    /** Wirkt die Dynamik gerade? Getrennt vom WUNSCH des Users (bands[i].dynOn),
+        der auch dann stehen bleibt, wenn das Band aus ist oder gar keinen Gain hat —
+        sonst spraenge der Haken beim Anklicken sofort wieder heraus. */
+    std::array<bool, NumBands> dynEffective {};
+
+    float dynAttackCoeff  = 0.0f;   // pro Teilblock, aus Attack/Release + Samplerate
+    float dynReleaseCoeff = 0.0f;
+    float dynCoeffSourceAttack = -1.0f, dynCoeffSourceRelease = -1.0f;
+
+    /** true, sobald irgendein Band Dynamik eingeschaltet hat (sonst laeuft der
+        Block wie vorher in EINEM Stueck durch — keine Kosten, wenn ungenutzt). */
+    bool anyDynamicActive = false;
+
+    /** Huellkurven fortschreiben und, falls noetig, Koeffizienten neu schreiben.
+        Laeuft je Teilblock im Audio-Thread; alloc- und lock-frei. */
+    void updateDynamicsForSubBlock (const juce::AudioBuffer<float>& input,
+                                    int startSample, int numSamples);
+
+    /** Schreibt die Koeffizienten fuer ein Band mit gegebenem Gain (dB). */
+    void writeBandCoefficients (int bandIndex, float gainDB, double sampleRate);
+
+    /** Legt die Parameter an (nur aus dem Konstruktor). */
     void createBandParameters();
 
     /**

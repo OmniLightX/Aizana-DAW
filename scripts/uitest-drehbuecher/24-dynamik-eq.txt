@@ -1,0 +1,41 @@
+# Dynamik-EQ — sind die Bedienelemente da und wirken sie auf den Prozessor?
+#
+# Der Klang gehoert dem Menschen; hier wird geprueft, was maschinell pruefbar ist:
+# die Leiste existiert, ist ueber Namen erreichbar, und der Schalter aendert den
+# Zustand des Bandes (nachgewiesen ueber den gespeicherten Session-Inhalt waere zu
+# indirekt — hier reicht: Regler vorhanden, Werte annehmbar, App bleibt stehen).
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/24-dynamik-eq.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# Aizana EQ auf Spur 1 legen (Kanalzug → Insert-Platz 1)
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+klickin Insert-Plaetze Track 1 @ 0.5 0.08
+warte 1500
+> press Aizana EQ
+warte 3000
+> peers
+
+# Die Dynamik-Leiste im EQ-Fenster
+> find Dynamik Bandwahl
+> find Dynamik An
+> find Dyn-Schwelle
+> find Dyn-Ratio
+> find Dyn-Attack
+> find Dyn-Release
+> bild 1 /tmp/aizana_gui_eq/dyneq-00-leiste.png
+
+# Einschalten und einen Wert ziehen — danach muss die App noch leben und die
+# Regler muessen ihre Werte halten (der Timer holt sie aus dem Prozessor zurueck:
+# stuende dort nichts an, spraenge der Regler sofort wieder zurueck).
+klick Dynamik An
+warte 800
+ziehe Dyn-Schwelle -60 0
+warte 1000
+> bild 1 /tmp/aizana_gui_eq/dyneq-01-eingeschaltet.png
+> find Dynamik An
