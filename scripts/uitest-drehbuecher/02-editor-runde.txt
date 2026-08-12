@@ -1,0 +1,25 @@
+# Block A / E-V1 ff. — Editor-Runde.
+#
+# Ein Lauf = eine frische Session (ApplicationState ruft createNewEdit()). Vorbereitung
+# und Pruefung muessen deshalb in EINEM Drehbuch stehen — sonst prueft der zweite Lauf
+# eine leere Session und meldet trotzdem Erfolg.
+#
+# Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/02-editor-runde.txt
+
+warte 2500
+
+# --- Vorbereitung: 1 Audio-Clip, NICHT am Songanfang (Voraussetzung E-V8/E-V10) ---
+dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
+warte 3000
+bild 20-clip-importiert
+
+# Clip auswaehlen — der Dock-Editor arbeitet selektionsgetrieben.
+klick Clip 121 bpm_809
+warte 800
+bild 21-clip-gewaehlt
+
+# --- E-V1: Dock-Editor oeffnen, Werkzeugleiste muss erscheinen ---
+klick Unten Editor
+warte 2000
+bild 22-dock-offen
+namen

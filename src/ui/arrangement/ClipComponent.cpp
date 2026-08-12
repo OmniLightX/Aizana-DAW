@@ -23,6 +23,13 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
       pixelsPerSecond (pixelsPerSecond_), activeTool_ (activeTool)
 {
     setRepaintsOnMouseActivity (true);
+
+    // Benennung wie in der a11y-Welle (f846eb9): ohne Namen ist ein Clip nur ueber
+    // Bildschirmkoordinaten erreichbar — die bei jedem Scrollen, Zoomen oder
+    // Verschieben still ins Leere greifen und trotzdem Erfolg melden. Gezeichnet
+    // wird der Titel nicht (der sichtbare Clip-Name kommt aus paint()).
+    setTitle (juce::String::fromUTF8 ("Clip ") + clip.getName());
+
     // Tell JUCE 8's Viewport DragToScrollListener not to hijack drag events
     // over clips — the clip handles its own dragging.
     setViewportIgnoreDragFlag (true);

@@ -1,0 +1,41 @@
+# Block A — E-V1/E-V2/E-V4/E-V10 + Nachfrage zur fehlenden Wellenform im Arrangement.
+# Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/03-editor-werkzeuge.txt
+
+warte 2500
+dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
+warte 3000
+
+# Wellenform im ARRANGEMENT: erscheint sie spaeter? (im Dock ist sie sofort da)
+bild 30-arrangement-direkt
+warte 8000
+bild 31-arrangement-nach-8s
+
+klick Clip 121 bpm_809
+warte 600
+# Dock-Zustand ist persistiert — nur oeffnen, wenn die Werkzeugleiste fehlt.
+wennfehlt Werkzeug Pfeil @ Unten Editor
+warte 2000
+bild 32-dock-offen
+
+# --- E-V2 Split: Werkzeug Teilen waehlen, in der Mitte des Clips klicken ---
+klick Werkzeug Teilen
+warte 500
+bild 33-werkzeug-teilen-aktiv
+klickin Clip 121 bpm_809 @ 0.5 0.5
+warte 1200
+bild 34-nach-split
+namen
+
+# --- E-V4 Mute: Clip stummschalten ---
+klick Werkzeug Pfeil
+warte 400
+klick Clip stummschalten
+warte 1000
+bild 35-clip-stumm
+
+# Rueckgaengig, damit der Zustand fuer die naechsten Punkte sauber ist
+taste z cmd
+warte 800
+taste z cmd
+warte 800
+bild 36-nach-undo

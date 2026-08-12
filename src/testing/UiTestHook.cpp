@@ -183,10 +183,14 @@ juce::String cmdPeers()
         if (auto* peer = juce::ComponentPeer::getPeer (i))
         {
             auto& c = peer->getComponent();
+            const auto b = c.getScreenBounds();
             lines.add ("| peer=" + juce::String (i)
-                         + " label=\"" + describe (c) + "\""
-                         + " bounds=" + c.getScreenBounds().toString()
-                         + " focused=" + (peer->isFocused() ? "1" : "0"));
+                         + " sx=" + juce::String (b.getX())
+                         + " sy=" + juce::String (b.getY())
+                         + " sw=" + juce::String (b.getWidth())
+                         + " sh=" + juce::String (b.getHeight())
+                         + " focused=" + (peer->isFocused() ? "1" : "0")
+                         + " label=\"" + describe (c) + "\"");
         }
     }
 
@@ -239,7 +243,16 @@ juce::String cmdFind (const juce::String& name)
     if (peer == nullptr)
         return "ERR \"" + name + "\" haengt an keinem Fenster";
 
-    const auto screen = comp->getScreenBounds().toFloat();
+    // Nur den SICHTBAREN Ausschnitt melden. Scrollende Flaechen sind viel groesser
+    // als das Fenster — die Clip-Flaeche einer Spur ist 30000 px breit. Ein Anteil
+    // von 40 % laege dann weit ausserhalb des Bildschirms, und der Klick ginge ins
+    // Leere, ohne dass es auffiele. Geschnitten wird gegen das Fenster.
+    const auto screen = comp->getScreenBounds().toFloat()
+                            .getIntersection (peer->getComponent().getScreenBounds().toFloat());
+
+    if (screen.isEmpty())
+        return "ERR \"" + name + "\" liegt ausserhalb des sichtbaren Fensters";
+
     const auto tl     = peer->globalToLocal (screen.getTopLeft());
     const auto centre = peer->globalToLocal (screen.getCentre());
 

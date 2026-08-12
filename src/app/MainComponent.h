@@ -203,6 +203,14 @@ private:
             editButton.onClick   = [this] { if (onEditClick)   onEditClick(); };
             mixButton.onClick    = [this] { if (onMixClick)    onMixClick(); };
             browseButton.onClick = [this] { if (onBrowseClick) onBrowseClick(); };
+
+            // Mehrdeutige Namen qualifizieren (Rest der a11y-Welle f846eb9): "Edit" und
+            // "Mix" gibt es ZWEIMAL — oben in der TransportBar als Ansichtsumschalter,
+            // hier unten als Dock-Waehler. Wer nur "Edit" anspricht, trifft mal das eine,
+            // mal das andere. Gezeichnet wird der Titel nicht, die Beschriftung bleibt.
+            editButton  .setTitle (juce::String::fromUTF8 ("Unten Editor"));
+            mixButton   .setTitle (juce::String::fromUTF8 ("Unten Mixer"));
+            browseButton.setTitle (juce::String::fromUTF8 ("Unten Browser"));
         }
 
         std::function<void()>    onEditClick, onMixClick, onBrowseClick;

@@ -17,6 +17,12 @@ TrackRow::TrackRow (te::AudioTrack&   track_,
     // clipArea itself does not intercept clicks (they pass through to TrackRow),
     // but its children (ClipComponents) still receive them.
     clipArea.setInterceptsMouseClicks (false, true);
+
+    // Benennung wie in der a11y-Welle (f846eb9): die Clip-Flaeche einer Spur ist das
+    // Ziel fuer Datei-Drops und Zieh-Gesten. Ueber den Namen ansprechbar ueberlebt
+    // das jede Layout-Aenderung — ein Koordinatenziel wuerde still danebengreifen und
+    // trotzdem Erfolg melden. Gezeichnet wird der Titel nicht.
+    setTitle (juce::String::fromUTF8 ("Spurbereich ") + track.getName());
     buildDisclosureButton();
     addAndMakeVisible (disclosureButton);
 }
