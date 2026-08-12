@@ -1,0 +1,63 @@
+# T1.3-L — Edit-Gruppen: Split und Delete propagieren auf die Gruppen-Spuren.
+#
+# ⚠️ NOCH NIE GEFAHREN (geschrieben am 12.08. bei gesperrtem Bildschirm, als
+#    GUI-Laeufe blockiert waren). Beim ersten Lauf mit Namensfehlern rechnen —
+#    dann die Namen ueber "namen" bzw. "> tree 0 20" nachschlagen und korrigieren.
+#
+# Messgroesse: "find Clip <Name>" meldet mehrdeutig MIT Anzahl. Ein Split auf
+# Spur 1 muss die Clipzahl um ZWEI erhoehen (beide Spuren), nicht um eins.
+#
+# GEGENKONTROLLE ist eingebaut: dieselbe Geste OHNE Gruppenzuordnung darf nur
+# EINEN Clip teilen. Ohne diesen Vergleich wuerde ein Split, der immer alles
+# teilt, genauso bestehen.
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/15-block-e-t13-editgruppen.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# Zweite Spur
+klick Spur hinzufuegen
+warte 1000
+klick Audio
+warte 400
+klick Add
+warte 2000
+
+# Zeitgleiche Clips auf beiden Spuren (gleicher Anteil = gleiche Zeitposition)
+dropin Spurbereich Track 1 @ 0.20 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Audio @ 0.20 0.5 $AIZANA_TESTKURZ
+warte 2500
+# Erwartung: mehrdeutig, 2x
+> find Clip testmaterial_kurz
+
+# ---------------------------------------------- GEGENKONTROLLE: OHNE Gruppe
+# Split auf Spur 1, beide Spuren noch ungruppiert -> nur Spur 1 wird geteilt.
+# Geteilt wird mit dem SCHERENWERKZEUG (Taste C) — einen Menuepunkt "Split" gibt
+# es nicht (MainComponent.h MenuIDs nachgeschlagen; 205 waere der Inspector
+# gewesen, also ein stiller Fehlklick), und Cmd+E gehoert der nativen Menueleiste.
+taste c
+warte 400
+klickin Spurbereich Track 1 @ 0.25 0.5
+warte 1200
+bild T13-00-split-ohne-gruppe
+# Erwartung: 3x  (2 Teile auf Spur 1 + 1 unberuehrt auf Spur 2) — NICHT 4x
+> find Clip testmaterial_kurz
+
+menu 2 101
+warte 1200
+# Erwartung: wieder 2x
+> find Clip testmaterial_kurz
+
+# ---------------------------------------------- beide Spuren in Gruppe 1
+rklick Spur Track 1
+warte 1200
+> peers
+bild T13-01-trackmenue
+# ACHTUNG: die Menue-Eintraege muessen beim ersten Lauf abgelesen werden
+# (peer=1 -> "> tree 1 6"), danach hier fest eintragen.
+> tree 1 6

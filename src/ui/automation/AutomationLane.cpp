@@ -15,6 +15,15 @@ AutomationLane::AutomationLane (te::AudioTrack&    track_,
     // Listen to the track's ValueTree so we repaint after undo / external changes
     track.state.addListener (this);
 
+    // Benennung wie im uebrigen Arrangement (Spurname im Titel, damit bei mehreren
+    // Spuren nichts mehrdeutig wird). Namenlose Komponenten sind weder fuer
+    // VoiceOver noch fuer einen Testlauf ansprechbar — nur ueber Koordinaten, und
+    // ein Koordinatenklick meldet auch dann Erfolg, wenn er danebengeht.
+    setTitle              ("Automations-Lane "      + track.getName());
+    paramSelector .setTitle ("Automations-Parameter " + track.getName());
+    modeSelector  .setTitle ("Automations-Modus "     + track.getName());
+    drawModeButton.setTitle ("Automation zeichnen "   + track.getName());
+
     // Parameter selector — T1.1: Volume/Pan + ALLE Plugin-Parameter der Spur
     // (qualifizierte plug:-IDs; siehe AutomationEngine::getAutomatableParams).
     rebuildParamChoices();

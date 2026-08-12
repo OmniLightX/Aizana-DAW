@@ -6,6 +6,7 @@ TempoLane::TempoLane (ApplicationState& as, TempoEngine& engine,
       pixelsPerSecond (pps), scrollPositionSecs (scroll)
 {
     setOpaque (false);
+    setTitle ("Tempo-Lane");   // benannt = ansprechbar (VoiceOver, Testlauf)
 }
 
 te::Edit* TempoLane::getEdit() const
