@@ -141,8 +141,11 @@ te::WaveAudioClip* ClipEditor::cutClipCore (te::WaveAudioClip& clip, double spli
     te::ClipPosition rightPos { TimeRng (rightStart, rightEnd),
                                 TimeDur::fromSeconds (rightOffsetSecs) };
 
+    // Die rechte Haelfte behaelt den Namen des Originals — sie ist DASSELBE Material.
+    // Vorher hiess jede zweite Haelfte "clip"; nach zwei Schnitten stand in der Spur
+    // "Vocal Lead", "clip", "clip", und die Herkunft war nicht mehr abzulesen.
     auto* newClipBase = audioTrack->insertNewClip (te::TrackItem::Type::wave,
-                                                    "clip",
+                                                    clip.getName(),
                                                     rightPos,
                                                     nullptr);
     auto* newClip = dynamic_cast<te::WaveAudioClip*> (newClipBase);
@@ -332,7 +335,9 @@ te::Clip* ClipEditor::copyClip (te::Clip& sourceClip,
                                        ? te::TrackItem::Type::midi
                                        : te::TrackItem::Type::wave;
 
-    auto* newClipBase = destTrack.insertNewClip (clipType, "clip", newPos, nullptr);
+    // Kopie/Duplikat/Einfuegen erben den Namen der Quelle (S1/Logic-Verhalten);
+    // frueher hiess jedes Duplikat "clip".
+    auto* newClipBase = destTrack.insertNewClip (clipType, sourceClip.getName(), newPos, nullptr);
     if (newClipBase == nullptr)
         return nullptr;
 

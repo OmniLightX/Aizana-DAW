@@ -351,10 +351,21 @@ private:
     public:
         ToolSelectorStrip (EditTool& activeTool, std::function<void(EditTool)> onToolSelected);
         void paint (juce::Graphics& g) override;
+        void resized() override;
         void mouseDown (const juce::MouseEvent& e) override;
+
+        // Namen der Zellen an den aktiven Zustand angleichen ("… (aktiv)"). Wird auch
+        // von aussen gerufen, weil das Werkzeug per Taste oder Menue wechseln kann.
+        void refreshCellTitles();
+
     private:
         EditTool& activeTool;
         std::function<void(EditTool)> onToolSelected;
+
+        // Die Zellen sind GEZEICHNET. Diese Stellvertreter zeichnen nichts und nehmen
+        // keine Maus an — der Klick geht unveraendert an mouseDown der Leiste — geben
+        // den Zellen aber einen Namen, ueber den sie ueberhaupt erst adressierbar sind.
+        juce::OwnedArray<juce::Component> cellProxies;
     };
 
     ToolSelectorStrip toolSelector;

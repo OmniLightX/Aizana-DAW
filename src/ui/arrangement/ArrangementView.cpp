@@ -271,6 +271,40 @@ void ArrangementView::ToolSelectorStrip::paint (juce::Graphics& g)
     }
 }
 
+void ArrangementView::ToolSelectorStrip::resized()
+{
+    const int cellW = juce::jmin (kToolCellMaxW, getWidth() / kNumToolCells);
+    const int cellH = juce::jmin (cellW, getHeight());
+    const int yOff  = (getHeight() - cellH) / 2;
+
+    while (cellProxies.size() < kNumToolCells)
+    {
+        auto* c = new juce::Component();
+        c->setInterceptsMouseClicks (false, false);   // Klick geht an mouseDown der Leiste
+        addAndMakeVisible (c);
+        cellProxies.add (c);
+    }
+
+    for (int i = 0; i < kNumToolCells; ++i)
+        cellProxies[i]->setBounds (i * cellW, yOff, cellW, cellH);
+
+    refreshCellTitles();
+}
+
+void ArrangementView::ToolSelectorStrip::refreshCellTitles()
+{
+    // Ohne den Zustand im Namen waere "welches Werkzeug ist aktiv" nur an einer FARBE
+    // ablesbar — fuer VoiceOver gar nicht, fuer einen Testlauf nur per Pixelvergleich.
+    static const char* kNames[kNumToolCells] {
+        "Werkzeug Pfeil", "Werkzeug Bereich", "Werkzeug Schere",
+        "Werkzeug Radierer", "Werkzeug Stumm"
+    };
+
+    for (int i = 0; i < cellProxies.size() && i < kNumToolCells; ++i)
+        cellProxies[i]->setTitle (juce::String (kNames[i])
+                                   + (activeTool == kToolCells[i].tool ? " (aktiv)" : ""));
+}
+
 void ArrangementView::ToolSelectorStrip::mouseDown (const juce::MouseEvent& e)
 {
     const int cellW = juce::jmin (kToolCellMaxW, getWidth() / kNumToolCells);
@@ -1550,14 +1584,12 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
                 }
                 else if (result == 2)
                 {
-                    appState.editManager.getUndoManager().beginNewTransaction ("Add MIDI Track");
-                    auto t = edit->insertNewAudioTrack (
-                        te::TrackInsertPoint (nullptr, lastTrack), nullptr);
-                    if (t != nullptr)
-                    {
-                        t->setSoloIsolate (false);
-                        t->setName ("MIDI " + juce::String (existingTracks.size() + 1));
-                    }
+                    // Denselben Weg gehen wie "+ Track" → MIDI: dort bekommt die Spur
+                    // einen 4-Takt-Clip mitgeliefert. Vorher entstand hier eine Spur,
+                    // die nur dem NAMEN nach MIDI war — ohne Clip gab es nichts
+                    // aufzumachen, der Doppelklick lief ins Leere.
+                    createTracks (1, true, false,
+                                  "MIDI " + juce::String (existingTracks.size() + 1));
                 }
                 else if (result == 3)
                 {
@@ -1958,6 +1990,7 @@ void ArrangementView::setActiveTool (EditTool tool)
     // Update toolbar highlight so it reflects the new tool regardless of how the
     // tool was changed (keyboard shortcut, right-click menu, or toolbar click)
     toolSelector.repaint();
+    toolSelector.refreshCellTitles();   // Name traegt den aktiven Zustand mit
 }
 
 void ArrangementView::splitClipAtTime (double timeSecs, int screenY)

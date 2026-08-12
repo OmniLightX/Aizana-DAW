@@ -200,6 +200,45 @@ TEST_CASE ("ClipEditor: copyClip creates independent clip without modifying orig
 }
 
 // ---------------------------------------------------------------------------
+// Namen: Schnitt-Haelften, Kopien und Duplikate erben den Namen des Originals.
+// Vorher hiess jedes neu eingefuegte Stueck "clip" — nach zwei Schnitten stand in
+// der Spur "Vocal Lead", "clip", "clip", und die Herkunft war nicht mehr ablesbar.
+// ---------------------------------------------------------------------------
+TEST_CASE ("ClipEditor: Schnitt, Kopie und Duplikat erben den Clipnamen", "[clip][naming]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    REQUIRE (edit != nullptr);
+
+    auto* track = getFirstAudioTrack (*edit);
+    REQUIRE (track != nullptr);
+
+    auto* original = insertDummyAudioClip (*track, 0.0, 4.0);
+    REQUIRE (original != nullptr);
+    original->setName ("Vocal Lead");
+
+    ClipEditor editor (em);
+
+    auto* rightHalf = editor.cutClip (*original, 2.0);
+    REQUIRE (rightHalf != nullptr);
+    CHECK (rightHalf->getName() == "Vocal Lead");
+    CHECK (original->getName()  == "Vocal Lead");   // linke Haelfte unveraendert
+
+    auto* duplicate = editor.duplicateClip (*original);
+    REQUIRE (duplicate != nullptr);
+    CHECK (duplicate->getName() == "Vocal Lead");
+
+    // Kopie auf eine ANDERE Spur — derselbe Kern (copyClip), anderer Aufrufweg.
+    edit->getUndoManager().beginNewTransaction ("Add track");
+    auto track2 = edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, track), nullptr);
+    REQUIRE (track2 != nullptr);
+    auto* copy = editor.copyClip (*original, *track2, 0.0);
+    REQUIRE (copy != nullptr);
+    CHECK (copy->getName() == "Vocal Lead");
+}
+
+// ---------------------------------------------------------------------------
 // Test 5 — Comping: insert 3 takes on a MidiClip; setActiveTake(1) → take 1 is current
 // ---------------------------------------------------------------------------
 TEST_CASE ("ClipEditor: setActiveTake selects the correct take on a MidiClip", "[clip][AUDIO-03]")

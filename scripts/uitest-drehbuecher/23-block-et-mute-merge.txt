@@ -1,0 +1,97 @@
+# Block ET — Mute-Werkzeug und "Events verbinden" (Cmd+J) fuer MIDI.
+#
+# Zwei Messgroessen:
+#   * WERKZEUG: die Zellen der Werkzeugleiste sind gezeichnet und tragen seit dieser
+#     Runde Namen, die den aktiven Zustand mitfuehren ("Werkzeug Stumm (aktiv)").
+#     Ohne das waere "welches Werkzeug ist aktiv" nur an einer FARBE ablesbar.
+#   * STUMMER CLIP: der Clip wird gedimmt gezeichnet — gemessen wird die MITTLERE
+#     HELLIGKEIT seines Rechtecks in den drei Bildern (Auswertung nach dem Lauf,
+#     Retina = doppelte Koordinaten):
+#       magick et-01-stumm.png -crop 400x176+594+280 +repage -format '%[fx:mean]' info:
+#     Gemessen 2026-08-12: 0.666 (vorher) -> 0.546 (stumm) -> 0.664 (nach EINEM Undo).
+#   * MERGE: die Clipzahl aus der Mehrdeutigkeits-Meldung von find.
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/23-block-et-mute-merge.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+dropin Spurbereich Track 1 @ 0.06 0.5 $AIZANA_TESTKURZ
+warte 3000
+> find Clip testmaterial_kurz
+
+# ------------------------------------------- Werkzeugwechsel
+# GEGENKONTROLLE: vorher ist der Pfeil aktiv, das Mute-Werkzeug NICHT.
+> find Werkzeug Pfeil (aktiv)
+> find Werkzeug Stumm (aktiv)
+> bild 0 /tmp/aizana_gui_et/et-00-vor-mute.png
+
+klick Werkzeug Stumm
+warte 1000
+# Erwartung: jetzt umgekehrt
+> find Werkzeug Stumm (aktiv)
+> find Werkzeug Pfeil (aktiv)
+
+# ------------------------------------------- Clip stummschalten
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 1200
+> bild 0 /tmp/aizana_gui_et/et-01-stumm.png
+
+# EIN Undo muss den Clip wieder hoerbar machen
+menu 2 101
+warte 1500
+> bild 0 /tmp/aizana_gui_et/et-02-nach-undo.png
+
+# Zurueck auf den Pfeil, sonst stummt jeder weitere Klick.
+klick Werkzeug Pfeil
+warte 800
+> find Werkzeug Pfeil (aktiv)
+
+# ------------------------------------------- Merge MIDI (Cmd+J)
+# Der Audio-Clip muss weg, sonst faengt Cmd+A ihn spaeter mit ein und die Auswahl
+# laege auf ZWEI Spuren (dann tut Verbinden zu Recht nichts).
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 600
+taste backspace
+warte 1200
+> find Clip testmaterial_kurz
+
+# Eine MIDI-Spur bringt einen 4-Takt-Clip mit; der zweite entsteht per Duplicate.
+rklickin Spurbereich Track 1 @ 0.5 0.95
+warte 1200
+> press Add MIDI Track
+warte 2500
+> find Clip MIDI Clip
+
+klick Clip MIDI Clip
+warte 800
+rklick Clip MIDI Clip
+warte 1200
+> press Duplicate
+warte 2000
+# Erwartung: mehrdeutig, 2x — das Duplikat ERBT den Namen (vorher hiess es "clip").
+> find Clip MIDI Clip
+> find Clip clip
+bild ET-03-zwei-midi-clips
+
+# Beide auswaehlen und verbinden. Cmd+A waehlt alle Clips (hier genau die zwei
+# MIDI-Clips derselben Spur). Cmd+J steht NICHT in der Menueleiste, der Tastendruck
+# erreicht also ArrangementView::keyPressed direkt.
+taste a cmd
+warte 1000
+taste j cmd
+warte 2500
+# Erwartung: EIN Clip "MIDI Clip (Merged)", die beiden Originale weg
+> find Clip MIDI Clip (Merged)
+> find Clip MIDI Clip
+bild ET-04-verbunden
+
+# EIN Undo muss beide Originale zurueckholen
+menu 2 101
+warte 2000
+> find Clip MIDI Clip
+> find Clip MIDI Clip (Merged)
+bild ET-05-nach-undo
