@@ -1,0 +1,65 @@
+# UX5-L — Send-Zeilen erscheinen NUR fuer tatsaechlich angelegte Sends.
+#
+# Hintergrund: nach der UX2-Welle (Send-Zeilen als Level-Balken) zeigte JEDER Strip
+# pro FX-Bus eine graue Geister-Zeile. Das sah aus wie ein aufgezwungener Send.
+# UX5 hat die entfernt.
+#
+# Messgroesse: Zahl der Send-Zeilen auf einem Kanalzug, ausgelesen ueber ihren Namen.
+# GEGENKONTROLLE ist der Kern des Punktes: EIN Strip bekommt einen Send, der andere
+# nicht — der zweite muss trotz vorhandenem FX-Bus leer bleiben. Ein Test, der nur
+# "Send-Zeile erscheint" prueft, wuerde die Geister-Zeilen nicht von echten Sends
+# unterscheiden.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/18-block-f-ux5-sends.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
+# Zweite Spur, damit es einen Strip OHNE Send gibt
+klick Spur hinzufuegen
+warte 1000
+klick Audio
+warte 400
+klick Add
+warte 2000
+
+# Die Mixer-Ansicht ist PERSISTIERT — blind auf "Mix" zu klicken schaltet mal hin
+# und mal zurueck. Zustand herstellen, nicht voraussetzen.
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+bild UX5-00-mixer
+> find Kanal hinzufuegen
+
+# FX-Channel anlegen
+klick Kanal hinzufuegen
+warte 1200
+> peers
+> tree 1 4
+> press Add FX Channel
+warte 2000
+bild UX5-01-fx-bus-da
+
+# Jetzt existiert ein FX-Bus. ENTSCHEIDEND: solange kein Send angelegt wurde, darf
+# KEIN Strip eine Send-Zeile zeigen (das war die Geister-Zeile vor UX5).
+> tree 0 8
+
+# ---------------------------------------------- echten Send NUR auf Spur 1
+# Das Panel ist eindeutig benannt; der "+ Send"-Knopf fuellt es fast aus
+# ("+ Send" allein waere mehrdeutig — auf jedem Strip einer).
+klickin Sends Track 1 @ 0.5 0.5
+warte 1200
+> peers
+> tree 1 4
+> press FX 1
+warte 1500
+bild UX5-02-send-nur-auf-spur1
+
+# ENTSCHEIDEND: Spur 1 hat jetzt EINE Send-Zeile, Spur "Audio" trotz desselben
+# FX-Busses weiterhin KEINE. Ablesbar an der Hoehe des Sends-Panels: 22 px = nur
+# der "+ Send"-Knopf, deutlich mehr = zusaetzlich eine Send-Zeile.
+> find Sends Track 1
+> find Sends Audio
+> tree 0 8
