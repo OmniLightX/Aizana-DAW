@@ -1,0 +1,39 @@
+# P0-L Session-Roundtrip, TEIL 2 von 2 — nach dem Neustart pruefen.
+#
+# Vorher Drehbuch 19 fahren (legt Drums + Synth an und speichert). Dieser Lauf
+# startet die App frisch: dabei wird die gespeicherte Session geladen, das alte
+# Edit zerstoert und ein neues aufgebaut — genau die Klasse, in der der M6-Crash
+# sass.
+#
+# Geprueft wird dreierlei:
+#   1. Die App startet ueberhaupt und hat ein Fenster (kein Absturz beim Laden).
+#   2. Beide Spuren sind da.
+#   3. Die Instrumente sind wieder eingesetzt — nachgewiesen dadurch, dass sich
+#      ihr Editor oeffnen laesst: das Fenster traegt den Plugin-Namen als Titel
+#      und taucht in der Fensterliste auf. Fehlte das Instrument, gaebe es nichts
+#      zu oeffnen.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/20-p0-session-roundtrip-teil2.txt
+
+vorn
+warte 3500
+
+# 1 + 2: Fenster da, beide Spuren geladen
+> peers
+> find Spur Track 1
+> find Spur Audio
+bild P0-10-nach-neustart
+
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+bild P0-11-mixer-nach-neustart
+
+# 3: Instrument-Editor oeffnen. Der Insert-Slot traegt keinen eigenen Namen (der
+# Text wird gezeichnet), deshalb ueber den Kanalzug-Anteil: die Slot-Zeile sitzt
+# unter dem "+ Send"-Knopf, rund 63 % der Strip-Hoehe.
+dklickin Kanalzug Track 1 @ 0.5 0.63
+warte 2500
+# Erwartung: ein zweites Fenster mit dem Namen des Instruments
+> peers
+bild P0-12-instrument-editor

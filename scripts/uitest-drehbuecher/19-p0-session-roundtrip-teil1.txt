@@ -1,0 +1,67 @@
+# P0-L Session-Roundtrip, TEIL 1 von 2 — Instrumente anlegen und speichern.
+#
+# Warum dieser Punkt der riskanteste der ganzen Liste ist: beim Speichern und
+# Wiederoeffnen wird das alte te::Edit zerstoert und ein neues geladen. Genau dort
+# sass der M6-Crash (Ansichten hielten Zeiger auf Clips/Spuren/Plugins des ALTEN
+# Edits = Use-after-free). P0-L verschaerft das noch, weil Instrumente zusaetzlich
+# ihre Built-in-uniqueId und ihre Sample-Pfade wiederfinden muessen.
+#
+# Zwei Laeufe, weil der Roundtrip einen echten Neustart braucht:
+#   Teil 1 legt Drums + Synth an und speichert.
+#   Teil 2 (Drehbuch 20) startet neu und prueft, was ueberlebt hat.
+#
+# "Save" (Menue 1/3) schreibt DIREKT, solange die Session schon eine Datei hat —
+# sonst faellt es auf "Save As" mit nativem Dialog zurueck, den der Hook nicht
+# bedienen kann. Deshalb prueft das Drehbuch nach dem Speichern die Fensterliste:
+# taucht dort ein zweites Fenster auf, ist genau das passiert.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/19-p0-session-roundtrip-teil1.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 1500
+
+# ---------------------------------------------------- Drums auf Spur 1
+rklick Spur Track 1
+warte 1000
+> press Instrument
+warte 1000
+> press Drums (Drum Machine)
+warte 2500
+klick close
+warte 1000
+
+# ---------------------------------------------------- zweite Spur mit Synth
+klick Spur hinzufuegen
+warte 1000
+klick Audio
+warte 400
+klick Add
+warte 2000
+
+rklick Spur Audio
+warte 1000
+> press Instrument
+warte 1000
+> press Synth (Poly)
+warte 2500
+klick close
+warte 1000
+
+bild P0-01-zwei-instrumente
+
+# Beleg VOR dem Speichern: beide Instrumente sind als Insert zu sehen.
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+bild P0-02-mixer-vor-save
+> tree 0 8
+
+# ---------------------------------------------------- speichern
+menu 1 3
+warte 3000
+# Erwartung: KEIN zweites Fenster (sonst kam der native Save-As-Dialog und der
+# Lauf muesste abgebrochen werden — der Hook kann ihn nicht bedienen).
+> peers
+bild P0-03-nach-save
