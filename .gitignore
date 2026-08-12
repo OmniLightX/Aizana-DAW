@@ -2,6 +2,7 @@
 build/
 builds/
 build-release/
+build-uitest/
 out/
 
 # CMake

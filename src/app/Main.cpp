@@ -4,6 +4,7 @@
 #include "LegacyMigration.h"
 #include "plugins/OutOfProcessPluginScanner.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
+#include "testing/UiTestHook.h"
 #include "BinaryData.h"
 
 //==============================================================================
@@ -78,6 +79,30 @@ public:
         // has to happen first. Idempotent no-op once migrated.
         aizana::legacy::migrateAppData();
 
+       #if AIZANA_UITEST_HOOK
+        // GUI-Testlauf (nur in einem Build mit -DAIZANA_UITEST_HOOK=ON vorhanden).
+        // armIfRequested() IST das Tor: es gibt nur dann etwas zurueck, wenn
+        // AIZANA_UITEST=1 gesetzt UND stdin eine unbenannte Pipe ist.
+        //
+        // Zuerst scharf machen, DANN das Fenster bauen: MainComponent fragt im
+        // Konstruktor isArmed() ab, um alles abzuschalten, was aus dem Prozess
+        // hinausreicht (Loopback-Server der KI-Bruecke). Umgekehrte Reihenfolge
+        // haette den Server bereits gestartet.
+        //
+        // Im Testmodus zusaetzlich weggelassen: der Splash (eigenes Fenster =
+        // verschobene Peer-Indizes) und die Mikrofon-Abfrage (ein nativer
+        // System-Dialog, den der Hook konstruktionsbedingt nicht bedienen kann,
+        // und der nach jedem Rebuild wiederkommt, weil die Ad-hoc-Signatur wechselt).
+        if ((uiTestHook = aizana::uitest::Hook::armIfRequested()) != nullptr)
+        {
+            juce::MessageManager::callAsync ([this]
+            {
+                mainWindow = std::make_unique<MainWindow> (getApplicationName());
+            });
+            return;
+        }
+       #endif
+
         // Brand splash — show the Aizana logo while the engine + window load.
         // SplashScreen self-owns and self-deletes after the delay.
         if (auto logo = juce::ImageCache::getFromMemory (BinaryData::AizanaIcon_png,
@@ -116,6 +141,10 @@ private:
     std::unique_ptr<MainWindow> mainWindow;
     std::shared_ptr<void>       scannerWorker;      // alive only in the scan-worker subprocess
     std::shared_ptr<aizana::PluginHostWorkerHandle> pluginHostWorker;   // alive only in a plugin-host worker
+
+   #if AIZANA_UITEST_HOOK
+    std::unique_ptr<aizana::uitest::Hook> uiTestHook;                  // nur im UI-Test-Build vorhanden
+   #endif
 };
 
 //==============================================================================

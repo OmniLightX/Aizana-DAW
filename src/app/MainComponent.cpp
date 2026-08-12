@@ -8,6 +8,7 @@
 #include "ui/pluginbrowser/GeneratedPluginsPanel.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
+#include "testing/UiTestHook.h"
 
 namespace te = tracktion::engine;
 
@@ -145,7 +146,12 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     // KI-Studio live bridge (Phase 4, Slice 2): host the loopback socket so the in-app
     // agent's aizana-mcp can read tracks + mix the running session. Non-fatal if no port.
-    aiLiveServer.start();
+    //
+    // NICHT im GUI-Testlauf: der Testmodus verkleinert die App, er vergroessert sie nie.
+    // Dieser Server ist ein Loopback-Socket mit Token-Datei, also eine adressierbare
+    // Tuer — waehrend ein Automat blind Knoepfe drueckt, bleibt sie zu.
+    if (! aizana::uitest::isArmed())
+        aiLiveServer.start();
 
     // M13-Diagnose: XRun-Logger — jeder hörbare Aussetzer landet mit Zeitstempel,
     // Buffer/CPU und App-Kontext in ~/Library/Aizana/logs/dropouts.log, damit die
@@ -1740,6 +1746,14 @@ void MainComponent::startStemSeparationFlow (const juce::File& song)
 void MainComponent::downloadSeparationModel (const juce::File& songToContinueWith)
 {
     using Model = StemSeparationEngine::Model;
+
+    // Im GUI-Testlauf gesperrt: 53 MB aus dem Netz sind ein Ausgang aus dem Prozess.
+    if (aizana::uitest::isArmed())
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung", "Im GUI-Testlauf ist der Modell-Download gesperrt.");
+        return;
+    }
 
     StemSeparationEngine::modelsDirectory().createDirectory();
     auto       url    = StemSeparationEngine::requiredModelURLs  (Model::fast6Stem)[0];

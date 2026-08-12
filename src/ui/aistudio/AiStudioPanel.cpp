@@ -1,5 +1,6 @@
 #include "AiStudioPanel.h"
 #include "generator/FaustCompiler.h"
+#include "testing/UiTestHook.h"
 
 using namespace aizana;
 
@@ -230,6 +231,15 @@ void AiStudioPanel::send()
 {
     if (busy || ! cli.isValid())
         return;
+
+    // Im GUI-Testlauf gesperrt: das hier startet einen KINDPROZESS (Claude-/Codex-CLI)
+    // mit Datei- und Netzzugang — die einzige echte Bruecke aus der App heraus. Ein
+    // blind gesetzter Klick eines Automaten darf sie nicht betreten.
+    if (aizana::uitest::isArmed())
+    {
+        appendLine (juce::String::fromUTF8 ("\n[Testmodus] Der Agentenstart ist im GUI-Testlauf gesperrt.\n"));
+        return;
+    }
 
     const auto prompt = input.getText().trim();
     if (prompt.isEmpty())

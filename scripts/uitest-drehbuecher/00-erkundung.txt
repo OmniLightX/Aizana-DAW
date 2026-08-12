@@ -1,0 +1,20 @@
+# Erkundung — was ist nach dem Start überhaupt ansprechbar?
+# Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/00-erkundung.txt
+#
+# Zweck: den Namensbaum in BEIDEN Ansichten abholen, damit die folgenden
+# Drehbücher Elemente über Namen ansprechen können statt über Koordinaten.
+
+warte 3000
+bild 00-start
+namen
+
+# In die Pro-Ansicht wechseln (die App startet im gespeicherten Modus).
+klick Pro
+warte 1500
+bild 01-pro
+namen
+
+# Fenster nach vorn holen, damit die Screenshots die App zeigen und nicht,
+# was zufällig darüber liegt.
+vorn
+bild 02-pro-vorn

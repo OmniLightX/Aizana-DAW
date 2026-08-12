@@ -308,6 +308,31 @@ target_include_directories(Aizana PRIVATE
     src
 )
 
+# ---------------------------------------------------------------------------
+# UI-Test-Hook (GUI-Testlaeufe) — MUSS fuer die Auslieferung AUS bleiben.
+#
+# ON macht Aizana per unbenannter Pipe auf stdin fernsteuerbar: synthetische
+# Mausereignisse gehen an ComponentPeer::handleMouseEvent, also an genau die
+# Stelle, an der macOS die echten einspeist. Sie betreten den Bildschirm nie und
+# koennen keinen anderen Prozess treffen — die Signatur traegt kein Ziel.
+#
+# OFF (Standard) wird src/testing/UiTestHook.cpp GAR NICHT UEBERSETZT und
+# AIZANA_UITEST_HOOK bleibt 0; der Header stellt dann nur ein constexpr false
+# bereit, das der Compiler an jeder Aufrufstelle wegfaltet. Im ausgelieferten
+# Binary existieren die Anweisungen also nicht — nachweisbar am Artefakt selbst:
+#   scripts/uitest-guard-check.sh
+#
+# Ein Schalter, der eine vorhandene Faehigkeit nur schlafen legt, waere eine
+# schlafende Faehigkeit in JEDER ausgelieferten Kopie. Struktur schlaegt
+# Konfiguration.
+# ---------------------------------------------------------------------------
+option(AIZANA_UITEST_HOOK "In-App-Maussteuerung fuer GUI-Testlaeufe (NIE fuer Release)" OFF)
+if(AIZANA_UITEST_HOOK)
+    message(WARNING "AIZANA_UITEST_HOOK=ON — dieser Build ist fernsteuerbar und darf NICHT ausgeliefert werden.")
+    target_sources(Aizana PRIVATE src/testing/UiTestHook.cpp)
+    target_compile_definitions(Aizana PRIVATE AIZANA_UITEST_HOOK=1)
+endif()
+
 target_compile_definitions(Aizana PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
