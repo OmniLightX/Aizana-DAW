@@ -222,7 +222,19 @@ def main():
                 # Erst IN der App (macht aus dem direkt gestarteten Prozess eine
                 # regulaere Vordergrund-App), dann ueber die Bedienungshilfen.
                 hook.send("front 0", 10)
-                vorn(); continue
+                vorn()
+                # WARTEN, bis das Fenster wirklich vorn ist. Das Nach-vorn-Holen
+                # laeuft asynchron; ein Klick mitten in die Umschaltphase kommt an,
+                # bewirkt aber nichts — gemessen am Wechsel nach "Pro", der ohne
+                # dieses Warten zuverlaessig verpuffte und trotzdem OK meldete.
+                for _ in range(20):
+                    ok, zeilen = hook.send("peers", timeout=10)
+                    if ok and any("focused=1" in z for z in zeilen):
+                        break
+                    time.sleep(0.25)
+                else:
+                    print("   (Hinweis: Fenster meldet keinen Fokus)")
+                continue
 
             # wennfehlt <Pruefname> @ <Knopfname>
             # Umschalter blind zu druecken ist unzuverlaessig, sobald die App ihren
@@ -255,11 +267,11 @@ def main():
                     fehler += 1
                 continue
 
-            if befehl in ("klick", "dklick"):
+            if befehl in ("klick", "dklick", "rklick"):
                 ziel = hook.finde(rest)
                 if ziel is None:
                     print("   " + hook.letzter_fehler); fehler += 1; continue
-                k = "click" if befehl == "klick" else "dblclick"
+                k = {"klick": "click", "dklick": "dblclick", "rklick": "rclick"}[befehl]
                 ok, zeilen = hook.send(f"{k} {int(ziel['peer'])} {ziel['x']} {ziel['y']}", 40)
 
             elif befehl == "ziehe":
@@ -293,7 +305,7 @@ def main():
             # Schreibweise:  <befehl> <Name> @ <zahlen...> [pfad]
             # Das @ trennt den Namen von den Zahlen — Namen UND Dateipfade duerfen
             # Leerzeichen enthalten ("Spurbereich Track 1", "121 bpm_809.wav").
-            elif befehl in ("klickin", "dklickin", "ziehein", "dropin"):
+            elif befehl in ("klickin", "dklickin", "rklickin", "ziehein", "dropin"):
                 if "@" not in rest:
                     print("   ERR Schreibweise: " + befehl + " <Name> @ <zahlen> [pfad]")
                     fehler += 1; continue
@@ -318,8 +330,11 @@ def main():
                     ok, zeilen = hook.send(
                         f"drop {p} {int(px(zahlen[0]))} {int(py(zahlen[1]))} {pfad}", 40)
                 else:
-                    k = "click" if befehl == "klickin" else "dblclick"
-                    ok, zeilen = hook.send(f"{k} {p} {px(zahlen[0])} {py(zahlen[1])}", 40)
+                    k = {"klickin": "click", "dklickin": "dblclick",
+                         "rklickin": "rclick"}[befehl]
+                    # Optionaler dritter Wert = Modifier (z. B. cmd fuer Mehrfachauswahl)
+                    mods = zahlen[2] if len(zahlen) > 2 else "-"
+                    ok, zeilen = hook.send(f"{k} {p} {px(zahlen[0])} {py(zahlen[1])} {mods}", 40)
 
             elif befehl == "taste":
                 ok, zeilen = hook.send("key 0 " + rest)

@@ -3,6 +3,7 @@
 #if AIZANA_UITEST_HOOK
 
 #include <cerrno>
+#include <functional>
 #include <cstdio>
 #include <poll.h>
 #include <sys/stat.h>
@@ -347,13 +348,35 @@ juce::String cmdKey (int peerIndex, const juce::String& keyName, juce::ModifierK
     else if (keyName.length() == 1)         { code = (int) keyName[0]; text = keyName[0]; }
     else return "ERR unbekannte Taste: " + keyName;
 
-    // Tastendruecke gehen an die Component MIT Tastaturfokus. Ein Fenster, das nicht
-    // im Vordergrund steht, hat keinen — dann verpufft jeder Tastendruck. Den Fokus
-    // holen wir INNERHALB der App (grabKeyboardFocus), nicht ueber das System:
-    // peer->toFront() wuerde dem User mitten in der Arbeit das Fenster nach vorn
-    // reissen, und genau solchen Fokusklau soll dieser Weg vermeiden.
-    if (juce::Component::getCurrentlyFocusedComponent() == nullptr)
-        peer->getComponent().grabKeyboardFocus();
+    // Tastendruecke gehen an die Component MIT Tastaturfokus, und JUCE reicht sie von
+    // dort nach OBEN an die Eltern weiter — nie nach unten. Den Fokus einfach auf das
+    // Fenster zu legen genuegt deshalb NICHT: die Tastenbehandlung der App sitzt in
+    // dessen KIND (MainComponent::keyPressed faengt u.a. Delete global ab), und das
+    // sieht ein Fensterfokus nie. Also die erste Component suchen, die Tasten
+    // ueberhaupt haben will. Alles innerhalb der App — peer->toFront() wuerde dem
+    // User mitten in der Arbeit das Fenster nach vorn reissen.
+    if (auto* fokus = juce::Component::getCurrentlyFocusedComponent();
+        fokus == nullptr || fokus == &peer->getComponent())
+    {
+        std::function<juce::Component*(juce::Component&)> suche =
+            [&suche] (juce::Component& c) -> juce::Component*
+            {
+                if (c.getWantsKeyboardFocus() && c.isShowing())
+                    return &c;
+
+                for (auto* kind : c.getChildren())
+                    if (kind != nullptr)
+                        if (auto* treffer = suche (*kind))
+                            return treffer;
+
+                return nullptr;
+            };
+
+        if (auto* ziel = suche (peer->getComponent()))
+            ziel->grabKeyboardFocus();
+        else
+            peer->getComponent().grabKeyboardFocus();
+    }
 
     return peer->handleKeyPress (juce::KeyPress (code, mods, text)) ? "OK" : "ERR Taste nicht angenommen";
 }
@@ -643,7 +666,7 @@ struct Hook::Impl : public juce::Thread
         }
 
         //---------------------------------------------------------------- Maus
-        static const juce::StringArray mouseCmds { "move", "moveb", "down", "up", "click", "dblclick", "drag" };
+        static const juce::StringArray mouseCmds { "move", "moveb", "down", "up", "click", "dblclick", "rclick", "drag" };
 
         if (! mouseCmds.contains (cmd))
             return "ERR unbekanntes Kommando: " + cmd + " (siehe hilfe)";
@@ -652,18 +675,33 @@ struct Hook::Impl : public juce::Thread
         juce::ModifierKeys mods;
         juce::String err;
 
-        const int modArg = (cmd == "drag") ? 7 : 5;
+        // Modifier stehen HINTER den Koordinaten: click/move/down/up nehmen
+        // peer,x,y (Index 1..3), also liegt der Modifier bei 4 — drag nimmt
+        // zusaetzlich x2,y2,schritte, dort bei 7. Stand hier vorher 5 statt 4,
+        // wurden Modifier bei Klicks still verworfen: Cmd+Klick verhielt sich wie
+        // ein normaler Klick und ersetzte die Auswahl, statt sie zu erweitern.
+        const int modArg = (cmd == "drag") ? 7 : 4;
 
         if (! parseMods (args.size() > modArg ? args[modArg] : juce::String(), mods, err))
             return err;
 
-        const auto held = mods.withFlags (juce::ModifierKeys::leftButtonModifier);
+        const auto held  = mods.withFlags (juce::ModifierKeys::leftButtonModifier);
+        // Rechtsklick: JUCE oeffnet daraufhin ein PopupMenu — das ist ein EIGENES
+        // Fenster (eigener ComponentPeer), also danach "peers" neu abfragen.
+        const auto held2 = mods.withFlags (juce::ModifierKeys::rightButtonModifier);
         const float x = num (2), y = num (3);
 
         if (cmd == "move")   return onMessageThread ([=] { return sendMouse (peer, x, y, mods); });
         if (cmd == "moveb")  return onMessageThread ([=] { return sendMouse (peer, x, y, held); });
         if (cmd == "down")   return onMessageThread ([=] { return sendMouse (peer, x, y, held); });
         if (cmd == "up")     return onMessageThread ([=] { return sendMouse (peer, x, y, mods); });
+
+        if (cmd == "rclick")
+        {
+            return gesture ({ [=] { return sendMouse (peer, x, y, mods); },
+                              [=] { return sendMouse (peer, x, y, held2); },
+                              [=] { return sendMouse (peer, x, y, mods); } }, 60);
+        }
 
         if (cmd == "click" || cmd == "dblclick")
         {

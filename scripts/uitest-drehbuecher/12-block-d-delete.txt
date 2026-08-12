@@ -1,0 +1,53 @@
+# Block D — Delete-Verhalten (D1, D2, D4) + Kontextmenue-Erkundung.
+#
+# Messgroesse: "find Clip testmaterial_kurz" meldet MEHRDEUTIG mit Anzahl, solange
+# mehrere gleichnamige Clips da sind. Damit ist die Clipzahl ablesbar, ohne zu raten.
+#
+# Aufruf:
+#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/12-block-d-delete.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# Drei Clips nebeneinander
+dropin Spurbereich Track 1 @ 0.06 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.36 0.5 $AIZANA_TESTKURZ
+warte 2500
+dropin Spurbereich Track 1 @ 0.66 0.5 $AIZANA_TESTKURZ
+warte 3000
+bild D00-drei-clips
+# Erwartung: mehrdeutig, 3x
+> find Clip testmaterial_kurz
+
+# ------------------------------------------------- D1: Marquee ueber alle drei
+# Mehrfachauswahl ueber Cmd+Klick (dokumentierter Weg). Das Gummiband braucht einen
+# LEEREN Startpunkt; nach drei Drops ueberlappen sich die Clips so weit, dass es in
+# dieser Spur keinen gibt — ein erster Versuch startete auf dem ersten Clip und hat
+# ihn verschoben statt auszuwaehlen.
+klickin Spurbereich Track 1 @ 0.10 0.5
+warte 500
+klickin Spurbereich Track 1 @ 0.40 0.5 cmd
+warte 500
+klickin Spurbereich Track 1 @ 0.70 0.5 cmd
+warte 1000
+bild D01-marquee
+taste delete
+warte 1500
+bild D02-nach-delete
+# Erwartung: kein Clip mehr
+> find Clip testmaterial_kurz
+
+# EIN Undo muss ALLE drei zurueckholen
+menu 2 101
+warte 1500
+bild D03-nach-einem-undo
+> find Clip testmaterial_kurz
+
+# ------------------------------------------------- D2: Kontextmenue auf einem Clip
+rklickin Spurbereich Track 1 @ 0.12 0.5
+warte 1200
+> peers
+bild D04-kontextmenue
