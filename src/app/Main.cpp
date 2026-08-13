@@ -194,9 +194,13 @@ public:
 
     void anotherInstanceStarted (const juce::String& commandLine) override
     {
-        // macOS schickt einen Doppelklick im Finder an die LAUFENDE Instanz
-        // (JUCE laesst nur eine zu). Ohne diese Zeile passierte gar nichts —
-        // die Datei liess sich nur ueber "Open Session…" oeffnen.
+        // Gedacht fuer den Doppelklick im Finder auf eine laufende Instanz.
+        // MESSSTAND 2026-08-13: dieser Rueckruf feuert auf diesem System NICHT —
+        // mit einer Marker-Datei nachgewiesen, auch nach dem Deklarieren der
+        // Dokumenttypen (DOCUMENT_EXTENSIONS) und lsregister. macOS liefert das
+        // Oeffnen-Ereignis also gar nicht aus. Der Code bleibt stehen, weil er
+        // richtig ist, sobald das Ereignis kommt; BELEGT ist nur der Weg ueber die
+        // Kommandozeile (Start mit Dateipfad).
         pendingSession = sessionFileFrom (commandLine);
         openPendingSession();
     }

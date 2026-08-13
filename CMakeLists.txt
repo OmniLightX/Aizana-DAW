@@ -174,6 +174,11 @@ juce_add_gui_app(Aizana
     ICON_BIG                        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AizanaIcon.png"
     MICROPHONE_PERMISSION_ENABLED   TRUE
     MICROPHONE_PERMISSION_TEXT      "Aizana needs microphone access to record audio tracks."
+    # Ohne diese Erklaerung schickt macOS einer LAUFENDEN Instanz gar kein
+    # Oeffnen-Ereignis: ein Doppelklick auf eine Session im Finder holte die App nur
+    # nach vorn und lud nichts (gemessen 2026-08-13). Erst damit greift
+    # JUCEApplication::anotherInstanceStarted.
+    DOCUMENT_EXTENSIONS             "tracktionedit;tracktion"
 )
 
 # Brand assets embedded in the binary (splash / about) — BinaryData::AizanaIcon_png

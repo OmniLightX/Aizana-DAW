@@ -17,6 +17,13 @@
 # Ein SIGBUS wuerde die Pipe schliessen und jeden Folgebefehl mit "die App ist
 # beendet" quittieren.
 #
+# WICHTIG — Material LANG waehlen (hier 2:44 / 43 MB). Der erste Anlauf lief mit
+# einer 1,4-MB-Datei: die liegt nach dem Import komplett im Seitencache, also
+# faellt beim Abziehen gar kein Seitenfehler mehr an und "kein Absturz" waere
+# ohne Aussage gewesen. Bei langem Material ist beim Abziehen (nach ~40 s) der
+# groesste Teil der Datei NICHT gelesen — jeder weitere Block muss vom
+# verschwundenen Traeger kommen.
+#
 # Aufruf:
 #   AIZANA_TESTWAV=/Volumes/AizanaSSD/testmaterial_laut.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/30-m12-volume-abziehen.txt
@@ -26,7 +33,7 @@ wennfehlt Spurbereich Track 1 @ Pro
 warte 2000
 dropin Spurbereich Track 1 @ 0.02 0.5 $AIZANA_TESTWAV
 warte 4000
-> find Clip testmaterial_laut
+> find Clip lang
 bild M12-00-vom-volume-geladen
 
 # Wiedergabe starten. Ueber den KNOPF, nicht ueber die Leertaste: die kam ohne
@@ -42,7 +49,7 @@ warte 20000
 
 # Ab hier ist der Datentraeger weg. Die App MUSS weiterlaufen.
 > peers
-> find Clip testmaterial_laut
+> find Clip lang
 bild M12-01-nach-dem-abziehen
 klick Stopp
 warte 1500
