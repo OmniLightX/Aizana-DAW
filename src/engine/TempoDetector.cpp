@@ -16,6 +16,13 @@ namespace
     constexpr int kFftOrder = 11;              // 2048 Samples Analysefenster
     constexpr int kFftSize  = 1 << kFftOrder;
 
+    // Verlässlichkeitsmaße (C2). Beide Werte sind an echtem Material vermessen
+    // (Messreihe 2026-08-15, test_tempo_detector.cpp "[confidence]"), nicht
+    // geraten — die Zahlen stehen dort im Testkommentar.
+    constexpr double kOnsetSupportSd    = 0.5;   // SD-Einheiten: ab hier gilt ein
+                                                 // Frame als echter Anschlag
+    constexpr double kIntervalTolerance = 0.15;  // ±15 % um den Median-Abstand
+
     // Onset-Kurve = SPECTRAL FLUX (ein Wert pro Hop).
     //
     // Vorher stand hier die Differenz der breitbandigen Frame-ENERGIE. Das ist
@@ -250,8 +257,9 @@ void TempoDetector::detectAsync (const juce::File& audioFile,
 //==============================================================================
 // P7a: Beat-Tracking (Ellis 2007 dynamic programming)
 
-juce::Array<double> TempoDetector::detectBeats (const juce::AudioBuffer<float>& mono,
-                                                double sampleRate)
+TempoDetector::BeatResult
+TempoDetector::detectBeatsWithConfidence (const juce::AudioBuffer<float>& mono,
+                                          double sampleRate)
 {
     if (sampleRate <= 0.0 || mono.getNumSamples() < kHop * 8)
         return {};
@@ -388,20 +396,91 @@ juce::Array<double> TempoDetector::detectBeats (const juce::AudioBuffer<float>& 
     if (end < 0)
         return {};
 
-    juce::Array<double> beats;
+    std::vector<int> beatFrames;
     for (int t = end; t >= 0; t = backlink[(size_t) t])
     {
-        beats.add ((double) t * (double) kHop / sampleRate);
+        beatFrames.push_back (t);
         if (backlink[(size_t) t] < 0)
             break;
     }
 
     // Backtrack lief rückwärts; weniger als 2 Beats = kein verwertbarer Puls
-    std::reverse (beats.begin(), beats.end());
-    if (beats.size() < 2)
+    std::reverse (beatFrames.begin(), beatFrames.end());
+    if (beatFrames.size() < 2)
         return {};
 
-    return beats;
+    BeatResult result;
+    for (int t : beatFrames)
+        result.beats.add ((double) t * (double) kHop / sampleRate);
+
+    // ---- Verlässlichkeit (C2) ------------------------------------------------
+    // 1) Onset-Support: liegt unter jedem Beat wirklich ein Anschlag?
+    //    Der DP setzt Beats auch auf Stille — er bestraft nur ungleichmässige
+    //    Abstände. Auf sparsamem Material (Kick allein) ist genau das der
+    //    Fehlermodus: das Raster hält sich formal, hat aber nichts, woran es
+    //    sich festmacht. flux ist hier bereits rektifiziert und in SD-Einheiten,
+    //    echte Anschläge liegen materialunabhängig bei etwa 2–6.
+    int supported = 0;
+    for (int t : beatFrames)
+    {
+        double peak = 0.0;
+        for (int k = juce::jmax (0, t - 1); k <= juce::jmin (n - 1, t + 1); ++k)
+            peak = juce::jmax (peak, flux[(size_t) k]);
+
+        if (peak >= kOnsetSupportSd)
+            ++supported;
+    }
+    result.onsetSupport = (double) supported / (double) beatFrames.size();
+
+    // 2) Abstands-Konsistenz: Anteil der Beat-Abstände nahe am Median.
+    //    Fängt „Puls verloren, Raster eiert" auch dann, wenn zufällig Onsets
+    //    unter den Beats liegen.
+    std::vector<int> deltas;
+    for (size_t i = 0; i + 1 < beatFrames.size(); ++i)
+        deltas.push_back (beatFrames[i + 1] - beatFrames[i]);
+
+    std::vector<int> sorted (deltas);
+    std::sort (sorted.begin(), sorted.end());
+    const double medianDelta = (double) sorted[sorted.size() / 2];
+
+    int consistent = 0;
+    for (int d : deltas)
+        if (std::abs ((double) d - medianDelta) <= kIntervalTolerance * medianDelta)
+            ++consistent;
+
+    result.intervalConsistency = (double) consistent / (double) deltas.size();
+
+    // Eine Kette ist so gut wie ihr schwächstes Glied — beide Fehlerbilder
+    // treten unabhängig voneinander auf.
+    result.confidence = juce::jmin (result.onsetSupport, result.intervalConsistency);
+
+    return result;
+}
+
+juce::Array<double> TempoDetector::detectBeats (const juce::AudioBuffer<float>& mono,
+                                                double sampleRate)
+{
+    return detectBeatsWithConfidence (mono, sampleRate).beats;
+}
+
+TempoDetector::BeatResult
+TempoDetector::detectBeatsWithConfidenceInFile (const juce::File& audioFile)
+{
+    const auto mono = loadMonoForAnalysis (audioFile);
+    if (mono.getNumSamples() == 0)
+        return {};
+
+    return detectBeatsWithConfidence (mono, readerSampleRate (audioFile));
+}
+
+void TempoDetector::detectBeatsWithConfidenceAsync (const juce::File& audioFile,
+                                                    std::function<void (BeatResult)> onResult)
+{
+    std::thread ([audioFile, onResult = std::move (onResult)]
+    {
+        auto r = detectBeatsWithConfidenceInFile (audioFile);
+        juce::MessageManager::callAsync ([r = std::move (r), onResult] { onResult (r); });
+    }).detach();
 }
 
 juce::Array<double> TempoDetector::detectBeatsInFile (const juce::File& audioFile)

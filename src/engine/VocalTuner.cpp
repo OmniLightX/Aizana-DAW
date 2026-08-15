@@ -176,23 +176,84 @@ bool VocalTuner::renderCorrected (const juce::AudioBuffer<float>& in,
 //==============================================================================
 // Clip-Workflow
 
-te::WaveAudioClip* VocalTuner::tuneClipInPlace (te::WaveAudioClip& clip, const Settings& settings)
+juce::String VocalTuner::Analysis::describe() const
 {
+    switch (status)
+    {
+        case Status::stretched:
+            return juce::String::fromUTF8 (
+                "Der Clip ist zeitgedehnt (Songtempo-Anpassung oder Warp). Vocal-Tuning "
+                "arbeitet auf der Originaldatei \xe2\x80\x94 erst die Anpassung entfernen.");
+        case Status::unreadableSource:
+            return juce::String::fromUTF8 (
+                "Die Quelldatei des Clips ist nicht lesbar (fehlt, verschoben, oder eine "
+                "Warp-Datei ist noch nicht fertig gerendert).");
+        case Status::tooShort:
+            return juce::String::fromUTF8 (
+                "Der gespielte Ausschnitt ist zu kurz f\xc3\xbcr eine Tonh\xc3\xb6henanalyse "
+                "(unter 0,1 Sekunden).");
+        case Status::notTonal:
+            return juce::String::fromUTF8 (
+                "In diesem Clip ist kein einziger Ton mit erkennbarer Tonh\xc3\xb6he \xe2\x80\x94 "
+                "reines Schlagzeug, Rauschen oder Stille l\xc3\xa4sst sich nicht stimmen.");
+        case Status::renderFailed:
+            return juce::String::fromUTF8 ("Die Tonh\xc3\xb6hen-Verschiebung konnte nicht "
+                                           "gestartet werden.");
+        case Status::writeFailed:
+            return juce::String::fromUTF8 ("Die getunte Datei konnte nicht geschrieben werden.");
+        case Status::emptyClip:
+            return juce::String::fromUTF8 ("Der Clip hat keine L\xc3\xa4nge.");
+        case Status::noTrack:
+        case Status::wrongEdit:
+            return juce::String::fromUTF8 ("Der Clip geh\xc3\xb6rt zu keiner Spur dieser Session.");
+        case Status::ok:
+            break;
+    }
+
+    juce::String s;
+    s << juce::String::fromUTF8 ("Erkannt: Grundton ") << juce::String (medianHz, 1) << " Hz, "
+      << juce::String (100.0 * voicedRatio, 0)
+      << juce::String::fromUTF8 (" % des Ausschnitts haben eine klare Tonh\xc3\xb6he.");
+
+    if (voicedRatio < kDoubtfulVoicedRatio)
+        s << juce::String::fromUTF8 ("\nDas ist wenig \xe2\x80\x94 typisch f\xc3\xbcr Akkorde, "
+                                     "mehrere Stimmen gleichzeitig oder viel Hall. Das Ergebnis "
+                                     "wird vermutlich nichts taugen; tunen kannst du es trotzdem.");
+
+    return s;
+}
+
+VocalTuner::Prepared VocalTuner::prepare (te::WaveAudioClip& clip) const
+{
+    Prepared p;
+
     auto* edit = editManager.getEdit();
     if (edit == nullptr || &clip.edit != edit)
-        return nullptr;
+    {
+        p.analysis.status = Status::wrongEdit;
+        return p;
+    }
 
-    auto* track = dynamic_cast<te::AudioTrack*> (clip.getClipTrack());
-    if (track == nullptr)
-        return nullptr;
+    if (dynamic_cast<te::AudioTrack*> (clip.getClipTrack()) == nullptr)
+    {
+        p.analysis.status = Status::noTrack;
+        return p;
+    }
 
     // v1: nur ungestretchte Clips (Datei-Zeit == Edit-Zeit)
     if (std::abs (clip.getSpeedRatio() - 1.0) > 0.001 || clip.getAutoTempo())
-        return nullptr;
+    {
+        p.analysis.status = Status::stretched;
+        return p;
+    }
 
     const auto range = clip.getPosition().time;
-    if (range.getLength().inSeconds() <= 0.0)
-        return nullptr;
+    p.analysis.lengthSecs = range.getLength().inSeconds();
+    if (p.analysis.lengthSecs <= 0.0)
+    {
+        p.analysis.status = Status::emptyClip;
+        return p;
+    }
 
     // Aktuelle Quelle lesen (bei aktivem Warp = die gewarpte Datei) —
     // genau den Ausschnitt, den der Clip spielt (offset..offset+len).
@@ -201,34 +262,87 @@ te::WaveAudioClip* VocalTuner::tuneClipInPlace (te::WaveAudioClip& clip, const S
     fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (sourceFile));
     if (reader == nullptr || reader->sampleRate <= 0.0)
-        return nullptr;
+    {
+        p.analysis.status = Status::unreadableSource;
+        return p;
+    }
 
-    const double rate     = reader->sampleRate;
-    const auto   startSmp = (juce::int64) (clip.getPosition().getOffset().inSeconds() * rate);
-    const auto   lenSmp   = juce::jmin ((juce::int64) (range.getLength().inSeconds() * rate),
-                                        reader->lengthInSamples - startSmp);
+    p.rate = reader->sampleRate;
+    const auto startSmp = (juce::int64) (clip.getPosition().getOffset().inSeconds() * p.rate);
+    const auto lenSmp   = juce::jmin ((juce::int64) (range.getLength().inSeconds() * p.rate),
+                                      reader->lengthInSamples - startSmp);
     if (lenSmp < 4096)
-        return nullptr;   // zu kurz für sinnvolle Analyse
+    {
+        p.analysis.status = Status::tooShort;
+        return p;
+    }
 
-    juce::AudioBuffer<float> buffer ((int) reader->numChannels, (int) lenSmp);
-    reader->read (&buffer, 0, (int) lenSmp, startSmp, true, true);
+    p.buffer.setSize ((int) reader->numChannels, (int) lenSmp);
+    reader->read (&p.buffer, 0, (int) lenSmp, startSmp, true, true);
 
     // Mono-Mix für die Analyse
     juce::AudioBuffer<float> mono (1, (int) lenSmp);
     mono.clear();
-    for (int c = 0; c < buffer.getNumChannels(); ++c)
-        mono.addFrom (0, 0, buffer, c, 0, (int) lenSmp, 1.0f / (float) buffer.getNumChannels());
+    for (int c = 0; c < p.buffer.getNumChannels(); ++c)
+        mono.addFrom (0, 0, p.buffer, c, 0, (int) lenSmp, 1.0f / (float) p.buffer.getNumChannels());
 
     PitchDetector::Settings ps;
-    const auto pitch = PitchDetector::detectPitchHz (mono.getReadPointer (0), (int) lenSmp, rate, ps);
-    if (pitch.isEmpty() || PitchDetector::medianPitchHz (pitch) <= 0.0f)
-        return nullptr;   // kein tonales Material erkannt
+    p.hopSize = ps.hopSize;
+    p.pitchHz = PitchDetector::detectPitchHz (mono.getReadPointer (0), (int) lenSmp, p.rate, ps);
 
-    const auto corr = buildCorrectionSemitones (pitch, settings, rate / ps.hopSize);
+    int voiced = 0;
+    for (float v : p.pitchHz)
+        if (v > 0.0f)
+            ++voiced;
+
+    p.analysis.voicedRatio = p.pitchHz.isEmpty()
+                               ? 0.0 : (double) voiced / (double) p.pitchHz.size();
+    p.analysis.medianHz    = (double) PitchDetector::medianPitchHz (p.pitchHz);
+
+    // Hart abgelehnt wird NUR, was gar keine Tonhöhe hat. Wenig tonales
+    // Material ist ein Hinweis (kDoubtfulVoicedRatio), kein Verbot — genau der
+    // Punkt, an dem die alte Fassung zu streng wirkte, ohne es zu sein.
+    p.analysis.status = (p.pitchHz.isEmpty() || p.analysis.medianHz <= 0.0)
+                          ? Status::notTonal : Status::ok;
+    return p;
+}
+
+VocalTuner::Analysis VocalTuner::analyseClip (te::WaveAudioClip& clip) const
+{
+    return prepare (clip).analysis;
+}
+
+te::WaveAudioClip* VocalTuner::tuneClipInPlace (te::WaveAudioClip& clip, const Settings& settings,
+                                                Analysis* outAnalysis)
+{
+    auto prep = prepare (clip);
+
+    auto fail = [&prep, outAnalysis] (Status s) -> te::WaveAudioClip*
+    {
+        prep.analysis.status = s;
+        if (outAnalysis != nullptr) *outAnalysis = prep.analysis;
+        return nullptr;
+    };
+
+    if (outAnalysis != nullptr)
+        *outAnalysis = prep.analysis;
+
+    if (! prep.analysis.isTunable())
+        return nullptr;
+
+    auto* track = dynamic_cast<te::AudioTrack*> (clip.getClipTrack());
+    if (track == nullptr)
+        return fail (Status::noTrack);
+
+    const auto range  = clip.getPosition().time;
+    const double rate = prep.rate;
+    auto& buffer      = prep.buffer;
+
+    const auto corr = buildCorrectionSemitones (prep.pitchHz, settings, rate / prep.hopSize);
 
     juce::AudioBuffer<float> tuned;
-    if (! renderCorrected (buffer, tuned, rate, corr, ps.hopSize))
-        return nullptr;
+    if (! renderCorrected (buffer, tuned, rate, corr, prep.hopSize))
+        return fail (Status::renderFailed);
 
     // Getunte Datei neben die Session schreiben (Bounce-Konvention)
     const auto sessionFile = editManager.getCurrentFile();
@@ -245,14 +359,14 @@ te::WaveAudioClip* VocalTuner::tuneClipInPlace (te::WaveAudioClip& clip, const S
         juce::WavAudioFormat wav;
         auto stream = outFile.createOutputStream();
         if (stream == nullptr)
-            return nullptr;
+            return fail (Status::writeFailed);
         std::unique_ptr<juce::AudioFormatWriter> writer (
             wav.createWriterFor (stream.get(), rate, (unsigned int) tuned.getNumChannels(), 24, {}, 0));
         if (writer == nullptr)
-            return nullptr;
+            return fail (Status::writeFailed);
         stream.release();
         if (! writer->writeFromAudioSampleBuffer (tuned, 0, tuned.getNumSamples()))
-            return nullptr;
+            return fail (Status::writeFailed);
     }
 
     // Swap wie Bounce-in-Place: EIN Undo-Schritt, Position bleibt identisch.
@@ -266,7 +380,7 @@ te::WaveAudioClip* VocalTuner::tuneClipInPlace (te::WaveAudioClip& clip, const S
                                               pos, nullptr);
     auto* newClip = dynamic_cast<te::WaveAudioClip*> (newClipBase);
     if (newClip == nullptr)
-        return nullptr;
+        return fail (Status::writeFailed);
 
     newClip->getSourceFileReference().setToDirectFileReference (outFile, false);
 

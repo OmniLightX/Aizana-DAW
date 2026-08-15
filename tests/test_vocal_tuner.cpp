@@ -372,3 +372,126 @@ TEST_CASE ("VocalTuner: Korrektur um Null herum erzeugt keine Knacks-Energie", "
     REQUIRE (c > 0.0);
     CHECK (o < c * 5.0);
 }
+
+// ---------------------------------------------------------------------------
+// C3 (User-Befund 2026-08-13): "Vocal-Tuning lehnt reales Fremdmaterial ab."
+//
+// Die Nachmessung hat die naheliegende Vermutung WIDERLEGT: der Pitch-Detektor
+// findet den Floeten-Stem einwandfrei (358 Hz, 44 % stimmhafte Frames), und
+// tuneClipInPlace nimmt ihn im Engine-Test an. Der Suchbereich war nicht das
+// Problem — ein weiterer Bereich (60-2500 statt 60-1000 Hz) aendert am
+// Ergebnis exakt nichts (Messreihe 2026-08-15, "[pitchrange]").
+//
+// Der echte Mangel war die DIAGNOSE: eine Sammelmeldung nannte vier Ursachen
+// auf einmal ("kein tonales Material ODER gestretcht ODER zu kurz"), und zwar
+// erst NACH dem Rechnen. Damit war nicht feststellbar, was zutraf — weder fuer
+// den Anwender noch fuer mich. Melodyne (die Tuning-Engine hinter Studio One)
+// verweigert die Analyse nie und laesst den Anwender entscheiden; abgelehnt
+// wird nur, was wirklich unmoeglich ist.
+//
+// Diese Tests halten fest: jede Ursache hat ihren eigenen Status und ihren
+// eigenen Klartext, und zweifelhaftes Material wird benannt statt verboten.
+// ---------------------------------------------------------------------------
+TEST_CASE ("VocalTuner C3: jede Ablehnungsursache hat ihren eigenen Status", "[tune][c3]")
+{
+    EditManager em;
+    em.createNewEdit();
+    ClipEditor clipEditor (em);
+
+    auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("aizana_tune_c3");
+    tempDir.createDirectory();
+
+    auto* track = te::getAudioTracks (*em.getEdit())[0];
+    VocalTuner tuner (em);
+
+    SECTION ("tonales Material = ok, mit gemessenem Grundton")
+    {
+        const auto wav = writeWav (makeSine (445.0, 3.0), tempDir, "c3_sine.wav");
+        auto* clip = clipEditor.importAudioFile (wav, *track, 0.0);
+        REQUIRE (clip != nullptr);
+
+        const auto a = tuner.analyseClip (*clip);
+        CHECK (a.status == VocalTuner::Status::ok);
+        CHECK (a.isTunable());
+        CHECK (a.medianHz == Catch::Approx (445.0).margin (2.0));
+        CHECK (a.voicedRatio > 0.9);
+        CHECK (a.describe().contains ("445"));
+    }
+
+    SECTION ("Stille = notTonal, und der Text sagt genau das")
+    {
+        juce::AudioBuffer<float> silence (1, (int) (2.0 * kSampleRate));
+        silence.clear();
+        const auto wav = writeWav (silence, tempDir, "c3_silence.wav");
+        auto* clip = clipEditor.importAudioFile (wav, *track, 0.0);
+        REQUIRE (clip != nullptr);
+
+        const auto a = tuner.analyseClip (*clip);
+        CHECK (a.status == VocalTuner::Status::notTonal);
+        CHECK_FALSE (a.isTunable());
+        CHECK (a.voicedRatio == 0.0);
+        // Der Text nennt die EINE Ursache — nicht mehr vier auf einmal.
+        CHECK_FALSE (a.describe().containsIgnoreCase ("gestretcht"));
+        CHECK_FALSE (a.describe().containsIgnoreCase ("zu kurz"));
+    }
+
+    SECTION ("zeitgedehnter Clip = stretched, NICHT 'kein tonales Material'")
+    {
+        const auto wav = writeWav (makeSine (445.0, 3.0), tempDir, "c3_stretch.wav");
+        auto* clip = clipEditor.importAudioFile (wav, *track, 0.0);
+        REQUIRE (clip != nullptr);
+        clip->setAutoTempo (true);
+
+        const auto a = tuner.analyseClip (*clip);
+        CHECK (a.status == VocalTuner::Status::stretched);
+        CHECK (a.describe().containsIgnoreCase ("zeitgedehnt"));
+
+        // Und tuneClipInPlace meldet dieselbe Ursache zurueck, ohne zu rechnen.
+        VocalTuner::Analysis outcome;
+        CHECK (tuner.tuneClipInPlace (*clip, {}, &outcome) == nullptr);
+        CHECK (outcome.status == VocalTuner::Status::stretched);
+    }
+
+    tempDir.deleteRecursively();
+}
+
+TEST_CASE ("VocalTuner C3: wenig tonales Material wird benannt, aber nicht verboten",
+           "[tune][c3]")
+{
+    EditManager em;
+    em.createNewEdit();
+    ClipEditor clipEditor (em);
+
+    auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("aizana_tune_c3b");
+    tempDir.createDirectory();
+
+    // Ein Ton, der nur ein Viertel der Zeit klingt — Rest Stille. Das ist der
+    // Bereich, in dem das Ergebnis zweifelhaft ist (Messreihe: 808-Bass 8,7 %,
+    // Akkorde 25,9 % gegen Gesang ~50 %).
+    juce::AudioBuffer<float> buf (1, (int) (4.0 * kSampleRate));
+    buf.clear();
+    const auto tone = makeSine (300.0, 1.0);
+    buf.copyFrom (0, 0, tone, 0, 0, tone.getNumSamples());
+
+    const auto wav = writeWav (buf, tempDir, "c3_sparse.wav");
+    auto* track = te::getAudioTracks (*em.getEdit())[0];
+    auto* clip = clipEditor.importAudioFile (wav, *track, 0.0);
+    REQUIRE (clip != nullptr);
+
+    VocalTuner tuner (em);
+    const auto a = tuner.analyseClip (*clip);
+
+    INFO ("voicedRatio " << a.voicedRatio << " medianHz " << a.medianHz);
+    CHECK (a.voicedRatio < VocalTuner::kDoubtfulVoicedRatio);
+
+    // ENTSCHEIDEND: trotzdem tunebar. Wenig tonal ist ein Hinweis, kein Verbot.
+    CHECK (a.status == VocalTuner::Status::ok);
+    CHECK (a.isTunable());
+    CHECK (a.describe().containsIgnoreCase ("trotzdem"));
+
+    CHECK (tuner.tuneClipInPlace (*clip, {}) != nullptr);
+
+    tempDir.deleteRecursively();
+}

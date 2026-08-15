@@ -127,17 +127,23 @@ TEST_CASE ("TempoMap: grid lands exactly on the supplied beats; undo restores", 
     for (int i = 0; i <= 8; ++i)  beats.add (1.0 + 0.5 * i);        // 1.0 .. 5.0
     for (int i = 1; i <= 8; ++i)  beats.add (5.0 + 0.4 * i);        // 5.4 .. 8.2
 
-    const int numPoints = engine.extractTempoMap (beats);
-    REQUIRE (numPoints >= 2);
+    const auto res = engine.extractTempoMap (beats);
+    REQUIRE (res.numPoints >= 2);
 
     auto& seq = edit->tempoSequence;
 
-    // Vorlauf: t0=1.0, Median-dt≈0.5 → 2 Beats Vorlauf; Beat 2 == 1.0 s,
-    // danach landet Beat (2+k) exakt auf beats[k]
+    // C1: der Vorlauf trägt das ERKANNTE Tempo (120 BPM aus dem 0,5-s-Raster),
+    // nicht mehr einen aus der Vorlaufstrecke zurückgerechneten Wert. Der
+    // Vorlauf ist ein ganzer Takt (4/4 → 4 Beats), das Raster landet auf den
+    // Beats, nachdem das Audio um shiftSeconds gerückt wurde.
+    CHECK_THAT (res.leadInBpm, Catch::Matchers::WithinAbs (120.0, 0.5));
+    CHECK (res.leadInBeats % 4 == 0);
+
     for (int k = 0; k < beats.size(); ++k)
     {
-        const double t = seq.toTime (tracktion::core::BeatPosition::fromBeats ((double) (2 + k))).inSeconds();
-        CHECK_THAT (t, Catch::Matchers::WithinAbs (beats[k], 0.004));
+        const double t = seq.toTime (tracktion::core::BeatPosition::fromBeats (
+                                         (double) (res.leadInBeats + k))).inSeconds();
+        CHECK_THAT (t, Catch::Matchers::WithinAbs (beats[k] + res.shiftSeconds, 0.004));
     }
 
     // Ein Undo stellt die einzelne Grund-Tempo-Map wieder her
@@ -168,25 +174,33 @@ TEST_CASE ("TempoMap: end-to-end from an imported click clip", "[tempomap][P7a]"
     const auto beats = TempoDetector::detectBeatsInFile (wav);
     REQUIRE (beats.size() >= 30);
 
-    const int numPoints = engine.extractTempoMapFromClip (*clip, beats);
-    REQUIRE (numPoints >= 1);
+    const auto res = engine.extractTempoMapFromClip (*clip, beats);
+    REQUIRE (res.numPoints >= 1);
 
-    // Das Grid trifft die Klick-Zeiten im EDIT (Datei-Zeit + 2.0 s):
+    // C1: das Grundtempo ist das erkannte (120 BPM) — vor dem Fix stand hier
+    // ein aus der Vorlaufstrecke zurückgerechneter Fantasiewert.
+    CHECK_THAT (res.leadInBpm, Catch::Matchers::WithinAbs (120.0, 1.0));
+
+    // Das Audio ist um weniger als einen halben Takt auf die Taktlinie gerückt
+    // (Studio Ones „ersten Downbeat auf einen Downbeat ziehen", automatisiert).
+    const double barSecs = 4.0 * 60.0 / res.leadInBpm;
+    CHECK (std::abs (res.shiftSeconds) <= 0.5 * barSecs + 1.0e-6);
+
+    CHECK_THAT (clip->getPosition().getStart().inSeconds(),
+                Catch::Matchers::WithinAbs (2.0 + res.shiftSeconds, 1e-6));
+
+    // Das Grid trifft die Klick-Zeiten im EDIT (Datei-Zeit + Clipstart + Shift):
     // für jeden inneren Klick existiert ein ganzzahliger Beat in seiner Nähe
     auto& seq = edit->tempoSequence;
     int matched = 0;
     for (int k = 4; k < 36; ++k)
     {
-        const double clickEdit = clicks[k] + 2.0;
+        const double clickEdit = clicks[k] + 2.0 + res.shiftSeconds;
         const double beatPos   = seq.toBeats (tracktion::core::TimePosition::fromSeconds (clickEdit)).inBeats();
         if (std::abs (beatPos - std::round (beatPos)) < 0.12)
             ++matched;
     }
     CHECK (matched >= 26);   // >= ~80 % der 32 geprüften Klicks
-
-    // Audio blieb stehen: Clip-Position unverändert
-    CHECK_THAT (clip->getPosition().getStart().inSeconds(),
-                Catch::Matchers::WithinAbs (2.0, 1e-9));
 
     tempDir.deleteRecursively();
 }
@@ -253,4 +267,122 @@ TEST_CASE ("BeatTracking: dichtes Achtel-Material wird nicht doppelt so schnell 
     }
     INFO ("Viertel " << quarters << ", Achtel " << eighths);
     CHECK (quarters > eighths * 4);        // eindeutig auf der Viertel-Ebene
+}
+
+// ---------------------------------------------------------------------------
+// C1 (User-Befund 2026-08-13): Das Vorlauf-Tempo war ein Fantasiewert.
+//
+// Reproduktion des gemeldeten Falls: ein 121-BPM-Clip beginnt 0,316 s nach
+// Songanfang. In die Vorlaufstrecke passt KEIN ganzer Beat (ein Beat dauert
+// 0,496 s), die alte Fassung rundete trotzdem auf einen auf und schrieb
+// 60/0,316 = 189,8 BPM als Grundtempo — die Transportanzeige zeigte Unsinn,
+// solange der Kopf vor dem Clip stand.
+//
+// Neu (Weg der Referenz-DAWs): das erkannte Tempo gilt auch im Vorlauf, und
+// das Audio rückt auf die nächste Taktlinie. Studio One schreibt genau das als
+// Handarbeit vor („drag to line up the first downbeat with a downbeat").
+// ---------------------------------------------------------------------------
+TEST_CASE ("TempoMap C1: Vorlauf erfindet kein Tempo, Audio rueckt auf die Taktlinie",
+           "[tempomap][c1]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    ClipEditor clipEditor (em);
+    TempoEngine engine (em);
+
+    auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("aizana_tempomap_c1");
+    tempDir.createDirectory();
+
+    constexpr double kBpm      = 121.0;
+    constexpr double kBeatLen  = 60.0 / kBpm;          // 0.49587 s
+    constexpr double kClipStart = 0.316;               // < ein Beat Vorlauf
+
+    // Der Clip enthält das Material; die Beat-Zeiten geben wir exakt vor, damit
+    // dieser Test die MAP prüft und nicht den Tracker.
+    const auto wav = writeWav (tempDir, "c1.wav",
+                               makeClickBuffer (regularClicks (0.0, kBeatLen, 40), 20.5));
+    auto* track = te::getAudioTracks (*edit)[0];
+    auto* clip  = clipEditor.importAudioFile (wav, *track, kClipStart);
+    REQUIRE (clip != nullptr);
+
+    juce::Array<double> beats;
+    for (int i = 0; i < 32; ++i)
+        beats.add (kClipStart + kBeatLen * i);
+
+    const auto res = engine.extractTempoMap (beats);
+    REQUIRE (res.numPoints >= 1);
+
+    // DER EIGENTLICHE BEFUND: kein 189,8-BPM-Vorlauf mehr.
+    // Gegenprobe mit der ALTEN Formel (ganze Beat-Anzahl in die Vorlaufstrecke
+    // quetschen) — sie ist rein arithmetisch und liefert genau den gemeldeten
+    // Wert. Damit ist belegt, dass dieser Test den Fehler wirklich fangen wuerde.
+    const double altFormel = 60.0 * (double) juce::jmax (1, (int) std::round (kClipStart / kBeatLen))
+                             / kClipStart;
+    CHECK_THAT (altFormel, Catch::Matchers::WithinAbs (189.9, 0.5));
+
+    CHECK_THAT (res.leadInBpm, Catch::Matchers::WithinAbs (kBpm, 0.5));
+    CHECK (std::abs (res.leadInBpm - altFormel) > 60.0);
+
+    // Der Vorlauf ist ein ganzer Takt (oder null) — der Clip beginnt auf einem
+    // Taktanfang, nicht irgendwo zwischen zwei Linien.
+    CHECK (res.leadInBeats % 4 == 0);
+
+    // Das Audio ist um weniger als einen halben Takt gerückt und liegt danach
+    // exakt auf der Beat-Position, die der Vorlauf ausweist.
+    CHECK (std::abs (res.shiftSeconds) <= 0.5 * 4.0 * kBeatLen + 1.0e-6);
+
+    auto& seq = edit->tempoSequence;
+    const double gridTime = seq.toTime (tracktion::core::BeatPosition::fromBeats (
+                                            (double) res.leadInBeats)).inSeconds();
+    CHECK_THAT (clip->getPosition().getStart().inSeconds(),
+                Catch::Matchers::WithinAbs (gridTime, 0.002));
+    CHECK (clip->getPosition().getStart().inSeconds() >= 0.0);
+
+    // Und das Grundtempo steht auch WIRKLICH in der Sequenz (das ist der Wert,
+    // den die Transportanzeige vor dem Clip zeigt).
+    REQUIRE (seq.getTempo (0) != nullptr);
+    CHECK_THAT (seq.getTempo (0)->getBpm(), Catch::Matchers::WithinAbs (kBpm, 0.5));
+
+    // Ein Undo nimmt Map UND Verschiebung zusammen zurück.
+    em.getUndoManager().undo();
+    CHECK (seq.getNumTempos() == 1);
+    CHECK_THAT (clip->getPosition().getStart().inSeconds(),
+                Catch::Matchers::WithinAbs (kClipStart, 1.0e-6));
+
+    tempDir.deleteRecursively();
+}
+
+TEST_CASE ("TempoMap C1: Verschiebung drueckt nie Material vor den Songanfang", "[tempomap][c1]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto* edit = em.getEdit();
+    ClipEditor clipEditor (em);
+    TempoEngine engine (em);
+
+    auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("aizana_tempomap_c1b");
+    tempDir.createDirectory();
+
+    constexpr double kBeatLen = 0.5;
+    const auto wav = writeWav (tempDir, "c1b.wav",
+                               makeClickBuffer (regularClicks (0.0, kBeatLen, 40), 20.5));
+
+    // Clip liegt bei 0.1 s — ein Rückwärts-Ruck auf Beat 0 wäre möglich, ein
+    // Ruck über den Nullpunkt hinaus nicht.
+    auto* track = te::getAudioTracks (*edit)[0];
+    auto* clip  = clipEditor.importAudioFile (wav, *track, 0.1);
+    REQUIRE (clip != nullptr);
+
+    juce::Array<double> beats;
+    for (int i = 0; i < 32; ++i)
+        beats.add (0.1 + kBeatLen * i);
+
+    const auto res = engine.extractTempoMap (beats);
+    REQUIRE (res.numPoints >= 1);
+    CHECK (clip->getPosition().getStart().inSeconds() >= -1.0e-9);
+
+    tempDir.deleteRecursively();
 }

@@ -2,6 +2,7 @@
 
 using TimePos = tracktion::core::TimePosition;
 using BeatPos = tracktion::core::BeatPosition;
+using TimeDur = tracktion::core::TimeDuration;
 
 TempoEngine::TempoEngine (EditManager& em)
     : editManager (em)
@@ -168,16 +169,18 @@ void TempoEngine::removeTimeSigChange (int index)
 // P7a: Tempo-Map-Extraktion
 //==============================================================================
 
-int TempoEngine::extractTempoMap (const juce::Array<double>& beatTimes)
+TempoEngine::ExtractResult TempoEngine::extractTempoMap (const juce::Array<double>& beatTimes)
 {
+    ExtractResult result;
+
     auto* edit = editManager.getEdit();
     if (edit == nullptr || beatTimes.size() < 2)
-        return 0;
+        return result;
 
     // Aufsteigend + sinnvolle Intervalle (20..300 BPM entspricht 0.2..3 s)
     for (int i = 0; i + 1 < beatTimes.size(); ++i)
         if (beatTimes[i + 1] - beatTimes[i] < 0.005)
-            return 0;
+            return result;
 
     // Median-Intervall für die Vorlauf-Schätzung
     juce::Array<double> intervals;
@@ -186,7 +189,7 @@ int TempoEngine::extractTempoMap (const juce::Array<double>& beatTimes)
     intervals.sort();
     const double medianDt = intervals[intervals.size() / 2];
     if (medianDt <= 0.005)
-        return 0;
+        return result;
 
     auto& seq = edit->tempoSequence;
     edit->getUndoManager().beginNewTransaction ("Tempo-Map aus Clip");
@@ -209,22 +212,56 @@ int TempoEngine::extractTempoMap (const juce::Array<double>& beatTimes)
     for (int i = seq.getNumTempos() - 1; i >= 1; --i)
         seq.removeTempo (i, false);
 
-    // Vorlauf: erster Beat bei t0 > 0 → eine GANZE Beat-Anzahl endet exakt dort
+    // ---- Vorlauf (C1) --------------------------------------------------------
+    // Das Tempo vor dem ersten Beat ist das ERKANNTE Tempo — nie ein aus der
+    // Vorlaufstrecke zurückgerechneter Wert. Damit das Raster trotzdem exakt
+    // auf dem Audio sitzt, rückt das Audio auf die nächste TAKTLINIE (Studio
+    // Ones Handarbeit „ersten Downbeat auf einen Downbeat ziehen", automatisch).
+    // Grundtempo aus dem MEDIAN-Abstand, nicht aus dem ersten Intervall: ein
+    // einzelnes Intervall ist bis auf einen Analyse-Frame genau (11,6 ms bei
+    // Hop 512 / 44,1 kHz ≈ ±3 BPM) — das Songtempo würde bei jeder Extraktion
+    // anders zittern. Die Genauigkeit am Audio geht dadurch nicht verloren:
+    // ab dem ersten Beat setzt die Schleife unten pro Intervall einen eigenen
+    // Step. Der Vorlauf deckt ohnehin kein Audio ab.
     const double t0 = beatTimes[0];
-    int preBeats = 0;
-    double bpm0 = 0.0;
 
+    double bpm0 = juce::jlimit (20.0, 300.0, 60.0 / medianDt);
+
+    // Beat-Länge nach dem Clamp neu bestimmen: bei absurdem Material (Clamp
+    // greift) müssen Raster und Verschiebung zueinander passen, sonst sitzt das
+    // Audio hinterher NEBEN der Linie, die wir gerade berechnet haben.
+    const double beatLen = 60.0 / bpm0;
+
+    int barBeats = 4;
+    if (auto* ts = seq.getTimeSig (0))
+        barBeats = juce::jlimit (1, 32, ts->numerator.get());
+
+    int preBeats = 0;
     if (t0 > 0.05)
     {
-        preBeats = juce::jmax (1, (int) std::round (t0 / medianDt));
-        bpm0     = 60.0 * (double) preBeats / t0;
-    }
-    else
-    {
-        bpm0 = 60.0 / (beatTimes[1] - beatTimes[0]);
+        const double rawBars = t0 / (beatLen * (double) barBeats);
+        preBeats = juce::jmax (0, (int) std::llround (rawBars)) * barBeats;
     }
 
-    bpm0 = juce::jlimit (20.0, 300.0, bpm0);
+    // Nach vorn schieben, solange irgendein Clip sonst vor 0 landen würde.
+    // (Rückwärts-Verschiebung ist der kürzere Weg und deshalb der Normalfall —
+    // sie darf nur nie Material aus der Timeline drücken.)
+    auto shiftFor = [&] (int beats) { return (double) beats * beatLen - t0; };
+
+    double earliestStart = 0.0;
+    bool haveClip = false;
+    for (auto& f : frozen)
+    {
+        const double s = f.pos.time.getStart().inSeconds();
+        if (! haveClip || s < earliestStart) { earliestStart = s; haveClip = true; }
+    }
+
+    while (haveClip && earliestStart + shiftFor (preBeats) < -1.0e-9)
+        preBeats += barBeats;
+
+    result.leadInBeats  = preBeats;
+    result.leadInBpm    = bpm0;
+    result.shiftSeconds = shiftFor (preBeats);
 
     if (auto first = seq.getTempo (0))
     {
@@ -250,20 +287,29 @@ int TempoEngine::extractTempoMap (const juce::Array<double>& beatTimes)
         ++numPoints;
     }
 
-    // Audio zurück an seine Zeit-Positionen (beat-verankerte Clips wären gewandert)
+    // Audio zurück an seine Zeit-Positionen (beat-verankerte Clips wären
+    // gewandert), plus die Vorlauf-Korrektur: alle Clips um denselben Betrag,
+    // damit ihre Abstände zueinander erhalten bleiben.
+    const auto shift = TimeDur::fromSeconds (result.shiftSeconds);
     for (auto& f : frozen)
-        f.clip->setPosition (f.pos);
+    {
+        auto p = f.pos;
+        p.time = p.time + shift;
+        f.clip->setPosition (p);
+    }
 
-    return numPoints;
+    result.numPoints = numPoints;
+    return result;
 }
 
-int TempoEngine::extractTempoMapFromClip (te::WaveAudioClip& clip,
-                                          const juce::Array<double>& beatTimesFileSecs)
+TempoEngine::ExtractResult
+TempoEngine::extractTempoMapFromClip (te::WaveAudioClip& clip,
+                                      const juce::Array<double>& beatTimesFileSecs)
 {
     // Timestretch (autoTempo) verzerrt die Zeitbasis — Datei-Zeit wäre nicht
     // mehr 1:1 Edit-Zeit. Erst Anpassung entfernen, dann extrahieren.
     if (clip.getAutoTempo())
-        return 0;
+        return {};
 
     const auto pos = clip.getPosition();
     const double clipStart = pos.getStart().inSeconds();

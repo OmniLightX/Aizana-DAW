@@ -38,6 +38,59 @@ public:
     // -------------------------------------------------------------------------
 
     /**
+     * Beat-Zeiten PLUS Verlässlichkeitsmaß.
+     *
+     * Warum das existiert (C2, User-Befund 2026-08-13): auf einem Kick-Stem
+     * allein lieferte der Tracker drei Beats mit 81/94/99 BPM — überzeugt
+     * falsch, ohne jeden Hinweis. Genau diese Klasse ist ein Vertrauensproblem:
+     * ein falsches Ergebnis, das wie ein Messergebnis aussieht.
+     *
+     * Der Industrieweg ist ABLEHNEN statt raten: Studio One meldet, dass es
+     * „kein realistisches Tempo bestimmen kann, wenn es zu wenig Cadence gibt";
+     * Cubase verlangt mindestens 7 s Material mit erkennbaren Beats und meldet,
+     * wenn es nicht weiterkommt. Aizana misst dafür zwei unabhängige Größen:
+     *
+     *  - onsetSupport       Anteil der Beats, unter denen wirklich ein Anschlag
+     *                       liegt (rektifizierte Onset-Stärke in SD-Einheiten
+     *                       ≥ kOnsetSupportSd im Fenster ±1 Frame). Sparsames
+     *                       Material (Kick allein) lässt den DP ins Leere
+     *                       schlagen — genau das misst diese Zahl.
+     *  - intervalConsistency Anteil der Beat-Abstände innerhalb ±15 % des
+     *                       Medians. Fängt den Fall „Puls verloren, Raster
+     *                       eiert" auch dann, wenn zufällig Onsets darunter
+     *                       liegen.
+     *
+     * confidence = min(beider) — eine Kette ist nur so gut wie ihr schwächstes
+     * Glied, und beide Fehlerbilder sind unabhängig voneinander möglich.
+     */
+    struct BeatResult
+    {
+        juce::Array<double> beats;
+        double onsetSupport        = 0.0;   // 0..1
+        double intervalConsistency = 0.0;   // 0..1
+        double confidence          = 0.0;   // min(beider), 0..1
+
+        bool isEmpty() const noexcept { return beats.size() < 2; }
+    };
+
+    /** Schwelle, ab der eine Tempo-Map angeboten wird. Aus echtem Material
+        abgeleitet (Messreihe 2026-08-15, siehe test_tempo_detector.cpp
+        „[confidence]"): Drum-Summe/Vollmix liegen deutlich darüber, ein
+        Kick-Stem allein deutlich darunter. */
+    static constexpr double kMinConfidence = 0.60;
+
+    /** Wie detectBeats, zusätzlich mit den Verlässlichkeitsmaßen. */
+    static BeatResult detectBeatsWithConfidence (const juce::AudioBuffer<float>& mono,
+                                                 double sampleRate);
+
+    /** Wie oben, auf den ersten 60 s einer Datei. */
+    static BeatResult detectBeatsWithConfidenceInFile (const juce::File& audioFile);
+
+    /** BG-Thread-Wrapper; Callback bekommt immer ein Ergebnis (ggf. leer). */
+    static void detectBeatsWithConfidenceAsync (const juce::File& audioFile,
+                                                std::function<void (BeatResult)> onResult);
+
+    /**
      * Beat-Zeitpunkte in Sekunden (Puffer-/Datei-Zeit), aufsteigend.
      *
      * Verfahren: dieselbe Onset-Envelope wie detectBpm + Ellis-2007-DP —

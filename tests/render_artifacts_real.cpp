@@ -21,6 +21,8 @@
 #include "engine/TempoDetector.h"
 #include "engine/PitchDetector.h"
 #include "engine/VocalTuner.h"
+#include "engine/EditManager.h"
+#include "engine/ClipEditor.h"
 
 #include <cmath>
 #include <vector>
@@ -809,5 +811,156 @@ TEST_CASE ("Real: Delay, Gate und Saturator auf echtem Material", "[.realmateria
         note (dir, juce::String (f.datei) + ": " + stem.getFileName()
                    + "  Spitze trocken " + juce::String (teil.getMagnitude (0, teil.getNumSamples()), 3)
                    + " / bearbeitet "    + juce::String (out.getMagnitude (0, out.getNumSamples()), 3));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C2 — MESSREIHE fuer die Verlaesslichkeits-Schwelle des Beat-Trackers.
+//
+// Zweck: die Schwelle kMinConfidence aus echtem Material ABLEITEN statt zu
+// raten. Gedruckt wird pro Quelle onsetSupport / intervalConsistency /
+// confidence. Erwartung: dichte Quellen (Drum-Summe, HiHat, Vollmix) deutlich
+// oben, duenne (Kick allein) deutlich unten — dazwischen muss die Schwelle
+// mit Abstand zu BEIDEN Seiten liegen.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Messreihe: Beat-Tracker-Konfidenz je Quelle", "[.realmaterial][confidence]")
+{
+    if (! materialDir().isDirectory())
+        SKIP ("Kein Material — AIZANA_MATERIAL_DIR setzen");
+
+    auto dir = outDir ("50_confidence");
+
+    auto report = [&dir] (const juce::String& label, const TempoDetector::BeatResult& r)
+    {
+        note (dir, label.paddedRight (' ', 16)
+                   + juce::String (r.beats.size()).paddedLeft (' ', 4) + " Beats | Support "
+                   + juce::String (r.onsetSupport, 3) + " | Konsistenz "
+                   + juce::String (r.intervalConsistency, 3) + " | KONFIDENZ "
+                   + juce::String (r.confidence, 3));
+    };
+
+    for (const auto* frag : { "Kick", "HH 1", "HH 2", "Clap", "Perc", "809",
+                              "Flute", "chords", "Guitar", "Verse 1" })
+    {
+        auto f = findStem (frag);
+        if (! f.existsAsFile()) continue;
+        report (frag, TempoDetector::detectBeatsWithConfidenceInFile (f));
+    }
+
+    // Drum-Summe und Vollmix = die realistischen Faelle.
+    struct Mix { const char* name; std::vector<const char*> parts; };
+    for (const auto& mix : { Mix { "DRUM-SUMME", { "Kick", "HH 1", "Clap", "Perc", "809" } },
+                             Mix { "VOLLMIX",    { "Kick", "HH 1", "Clap", "Perc", "809",
+                                                   "chords", "Verse 1" } } })
+    {
+        juce::AudioBuffer<float> sum; double sr = 0.0; int added = 0;
+        for (const auto* frag : mix.parts)
+        {
+            auto f = findStem (frag);
+            if (! f.existsAsFile()) continue;
+            juce::AudioBuffer<float> b; double thisSr = 0.0;
+            if (! readAudio (f, b, thisSr)) continue;
+            if (added == 0) { sr = thisSr; sum.setSize (1, b.getNumSamples()); sum.clear(); }
+            const int n = juce::jmin (sum.getNumSamples(), b.getNumSamples());
+            for (int ch = 0; ch < b.getNumChannels(); ++ch)
+                sum.addFrom (0, 0, b, ch, 0, n, 0.4f / (float) b.getNumChannels());
+            ++added;
+        }
+        if (added >= 3)
+            report (mix.name, TempoDetector::detectBeatsWithConfidence (sum, sr));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C3 — MESSREIHE fuer den Tonumfang des Pitch-Detektors.
+//
+// Befund: Vocal-Tuning lehnte einen Floeten-Stem als "kein tonales Material"
+// ab. Verdacht: der Standard-Suchbereich endet bei 1000 Hz. Gemessen wird der
+// Anteil stimmhafter Frames und der Median je Bereich — daraus faellt die
+// Entscheidung, ob ein zweiter Durchgang mit weiterem Bereich das Problem
+// loest (Melodyne macht genau das ueber die Variante "Tonal (hoch)").
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Messreihe: Pitch-Detektor je Tonumfang", "[.realmaterial][pitchrange]")
+{
+    if (! materialDir().isDirectory())
+        SKIP ("Kein Material — AIZANA_MATERIAL_DIR setzen");
+
+    auto dir = outDir ("51_pitchrange");
+
+    struct RangeDef { const char* name; float minHz; float maxHz; };
+    const RangeDef ranges[] = { { "Standard 60-1000",  60.0f, 1000.0f },
+                                { "Hoch     150-2500", 150.0f, 2500.0f },
+                                { "Weit      60-2500",  60.0f, 2500.0f } };
+
+    for (const auto* frag : { "Flute", "Kalimba Hook", "Verse 1", "Chorus Main 1", "809", "chords" })
+    {
+        auto f = findStem (frag);
+        if (! f.existsAsFile()) continue;
+
+        juce::AudioBuffer<float> b; double sr = 0.0;
+        if (! readAudio (f, b, sr)) continue;
+        auto mono = toMono (b);
+
+        // Auf den lautesten 10 s messen — Stille am Anfang verzerrt den Anteil.
+        const double off = loudestOffsetSecs (mono, sr, 10.0);
+        auto part = excerpt (mono, sr, off, 10.0);
+
+        for (const auto& r : ranges)
+        {
+            PitchDetector::Settings s;
+            s.minHz = r.minHz;
+            s.maxHz = r.maxHz;
+            const auto curve = PitchDetector::detectPitchHz (part.getReadPointer (0),
+                                                             part.getNumSamples(), sr, s);
+            int voiced = 0;
+            for (float v : curve) if (v > 0.0f) ++voiced;
+            const double ratio = curve.isEmpty() ? 0.0
+                                                 : (double) voiced / (double) curve.size();
+
+            note (dir, juce::String (frag).paddedRight (' ', 16)
+                       + juce::String (r.name).paddedRight (' ', 20)
+                       + "stimmhaft " + juce::String (100.0 * ratio, 1).paddedLeft (' ', 5)
+                       + " % | Median " + juce::String (PitchDetector::medianPitchHz (curve), 1)
+                       + " Hz");
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C3 — DIAGNOSE: warum lehnt tuneClipInPlace den Floeten-Stem ab?
+// Die Sammelmeldung im Dialog nennt vier moegliche Ursachen auf einmal. Hier
+// wird jede EINZELN geprueft, damit die Behauptung belegt ist statt vermutet.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE ("Diagnose: Vocal-Tuning auf echtem Fremdmaterial", "[.realmaterial][tunediag]")
+{
+    if (! materialDir().isDirectory())
+        SKIP ("Kein Material — AIZANA_MATERIAL_DIR setzen");
+
+    auto dir = outDir ("52_tunediag");
+
+    for (const auto* frag : { "Flute", "Kalimba Hook", "Verse 1", "chords" })
+    {
+        auto f = findStem (frag);
+        if (! f.existsAsFile()) continue;
+
+        EditManager em;
+        em.createNewEdit();
+        ClipEditor clipEditor (em);
+
+        auto* track = te::getAudioTracks (*em.getEdit())[0];
+        auto* clip  = clipEditor.importAudioFile (f, *track, 1.0);
+        if (clip == nullptr) { note (dir, juce::String (frag) + ": Import fehlgeschlagen"); continue; }
+
+        const auto pos = clip->getPosition();
+        juce::String diag = juce::String (frag).paddedRight (' ', 16)
+                          + "speedRatio " + juce::String (clip->getSpeedRatio(), 4)
+                          + " | autoTempo " + (clip->getAutoTempo() ? "AN" : "aus")
+                          + " | Laenge " + juce::String (pos.getLength().inSeconds(), 2) + " s"
+                          + " | Offset " + juce::String (pos.getOffset().inSeconds(), 2) + " s";
+
+        VocalTuner tuner (em);
+        auto* tuned = tuner.tuneClipInPlace (*clip, {});
+        diag += juce::String (" | tuneClipInPlace ") + (tuned != nullptr ? "OK" : "ABGELEHNT");
+        note (dir, diag);
     }
 }

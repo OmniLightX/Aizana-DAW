@@ -1469,13 +1469,14 @@ void ClipComponent::extractTempoMapFromClip()
         return;
 
     // Beat-Tracking auf dem Worker; Anwendung auf dem Message-Thread (1 Undo).
-    TempoDetector::detectBeatsAsync (file,
-        [safe = juce::Component::SafePointer<ClipComponent> (this)] (juce::Array<double> beats)
+    TempoDetector::detectBeatsWithConfidenceAsync (file,
+        [safe = juce::Component::SafePointer<ClipComponent> (this)]
+        (TempoDetector::BeatResult r)
         {
             if (safe == nullptr)
                 return;
 
-            if (beats.size() < 8)
+            if (r.beats.size() < 8)
             {
                 juce::AlertWindow::showMessageBoxAsync (
                     juce::MessageBoxIconType::InfoIcon,
@@ -1485,23 +1486,89 @@ void ClipComponent::extractTempoMapFromClip()
                 return;
             }
 
-            auto* wc = dynamic_cast<te::WaveAudioClip*> (&safe->clip);
-            if (wc == nullptr)
+            // C2: ein Ergebnis, das nach Messung aussieht und falsch ist, ist
+            // schlimmer als gar keins. Unter der Schwelle wird gewarnt statt
+            // stillschweigend übernommen — mit der Ursache und dem Ausweg im
+            // Klartext. Studio One lehnt hier ebenfalls ab („zu wenig Cadence"),
+            // Cubase verlangt erkennbare Beats; erzwungen wird es aber nicht,
+            // die Entscheidung bleibt beim Anwender.
+            if (r.confidence < TempoDetector::kMinConfidence)
+            {
+                juce::String msg;
+                msg << juce::String::fromUTF8 ("Der Puls ist auf dieser Spur nur schwach "
+                                               "erkennbar (Verl\xc3\xa4sslichkeit ")
+                    << juce::String (100.0 * r.confidence, 0)
+                    << juce::String::fromUTF8 (" %, n\xc3\xb6tig sind ")
+                    << juce::String (100.0 * TempoDetector::kMinConfidence, 0)
+                    << juce::String::fromUTF8 (" %).\n\nNur unter ")
+                    << juce::String (100.0 * r.onsetSupport, 0)
+                    << juce::String::fromUTF8 (" % der gefundenen Beats liegt wirklich ein "
+                                               "Anschlag. Das passiert auf d\xc3\xbcnn besetzten "
+                                               "Spuren \xe2\x80\x94 eine Kick allein, ein einzelnes "
+                                               "Instrument. Nimm daf\xc3\xbcr eine Spur mit "
+                                               "durchgehendem Rhythmus: eine Schlagzeug-Summe "
+                                               "oder den ganzen Mix.\n\nEine Tempo-Map aus diesem "
+                                               "Material wird sehr wahrscheinlich falsch.");
+
+                juce::AlertWindow::showOkCancelBox (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Tempo-Map",
+                    msg,
+                    juce::String::fromUTF8 ("Trotzdem extrahieren"),
+                    "Abbrechen",
+                    nullptr,
+                    juce::ModalCallbackFunction::create (
+                        [safe, beats = r.beats] (int result)
+                        {
+                            if (result == 1 && safe != nullptr)
+                                safe->applyTempoMap (beats);
+                        }));
                 return;
+            }
 
-            TempoEngine tempoEngine (safe->editManager);
-            const int numPoints = tempoEngine.extractTempoMapFromClip (*wc, beats);
-
-            juce::AlertWindow::showMessageBoxAsync (
-                juce::MessageBoxIconType::InfoIcon,
-                "Tempo-Map",
-                numPoints > 0
-                    ? juce::String (numPoints)
-                        + juce::String::fromUTF8 (" Tempo-Punkte gesetzt — das Raster "
-                                                  "folgt jetzt der Performance (Cmd+Z macht "
-                                                  "alles r\xc3\xbc""ckg\xc3\xa4ngig).")
-                    : juce::String::fromUTF8 ("Tempo-Map konnte nicht angewendet werden."));
+            safe->applyTempoMap (r.beats);
         });
+}
+
+void ClipComponent::applyTempoMap (const juce::Array<double>& beats)
+{
+    auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (wc == nullptr)
+        return;
+
+    TempoEngine tempoEngine (editManager);
+    const auto res = tempoEngine.extractTempoMapFromClip (*wc, beats);
+
+    if (res.numPoints <= 0)
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon, "Tempo-Map",
+            juce::String::fromUTF8 ("Tempo-Map konnte nicht angewendet werden."));
+        return;
+    }
+
+    juce::String msg;
+    msg << juce::String (res.numPoints)
+        << juce::String::fromUTF8 (" Tempo-Punkte gesetzt \xe2\x80\x94 das Raster folgt jetzt "
+                                   "der Performance.\nGrundtempo ")
+        << juce::String (res.leadInBpm, 1) << " BPM.";
+
+    // C1: die Verschiebung sichtbar machen. Sie ist der Preis dafür, dass die
+    // Anzeige vor dem Clip kein Fantasietempo mehr zeigt — verschwiegen wäre
+    // sie eine Überraschung.
+    if (std::abs (res.shiftSeconds) > 0.001)
+        msg << juce::String::fromUTF8 ("\n\nDas Audio wurde um ")
+            << juce::String (std::abs (res.shiftSeconds) * 1000.0, 0)
+            << juce::String::fromUTF8 (" ms ")
+            << (res.shiftSeconds > 0 ? juce::String::fromUTF8 ("nach hinten")
+                                     : juce::String::fromUTF8 ("nach vorn"))
+            << juce::String::fromUTF8 (" auf die n\xc3\xa4""chste Taktlinie ger\xc3\xbc""ckt "
+                                       "(alle Clips gemeinsam, Abst\xc3\xa4nde bleiben).");
+
+    msg << juce::String::fromUTF8 ("\n\nCmd+Z macht alles r\xc3\xbc""ckg\xc3\xa4ngig.");
+
+    juce::AlertWindow::showMessageBoxAsync (
+        juce::MessageBoxIconType::InfoIcon, "Tempo-Map", msg);
 }
 
 void ClipComponent::showVocalTuningDialog()
@@ -1510,9 +1577,27 @@ void ClipComponent::showVocalTuningDialog()
     if (waveClip == nullptr || waveClip->getAutoTempo())
         return;
 
+    // C3: Material VORHER vermessen. Die alte Fassung liess den Anwender erst
+    // rechnen und meldete dann eine Sammelursache („kein tonales Material ODER
+    // gestretcht ODER zu kurz") — damit war nicht feststellbar, was wirklich
+    // zutraf. Jetzt steht die eine zutreffende Ursache im Dialog, bevor
+    // irgendetwas passiert.
+    VocalTuner probe (editManager);
+    const auto analysis = probe.analyseClip (*waveClip);
+
+    if (! analysis.isTunable())
+    {
+        juce::AlertWindow::showMessageBoxAsync (
+            juce::MessageBoxIconType::InfoIcon,
+            juce::String::fromUTF8 ("Vocal-Tuning nicht m\xc3\xb6glich"),
+            analysis.describe());
+        return;
+    }
+
     auto* w = new juce::AlertWindow (juce::String::fromUTF8 ("Vocal-Tuning"),
-                                     juce::String::fromUTF8 ("Tonh\xc3\xb6he auf die Skala ziehen "
-                                                             "(offline, ersetzt den Clip \xe2\x80\x94 1\xc3\x97 Cmd+Z stellt das Original wieder her)."),
+                                     analysis.describe()
+                                       + juce::String::fromUTF8 ("\n\nTonh\xc3\xb6he auf die Skala ziehen "
+                                                                 "(offline, ersetzt den Clip \xe2\x80\x94 1\xc3\x97 Cmd+Z stellt das Original wieder her)."),
                                      juce::MessageBoxIconType::NoIcon);
 
     const juce::StringArray keys   { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -1556,12 +1641,11 @@ void ClipComponent::showVocalTuningDialog()
 
                 // v1 synchron (Analyse+Render); bei typischen Take-Längen kurz.
                 VocalTuner tuner (safe->editManager);
-                if (tuner.tuneClipInPlace (*wc, st) == nullptr)
+                VocalTuner::Analysis outcome;
+                if (tuner.tuneClipInPlace (*wc, st, &outcome) == nullptr)
                     juce::AlertWindow::showMessageBoxAsync (
                         juce::MessageBoxIconType::InfoIcon,
-                        "Vocal-Tuning",
-                        juce::String::fromUTF8 ("Kein tonales Material erkannt oder Clip "
-                                                "nicht tunebar (gestretcht/zu kurz)."));
+                        "Vocal-Tuning", outcome.describe());
             }),
         false);
 }

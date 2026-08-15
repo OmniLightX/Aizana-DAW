@@ -66,30 +66,49 @@ public:
 
     // ---- P7a: Tempo-Map-Extraktion (S1 "Extract to tempo track") -------------
 
+    struct ExtractResult
+    {
+        int    numPoints    = 0;     // gesetzte Tempo-Punkte (0 = nichts passiert)
+        double leadInBpm    = 0.0;   // Tempo vor dem ersten Beat
+        int    leadInBeats  = 0;     // Beats vor dem ersten Beat (Vielfaches eines Takts)
+        double shiftSeconds = 0.0;   // um so viel wurde das Audio auf die Taktlinie gerückt
+    };
+
     /**
      * Ersetzt die Tempo-Map so, dass das GRID exakt auf den übergebenen
-     * Beat-Zeiten landet — das Audio bleibt stehen (kein Remap; Clip-Positionen
-     * sind zeitverankert, nur das Raster verschiebt sich).
+     * Beat-Zeiten landet.
      *
      * Mechanik: pro Beat-Intervall ein Tempo-STEP (curve=1.0 hält die BPM bis
-     * zum nächsten Punkt) mit bpm = 60/Δt an ganzzahligen Beat-Positionen;
-     * liegt der erste Beat nicht bei 0, bekommt der Vorlauf ein Tempo, das eine
-     * ganze Beat-Anzahl exakt auf beatTimes[0] enden lässt. Konstante Läufe
-     * werden zu EINEM Punkt zusammengefasst. TE-Clamp 20..300 BPM.
+     * zum nächsten Punkt) mit bpm = 60/Δt an ganzzahligen Beat-Positionen.
+     * Konstante Läufe werden zu EINEM Punkt zusammengefasst. TE-Clamp 20..300.
+     *
+     * VORLAUF (C1, User-Befund 2026-08-13): liegt der erste Beat nicht bei 0,
+     * braucht die Strecke davor ein Tempo. Früher wurde dort eine ganze
+     * Beat-Anzahl HINEINGEQUETSCHT — passte kein ganzer Beat mehr hinein,
+     * entstand ein Fantasiewert (gemessen 189,8 BPM vor einem 121-BPM-Clip).
+     * Rechnerisch korrekt, in der Transportanzeige Unsinn.
+     *
+     * Jetzt der Weg der Referenz-DAWs: das ERKANNTE Tempo gilt auch im Vorlauf,
+     * und stattdessen rückt das AUDIO auf die nächste Taktlinie. Genau das
+     * schreibt Studio One als Handarbeit vor („drag to line up the first
+     * downbeat in the clip with a downbeat in the Arrange view"), hier
+     * automatisch und in derselben Transaktion. Verschoben wird um weniger als
+     * einen halben Takt; alle nicht gestretchten Wave-Clips wandern gemeinsam,
+     * ihre Abstände zueinander bleiben also erhalten.
      *
      * beatTimesEditSecs: aufsteigend, EDIT-Zeit, >= 2 Einträge.
-     * EIN Undo-Schritt. Liefert die Anzahl gesetzter Tempo-Punkte (0 = nichts).
+     * EIN Undo-Schritt.
      */
-    int extractTempoMap (const juce::Array<double>& beatTimesEditSecs);
+    ExtractResult extractTempoMap (const juce::Array<double>& beatTimesEditSecs);
 
     /**
      * Convenience: Beat-Zeiten aus der QUELLDATEI eines Clips (TempoDetector-
      * Ausgabe) → Edit-Zeit (clipStart + t − offset), auf den Clip-Bereich
      * gefiltert, dann extractTempoMap. Clips mit autoTempo (Timestretch) werden
-     * abgelehnt (Datei-Zeit ≠ Edit-Zeit). Liefert die Anzahl Tempo-Punkte.
+     * abgelehnt (Datei-Zeit ≠ Edit-Zeit).
      */
-    int extractTempoMapFromClip (te::WaveAudioClip& clip,
-                                 const juce::Array<double>& beatTimesFileSecs);
+    ExtractResult extractTempoMapFromClip (te::WaveAudioClip& clip,
+                                           const juce::Array<double>& beatTimesFileSecs);
 
 private:
     EditManager& editManager;
