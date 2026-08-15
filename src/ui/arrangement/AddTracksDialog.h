@@ -12,7 +12,10 @@
 class AddTracksDialog : public juce::Component
 {
 public:
-    std::function<void (int /*count*/, bool /*midi*/, bool /*stereo*/, juce::String /*name*/)> onAdd;
+    /** instrument: leer = keins; sonst der Name des eingebauten Instruments
+        ("Aizana Synth" / "Aizana Drums"), das gleich mit eingesetzt wird. */
+    std::function<void (int /*count*/, bool /*midi*/, bool /*stereo*/,
+                        juce::String /*name*/, juce::String /*instrument*/)> onAdd;
 
     AddTracksDialog()
     {
@@ -33,7 +36,11 @@ public:
         addAndMakeVisible (countCombo);
 
         seg (typeAudio,    "Audio");  typeAudio.onClick    = [this] { setType (false); };
-        seg (typeMidi,     "MIDI");   typeMidi.onClick     = [this] { setType (true);  };
+        // "Instrument" statt "MIDI": das ist die Spurart, die in Studio One und
+        // Logic angelegt wird ("Add Instrument Track" / Software-Instrument-Spur).
+        // Der Anwender waehlt EINMAL beim Anlegen, statt hinterher eine Audiospur
+        // umzuwidmen — genau daran ist der User haengengeblieben.
+        seg (typeMidi,     "Instrument"); typeMidi.onClick = [this] { setType (true);  };
         seg (formatMono,   "Mono");   formatMono.onClick   = [this] { setStereo (false); };
         seg (formatStereo, "Stereo"); formatStereo.onClick = [this] { setStereo (true);  };
 
@@ -43,10 +50,28 @@ public:
         nameEditor.setColour (juce::TextEditor::outlineColourId,    juce::Colour (0xff444444));
         addAndMakeVisible (nameEditor);
 
+        key (instKey, "Sound");
+        instCombo.addItem ("Synth (Poly)", 1);
+        instCombo.addItem ("Drums", 2);
+        instCombo.addItem (juce::String::fromUTF8 ("ohne \xe2\x80\x94 sp\xc3\xa4ter waehlen"), 3);
+        instCombo.setSelectedId (1, juce::dontSendNotification);
+        instCombo.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff2a2a2a));
+        instCombo.setColour (juce::ComboBox::textColourId,       juce::Colours::white);
+        instCombo.setTitle ("Instrument");
+        addAndMakeVisible (instCombo);
+
         addButton.onClick = [this]
         {
+            juce::String instrument;
+            if (midi)
+            {
+                const int id = instCombo.getSelectedId();
+                instrument = id == 1 ? "Aizana Synth" : id == 2 ? "Aizana Drums" : juce::String();
+            }
+
             if (onAdd)
-                onAdd (countCombo.getSelectedId(), midi, stereo, nameEditor.getText().trim());
+                onAdd (countCombo.getSelectedId(), midi, stereo,
+                       nameEditor.getText().trim(), instrument);
             close();
         };
         addButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2d6a2d));
@@ -57,10 +82,10 @@ public:
 
         setType (false);
         setStereo (false);
-        setSize (320, 248);
+        setSize (320, 282);
     }
 
-    static void show (std::function<void (int, bool, bool, juce::String)> onAdd)
+    static void show (std::function<void (int, bool, bool, juce::String, juce::String)> onAdd)
     {
         auto* dialog = new AddTracksDialog();
         dialog->onAdd = std::move (onAdd);
@@ -92,6 +117,9 @@ public:
                                     r.removeFromLeft (4); typeMidi.setBounds (r.removeFromLeft (66).reduced (1)); }
         { auto r = row (formatKey); formatMono.setBounds (r.removeFromLeft (66).reduced (1));
                                     r.removeFromLeft (4); formatStereo.setBounds (r.removeFromLeft (66).reduced (1)); }
+        if (midi)
+            instCombo.setBounds (row (instKey).removeFromLeft (176));
+
         nameEditor.setBounds (row (nameKey).reduced (0, 2));
 
         auto buttons = area.removeFromBottom (30);
@@ -101,8 +129,8 @@ public:
     }
 
 private:
-    juce::Label title, countKey, typeKey, formatKey, nameKey;
-    juce::ComboBox   countCombo;
+    juce::Label title, countKey, typeKey, formatKey, nameKey, instKey;
+    juce::ComboBox   countCombo, instCombo;
     juce::TextButton typeAudio, typeMidi, formatMono, formatStereo;
     juce::TextEditor nameEditor;
     juce::TextButton addButton { "Add" }, cancelButton { "Cancel" };
@@ -116,8 +144,14 @@ private:
         // Format is audio-only; grey it out for MIDI.
         formatMono.setEnabled (! midi);
         formatStereo.setEnabled (! midi);
+
+        // Die Instrumentenwahl gehoert nur zur Instrumentenspur.
+        instKey  .setVisible (midi);
+        instCombo.setVisible (midi);
+        resized();
         // Default the name to the type if the user hasn't customised it.
-        if (nameEditor.getText() == "Audio" || nameEditor.getText() == "MIDI")
+        if (nameEditor.getText() == "Audio" || nameEditor.getText() == "MIDI"
+            || nameEditor.getText() == "Instrument")
             nameEditor.setText (midi ? "MIDI" : "Audio", juce::dontSendNotification);
     }
 

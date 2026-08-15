@@ -558,7 +558,8 @@ private:
 
     /** Create `count` tracks at the end (Studio One Add Tracks dialog). midi → MIDI
      *  tracks (each seeded with a 4-bar clip); stereo → audio tracks in stereo format. */
-    void createTracks (int count, bool midi, bool stereo, juce::String namePrefix);
+    void createTracks (int count, bool midi, bool stereo, juce::String namePrefix,
+                       juce::String instrument = {});
 
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();

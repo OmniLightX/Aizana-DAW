@@ -1,4 +1,5 @@
 #include "LiveMidiPreview.h"
+#include "engine/InstrumentTracks.h"
 
 namespace aizana
 {
@@ -18,18 +19,62 @@ namespace aizana
         }
     }
 
+    // ── Zwei Wege, und der erste ist der wichtige ────────────────────────────
+    //
+    // 1. UEBER DAS VIRTUELLE KEYBOARD-GERAET, wenn die Spur es als Eingang hat.
+    //    Nur so kommt das Gespielte am AUFNAHMEPFAD vorbei. Vorher ging alles
+    //    ausschliesslich ueber injectLiveMidiMessage — man hoerte die Noten,
+    //    aber die Aufnahme blieb leer, ohne jede Fehlermeldung (User-Befund
+    //    2026-08-15). In Logic ist das Musical-Typing-Fenster ausdruecklich eine
+    //    vollwertige Aufnahmequelle.
+    //
+    // 2. DIREKT IN DEN WIEDERGABE-GRAPHEN, wenn es das Geraet nicht gibt oder
+    //    die Spur es nicht hoert (kein MIDI-System, Audiospur mit Instrument,
+    //    Vorhoeren im Piano Roll). Dann hoert man wenigstens etwas — lieber
+    //    Vorhoeren ohne Aufnahme als Stille ohne Hinweis.
+
+    static bool trackListensToKeyboard (te::Track* track)
+    {
+        auto* at = asAudioTrack (track);
+        if (at == nullptr)
+            return false;
+
+        auto* dev = getOrCreateKeyboardDevice (at->edit.engine);
+        if (dev == nullptr)
+            return false;
+
+        for (auto* instance : at->edit.getAllInputDevices())
+            if (&instance->getInputDevice() == dev && te::isOnTargetTrack (*instance, *at, 0))
+                return true;
+
+        return false;
+    }
+
     void sendLivePreviewNoteOn (te::Track* track, int pitch, int velocity)
     {
-        if (auto* at = asAudioTrack (track))
-            at->injectLiveMidiMessage (juce::MidiMessage::noteOn (1, pitch,
-                                           (juce::uint8) juce::jlimit (1, 127, velocity)),
-                                       uiSourceID());
+        auto* at = asAudioTrack (track);
+        if (at == nullptr)
+            return;
+
+        if (trackListensToKeyboard (track)
+            && sendKeyboardNoteOn (at->edit.engine, pitch, velocity))
+            return;
+
+        at->injectLiveMidiMessage (juce::MidiMessage::noteOn (1, pitch,
+                                       (juce::uint8) juce::jlimit (1, 127, velocity)),
+                                   uiSourceID());
     }
 
     void sendLivePreviewNoteOff (te::Track* track, int pitch)
     {
-        if (auto* at = asAudioTrack (track))
-            at->injectLiveMidiMessage (juce::MidiMessage::noteOff (1, pitch), uiSourceID());
+        auto* at = asAudioTrack (track);
+        if (at == nullptr)
+            return;
+
+        if (trackListensToKeyboard (track) && sendKeyboardNoteOff (at->edit.engine, pitch))
+            return;
+
+        at->injectLiveMidiMessage (juce::MidiMessage::noteOff (1, pitch), uiSourceID());
     }
 
     void sendLivePreviewAllNotesOff (te::Track* track)

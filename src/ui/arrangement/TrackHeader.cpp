@@ -1,4 +1,5 @@
 #include "TrackHeader.h"
+#include "engine/InstrumentTracks.h"
 #include "engine/ClipEditor.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "ui/audiosetup/AudioIOSetupDialog.h"
@@ -500,10 +501,13 @@ void TrackHeader::toggleArm()
 
 bool TrackHeader::isMidiTrack() const
 {
-    for (auto* clip : track.getClips())
-        if (dynamic_cast<te::MidiClip*> (clip) != nullptr)
-            return true;
-    return false;
+    // Am TYP-MERKMAL, nicht mehr am Inhalt. Vorher galt eine Spur nur dann als
+    // MIDI-Spur, wenn zufaellig ein MidiClip darauf lag — eine frisch angelegte
+    // Instrumentenspur ohne Clip bot deshalb keinen MIDI-Eingang an, und der
+    // Aufnahmeknopf verhielt sich wie bei Audio (User-Befund 2026-08-15).
+    // Der Rueckfall auf den Inhalt steckt in isInstrumentTrack und haelt alte
+    // Sessions am Leben.
+    return aizana::isInstrumentTrack (track);
 }
 
 void TrackHeader::populateInputSelector()

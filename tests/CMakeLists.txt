@@ -70,6 +70,7 @@ target_sources(engine_tests PRIVATE
     test_edit_groups.cpp
     test_pan_value.cpp
     test_transport_keys.cpp
+    test_instrument_tracks.cpp
     test_removable_media_guard.cpp
     # DSP effects tests (FX-01 through FX-04) — require juce::dsp
     test_eq_dsp.cpp
@@ -133,6 +134,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/CompingEngine.cpp
     ../src/engine/TempoDetector.cpp
     ../src/engine/MidiRecorder.cpp
+    ../src/engine/InstrumentTracks.cpp
     ../src/engine/MixerEngine.cpp
     ../src/engine/WarpEngine.cpp
     ../src/engine/PitchDetector.cpp

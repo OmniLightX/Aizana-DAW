@@ -1,6 +1,8 @@
 #include "ArrangementView.h"
 #include "ui/common/AizanaIcons.h"
 #include "AddTracksDialog.h"
+#include "engine/InstrumentTracks.h"
+#include "plugins/BuiltInPluginFormat.h"
 #include <set>
 
 namespace te = tracktion::engine;
@@ -503,10 +505,11 @@ ArrangementView::ArrangementView (ApplicationState&    appState_,
         // Studio One-style: open the Add Tracks dialog (count + mono/stereo + name),
         // so several tracks can be created at once instead of one at a time.
         juce::Component::SafePointer<ArrangementView> safe (this);
-        AddTracksDialog::show ([safe] (int count, bool midi, bool stereo, juce::String name)
+        AddTracksDialog::show ([safe] (int count, bool midi, bool stereo,
+                                       juce::String name, juce::String instrument)
         {
             if (safe != nullptr)
-                safe->createTracks (count, midi, stereo, name);
+                safe->createTracks (count, midi, stereo, name, instrument);
         });
     };
 
@@ -1189,7 +1192,8 @@ void ArrangementView::timerCallback()
 //==============================================================================
 // Keyboard — arrow key scrubbing
 
-void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::String namePrefix)
+void ArrangementView::createTracks (int count, bool midi, bool stereo,
+                                    juce::String namePrefix, juce::String instrument)
 {
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr || count < 1)
@@ -1200,7 +1204,8 @@ void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::Str
         ? juce::String ("Add ") + (midi ? "MIDI" : "Audio") + " Track"
         : "Add " + juce::String (count) + (midi ? " MIDI Tracks" : " Audio Tracks"));
 
-    const juce::String base = namePrefix.isNotEmpty() ? namePrefix : (midi ? "MIDI" : "Audio");
+    const juce::String base = namePrefix.isNotEmpty() ? namePrefix
+                                                     : (midi ? "Instrument" : "Audio");
 
     for (int i = 0; i < count; ++i)
     {
@@ -1228,6 +1233,16 @@ void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::Str
 
         if (midi)
         {
+            // Instrumentenspur: Typ-MERKMAL setzen, damit die App sie auch ohne
+            // Clip als solche erkennt (vorher riet sie am Inhalt — eine Spur mit
+            // Instrument, aber ohne Clip, galt als Audiospur und bot deshalb
+            // keinen MIDI-Eingang an).
+            aizana::markAsInstrumentTrack (*newTrack);
+
+            if (instrument.isNotEmpty())
+                pluginManager.insertPlugin (*newTrack,
+                                            BuiltInPluginFormat::getDescriptionFor (instrument));
+
             // Seed a 4-bar MIDI clip so the track has something to double-click.
             const double bpm = (edit->tempoSequence.getNumTempos() > 0)
                                  ? edit->tempoSequence.getTempo (0)->getBpm() : 120.0;
@@ -1239,6 +1254,10 @@ void ArrangementView::createTracks (int count, bool midi, bool stereo, juce::Str
                 tracktion::TimeDuration() };
 
             newTrack->insertNewClip (te::TrackItem::Type::midi, "MIDI Clip", midiPos, nullptr);
+
+            // Die Bildschirmklaviatur auf diese Spur legen — damit hoert man das
+            // Instrument beim Spielen UND der Aufnahmeknopf nimmt es auf.
+            aizana::routeKeyboardToTrack (*newTrack);
         }
         // ArrangementView's ValueTree listener rebuilds the rows automatically.
     }
@@ -1635,7 +1654,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
         juce::PopupMenu menu;
         menu.addItem (1, "Add Audio Track");
-        menu.addItem (2, "Add MIDI Track");
+        menu.addItem (2, juce::String::fromUTF8 ("Instrumentenspur hinzuf\xc3\xbcgen (Synth)"));
         menu.addSeparator();
         menu.addItem (3, "Paste Clip Here",
                       clipEditor.hasClipboardContents());
@@ -1664,7 +1683,8 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
                     // die nur dem NAMEN nach MIDI war — ohne Clip gab es nichts
                     // aufzumachen, der Doppelklick lief ins Leere.
                     createTracks (1, true, false,
-                                  "MIDI " + juce::String (existingTracks.size() + 1));
+                                  "Synth " + juce::String (existingTracks.size() + 1),
+                                  "Aizana Synth");
                 }
                 else if (result == 3)
                 {

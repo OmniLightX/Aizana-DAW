@@ -55,6 +55,26 @@ public:
      */
     juce::File getLatestAutosave (const juce::File& sessionFile) const;
 
+    // ---- Autosave-Intervall (User-Wunsch 2026-08-15) ------------------------
+    //
+    // Fest verdrahtete 2 Minuten waren nicht verhandelbar; wer stundenlang an
+    // einer grossen Session arbeitet, sammelt damit unnoetig Schreibvorgaenge
+    // auf der Platte. Es bleiben zwar immer nur drei Dateien liegen
+    // (kAutosaveKeptCount), aber geschrieben wird trotzdem alle zwei Minuten.
+    //
+    // Der Wert steht in den App-Einstellungen und ueberlebt den Neustart.
+    // 0 = aus (dann wird gar nicht automatisch gesichert — bewusst moeglich,
+    // aber im Dialog als solches benannt).
+
+    /** Erlaubte Werte in Minuten; 0 = aus. */
+    static constexpr int kAutosaveMinutesChoices[] = { 0, 2, 5, 15, 30, 60, 120 };
+
+    /** Aktuelles Intervall in Minuten (aus den Einstellungen, Vorgabe 5). */
+    int getAutosaveIntervalMinutes() const;
+
+    /** Intervall setzen, speichern und den laufenden Timer sofort nachziehen. */
+    void setAutosaveIntervalMinutes (int minutes);
+
     /** Perform an autosave immediately (called by the timer and on clean exit).
         While the transport is PLAYING this writes a playback-safe snapshot (see
         writeAutosaveSnapshotAsync) instead of the full flush+save path — TE's
@@ -148,7 +168,6 @@ private:
     };
     AutosaveTimerImpl autosaveTimer { *this };
 
-    static constexpr int kAutosaveIntervalMs   = 2 * 60 * 1000;  // 2 minutes
     static constexpr int kAutosaveKeptCount    = 3;               // keep last 3
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditManager)

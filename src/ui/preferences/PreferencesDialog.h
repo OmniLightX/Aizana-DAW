@@ -40,5 +40,16 @@ private:
 
     void midiClockModeChanged();
 
+    // ---- Autosave ----
+    juce::Label    autosaveSectionLabel { {}, "Autosave" };
+    juce::Label    autosaveLabel        { {}, "Interval:" };
+    juce::ComboBox autosaveCombo;
+    juce::Label    autosaveNoteLabel {
+        {}, juce::String::fromUTF8 (
+            "Aizana sichert die laufende Session automatisch neben die Session-Datei.\n"
+            "Es bleiben immer nur die letzten drei Sicherungen liegen.") };
+
+    void autosaveIntervalChanged();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PreferencesDialog)
 };

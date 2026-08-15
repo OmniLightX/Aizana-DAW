@@ -265,7 +265,11 @@ void EditManager::setCurrentFile (const juce::File& file)
     if (file.existsAsFile())
     {
         // Start autosave timer on a valid session file
-        autosaveTimer.startTimer (kAutosaveIntervalMs);
+        // 0 Minuten = aus; sonst der eingestellte Abstand.
+        if (const int mins = getAutosaveIntervalMinutes(); mins > 0)
+            autosaveTimer.startTimer (mins * 60 * 1000);
+        else
+            autosaveTimer.stopTimer();
     }
     else
     {
@@ -411,4 +415,42 @@ void EditManager::trimClip (te::Clip& clip, double newStartTimeSecs, double newE
     auto newStart = TimePos::fromSeconds (newStartTimeSecs);
     auto newEnd   = TimePos::fromSeconds (newEndTimeSecs);
     clip.setPosition ({ TimeRng (newStart, newEnd), {} });
+}
+
+//==============================================================================
+// Autosave-Intervall (User-Wunsch 2026-08-15)
+//==============================================================================
+
+namespace
+{
+    const juce::Identifier kAutosaveMinutesKey ("aizanaAutosaveMinutes");
+    constexpr int kAutosaveDefaultMinutes = 5;
+}
+
+int EditManager::getAutosaveIntervalMinutes() const
+{
+    auto& props = engine.getPropertyStorage().getPropertiesFile();
+    const int stored = props.getIntValue (kAutosaveMinutesKey.toString(), kAutosaveDefaultMinutes);
+
+    // Nur bekannte Stufen zulassen — ein aus Versehen editierter Wert soll die
+    // App nicht in einen Sekundentakt schicken.
+    for (int m : kAutosaveMinutesChoices)
+        if (m == stored)
+            return stored;
+
+    return kAutosaveDefaultMinutes;
+}
+
+void EditManager::setAutosaveIntervalMinutes (int minutes)
+{
+    auto& props = engine.getPropertyStorage().getPropertiesFile();
+    props.setValue (kAutosaveMinutesKey.toString(), minutes);
+    props.saveIfNeeded();
+
+    // Sofort wirksam: ein laufender Timer haette sonst noch bis zu zwei Minuten
+    // im alten Takt weitergeschrieben.
+    if (minutes > 0 && currentSessionFile.existsAsFile())
+        autosaveTimer.startTimer (minutes * 60 * 1000);
+    else
+        autosaveTimer.stopTimer();
 }

@@ -221,6 +221,7 @@ target_sources(Aizana PRIVATE
     src/engine/CompingEngine.cpp
     src/engine/TempoDetector.cpp
     src/engine/MidiRecorder.cpp
+    src/engine/InstrumentTracks.cpp
     src/engine/MixerEngine.cpp
     src/engine/WarpEngine.cpp
     src/engine/PitchDetector.cpp

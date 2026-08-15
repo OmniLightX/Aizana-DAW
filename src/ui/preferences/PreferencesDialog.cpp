@@ -11,6 +11,29 @@ PreferencesDialog::PreferencesDialog (ApplicationState& appState_)
     addAndMakeVisible (midiClockSectionLabel);
 
     // ---- MIDI Clock mode combo ----
+    // ---- Autosave-Intervall (User-Wunsch 2026-08-15) ----
+    // Fest verdrahtete zwei Minuten schreiben ueber einen langen Arbeitstag
+    // unnoetig oft auf die Platte. Jetzt waehlbar — inklusive "aus".
+    {
+        int id = 1;
+        for (int m : EditManager::kAutosaveMinutesChoices)
+        {
+            autosaveCombo.addItem (m == 0 ? juce::String::fromUTF8 ("aus")
+                                          : juce::String (m) + " Minuten", id++);
+        }
+
+        const int current = appState.editManager.getAutosaveIntervalMinutes();
+        int sel = 1, i = 1;
+        for (int m : EditManager::kAutosaveMinutesChoices)
+        {
+            if (m == current) sel = i;
+            ++i;
+        }
+        autosaveCombo.setSelectedId (sel, juce::dontSendNotification);
+        autosaveCombo.setTitle ("Autosave Intervall");
+        autosaveCombo.onChange = [this] { autosaveIntervalChanged(); };
+    }
+
     midiClockModeCombo.addItem ("Off",    1);
     midiClockModeCombo.addItem ("Master", 2);
     midiClockModeCombo.addItem ("Slave",  3);
@@ -24,6 +47,17 @@ PreferencesDialog::PreferencesDialog (ApplicationState& appState_)
     midiClockNoteLabel.setColour (juce::Label::textColourId, juce::Colour (0xffaaaaaa));
     midiClockNoteLabel.setJustificationType (juce::Justification::topLeft);
     addAndMakeVisible (midiClockNoteLabel);
+
+    autosaveSectionLabel.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+    autosaveSectionLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    autosaveLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    autosaveNoteLabel.setFont (juce::FontOptions (10.0f));
+    autosaveNoteLabel.setColour (juce::Label::textColourId, juce::Colour (0xffaaaaaa));
+    autosaveNoteLabel.setJustificationType (juce::Justification::topLeft);
+    addAndMakeVisible (autosaveSectionLabel);
+    addAndMakeVisible (autosaveLabel);
+    addAndMakeVisible (autosaveCombo);
+    addAndMakeVisible (autosaveNoteLabel);
 }
 
 void PreferencesDialog::resized()
@@ -40,6 +74,18 @@ void PreferencesDialog::resized()
 
     area.removeFromTop (8);
     midiClockNoteLabel.setBounds (area.removeFromTop (50));
+
+    // Autosave section
+    area.removeFromTop (12);
+    autosaveSectionLabel.setBounds (area.removeFromTop (24));
+    area.removeFromTop (4);
+
+    auto autoRow = area.removeFromTop (28);
+    autosaveLabel.setBounds (autoRow.removeFromLeft (80));
+    autosaveCombo.setBounds (autoRow.removeFromLeft (140));
+
+    area.removeFromTop (8);
+    autosaveNoteLabel.setBounds (area.removeFromTop (44));
 }
 
 void PreferencesDialog::paint (juce::Graphics& g)
@@ -80,7 +126,7 @@ void PreferencesDialog::midiClockModeChanged()
 void PreferencesDialog::show (ApplicationState& appState)
 {
     auto* dialog = new PreferencesDialog (appState);
-    dialog->setSize (360, 200);
+    dialog->setSize (360, 340);
 
     juce::DialogWindow::LaunchOptions opts;
     opts.dialogTitle             = "Preferences";
@@ -89,4 +135,14 @@ void PreferencesDialog::show (ApplicationState& appState)
     opts.useNativeTitleBar       = false;
     opts.resizable               = false;
     opts.launchAsync();
+}
+
+
+void PreferencesDialog::autosaveIntervalChanged()
+{
+    const int index = autosaveCombo.getSelectedId() - 1;
+    const auto& choices = EditManager::kAutosaveMinutesChoices;
+
+    if (index >= 0 && index < (int) (sizeof (choices) / sizeof (choices[0])))
+        appState.editManager.setAutosaveIntervalMinutes (choices[index]);
 }

@@ -1,0 +1,37 @@
+# Instrumentenspur + Aufnahme von der Bildschirmklaviatur
+#
+# Der Kern des User-Befunds: "Wenn ich aufnehmen moechte, wird die Melodie nicht
+# aufgenommen." Geprueft wird deshalb nicht nur, dass die Spur entsteht, sondern
+# dass nach einer Aufnahme AUCH NOTEN da sind.
+#
+# ERWARTET: 0 Fehler.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/28-instrumentenspur.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# --- Instrumentenspur ueber das Arrangement-Kontextmenue anlegen ------------
+# (Der "Spur hinzufuegen"-Dialog ist ein DialogWindow; PopupMenus und Dialoge
+#  brauchen `press`, synthetische Klicks erreichen sie nicht.)
+rklickin Spurbereich Track 1 @ 0.5 0.9
+warte 1200
+> press Instrumentenspur hinzufügen (Synth)
+warte 2500
+
+# Die neue Spur muss da sein und einen MIDI-Clip tragen.
+> bild 0 /tmp/aizana_gui_inst/inst-01-spur.png
+> tree 0 14
+
+# --- Scharfschalten geht (der Knopf existiert und nimmt den Klick an) -------
+klick Aufnahmebereit Synth 2
+warte 800
+
+# OFFEN, NICHT HIER BELEGT: dass eine ueber die Bildschirmklaviatur gespielte
+# Melodie auch WIRKLICH im Clip landet. Das virtuelle MIDI-Geraet entsteht nur
+# mit echtem Geraetesystem (headless faellt der Test aus, siehe
+# test_instrument_tracks.cpp "[instrument]"), und das Klaviatur-Fenster liess
+# sich hier nicht als eigenes Fenster ansprechen. Dieser Nachweis gehoert in
+# den Hoertest des Users — er ist der eigentliche Befund.
