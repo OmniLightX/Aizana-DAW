@@ -13,7 +13,7 @@
 
 TEST_CASE ("M12: pathLooksFragile — pure Volume-Heuristik", "[m12][removable]")
 {
-    CHECK (aizana::pathLooksFragile ("/Volumes/ExternalMedia/TestSong.tracktion"));
+    CHECK (aizana::pathLooksFragile ("/Volumes/Externe SSD/Beispiel.tracktion"));
     CHECK (aizana::pathLooksFragile ("/Volumes/USB/x.wav"));
     CHECK_FALSE (aizana::pathLooksFragile ("/Users/alice/Music/Aizana/song.wav"));
     CHECK_FALSE (aizana::pathLooksFragile ("/tmp/render.wav"));
@@ -32,7 +32,7 @@ TEST_CASE ("M12: memoryMappedFormatManager lehnt fragile Pfade ab, interne nicht
     // canHandleFile prüft bei WAV/AIFF nur die Endung — die Dateien müssen nicht
     // existieren. Genau diese Abfrage ist das Gate in getOrCreateCachedFile.
     const juce::File internalWav ("/Users/nobody/Music/take.wav");
-    const juce::File externalWav ("/Volumes/ExternalMedia/take.wav");
+    const juce::File externalWav ("/Volumes/Externe SSD/take.wav");
 
     bool internalHandled = false, externalHandled = false;
     for (auto* af : mm)
