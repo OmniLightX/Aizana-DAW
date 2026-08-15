@@ -1,4 +1,5 @@
 #include "PianoRollView.h"
+#include "ui/instruments/LiveMidiPreview.h"
 #include "VelocityLane.h"
 #include "CCLane.h"
 #include "engine/EditManager.h"
@@ -141,26 +142,18 @@ void PianoRollView::PianoKeyboard::mouseUp (const juce::MouseEvent&)
 
 void PianoRollView::sendPreviewNoteOn (int pitch, int velocity)
 {
-    // Inject a MIDI note-on via the engine's device manager.
-    // This sends to all active MIDI output devices so the instrument
-    // assigned to the track hears the preview note.
-    // Approach: engine DeviceManager → all MIDI output devices (TE v3.2.0 path).
-    auto msg = juce::MidiMessage::noteOn (1, pitch, static_cast<juce::uint8> (velocity));
-    auto& deviceManager = clip.edit.engine.getDeviceManager();
-    for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
-        if (auto* dev = deviceManager.getMidiOutDevice (i))
-            if (dev->isEnabled())
-                dev->fireMessage (msg);
+    // In die SPUR des Clips einspeisen — dort sitzt das Instrument.
+    //
+    // Vorher ging die Vorhoer-Note an alle externen MIDI-AUSGAENGE. Wer kein
+    // externes Klangerzeuger-Geraet angeschlossen hatte (also der Normalfall, und
+    // erst recht bei den eingebauten Instrumenten), hoerte beim Klick auf die
+    // Klaviatur schlicht NICHTS — ohne Fehlermeldung.
+    aizana::sendLivePreviewNoteOn (clip.getTrack(), pitch, velocity);
 }
 
 void PianoRollView::sendPreviewNoteOff (int pitch)
 {
-    auto msg = juce::MidiMessage::noteOff (1, pitch, static_cast<juce::uint8> (0));
-    auto& deviceManager = clip.edit.engine.getDeviceManager();
-    for (int i = 0; i < deviceManager.getNumMidiOutDevices(); ++i)
-        if (auto* dev = deviceManager.getMidiOutDevice (i))
-            if (dev->isEnabled())
-                dev->fireMessage (msg);
+    aizana::sendLivePreviewNoteOff (clip.getTrack(), pitch);
 }
 
 //==============================================================================

@@ -280,6 +280,8 @@ target_sources(Aizana PRIVATE
     src/ui/dockeditor/DockedEditorPanel.cpp
     src/ui/dockeditor/AudioClipEditor.cpp
     # Piano Roll editor (plan 01-09)
+    src/ui/instruments/LiveMidiPreview.cpp
+    src/ui/instruments/MusicalTypingWindow.cpp
     src/ui/pianoroll/PianoRollView.cpp
     src/ui/pianoroll/NoteComponent.cpp
     src/ui/pianoroll/VelocityLane.cpp

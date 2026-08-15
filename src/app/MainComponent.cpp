@@ -822,6 +822,10 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           juce::String::fromUTF8 ("KI-Studio (Chat: Plugins bauen lassen)…"));
             menu.addItem (SongManagePlugins,
                           juce::String::fromUTF8 ("Aizana-Plugins verwalten…"));
+            menu.addSeparator();
+            menu.addItem (SongMusicalTyping,
+                          juce::String::fromUTF8 ("Tastatur spielen (Musical Typing)"),
+                          hasEdit, musicalTypingWindow != nullptr);
 
             // KI-Referenz (REF-01/02/04): genre profile or analysed track.
             // The active profile's LUFS is shown as INFO — never enforced.
@@ -943,6 +947,10 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
             openGeneratedPluginsManager();
             break;
 
+        case SongMusicalTyping:
+            toggleMusicalTyping();
+            break;
+
         case SongAiStudio:
             openAiStudio();
             break;
@@ -1027,6 +1035,46 @@ void MainComponent::handleFileOpen()
 
             fileChooser.reset();
         });
+}
+
+void MainComponent::toggleMusicalTyping()
+{
+    if (musicalTypingWindow != nullptr)
+    {
+        musicalTypingWindow.reset();
+        menuItemsChanged();
+        return;
+    }
+
+    // Die Spur wird bei JEDER Note frisch erfragt — so folgt das Fenster der
+    // Auswahl im Arrangement, ohne dass man es neu aufmachen muss.
+    musicalTypingWindow = std::make_unique<MusicalTypingWindow> (
+        [this]() -> te::Track*
+        {
+            if (auto* t = arrangementView.getSelectedTrack())
+                return t;
+
+            // Keine Auswahl: die erste Audiospur nehmen — sonst spielt man ins
+            // Leere und weiss nicht warum.
+            if (auto* edit = appState.editManager.getEdit())
+            {
+                auto tracks = te::getAudioTracks (*edit);
+                if (! tracks.isEmpty())
+                    return tracks.getFirst();
+            }
+            return nullptr;
+        });
+
+    musicalTypingWindow->onClose = [this]
+    {
+        juce::MessageManager::callAsync ([this]
+        {
+            musicalTypingWindow.reset();
+            menuItemsChanged();
+        });
+    };
+
+    menuItemsChanged();
 }
 
 bool MainComponent::openSessionFile (const juce::File& file)

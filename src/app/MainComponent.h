@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "ui/instruments/MusicalTypingWindow.h"
 #include "ApplicationState.h"
 #include "engine/MixerEngine.h"
 #include "engine/InputBusManager.h"
@@ -375,6 +376,7 @@ private:
         SongGeneratePlugin = 405,  // Plugin generieren (Phase 4 — Faust→CLAP generator)
         SongAiStudio      = 406,   // KI-Studio: in-app chat agent (Claude/Codex) — Phase 4 flagship
         SongManagePlugins = 407,   // Aizana-Plugins verwalten (Phase 5 / G5b — rename/delete)
+        SongMusicalTyping = 408,   // Tastatur spielen (Logic "Musical Typing"-Aequivalent)
         SongRefGenreBase  = 410,   // 410..413 = genre profiles (REF-02)
         SongRefAnalyze    = 420,   // analyse reference track (REF-01)
         SongRefClear      = 421,
@@ -386,6 +388,11 @@ private:
     // Double-tap Space = Rewind: tracks timestamp of the previous Space press.
     juce::int64 lastSpaceKeyTimeMs = 0;
     static constexpr juce::int64 kDoubleSpaceThresholdMs = 400;
+
+    /** Fenster "Tastatur spielen" — Instrumente ohne angeschlossenes Keyboard
+        spielen. Existiert nur, solange es offen ist. */
+    std::unique_ptr<MusicalTypingWindow> musicalTypingWindow;
+    void toggleMusicalTyping();
 
     // Async file chooser — stored as member to keep alive across async callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;
