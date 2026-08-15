@@ -15,7 +15,7 @@
 // entschieden werden kann. Alle Cases tragen das versteckte Tag "[.session]" →
 // sie laufen NICHT im normalen Suite-Lauf. Aufruf:
 //
-//     AIZANA_MATERIAL_DIR="$HOME/repository/Audio Test Material" \
+//     AIZANA_MATERIAL_DIR="/pfad/zu/deinen/stems" \
 //     AIZANA_ARTIFACT_DIR="$HOME/Desktop/Aizana Testlaeufe/<Datum>" \
 //       engine_tests "[session]"
 //
