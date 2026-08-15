@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Aizana VERSION 0.1.1)
+project(Aizana VERSION 0.2.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -170,7 +170,7 @@ endif()
 juce_add_gui_app(Aizana
     PRODUCT_NAME                    "Aizana"
     BUNDLE_ID                       "com.aizanagi.aizana"
-    VERSION                         "0.1.1"
+    VERSION                         "0.2.0"
     ICON_BIG                        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AizanaIcon.png"
     MICROPHONE_PERMISSION_ENABLED   TRUE
     MICROPHONE_PERMISSION_TEXT      "Aizana needs microphone access to record audio tracks."
