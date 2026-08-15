@@ -40,6 +40,11 @@ public:
     void mouseWheelMove (const juce::MouseEvent& e,
                          const juce::MouseWheelDetails& wheel) override;
 
+    /** Feuert, wenn der User einen Bandgriff anfasst — die Band-Leiste des
+        Editors folgt darauf, damit Solo/Mute ohne Umweg ueber die Bandwahl
+        erreichbar sind (Arbeitsablauf aus Studio One / Pro-Q). */
+    std::function<void (int bandIndex)> onBandSelected;
+
 private:
     EQProcessor&     eqProcessor;
     SpectrumAnalyzer spectrumAnalyzer;  // Child component, rendered behind curve

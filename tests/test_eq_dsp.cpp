@@ -472,3 +472,232 @@ TEST_CASE ("Dynamik-EQ: Zustand ueberlebt den Roundtrip, alte Sessions bleiben s
     c.setStateInformation (altMb.getData(), (int) altMb.getSize());
     CHECK_FALSE (c.getBand (2).dynOn);                      // … danach AUS
 }
+
+// ===========================================================================
+// Band-Solo (Audition) und Band-Mute — Standardausstattung jedes Profi-EQs
+//
+// User-Befund 2026-08-15, WAEHREND des Hoertests: "Uns fehlt Solo und Mute im
+// EQ. Damit kann ich den Dynamik-EQ gar nicht richtig austesten." Zu Recht —
+// ohne Solo laesst sich eine Stoerfrequenz nicht heraushoeren, ohne Mute gibt
+// es keinen A/B-Vergleich eines einzelnen Bandes.
+//
+// Verhalten nach der Referenz (FabFilter Pro-Q, PreSonus Pro EQ3):
+//   - Solo spielt NICHT die Wirkung des Bandes, sondern den Teil des Spektrums,
+//     den das Band betrifft.
+//   - Bei einem Low/High Cut hoert man, was WEGGESCHNITTEN wird (Umkehrung).
+//   - Solo ist exklusiv und wird NICHT gespeichert (Abhoerzustand, kein Klang).
+// ===========================================================================
+
+namespace
+{
+    /** Pegel einer Frequenz nach dem EQ, in dB relativ zum Eingang.
+        Misst mit einem Sinus statt mit einem Impuls, weil das Solo den
+        EINGANG hoert und nicht die Impulsantwort der Kette. */
+    float sineLevelDb (EQProcessor& eq, float freqHz, double sampleRate, int blocks = 8)
+    {
+        constexpr int kBlock = 512;
+        eq.prepareToPlay (sampleRate, kBlock);
+
+        juce::MidiBuffer midi;
+        double sum = 0.0;
+        int counted = 0;
+
+        for (int b = 0; b < blocks; ++b)
+        {
+            juce::AudioBuffer<float> buf (2, kBlock);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < kBlock; ++i)
+                    buf.setSample (ch, i, (float) std::sin (2.0 * M_PI * freqHz
+                                                            * (b * kBlock + i) / sampleRate));
+
+            eq.processBlock (buf, midi);
+
+            // Erste Bloecke verwerfen: die Filter muessen erst einschwingen.
+            if (b < 3)
+                continue;
+
+            const float* d = buf.getReadPointer (0);
+            for (int i = 0; i < kBlock; ++i) { sum += (double) d[i] * d[i]; ++counted; }
+        }
+
+        const double rms = counted > 0 ? std::sqrt (sum / counted) : 0.0;
+        // Eingangs-RMS eines Vollpegel-Sinus = 1/sqrt(2)
+        return (float) (20.0 * std::log10 (juce::jmax (1.0e-9, rms / (1.0 / std::sqrt (2.0)))));
+    }
+
+    EQBand makeBand (EQBandType t, float freq, float gain, float q = 1.0f)
+    {
+        EQBand b;
+        b.type = t; b.frequencyHz = freq; b.gainDB = gain; b.Q = q; b.enabled = true;
+        return b;
+    }
+
+    /** Alle Baender neutral — sonst faerben die Werks-Baender (HP 40 Hz,
+        LP 20 kHz) die Messung und man misst nicht, was man glaubt. */
+    void flattenAllBands (EQProcessor& eq)
+    {
+        for (int i = 0; i < EQProcessor::NumBands; ++i)
+            eq.setBand (i, makeBand (EQBandType::Peak, 1000.0f + 100.0f * i, 0.0f, 0.707f));
+    }
+}
+
+TEST_CASE ("EQ Mute: ein einzelnes Band laesst sich abschalten, der Rest bleibt", "[eq][fx][solomute]")
+{
+    constexpr double sr = 44100.0;
+    EQProcessor eq;
+    flattenAllBands (eq);
+
+    // Band 2: +12 dB bei 1 kHz. Band 5: +6 dB bei 5 kHz (muss unberuehrt bleiben).
+    eq.setBand (2, makeBand (EQBandType::Peak, 1000.0f, 12.0f, 2.0f));
+    eq.setBand (5, makeBand (EQBandType::Peak, 5000.0f,  6.0f, 2.0f));
+
+    const float on1k = sineLevelDb (eq, 1000.0f, sr);
+    const float on5k = sineLevelDb (eq, 5000.0f, sr);
+    CHECK (on1k > 9.0f);
+    CHECK (on5k > 4.0f);
+
+    // Mute NUR Band 2
+    eq.setBandEnabled (2, false);
+    CHECK_FALSE (eq.isBandEnabled (2));
+
+    const float off1k = sineLevelDb (eq, 1000.0f, sr);
+    const float off5k = sineLevelDb (eq, 5000.0f, sr);
+
+    INFO ("1 kHz " << on1k << " -> " << off1k << " dB, 5 kHz " << on5k << " -> " << off5k);
+    CHECK (std::abs (off1k) < 0.5f);              // Band 2 wirkt nicht mehr
+    CHECK (std::abs (off5k - on5k) < 0.5f);       // Band 5 arbeitet unveraendert
+
+    // Und wieder an — der A/B-Vergleich muss verlustfrei zurueckfuehren.
+    eq.setBandEnabled (2, true);
+    CHECK (std::abs (sineLevelDb (eq, 1000.0f, sr) - on1k) < 0.2f);
+}
+
+TEST_CASE ("EQ Solo: man hoert den Bereich des Bandes, nicht seine Wirkung", "[eq][fx][solomute]")
+{
+    constexpr double sr = 44100.0;
+    EQProcessor eq;
+    flattenAllBands (eq);
+
+    // Ein Glockenband bei 1 kHz. Der Gain ist bewusst 0 dB: das Solo muss auch
+    // dann etwas hoerbar machen, wenn noch gar nichts eingestellt ist — das ist
+    // ja der Sinn (erst suchen, dann bearbeiten).
+    eq.setBand (3, makeBand (EQBandType::Peak, 1000.0f, 0.0f, 2.0f));
+
+    CHECK (eq.getSoloedBand() == -1);
+    eq.setSoloedBand (3);
+    CHECK (eq.getSoloedBand() == 3);
+
+    const float at1k  = sineLevelDb (eq, 1000.0f, sr);
+    const float at100 = sineLevelDb (eq,  100.0f, sr);
+    const float at8k  = sineLevelDb (eq, 8000.0f, sr);
+
+    INFO ("Solo: 100 Hz " << at100 << " | 1 kHz " << at1k << " | 8 kHz " << at8k);
+
+    // Die Mittenfrequenz kommt praktisch unveraendert durch (Bandpass mit
+    // Einheitsverstaerkung im Zentrum, zweifach kaskadiert).
+    CHECK (std::abs (at1k) < 1.5f);
+
+    // Alles weit daneben ist deutlich weg — sonst waere das Solo wertlos.
+    CHECK (at100 < at1k - 25.0f);
+    CHECK (at8k  < at1k - 25.0f);
+
+    // Solo aus → wieder neutral.
+    eq.setSoloedBand (-1);
+    CHECK (std::abs (sineLevelDb (eq, 100.0f, sr)) < 0.5f);
+}
+
+TEST_CASE ("EQ Solo bei einem Low Cut: man hoert, was weggeschnitten wird", "[eq][fx][solomute]")
+{
+    constexpr double sr = 44100.0;
+    EQProcessor eq;
+    flattenAllBands (eq);
+
+    // Low Cut = HOCHPASS bei 300 Hz. Er nimmt die Tiefen weg — beim Abhoeren
+    // will man genau diese Tiefen hoeren, um zu pruefen, ob man richtig
+    // ansetzt. Das ist die Umkehrung, die Pro-Q ausdruecklich so macht.
+    eq.setBand (1, makeBand (EQBandType::HighPass, 300.0f, 0.0f, 0.707f));
+
+    // Ohne Solo: der Hochpass nimmt 80 Hz weg, 3 kHz bleibt.
+    const float normal80 = sineLevelDb (eq,   80.0f, sr);
+    const float normal3k = sineLevelDb (eq, 3000.0f, sr);
+    INFO ("ohne Solo: 80 Hz " << normal80 << " | 3 kHz " << normal3k);
+    CHECK (normal80 < -15.0f);
+    CHECK (std::abs (normal3k) < 1.0f);
+
+    // Mit Solo kehrt es sich um: 80 Hz ist da, 3 kHz ist weg.
+    eq.setSoloedBand (1);
+    const float solo80 = sineLevelDb (eq,   80.0f, sr);
+    const float solo3k = sineLevelDb (eq, 3000.0f, sr);
+    INFO ("mit Solo: 80 Hz " << solo80 << " | 3 kHz " << solo3k);
+
+    CHECK (std::abs (solo80) < 1.5f);
+    CHECK (solo3k < solo80 - 25.0f);
+}
+
+TEST_CASE ("EQ Solo ist exklusiv und wird nicht gespeichert", "[eq][fx][solomute]")
+{
+    EQProcessor eq;
+
+    eq.setSoloedBand (2);
+    eq.setSoloedBand (5);
+    CHECK (eq.getSoloedBand() == 5);         // exklusiv: das zweite loest das erste ab
+
+    eq.setSoloedBand (99);                    // ungueltig = kein Solo
+    CHECK (eq.getSoloedBand() == -1);
+
+    // Ein Abhoerzustand gehoert nicht in die Session: sonst oeffnet der User
+    // seinen Song und hoert einen duennen Bandpass, ohne die Ursache zu sehen.
+    eq.setBand (4, makeBand (EQBandType::Peak, 2000.0f, 5.0f, 1.0f));
+    juce::MemoryBlock state;
+    eq.setSoloedBand (4);
+    eq.getStateInformation (state);
+
+    EQProcessor eq2;
+    eq2.setSoloedBand (7);                    // "steht noch von vorhin"
+    eq2.setStateInformation (state.getData(), (int) state.getSize());
+
+    CHECK (eq2.getSoloedBand() == -1);
+    CHECK_THAT (eq2.getBand (4).gainDB, Catch::Matchers::WithinAbs (5.0, 0.01));
+}
+
+// ---------------------------------------------------------------------------
+// Regression 2026-08-15: Low Cut und High Cut waren im Kontextmenue VERTAUSCHT.
+//
+// Beim Bau des Solos aufgefallen: das Menue legte "Low Cut" auf
+// EQBandType::LowPass — das ist ein TIEFPASS und nimmt die HOEHEN weg. Wer
+// Trittschall wegschneiden wollte, verlor stattdessen die Brillanz, und das
+// ohne Fehlermeldung. Die DSP war immer richtig, nur die Beschriftung nicht.
+//
+// Dieser Test haelt die Bedeutung der Typen fest, damit die Beschriftung nie
+// wieder gegen die Physik laufen kann.
+// ---------------------------------------------------------------------------
+TEST_CASE ("EQ Filtertypen: HighPass ist der Low Cut, LowPass der High Cut", "[eq][fx][cutnaming]")
+{
+    constexpr double sr = 44100.0;
+
+    {
+        EQProcessor eq;
+        flattenAllBands (eq);
+        eq.setBand (1, makeBand (EQBandType::HighPass, 500.0f, 0.0f, 0.707f));
+
+        const float low  = sineLevelDb (eq,  100.0f, sr);
+        const float high = sineLevelDb (eq, 5000.0f, sr);
+        INFO ("HighPass 500 Hz: 100 Hz " << low << " | 5 kHz " << high);
+
+        CHECK (low < -15.0f);                 // Tiefen weg  = LOW CUT
+        CHECK (std::abs (high) < 1.0f);       // Hoehen bleiben
+    }
+
+    {
+        EQProcessor eq;
+        flattenAllBands (eq);
+        eq.setBand (1, makeBand (EQBandType::LowPass, 500.0f, 0.0f, 0.707f));
+
+        const float low  = sineLevelDb (eq,  100.0f, sr);
+        const float high = sineLevelDb (eq, 5000.0f, sr);
+        INFO ("LowPass 500 Hz: 100 Hz " << low << " | 5 kHz " << high);
+
+        CHECK (std::abs (low) < 1.0f);        // Tiefen bleiben
+        CHECK (high < -15.0f);                // Hoehen weg = HIGH CUT
+    }
+}

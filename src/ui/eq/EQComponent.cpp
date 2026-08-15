@@ -352,10 +352,16 @@ void EQComponent::mouseDown (const juce::MouseEvent& e)
             menu.addItem (1, "Bell (Peak)",         true, b.type == EQBandType::Peak);
             menu.addItem (2, "Low Shelf",            true, b.type == EQBandType::LowShelf);
             menu.addItem (3, "High Shelf",           true, b.type == EQBandType::HighShelf);
-            menu.addItem (4, "Low Cut  12 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 2);
-            menu.addItem (5, "Low Cut  24 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 4);
-            menu.addItem (6, "High Cut 12 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 2);
-            menu.addItem (7, "High Cut 24 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 4);
+            // ACHTUNG, hier stand ein echter Fehler (gefunden 2026-08-15):
+            // "Low Cut" war auf EQBandType::LowPass gelegt — das ist ein
+            // TIEFPASS und nimmt die HOEHEN weg. Wer Trittschall wegschneiden
+            // wollte, verlor stattdessen die Brillanz. Ein Low Cut ist ein
+            // HOCHPASS (HighPass), ein High Cut ein Tiefpass (LowPass).
+            // Die DSP war immer richtig, nur die Beschriftung nicht.
+            menu.addItem (4, "Low Cut  12 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 2);
+            menu.addItem (5, "Low Cut  24 dB/oct",   true, b.type == EQBandType::HighPass && b.slopeOrder == 4);
+            menu.addItem (6, "High Cut 12 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 2);
+            menu.addItem (7, "High Cut 24 dB/oct",   true, b.type == EQBandType::LowPass  && b.slopeOrder == 4);
             menu.addItem (8, "Notch",                true, b.type == EQBandType::Notch);
             menu.addSeparator();
             menu.addItem (9, b.enabled ? "Disable Band" : "Enable Band");
@@ -373,10 +379,10 @@ void EQComponent::mouseDown (const juce::MouseEvent& e)
                         case 1: updated.type = EQBandType::Peak;      updated.slopeOrder = 2; break;
                         case 2: updated.type = EQBandType::LowShelf;  updated.slopeOrder = 2; break;
                         case 3: updated.type = EQBandType::HighShelf; updated.slopeOrder = 2; break;
-                        case 4: updated.type = EQBandType::LowPass;   updated.slopeOrder = 2; break;
-                        case 5: updated.type = EQBandType::LowPass;   updated.slopeOrder = 4; break;
-                        case 6: updated.type = EQBandType::HighPass;  updated.slopeOrder = 2; break;
-                        case 7: updated.type = EQBandType::HighPass;  updated.slopeOrder = 4; break;
+                        case 4: updated.type = EQBandType::HighPass;  updated.slopeOrder = 2; break;   // Low Cut
+                        case 5: updated.type = EQBandType::HighPass;  updated.slopeOrder = 4; break;   // Low Cut
+                        case 6: updated.type = EQBandType::LowPass;   updated.slopeOrder = 2; break;   // High Cut
+                        case 7: updated.type = EQBandType::LowPass;   updated.slopeOrder = 4; break;   // High Cut
                         case 8: updated.type = EQBandType::Notch;     updated.slopeOrder = 2; break;
                         case 9: updated.enabled = !updated.enabled;                            break;
                         default: return;
@@ -392,6 +398,11 @@ void EQComponent::mouseDown (const juce::MouseEvent& e)
     draggingBandIndex = hitTestBandHandle (e.position);
     if (draggingBandIndex >= 0)
     {
+        // Die Band-Leiste des Editors folgt dem angefassten Band, damit Solo
+        // und Mute ohne Umweg ueber die Bandwahl erreichbar sind.
+        if (onBandSelected != nullptr)
+            onBandSelected (draggingBandIndex);
+
         dragStartPos  = e.position;
         dragStartBand = eqProcessor.getBand (draggingBandIndex);
         bandHandles[draggingBandIndex].isDragging = true;

@@ -55,6 +55,43 @@ public:
     void setBand(int bandIndex, const EQBand& band);
     EQBand getBand(int bandIndex) const;
 
+    // -------------------------------------------------------------------------
+    // Band-Solo (Audition) und Band-Mute — Standardausstattung jedes Profi-EQs
+    //
+    // MUTE ist das Band-Bypass: `EQBand::enabled`. Die Mechanik gab es schon
+    // (ausgeschaltet = neutraler Peak), es fehlte nur der Knopf — deshalb war
+    // ein A/B-Vergleich eines einzelnen Bandes bisher gar nicht moeglich.
+    //
+    // SOLO ist neu und folgt dem Verhalten der Referenz (FabFilter Pro-Q,
+    // PreSonus Pro EQ3): man hoert NICHT die Wirkung des Bandes, sondern den
+    // Teil des Spektrums, den dieses Band ueberhaupt betrifft. Sonst kann man
+    // eine stoerende Frequenz nicht heraushoeren, bevor man sie bearbeitet.
+    //
+    // Zugeordnete Hoerkurve (Pro-Q-Regel, inkl. der Umkehrung bei Cuts):
+    //     Peak, Notch          → Bandpass auf Frequenz und Q des Bandes
+    //     LowShelf, HighPass   → Tiefpass  (bei einem Low Cut hoert man, was
+    //                            WEGGESCHNITTEN wird — genau darum geht es)
+    //     HighShelf, LowPass   → Hochpass
+    // Je zwei Sektionen kaskadiert (24 dB/Okt Flanken), damit das Gehoerte
+    // wirklich isoliert ist und nicht nur betont.
+    //
+    // Solo ist EXKLUSIV (nur ein Band) und wird BEWUSST NICHT gespeichert und
+    // NICHT automatisiert: es ist ein Abhoerwerkzeug, kein Klangparameter. Eine
+    // Session, die mit aktivem Solo gespeichert wird, klaenge beim naechsten
+    // Oeffnen duenn, ohne dass jemand die Ursache saehe. Aus demselben Grund
+    // schaltet das Schliessen des Editors das Solo ab.
+    // -------------------------------------------------------------------------
+
+    /** Band auf Solo schalten (-1 = kein Solo). Exklusiv. Beliebiger Thread. */
+    void setSoloedBand (int bandIndex);
+
+    /** Aktuell soloed geschaltetes Band oder -1. */
+    int getSoloedBand() const noexcept { return soloedBand.load (std::memory_order_relaxed); }
+
+    /** Band-Mute (= Band-Bypass). Message-Thread; spiegelt in den Parameter. */
+    void setBandEnabled (int bandIndex, bool shouldBeEnabled);
+    bool isBandEnabled  (int bandIndex) const;
+
     /** Attack/Release der Dynamik — geraeteweit, nicht pro Band. Message-Thread. */
     void  setDynTimes (float attackMs, float releaseMs);
     float getDynAttackMs()  const;
@@ -251,6 +288,39 @@ private:
 
 
 
+
+    //==========================================================================
+    // Solo/Audition-Sektion
+    //==========================================================================
+    enum class AuditionShape { bandPass, lowPass, highPass };
+
+    /** Welche Hoerkurve gehoert zu diesem Bandtyp? (Pro-Q-Regel, siehe oben.) */
+    static AuditionShape auditionShapeFor (EQBandType type) noexcept;
+
+    std::atomic<int> soloedBand { -1 };
+
+    /** Zwei kaskadierte Sektionen = 24 dB/Okt Flanken. Im prepareToPlay
+        angelegt, im Audio-Thread nur noch beschrieben (alloc-frei). */
+    std::array<EQFilter, 2> auditionFilters;
+
+    /** Kopie des EINGANGS. Das Solo hoert das Material VOR dem EQ — die Kette
+        selbst laeuft trotzdem weiter, damit ihre Filterzustaende und die
+        Dynamik-Huellkurven warm bleiben und das Ausschalten nicht knackt. */
+    juce::AudioBuffer<float> auditionBuffer;
+
+    struct AuditionApplied
+    {
+        int   shape = -1;
+        float freq  = -1.0f;
+        float q     = -1.0f;
+        bool  valid = false;
+    };
+
+    AuditionApplied auditionApplied;
+
+    /** Schreibt die Audition-Koeffizienten, wenn sich Typ/Frequenz/Q geaendert
+        haben. Audio-Thread, alloc-frei (ArrayCoefficients liefert auf den Stack). */
+    void refreshAuditionCoefficients (int bandIndex, double sampleRate);
 
     // Secondary IIR filters for HP/LP slope 24dB/oct (slopeOrder=4).
     // Each cascadeFilter[i] mirrors the coefficients of eqChain band i.

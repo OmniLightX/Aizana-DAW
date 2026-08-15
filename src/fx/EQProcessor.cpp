@@ -84,18 +84,33 @@ public:
         addAndMakeVisible (saveButton);
 
         rebuildPresetCombo();
+        buildBandBar();
         buildDynamicsBar();
 
-        setSize (700, 350 + kPresetBarH + kDynBarH);
+        // Wer ein Band auf der Kurve anfasst, meint dieses Band — die Leiste
+        // folgt ihm, damit Solo/Mute ohne Umweg ueber die Bandwahl erreichbar
+        // sind. Das ist der Arbeitsablauf aus Studio One: Band anklicken, Solo
+        // druecken, Stoerstelle suchen.
+        eqComponent.onBandSelected = [this] (int band) { selectBand (band); };
+
+        setSize (700, 350 + kPresetBarH + kBandBarH + kDynBarH);
         startTimerHz (10);
     }
 
-    ~EQEditor() override { stopTimer(); }
+    ~EQEditor() override
+    {
+        stopTimer();
+
+        // Solo ist an das Hinsehen gebunden. Bliebe es nach dem Schliessen des
+        // Fensters an, klaenge die Spur duenn und niemand saehe warum — die
+        // teuerste Sorte Fehler, weil sie nach einem kaputten Mix aussieht.
+        proc.setSoloedBand (-1);
+    }
 
     void resized() override
     {
         const int w = getWidth();
-        const int eqH = getHeight() - kPresetBarH - kDynBarH;
+        const int eqH = getHeight() - kPresetBarH - kBandBarH - kDynBarH;
         eqComponent.setBounds (0, 0, w, eqH);
 
         // Preset bar: combo takes the left 3/4, save button the rest
@@ -104,11 +119,19 @@ public:
         presetCombo.setBounds (4, barY + 4, w - saveW - 12, kPresetBarH - 8);
         saveButton.setBounds  (w - saveW - 4, barY + 4, saveW, kPresetBarH - 8);
 
+        // ---- Band-Leiste (Bandwahl + Solo + Mute) ----
+        auto br = juce::Rectangle<int> (0, barY + kPresetBarH, w, kBandBarH).reduced (4, 3);
+        auto bcell = [&br] (int width) { auto c = br.removeFromLeft (width); br.removeFromLeft (4); return c; };
+
+        bandCombo  .setBounds (bcell (80));
+        soloButton .setBounds (bcell (70));
+        muteButton .setBounds (bcell (70));
+        soloHintLabel.setBounds (br);
+
         // ---- Dynamik-Leiste ----
-        auto r = juce::Rectangle<int> (0, barY + kPresetBarH, w, kDynBarH).reduced (4, 3);
+        auto r = juce::Rectangle<int> (0, barY + kPresetBarH + kBandBarH, w, kDynBarH).reduced (4, 3);
         auto cell = [&r] (int width) { auto c = r.removeFromLeft (width); r.removeFromLeft (4); return c; };
 
-        dynBandCombo.setBounds  (cell (80));
         dynOnButton .setBounds  (cell (84));
         threshSlider.setBounds  (cell (140));
         ratioSlider .setBounds  (cell (110));
@@ -120,6 +143,7 @@ private:
     static int px (int v) { return juce::jmax (60, v); }
 
     static constexpr int kPresetBarH = 28;
+    static constexpr int kBandBarH   = 28;
     static constexpr int kDynBarH    = 30;
 
     EQProcessor&    proc;
@@ -134,7 +158,19 @@ private:
     // einen Mix-Engineer also praktisch nicht vorhanden. Bewusst EINE Zeile mit
     // Bandwahl statt acht Zeilen: der Platz gehoert der Kurve.
     //==========================================================================
-    juce::ComboBox     dynBandCombo;
+    //==========================================================================
+    // Band-Leiste — Bandwahl, Solo, Mute
+    //
+    // Solo und Mute sind Grundausstattung jedes Profi-EQs; ohne sie laesst sich
+    // eine Stoerfrequenz nicht heraushoeren und ein einzelnes Band nicht
+    // gegenpruefen. Bewusst EINE geteilte Bandwahl fuer Band- und
+    // Dynamik-Leiste: zwei Bandwaehler nebeneinander waeren eine Fehlerquelle.
+    //==========================================================================
+    juce::ComboBox     bandCombo;
+    juce::TextButton   soloButton;
+    juce::TextButton   muteButton;
+    juce::Label        soloHintLabel;
+
     juce::ToggleButton dynOnButton;
     juce::Slider       threshSlider  { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
     juce::Slider       ratioSlider   { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
@@ -143,24 +179,104 @@ private:
 
     int selectedDynBand = 0;
 
-    void buildDynamicsBar()
+    void buildBandBar()
     {
         for (int i = 0; i < EQProcessor::NumBands; ++i)
-            dynBandCombo.addItem ("Band " + juce::String (i + 1), i + 1);
+            bandCombo.addItem ("Band " + juce::String (i + 1), i + 1);
 
-        dynBandCombo.setSelectedId (1, juce::dontSendNotification);
-        dynBandCombo.setTitle ("Dynamik Bandwahl");
-        dynBandCombo.onChange = [this]
+        bandCombo.setSelectedId (1, juce::dontSendNotification);
+        bandCombo.setTitle ("Bandwahl");
+        bandCombo.onChange = [this]
         {
             selectedDynBand = juce::jlimit (0, EQProcessor::NumBands - 1,
-                                             dynBandCombo.getSelectedId() - 1);
+                                            bandCombo.getSelectedId() - 1);
+            refreshBandBarFromProcessor();
             refreshDynamicsFromProcessor();
         };
-        addAndMakeVisible (dynBandCombo);
+        addAndMakeVisible (bandCombo);
 
+        soloButton.setButtonText ("Solo");
+        soloButton.setTitle ("Band Solo");
+        soloButton.setTooltip (juce::String::fromUTF8 (
+            "H\xc3\xb6rt NUR den Frequenzbereich dieses Bandes (zum Aufsp\xc3\xbc""ren einer "
+            "St\xc3\xb6rstelle). Bei einem Low/High Cut h\xc3\xb6rt man, was weggeschnitten wird."));
+        soloButton.setClickingTogglesState (false);   // I-04
+        soloButton.onClick = [this]
+        {
+            const bool nowOn = proc.getSoloedBand() != selectedDynBand;
+            proc.setSoloedBand (nowOn ? selectedDynBand : -1);
+            refreshBandBarFromProcessor();
+        };
+        addAndMakeVisible (soloButton);
+
+        muteButton.setButtonText ("Mute");
+        muteButton.setTitle ("Band Mute");
+        muteButton.setTooltip (juce::String::fromUTF8 (
+            "Schaltet dieses eine Band ab \xe2\x80\x94 f\xc3\xbcr den A/B-Vergleich, "
+            "w\xc3\xa4hrend alle anderen B\xc3\xa4nder weiterarbeiten."));
+        muteButton.setClickingTogglesState (false);   // I-04
+        muteButton.onClick = [this]
+        {
+            proc.setBandEnabled (selectedDynBand, ! proc.isBandEnabled (selectedDynBand));
+            refreshBandBarFromProcessor();
+        };
+        addAndMakeVisible (muteButton);
+
+        soloHintLabel.setFont (juce::FontOptions (11.0f));
+        soloHintLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
+        soloHintLabel.setText (juce::String::fromUTF8 (
+                                   "Solo = nur diesen Bereich h\xc3\xb6ren \xc2\xb7 Mute = dieses Band aus"),
+                               juce::dontSendNotification);
+        addAndMakeVisible (soloHintLabel);
+
+        refreshBandBarFromProcessor();
+    }
+
+    /** Band von aussen waehlen (Klick auf einen Griff in der Kurve). */
+    void selectBand (int band)
+    {
+        const int b = juce::jlimit (0, EQProcessor::NumBands - 1, band);
+        if (b == selectedDynBand)
+            return;
+
+        selectedDynBand = b;
+        bandCombo.setSelectedId (b + 1, juce::dontSendNotification);
+        refreshBandBarFromProcessor();
+        refreshDynamicsFromProcessor();
+    }
+
+    void refreshBandBarFromProcessor()
+    {
+        const bool soloOn = proc.getSoloedBand() == selectedDynBand;
+        const bool muted  = ! proc.isBandEnabled (selectedDynBand);
+
+        // Zustand IM NAMEN mitfuehren: die Farbe allein ist weder vorlesbar
+        // noch maschinell pruefbar (Werkzeug-Regel aus den GUI-Testlaeufen).
+        soloButton.setTitle (soloOn ? juce::String ("Band Solo (aktiv)")
+                                    : juce::String ("Band Solo"));
+        muteButton.setTitle (muted  ? juce::String ("Band Mute (aktiv)")
+                                    : juce::String ("Band Mute"));
+
+        soloButton.setColour (juce::TextButton::buttonColourId,
+                              soloOn ? juce::Colour (0xffbb9900) : juce::Colour (0xff2a2a2a));
+        soloButton.setColour (juce::TextButton::textColourOffId,
+                              soloOn ? juce::Colours::black : juce::Colour (0xffcccccc));
+
+        muteButton.setColour (juce::TextButton::buttonColourId,
+                              muted ? juce::Colour (0xffaa3333) : juce::Colour (0xff2a2a2a));
+        muteButton.setColour (juce::TextButton::textColourOffId,
+                              muted ? juce::Colours::white : juce::Colour (0xffcccccc));
+
+        soloButton.repaint();
+        muteButton.repaint();
+    }
+
+    void buildDynamicsBar()
+    {
         dynOnButton.setButtonText ("Dynamik");
         dynOnButton.setTitle ("Dynamik An");
-        dynOnButton.onClick = [this] { pushDynamicsToProcessor(); };
+        // Nur der Haken selbst darf ein gemutetes Band wieder einschalten (s. u.).
+        dynOnButton.onClick = [this] { pushDynamicsToProcessor (true); };
         addAndMakeVisible (dynOnButton);
 
         auto setUp = [this] (juce::Slider& s, const juce::String& name,
@@ -170,7 +286,7 @@ private:
             s.setTextValueSuffix (suffix);
             s.setTitle (name);
             s.setTooltip (name);
-            s.onValueChange = [this] { pushDynamicsToProcessor(); };
+            s.onValueChange = [this] { pushDynamicsToProcessor (false); };
             addAndMakeVisible (s);
         };
 
@@ -202,7 +318,7 @@ private:
             releaseSlider.setValue (proc.getDynReleaseMs(), juce::dontSendNotification);
     }
 
-    void pushDynamicsToProcessor()
+    void pushDynamicsToProcessor (bool cameFromDynSwitch)
     {
         auto b = proc.getBand (selectedDynBand);
         b.dynOn          = dynOnButton.getToggleState();
@@ -210,9 +326,14 @@ private:
         b.dynRatio       = (float) ratioSlider.getValue();
 
         // Ein ausgeschaltetes Band filtert nicht, also kann es auch nichts
-        // dynamisch absenken. Wer hier die Dynamik einschaltet, meint das Band —
-        // sonst haette der Haken keine Wirkung und niemand saehe, warum.
-        if (b.dynOn && ! b.enabled)
+        // dynamisch absenken. Wer den HAKEN setzt, meint das Band — sonst haette
+        // er keine Wirkung und niemand saehe, warum.
+        //
+        // Aber NUR beim Haken: seit es einen Mute-Knopf gibt, wuerde diese Regel
+        // sonst zur Falle. Ein Band bewusst stummschalten und danach einen
+        // Dynamik-Regler anfassen haette es still wieder eingeschaltet — der
+        // A/B-Vergleich waere zerstoert, ohne dass jemand die Ursache saehe.
+        if (cameFromDynSwitch && b.dynOn && ! b.enabled)
             b.enabled = true;
 
         proc.setBand (selectedDynBand, b);
@@ -220,7 +341,11 @@ private:
         proc.setDynTimes ((float) attackSlider.getValue(), (float) releaseSlider.getValue());
     }
 
-    void timerCallback() override { refreshDynamicsFromProcessor(); }
+    void timerCallback() override
+    {
+        refreshDynamicsFromProcessor();
+        refreshBandBarFromProcessor();
+    }
 
     // User presets loaded from / saved to disk
     std::vector<EQPreset> userPresets;
@@ -661,6 +786,96 @@ void EQProcessor::writeBandCoefficients (int bandIndex, float gainDB, double sam
     }
 }
 
+//==============================================================================
+// Band-Solo (Audition) und Band-Mute
+//==============================================================================
+
+EQProcessor::AuditionShape EQProcessor::auditionShapeFor (EQBandType type) noexcept
+{
+    switch (type)
+    {
+        // Ein Low Cut (HighPass) nimmt die Tiefen WEG — beim Abhoeren will man
+        // genau die hoeren, um zu pruefen, ob man an der richtigen Stelle
+        // schneidet. Deshalb ist die Hoerkurve hier die Umkehrung des Filters
+        // (Pro-Q macht das genauso). Ein Low Shelf betrifft denselben Bereich.
+        case EQBandType::HighPass:
+        case EQBandType::LowShelf:  return AuditionShape::lowPass;
+
+        case EQBandType::LowPass:
+        case EQBandType::HighShelf: return AuditionShape::highPass;
+
+        case EQBandType::Peak:
+        case EQBandType::Notch:
+        default:                    return AuditionShape::bandPass;
+    }
+}
+
+void EQProcessor::setSoloedBand (int bandIndex)
+{
+    const int v = (bandIndex >= 0 && bandIndex < NumBands) ? bandIndex : -1;
+    soloedBand.store (v, std::memory_order_relaxed);
+
+    // Erzwingt das Neuschreiben der Audition-Koeffizienten im naechsten Block —
+    // ohne das wuerde ein Wechsel zwischen zwei Baendern mit zufaellig gleicher
+    // Frequenz und Q die alte Kurve weiterbenutzen.
+    auditionApplied.valid = false;
+}
+
+void EQProcessor::setBandEnabled (int bandIndex, bool shouldBeEnabled)
+{
+    if (bandIndex < 0 || bandIndex >= NumBands)
+        return;
+
+    auto b = bands[bandIndex];
+    b.enabled = shouldBeEnabled;
+    setBand (bandIndex, b);   // spiegelt in den Parameter und rechnet neu
+}
+
+bool EQProcessor::isBandEnabled (int bandIndex) const
+{
+    if (bandIndex < 0 || bandIndex >= NumBands)
+        return false;
+
+    return bands[bandIndex].enabled;
+}
+
+void EQProcessor::refreshAuditionCoefficients (int bandIndex, double sampleRate)
+{
+    if (sampleRate <= 0.0)
+        return;
+
+    const auto& b = bands[bandIndex];
+    const auto shape = auditionShapeFor (b.type);
+
+    const float freq = juce::jlimit (20.0f, (float) (sampleRate * 0.499), b.frequencyHz);
+
+    // Bandpass folgt dem Q des Bandes (enges Band = enges Hoerfenster, genau wie
+    // in der Referenz). Unten begrenzt, damit ein sehr breites Band nicht
+    // faktisch das ganze Signal durchlaesst und das Solo wirkungslos aussieht.
+    // Tief-/Hochpass laufen auf Butterworth — dort definiert die Eckfrequenz
+    // den Bereich, nicht das Q des Bandes.
+    const float q = (shape == AuditionShape::bandPass)
+                      ? juce::jlimit (0.5f, 30.0f, b.Q)
+                      : 0.707f;
+
+    if (auditionApplied.valid
+        && auditionApplied.shape == (int) shape
+        && juce::approximatelyEqual (auditionApplied.freq, freq)
+        && juce::approximatelyEqual (auditionApplied.q, q))
+        return;
+
+    using AC = juce::dsp::IIR::ArrayCoefficients<float>;
+    const std::array<float, 6> vals =
+        shape == AuditionShape::bandPass ? AC::makeBandPass (sampleRate, freq, q)
+      : shape == AuditionShape::lowPass  ? AC::makeLowPass  (sampleRate, freq, q)
+                                         : AC::makeHighPass (sampleRate, freq, q);
+
+    for (auto& f : auditionFilters)
+        writeCoefficients (*f.state, vals);
+
+    auditionApplied = { (int) shape, freq, q, true };
+}
+
 void EQProcessor::updateDynamicsForSubBlock (const juce::AudioBuffer<float>& input,
                                              int startSample, int numSamples)
 {
@@ -733,6 +948,15 @@ void EQProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPer
     for (int i = 0; i < NumBands; ++i)
         cascadeFilters[i].prepare(spec);
 
+    // ---- Band-Solo: Filter und Puffer hier anlegen, nie im Audio-Thread ----
+    for (auto& f : auditionFilters)
+        f.prepare (spec);
+
+    auditionApplied.valid = false;
+    auditionBuffer.setSize ((int) spec.numChannels,
+                            juce::jmax (1, maximumExpectedSamplesPerBlock),
+                            false, true, false);
+
     // Apply all current band coefficients
     for (int i = 0; i < NumBands; ++i)
         updateBandCoefficients(i);
@@ -778,6 +1002,22 @@ void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     // und rechnet nur, wenn sich wirklich etwas bewegt hat.
     refreshCoefficientsFromParameters();
 
+    const int numCh = buffer.getNumChannels();
+    const int numSm = buffer.getNumSamples();
+
+    // ---- Band-Solo: Eingang sichern, BEVOR die Kette ihn ueberschreibt -------
+    // Der Puffer ist in prepareToPlay angelegt; passt der Block nicht hinein
+    // (darf laut JUCE nicht vorkommen), laeuft der Block normal weiter statt
+    // hier zu allozieren — I-01 gilt ohne Ausnahme.
+    const int solo = soloedBand.load (std::memory_order_relaxed);
+    const bool auditioning = solo >= 0 && solo < NumBands
+                             && auditionBuffer.getNumSamples()  >= numSm
+                             && auditionBuffer.getNumChannels() >= numCh;
+
+    if (auditioning)
+        for (int ch = 0; ch < numCh; ++ch)
+            auditionBuffer.copyFrom (ch, 0, buffer, ch, 0, numSm);
+
     juce::dsp::AudioBlock<float> block(buffer);
 
     if (! anyDynamicActive)
@@ -811,6 +1051,25 @@ void EQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             juce::dsp::ProcessContextReplacing<float> cascadeCtx (cascadeBlock);
             cascadeFilters[i].process (cascadeCtx);
         }
+    }
+
+    // ---- Band-Solo: Ausgang durch das Hoerfenster ersetzen ------------------
+    // Die EQ-Kette oben ist absichtlich gelaufen (Filterzustaende und
+    // Dynamik-Huellkurven bleiben warm) — ihr Ergebnis wird jetzt verworfen.
+    // Gehoert wird der unbearbeitete Eingang durch zwei kaskadierte Sektionen.
+    if (auditioning)
+    {
+        refreshAuditionCoefficients (solo, sampleRateForAudio.load (std::memory_order_relaxed));
+
+        juce::dsp::AudioBlock<float> auditionBlock (auditionBuffer.getArrayOfWritePointers(),
+                                                    (size_t) numCh, 0, (size_t) numSm);
+        juce::dsp::ProcessContextReplacing<float> auditionCtx (auditionBlock);
+
+        for (auto& f : auditionFilters)
+            f.process (auditionCtx);
+
+        for (int ch = 0; ch < numCh; ++ch)
+            buffer.copyFrom (ch, 0, auditionBuffer, ch, 0, numSm);
     }
 
     // Push samples into spectrum FIFO (lock-free)
@@ -1025,6 +1284,11 @@ void EQProcessor::setStateInformation (const void* data, int sizeInBytes)
     std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
     if (xml == nullptr || ! xml->hasTagName ("EQState"))
         return;
+
+    // Solo ist ein Abhoerzustand, kein Klangparameter: es wird nicht gespeichert
+    // und beim Laden immer geloescht. Sonst koennte eine Session mit aktivem
+    // Solo geoeffnet werden und klaenge duenn, ohne sichtbare Ursache.
+    setSoloedBand (-1);
 
     for (int i = 0; i < NumBands; ++i)
     {

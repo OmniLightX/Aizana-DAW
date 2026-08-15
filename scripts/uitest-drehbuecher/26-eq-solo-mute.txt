@@ -1,0 +1,66 @@
+# EQ Band-Solo und Band-Mute — sind die Knoepfe da und schalten sie wirklich?
+#
+# Der KLANG gehoert dem Menschen. Maschinell pruefbar ist: die Band-Leiste
+# existiert, ist ueber Namen erreichbar, und ein Klick aendert den Zustand —
+# nachgewiesen ueber den NAMEN des Knopfes, der den Zustand mitfuehrt
+# ("Band Solo" -> "Band Solo (aktiv)"). Farbe allein waere nicht pruefbar.
+#
+# ERWARTET: genau 1 Fehler am Ende — das ist die absichtliche Gegenkontrolle
+# ganz unten (bei aktivem Solo darf der Name OHNE Zusatz NICHT gefunden werden).
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/26-eq-solo-mute.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# Aizana EQ auf Spur 1 legen (Kanalzug -> Insert-Platz 1)
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+klick Insert 1 Track 1 (leer)
+warte 1500
+> press Aizana EQ
+warte 3000
+
+# --- Die Band-Leiste muss vorhanden sein ---
+> find Bandwahl
+> find Band Solo
+> find Band Mute
+> bild 1 /tmp/aizana_gui_eq/solomute-00-leiste.png
+
+# --- Solo einschalten: der Name muss "(aktiv)" tragen ---
+klick Band Solo
+warte 800
+> find Band Solo (aktiv)
+> bild 1 /tmp/aizana_gui_eq/solomute-01-solo-an.png
+
+# --- Nochmal klicken schaltet es wieder aus ---
+klick Band Solo (aktiv)
+warte 800
+> find Band Solo
+> bild 1 /tmp/aizana_gui_eq/solomute-02-solo-aus.png
+
+# --- Mute einschalten und wieder aus ---
+klick Band Mute
+warte 800
+> find Band Mute (aktiv)
+> bild 1 /tmp/aizana_gui_eq/solomute-03-mute-an.png
+
+klick Band Mute (aktiv)
+warte 800
+> find Band Mute
+> bild 1 /tmp/aizana_gui_eq/solomute-04-mute-aus.png
+
+# --- Solo ist exklusiv: Band wechseln, Solo dort setzen ---
+klick Band Solo
+warte 600
+> find Band Solo (aktiv)
+> peers
+
+# --- GEGENKONTROLLE ---------------------------------------------------------
+# `find` vergleicht EXAKT (describe(c) == name, UiTestHook.cpp:136), nicht als
+# Teilstring. Also muss bei aktivem Solo der Name OHNE Zusatz fehlschlagen —
+# sonst wuerde der Nachweis oben auch dann gruen sein, wenn sich gar nichts
+# aendert. Die folgende Zeile MUSS "ERR nicht gefunden" liefern:
+> find Band Solo
