@@ -19,6 +19,9 @@ ArrangementView::RulerStrip::RulerStrip (ApplicationState& appState_,
     , gridResolution     (gridResolution_)
     , snapEnabled        (snapEnabled_)
 {
+    // Ansprechbarer Name — die Leiste ist eine gezeichnete Flaeche ohne
+    // Kindelemente und waere sonst weder vorlesbar noch pruefbar.
+    setTitle ("Zeitlineal");
 }
 
 void ArrangementView::RulerStrip::paint (juce::Graphics& g)
@@ -108,25 +111,76 @@ void ArrangementView::RulerStrip::paint (juce::Graphics& g)
         }
     }
 
-    // Draw loop region overlay
+    // ---- Loop-Bereich (F2, User-Befund 2026-08-15) -------------------------
+    //
+    // Vorher: 2 px gruen und 2 px rot, 10 px hoch, dazu eine kaum sichtbare
+    // blaue Flaeche. Auf dem Bildschirm war das nicht auszumachen — und GRUEN
+    // kollidierte zusaetzlich mit den Rasterlinien und den Warp-Markierungen,
+    // die ebenfalls gruen sind. Zwei Bedeutungen in derselben Farbe sind keine
+    // Farbcodierung mehr.
+    //
+    // Jetzt GELB wie Logics Cycle-Bereich ("appears as a yellow strip in the
+    // ruler") — im ganzen Programm sonst nirgends belegt, auf Dunkelgrau klar
+    // erkennbar, und farbenblind-freundlicher als die Rot/Gruen-Paarung.
     {
         const auto loopInX  = (float)((loopInSecs  - scrollPositionSecs) * pixelsPerSecond);
         const auto loopOutX = (float)((loopOutSecs - scrollPositionSecs) * pixelsPerSecond);
+        const float zoneH   = (float) getHeight() * kLoopZoneFraction;
+
+        // Die Loop-Zone selbst leicht abheben, damit sichtbar ist, WO gezogen wird.
+        g.setColour (juce::Colour (0x14ffffff));
+        g.fillRect (0.0f, 0.0f, (float) getWidth(), zoneH);
+        g.setColour (juce::Colour (0x22ffffff));
+        g.drawHorizontalLine ((int) zoneH, 0.0f, (float) getWidth());
 
         if (loopOutX > loopInX)
         {
-            g.setColour (juce::Colour (0x224488ff));  // translucent blue region
-            g.fillRect (loopInX, 0.0f, loopOutX - loopInX, (float)getHeight());
+            // Kraeftiger Balken IN der Zone + laengs durchscheinende Flaeche.
+            g.setColour (juce::Colour (0x66ffcc00));
+            g.fillRect (loopInX, 0.0f, loopOutX - loopInX, zoneH);
+
+            g.setColour (juce::Colour (0x1affcc00));
+            g.fillRect (loopInX, zoneH, loopOutX - loopInX, (float) getHeight() - zoneH);
+
+            // Kanten: 3 px, volle Hoehe, damit sie auch bei kurzen Bereichen
+            // greifbar UND sichtbar sind.
+            g.setColour (juce::Colour (0xffffcc00));
+            g.fillRect (loopInX  - 1.5f, 0.0f, 3.0f, (float) getHeight());
+            g.fillRect (loopOutX - 1.5f, 0.0f, 3.0f, (float) getHeight());
         }
-
-        // Loop In marker — green vertical bar at bottom
-        g.setColour (juce::Colour (0xff44bb44));
-        g.fillRect (juce::Rectangle<float> (loopInX - 1.0f, (float)(getHeight() - 10), 2.0f, 10.0f));
-
-        // Loop Out marker — red vertical bar at bottom
-        g.setColour (juce::Colour (0xffbb4444));
-        g.fillRect (juce::Rectangle<float> (loopOutX - 1.0f, (float)(getHeight() - 10), 2.0f, 10.0f));
     }
+}
+
+double ArrangementView::RulerStrip::snapTime (double timeSecs, bool bypassSnap) const
+{
+    if (bypassSnap || ! snapEnabled || gridResolution <= 0.0)
+        return juce::jmax (0.0, timeSecs);
+
+    return juce::jmax (0.0, std::round (timeSecs / gridResolution) * gridResolution);
+}
+
+void ArrangementView::RulerStrip::applyLoopRange (double inSecs, double outSecs,
+                                                  bool enableLooping)
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    loopInSecs  = juce::jmax (0.0, juce::jmin (inSecs, outSecs));
+    loopOutSecs = juce::jmax (loopInSecs + kMinLoopLenSecs, juce::jmax (inSecs, outSecs));
+
+    auto& transport = edit->getTransport();
+    transport.setLoopRange (tracktion::TimeRange (
+        tracktion::TimePosition::fromSeconds (loopInSecs),
+        tracktion::TimePosition::fromSeconds (loopOutSecs)));
+
+    // Logic schaltet den Cycle-Modus beim Aufziehen automatisch ein — wer einen
+    // Bereich zieht, will ihn hoeren. (Und es schliesst die Luecke, dass der
+    // Bereich frueher gesetzt sein konnte, ohne dass die Engine ihn kannte.)
+    if (enableLooping && ! transport.looping)
+        transport.looping = true;
+
+    repaint();
 }
 
 void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
@@ -136,29 +190,37 @@ void ArrangementView::RulerStrip::mouseDown (const juce::MouseEvent& e)
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr) return;
 
-    // Check if click is near a loop marker (within 8px) — loop marker drag takes priority
+    const double timeSecs = juce::jmax (0.0, scrollPositionSecs + (double) e.x / pixelsPerSecond);
     const double inX  = (loopInSecs  - scrollPositionSecs) * pixelsPerSecond;
     const double outX = (loopOutSecs - scrollPositionSecs) * pixelsPerSecond;
 
-    if (std::abs ((double)e.x - inX) < 8.0)
+    // Kanten haben immer Vorrang — auch unterhalb der Zone, sonst waeren sie
+    // dort unerreichbar, obwohl sie ueber die volle Hoehe gezeichnet werden.
+    if (std::abs ((double) e.x - inX) < kLoopEdgeGrabPx)  { dragging = DragTarget::LoopIn;  return; }
+    if (std::abs ((double) e.x - outX) < kLoopEdgeGrabPx) { dragging = DragTarget::LoopOut; return; }
+
+    if (isInLoopZone (e.y))
     {
-        dragging = DragTarget::LoopIn;
-        return;
-    }
-    if (std::abs ((double)e.x - outX) < 8.0)
-    {
-        dragging = DragTarget::LoopOut;
+        // Innerhalb des Bereichs: ganzen Bereich verschieben (Logic: "grab the
+        // yellow cycle strip by the middle and drag it horizontally").
+        if (loopOutSecs > loopInSecs && timeSecs > loopInSecs && timeSecs < loopOutSecs)
+        {
+            dragging = DragTarget::LoopMove;
+            moveGrabOffset = timeSecs - loopInSecs;
+            return;
+        }
+
+        // Sonst: neuen Bereich aufziehen. Der Anker steht beim Druecken fest;
+        // der Bereich entsteht erst mit der Bewegung (ein blosser Klick soll
+        // keinen 0-Sekunden-Bereich hinterlassen).
+        dragging = DragTarget::LoopNew;
+        dragAnchorSecs = snapTime (timeSecs, e.mods.isAltDown());
         return;
     }
 
-    // Default: click-to-seek
+    // Untere Haelfte: Klick zum Springen wie bisher.
     dragging = DragTarget::Seek;
-    const double clickTimeSecs = juce::jmax (
-        0.0,
-        scrollPositionSecs + (double)e.x / pixelsPerSecond);
-
-    edit->getTransport().setPosition (
-        tracktion::TimePosition::fromSeconds (clickTimeSecs));
+    edit->getTransport().setPosition (tracktion::TimePosition::fromSeconds (timeSecs));
 }
 
 void ArrangementView::RulerStrip::mouseDrag (const juce::MouseEvent& e)
@@ -180,21 +242,29 @@ void ArrangementView::RulerStrip::mouseDrag (const juce::MouseEvent& e)
 
     const double timeSecs = juce::jmax (0.0, scrollPositionSecs + (double)e.x / pixelsPerSecond);
 
+    const bool bypassSnap = e.mods.isAltDown();
+    const double snapped = snapTime (timeSecs, bypassSnap);
+
     if (dragging == DragTarget::LoopIn)
     {
-        loopInSecs = juce::jmin (timeSecs, loopOutSecs - 0.1);
-        edit->getTransport().setLoopRange (
-            tracktion::TimeRange (
-                tracktion::TimePosition::fromSeconds (loopInSecs),
-                tracktion::TimePosition::fromSeconds (loopOutSecs)));
+        applyLoopRange (juce::jmin (snapped, loopOutSecs - kMinLoopLenSecs), loopOutSecs, true);
     }
     else if (dragging == DragTarget::LoopOut)
     {
-        loopOutSecs = juce::jmax (timeSecs, loopInSecs + 0.1);
-        edit->getTransport().setLoopRange (
-            tracktion::TimeRange (
-                tracktion::TimePosition::fromSeconds (loopInSecs),
-                tracktion::TimePosition::fromSeconds (loopOutSecs)));
+        applyLoopRange (loopInSecs, juce::jmax (snapped, loopInSecs + kMinLoopLenSecs), true);
+    }
+    else if (dragging == DragTarget::LoopNew)
+    {
+        // Erst ab einer sichtbaren Bewegung — sonst erzeugt jeder Klick in die
+        // Zone einen Winzbereich.
+        if (std::abs (snapped - dragAnchorSecs) >= kMinLoopLenSecs)
+            applyLoopRange (dragAnchorSecs, snapped, true);
+    }
+    else if (dragging == DragTarget::LoopMove)
+    {
+        const double len = loopOutSecs - loopInSecs;
+        const double newIn = juce::jmax (0.0, snapTime (timeSecs - moveGrabOffset, bypassSnap));
+        applyLoopRange (newIn, newIn + len, true);
     }
 
     repaint();

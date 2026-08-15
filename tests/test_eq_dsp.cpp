@@ -701,3 +701,119 @@ TEST_CASE ("EQ Filtertypen: HighPass ist der Low Cut, LowPass der High Cut", "[e
         CHECK (high < -15.0f);                // Hoehen weg = HIGH CUT
     }
 }
+
+// ===========================================================================
+// F4 — Die Dynamik muss SICHTBAR sein.
+//
+// User-Befund 2026-08-15: "Ich sehe den dynamischen Bounce nicht. Also zum
+// Beispiel im FabFilter oder im F6 von Waves sieht man immer diesen dynamischen
+// Bounce — wo hast du angesetzt und von wo springt das Band hoch oder runter.
+// Visuell sieht man das gar nicht."
+//
+// Zu Recht: die Regelung arbeitete unsichtbar, man stellte die Schwelle blind
+// ein. Die Oberflaeche braucht dafuer den Wert, um den das Band GERADE zieht.
+// Hier wird die Datenquelle geprueft — dass die Kurve daraus gezeichnet wird,
+// ist Sache des GUI-Laufs.
+// ===========================================================================
+TEST_CASE ("EQ Dynamik: die aktuelle Absenkung ist auslesbar", "[eq][fx][dynview]")
+{
+    constexpr double sr = 44100.0;
+    constexpr int kBlock = 512;
+
+    EQProcessor eq;
+    flattenAllBands (eq);
+
+    // Band 3: Glocke bei 1 kHz, Dynamik an, Schwelle tief -> muss greifen.
+    EQBand b = makeBand (EQBandType::Peak, 1000.0f, -6.0f, 2.0f);
+    b.dynOn          = true;
+    b.dynThresholdDB = -40.0f;
+    b.dynRatio       = 6.0f;
+    eq.setBand (3, b);
+
+    eq.prepareToPlay (sr, kBlock);
+
+    // Vor dem ersten Block liegt noch nichts an — der Zustand entsteht im
+    // Audio-Thread, nicht beim Einstellen. (Frueher an dieser Stelle falsch
+    // erwartet und vom Test gefangen.)
+    CHECK_FALSE (eq.isDynamicsActive (3));
+    CHECK (eq.getDynamicGainReductionDb (3) == 0.0f);
+
+    juce::MidiBuffer midi;
+    for (int blk = 0; blk < 40; ++blk)
+    {
+        juce::AudioBuffer<float> buf (2, kBlock);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                buf.setSample (ch, i, 0.9f * (float) std::sin (2.0 * M_PI * 1000.0
+                                                               * (blk * kBlock + i) / sr));
+        eq.processBlock (buf, midi);
+    }
+
+    // Jetzt regelt es — und die Oberflaeche kann es sehen.
+    CHECK (eq.isDynamicsActive (3));
+
+    const float gr = eq.getDynamicGainReductionDb (3);
+    INFO ("Absenkung nach lautem 1-kHz-Ton: " << gr << " dB");
+
+    // Gegen die RECHNUNG pruefen, nicht nur gegen "irgendwas passiert":
+    // Pegel ~ -0.9 dBFS, Schwelle -40 dB, Ratio 6 -> (39.1) * (1 - 1/6) ~ 32.6 dB.
+    CHECK_THAT (gr, Catch::Matchers::WithinAbs (-32.6, 2.0));
+
+    // Sie MUSS negativ sein (das Band zieht nach unten) und in einer plausiblen
+    // Groessenordnung — nicht nur "irgendein Wert ungleich null".
+    CHECK (gr < -1.0f);
+    CHECK (gr > -40.0f);
+
+    // GEGENKONTROLLE: ohne Dynamik meldet dasselbe Band 0 — sonst koennte der
+    // Test auch dann gruen sein, wenn hier irgendetwas Konstantes stuende.
+    EQProcessor eq2;
+    flattenAllBands (eq2);
+    EQBand b2 = makeBand (EQBandType::Peak, 1000.0f, -6.0f, 2.0f);
+    b2.dynOn = false;
+    eq2.setBand (3, b2);
+    eq2.prepareToPlay (sr, kBlock);
+
+    for (int blk = 0; blk < 40; ++blk)
+    {
+        juce::AudioBuffer<float> buf (2, kBlock);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                buf.setSample (ch, i, 0.9f * (float) std::sin (2.0 * M_PI * 1000.0
+                                                               * (blk * kBlock + i) / sr));
+        eq2.processBlock (buf, midi);
+    }
+
+    CHECK_FALSE (eq2.isDynamicsActive (3));
+    CHECK (eq2.getDynamicGainReductionDb (3) == 0.0f);
+}
+
+TEST_CASE ("EQ Dynamik: bei leisem Material bleibt die Anzeige bei null", "[eq][fx][dynview]")
+{
+    constexpr double sr = 44100.0;
+    constexpr int kBlock = 512;
+
+    EQProcessor eq;
+    flattenAllBands (eq);
+
+    EQBand b = makeBand (EQBandType::Peak, 1000.0f, -6.0f, 2.0f);
+    b.dynOn          = true;
+    b.dynThresholdDB = -6.0f;    // hoch: leises Material erreicht sie nicht
+    b.dynRatio       = 6.0f;
+    eq.setBand (3, b);
+    eq.prepareToPlay (sr, kBlock);
+
+    juce::MidiBuffer midi;
+    for (int blk = 0; blk < 40; ++blk)
+    {
+        juce::AudioBuffer<float> buf (2, kBlock);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlock; ++i)
+                buf.setSample (ch, i, 0.005f * (float) std::sin (2.0 * M_PI * 1000.0
+                                                                  * (blk * kBlock + i) / sr));
+        eq.processBlock (buf, midi);
+    }
+
+    const float gr = eq.getDynamicGainReductionDb (3);
+    INFO ("Absenkung bei leisem Material: " << gr << " dB");
+    CHECK (std::abs (gr) < 0.5f);
+}

@@ -92,6 +92,26 @@ public:
     void setBandEnabled (int bandIndex, bool shouldBeEnabled);
     bool isBandEnabled  (int bandIndex) const;
 
+    // -------------------------------------------------------------------------
+    // Sichtbarkeit der Dynamik (F4, User-Befund 2026-08-15)
+    //
+    // "Ich sehe den dynamischen Bounce nicht" — zu Recht: die Regelung arbeitete
+    // unsichtbar. In Pro-Q und Waves F6 BEWEGT sich die Kurve des Bandes im
+    // Takt der Musik; erst daran sieht man, ob die Schwelle sitzt und wie weit
+    // das Band gerade zieht. Ohne diese Rueckmeldung stellt man blind ein.
+    //
+    // Der Audio-Thread legt den Wert in einem Atomic ab, die Oberflaeche liest
+    // ihn im Timer. Kein Lock, kein FIFO — ein einzelner float pro Band, bei dem
+    // ein verpasster Zwischenwert folgenlos ist (der naechste kommt in 32
+    // Samples).
+    // -------------------------------------------------------------------------
+
+    /** Aktuell wirkende dynamische Absenkung dieses Bandes in dB (<= 0). */
+    float getDynamicGainReductionDb (int bandIndex) const;
+
+    /** Regelt dieses Band gerade wirklich? (Wunsch UND Band an UND Gain-tragend.) */
+    bool isDynamicsActive (int bandIndex) const;
+
     /** Attack/Release der Dynamik — geraeteweit, nicht pro Band. Message-Thread. */
     void  setDynTimes (float attackMs, float releaseMs);
     float getDynAttackMs()  const;
@@ -255,6 +275,11 @@ private:
         der auch dann stehen bleibt, wenn das Band aus ist oder gar keinen Gain hat —
         sonst spraenge der Haken beim Anklicken sofort wieder heraus. */
     std::array<bool, NumBands> dynEffective {};
+
+    /** Fuer die Anzeige: aktuelle Absenkung je Band (dB, <= 0) und ob geregelt
+        wird. Vom Audio-Thread geschrieben, vom Message-Thread gelesen. */
+    std::array<std::atomic<float>, NumBands> dynReductionDb {};
+    std::array<std::atomic<bool>,  NumBands> dynActiveForUi {};
 
     float dynAttackCoeff  = 0.0f;   // pro Teilblock, aus Attack/Release + Samplerate
     float dynReleaseCoeff = 0.0f;

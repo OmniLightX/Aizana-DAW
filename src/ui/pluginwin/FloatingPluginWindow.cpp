@@ -1,6 +1,7 @@
 #include "FloatingPluginWindow.h"
 #include "PluginWindowManager.h"
 #include "plugins/PluginLoadLog.h"
+#include "ui/common/TransportKeys.h"
 
 //==============================================================================
 // BypassWrapper — overlays a small LED toggle button on the plugin editor and
@@ -277,6 +278,38 @@ FloatingPluginWindow::~FloatingPluginWindow()
 void FloatingPluginWindow::closeButtonPressed()
 {
     manager.closePluginWindow (plugin);
+}
+
+bool FloatingPluginWindow::keyPressed (const juce::KeyPress& key)
+{
+    // Ein fokussiertes Textfeld hat Vorrang — sonst koennte man in einem Plugin
+    // (Preset-Name, unser eigenes Frequenzfeld) kein Leerzeichen mehr tippen.
+    if (auto* focused = juce::Component::getCurrentlyFocusedComponent())
+        if (dynamic_cast<juce::TextEditor*> (focused) != nullptr)
+            return juce::DocumentWindow::keyPressed (key);
+
+    const auto action = TransportKeys::actionFor (key, juce::Time::currentTimeMillis(),
+                                                  lastSpaceKeyTimeMs);
+    if (action == TransportKeys::Action::none)
+        return juce::DocumentWindow::keyPressed (key);
+
+    auto& transport = plugin.edit.getTransport();
+
+    if (action == TransportKeys::Action::rewindToStart)
+    {
+        transport.stop (false, false);
+        transport.setPosition (tracktion::core::TimePosition::fromSeconds (0.0));
+    }
+    else if (transport.isPlaying())
+    {
+        transport.stop (false, false);
+    }
+    else
+    {
+        transport.play (false);
+    }
+
+    return true;
 }
 
 void FloatingPluginWindow::applyZoom (float factor)

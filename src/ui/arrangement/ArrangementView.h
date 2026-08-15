@@ -282,8 +282,40 @@ private:
         double loopInSecs  = ArrangementView::kDefaultLoopInSecs;
         double loopOutSecs = ArrangementView::kDefaultLoopOutSecs;
 
-        enum class DragTarget { None, LoopIn, LoopOut, Seek };
+        // ---- Loop-Zone (User-Befund 2026-08-15) -----------------------------
+        //
+        // Vorher liessen sich nur die beiden duennen Griffe anfassen: wer einen
+        // Bereich wollte, musste erst den einen Griff von 0 aus dorthin ziehen,
+        // wo er beginnen soll, und dann den anderen — umstaendlich und in einer
+        // langen Session kaum zu treffen.
+        //
+        // Jetzt der Weg der Referenz-DAWs: im OBEREN Teil des Lineals erzeugt
+        // ein Zug direkt einen Bereich. Logic beschreibt genau das ("drag left
+        // or right in the top part of the ruler to create a cycle area ... Cycle
+        // mode is automatically turned on"), Studio One ebenso. Die Mitte des
+        // Bereichs verschiebt ihn, seine Kanten aendern ihn.
+        //
+        // Die untere Haelfte bleibt Klick-zum-Springen wie bisher — sonst waere
+        // das Positionieren des Abspielkopfs verloren.
+        static constexpr float kLoopZoneFraction = 0.55f;   // oberer Anteil der Hoehe
+        static constexpr double kLoopEdgeGrabPx  = 6.0;
+        static constexpr double kMinLoopLenSecs  = 0.05;
+
+        bool isInLoopZone (int y) const
+        {
+            return (float) y < (float) getHeight() * kLoopZoneFraction;
+        }
+
+        /** Auf das Raster ziehen, wenn Snap an ist (Alt umgeht es wie ueberall). */
+        double snapTime (double timeSecs, bool bypassSnap) const;
+
+        void applyLoopRange (double inSecs, double outSecs, bool enableLooping);
+
+        enum class DragTarget { None, LoopIn, LoopOut, Seek, LoopNew, LoopMove };
         DragTarget dragging = DragTarget::None;
+
+        double dragAnchorSecs = 0.0;   // Startpunkt eines neuen Bereichs
+        double moveGrabOffset = 0.0;   // Abstand Mausposition → Bereichsanfang
     };
 
     // ---- Viewport subclass that lets left/right arrow keys pass to parent ----

@@ -23,6 +23,11 @@ EQComponent::EQComponent (EQProcessor& eqProcessor_)
     addChildComponent (dragInfoLabel);
 
     setSize (700, 350);
+
+    // F4: die dynamische Kurve muss sichtbar ATMEN. 30 Hz ist die Grenze, ab der
+    // eine Regelbewegung fluessig wirkt; darunter sieht sie ruckartig aus und man
+    // traut ihr nicht. Der Timer zeichnet nur, wenn wirklich geregelt wird.
+    startTimerHz (30);
 }
 
 //==============================================================================
@@ -77,6 +82,32 @@ float EQComponent::gainDBAtY (float y) const
 
 float EQComponent::getMagnitudeAtFrequency (float hz) const
 {
+    return magnitudeAt (hz, false);
+}
+
+float EQComponent::getDynamicMagnitudeAtFrequency (float hz) const
+{
+    return magnitudeAt (hz, true);
+}
+
+bool EQComponent::anyDynamicsActive() const
+{
+    for (int i = 0; i < EQProcessor::NumBands; ++i)
+        if (eqProcessor.isDynamicsActive (i))
+            return true;
+    return false;
+}
+
+void EQComponent::timerCallback()
+{
+    // Nur neu zeichnen, wenn wirklich geregelt wird — ein EQ ohne Dynamik soll
+    // keine 30 Repaints pro Sekunde kosten.
+    if (anyDynamicsActive())
+        repaint();
+}
+
+float EQComponent::magnitudeAt (float hz, bool withDynamics) const
+{
     // Accumulate gain contributions from all enabled bands.
     // Each band's contribution is computed analytically from IIR coefficients.
     // We approximate by asking EQProcessor for each band's parameters and
@@ -96,7 +127,8 @@ float EQComponent::getMagnitudeAtFrequency (float hz) const
         CoeffPtr coeffs;
 
         const float f = band.frequencyHz;
-        const float g = band.gainDB;
+        const float g = band.gainDB
+                        + (withDynamics ? eqProcessor.getDynamicGainReductionDb (i) : 0.0f);
         const float q = band.Q;
 
         switch (band.type)
@@ -145,7 +177,11 @@ juce::Point<float> EQComponent::bandHandlePosition (int bandIndex) const
 
 int EQComponent::hitTestBandHandle (juce::Point<float> pos) const
 {
-    // Return the NEAREST enabled band handle within the hit radius.
+    // Return the NEAREST band handle within the hit radius.
+    //
+    // Gemutete Baender zaehlen MIT (F6, User-Befund 2026-08-15): frueher fielen
+    // sie hier heraus und waren damit unanfassbar — wer ein Band stummschaltete,
+    // konnte es weder verschieben noch wiederfinden.
     // Previously returned the first match (by index), which meant clicking near
     // a higher-index band always picked a lower-index band at the same y position.
     int   nearestIndex = -1;
@@ -222,6 +258,65 @@ void EQComponent::drawGrid (juce::Graphics& g) const
     }
 }
 
+void EQComponent::drawDynamicCurve (juce::Graphics& g) const
+{
+    if (! anyDynamicsActive())
+        return;
+
+    // Die bewegte Kurve: dieselbe Rechnung, aber mit der Absenkung, die die
+    // Regelung GERADE anlegt. In Pro-Q und F6 ist genau das der „dynamische
+    // Ausschlag" — man sieht, von wo nach wo das Band zieht, und kann die
+    // Schwelle danach setzen statt sie zu raten.
+    juce::Path dyn;
+    bool started = false;
+
+    for (int px = 0; px < getWidth(); ++px)
+    {
+        const float y = yForGainDB (getDynamicMagnitudeAtFrequency (frequencyAtX ((float) px)));
+        if (! started) { dyn.startNewSubPath ((float) px, y); started = true; }
+        else            dyn.lineTo ((float) px, y);
+    }
+
+    if (! started)
+        return;
+
+    // Bernstein/Amber — im EQ sonst nicht belegt (die statische Kurve ist blau,
+    // das Spektrum gruen), und deutlich genug, um die Bewegung zu verfolgen.
+    static const juce::Colour kDynColour (0xffffa028);
+
+    // Flaeche ZWISCHEN statischer und dynamischer Kurve: sie zeigt den Betrag
+    // der Regelung, nicht nur ihre Lage.
+    juce::Path band = dyn;
+    for (int px = getWidth() - 1; px >= 0; --px)
+        band.lineTo ((float) px, yForGainDB (getMagnitudeAtFrequency (frequencyAtX ((float) px))));
+    band.closeSubPath();
+
+    g.setColour (kDynColour.withAlpha (0.22f));
+    g.fillPath (band);
+
+    g.setColour (kDynColour);
+    g.strokePath (dyn, juce::PathStrokeType (2.0f));
+
+    // Zahlenwert am Band: die Kurve zeigt die Bewegung, die Zahl macht sie
+    // ablesbar (F6 zeigt ebenfalls den Wert).
+    for (int i = 0; i < EQProcessor::NumBands; ++i)
+    {
+        if (! eqProcessor.isDynamicsActive (i))
+            continue;
+
+        const float gr = eqProcessor.getDynamicGainReductionDb (i);
+        if (gr > -0.1f)
+            continue;
+
+        const auto pos = bandHandlePosition (i);
+        g.setColour (kDynColour);
+        g.setFont (juce::FontOptions (10.0f));
+        g.drawText (juce::String (gr, 1) + " dB",
+                    juce::Rectangle<float> (pos.x - 30.0f, pos.y + kHandleRadius + 2.0f, 60.0f, 12.0f),
+                    juce::Justification::centred, false);
+    }
+}
+
 void EQComponent::drawEQCurve (juce::Graphics& g) const
 {
     // Sample the combined EQ response at each pixel column
@@ -278,8 +373,15 @@ void EQComponent::drawBandHandles (juce::Graphics& g) const
     for (int i = 0; i < EQProcessor::NumBands; ++i)
     {
         const EQBand band = eqProcessor.getBand (i);
-        if (!band.enabled)
-            continue;
+
+        // F6 (User-Befund 2026-08-15): ein gemutetes Band VERSCHWAND komplett —
+        // man sah nicht mehr, wo man die Frequenz gesetzt hatte, und konnte den
+        // Griff auch nicht mehr anfassen. In jedem ueblichen EQ wird er in dieser
+        // Lage nur DURCHSICHTIG. Genau so jetzt auch hier: Position und Farbe
+        // bleiben ablesbar, der Zustand ist an der Transparenz und am
+        // durchgestrichenen Ring zu erkennen.
+        const bool muted = ! band.enabled;
+        const float alpha = muted ? 0.28f : 1.0f;
 
         const juce::Point<float> pos = bandHandlePosition (i);
         const bool isDragging = bandHandles[i].isDragging;
@@ -287,7 +389,7 @@ void EQComponent::drawBandHandles (juce::Graphics& g) const
         // Outer glow when dragging
         if (isDragging)
         {
-            g.setColour (kBandColours[i].withAlpha (0.35f));
+            g.setColour (kBandColours[i].withAlpha (0.35f * alpha));
             g.fillEllipse (pos.x - kHandleRadius - 4.0f,
                            pos.y - kHandleRadius - 4.0f,
                            (kHandleRadius + 4.0f) * 2.0f,
@@ -295,21 +397,22 @@ void EQComponent::drawBandHandles (juce::Graphics& g) const
         }
 
         // Handle fill
-        g.setColour (isDragging ? kBandColours[i] : kBandColours[i].withAlpha (0.8f));
+        g.setColour (isDragging ? kBandColours[i].withAlpha (alpha)
+                                : kBandColours[i].withAlpha (0.8f * alpha));
         g.fillEllipse (pos.x - kHandleRadius,
                        pos.y - kHandleRadius,
                        kHandleRadius * 2.0f,
                        kHandleRadius * 2.0f);
 
         // Handle outline
-        g.setColour (juce::Colours::white.withAlpha (0.6f));
+        g.setColour (juce::Colours::white.withAlpha (0.6f * alpha));
         g.drawEllipse (pos.x - kHandleRadius,
                        pos.y - kHandleRadius,
                        kHandleRadius * 2.0f,
                        kHandleRadius * 2.0f, 1.0f);
 
         // Band index label inside handle
-        g.setColour (juce::Colours::white);
+        g.setColour (juce::Colours::white.withAlpha (alpha));
         g.setFont (juce::FontOptions (9.0f));
         g.drawText (juce::String (i + 1),
                     (int)(pos.x - kHandleRadius),
@@ -317,6 +420,15 @@ void EQComponent::drawBandHandles (juce::Graphics& g) const
                     (int)(kHandleRadius * 2.0f),
                     (int)(kHandleRadius * 2.0f),
                     juce::Justification::centred);
+
+        // Durchgestrichen = gemutet. Die Transparenz allein koennte man fuer
+        // "weit weg" oder "nicht ausgewaehlt" halten; der Strich ist eindeutig.
+        if (muted)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.55f));
+            g.drawLine (pos.x - kHandleRadius, pos.y + kHandleRadius,
+                        pos.x + kHandleRadius, pos.y - kHandleRadius, 1.4f);
+        }
     }
 }
 
@@ -331,6 +443,7 @@ void EQComponent::paint (juce::Graphics& g)
 
     drawGrid (g);
     drawEQCurve (g);
+    drawDynamicCurve (g);   // F4: bewegte Kurve ueber der statischen
     drawBandHandles (g);
 }
 

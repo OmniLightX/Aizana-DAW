@@ -24,7 +24,8 @@
  * Coordinate system: log frequency x-axis, linear dB y-axis.
  * Both EQComponent and SpectrumAnalyzer share the same coordinate transforms.
  */
-class EQComponent : public juce::Component
+class EQComponent : public juce::Component,
+                    private juce::Timer
 {
 public:
     explicit EQComponent (EQProcessor& eqProcessor);
@@ -92,6 +93,27 @@ private:
      * juce::dsp::IIR::Coefficients::getMagnitudeForFrequency().
      */
     float getMagnitudeAtFrequency (float hz) const;
+
+    /**
+     * Wie oben, aber MIT der gerade wirkenden dynamischen Absenkung (F4).
+     * Damit entsteht die zweite, sich bewegende Kurve — der „dynamische
+     * Ausschlag", den Pro-Q und Waves F6 zeigen und ohne den man die Schwelle
+     * nur raten kann.
+     */
+    float getDynamicMagnitudeAtFrequency (float hz) const;
+
+    /** Gemeinsamer Kern beider Kurven; dynamicGainOffset[] ist 0, wenn die
+        statische Kurve gemeint ist. */
+    float magnitudeAt (float hz, bool withDynamics) const;
+
+    /** Zeichnet die bewegte Kurve, solange irgendein Band wirklich regelt. */
+    void drawDynamicCurve (juce::Graphics& g) const;
+
+    /** 30 Hz — die Regelung soll sichtbar ATMEN; 10 Hz wirkt ruckartig. */
+    void timerCallback() override;
+
+    /** Regelt gerade irgendein Band? (Timer laeuft sonst leer.) */
+    bool anyDynamicsActive() const;
 
     /**
      * Returns the screen-space position of band handle n.

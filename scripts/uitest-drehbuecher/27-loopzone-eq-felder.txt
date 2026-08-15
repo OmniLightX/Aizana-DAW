@@ -1,0 +1,79 @@
+# F1/F2 Loop-Zone im Lineal + F5 Eingabefelder im EQ
+#
+# Maschinell pruefbar ist: ein Zug in der OBEREN Linealhaelfte erzeugt einen
+# Loop-Bereich (vorher musste man die beiden Griffe einzeln von 0 aus ziehen),
+# und die EQ-Felder nehmen getippte Werte an. Die FARBE beurteilt der Mensch —
+# dafuer liegen Screenshots daneben.
+#
+# ERWARTET: genau 1 Fehler — die absichtliche Gegenkontrolle ganz unten.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/27-loopzone-eq-felder.txt
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# --- F1: Bereich in der oberen Linealhaelfte aufziehen ----------------------
+# Das Lineal liegt unter Marker- und Tempo-Spur; 0.25 der Hoehe ist sicher in
+# der Loop-Zone (obere 55 %), 0.85 waere die Sprung-Zone.
+> bild 0 /tmp/aizana_gui_loop/loop-00-vorher.png
+ziehein Zeitlineal @ 0.25 0.25 0.60 0.25
+warte 1000
+> bild 0 /tmp/aizana_gui_loop/loop-01-bereich-gezogen.png
+
+# Der Bereich muss jetzt in der Engine stehen: die Schleife schaltet sich beim
+# Aufziehen selbst ein (wie Logics Cycle-Modus).
+> find Schleife
+warte 500
+
+# --- Bereich verschieben (Griff in der Mitte) ------------------------------
+ziehein Zeitlineal @ 0.40 0.25 0.55 0.25
+warte 800
+> bild 0 /tmp/aizana_gui_loop/loop-02-verschoben.png
+
+# --- Untere Haelfte bleibt Klick-zum-Springen ------------------------------
+klickin Zeitlineal @ 0.30 0.85
+warte 600
+> bild 0 /tmp/aizana_gui_loop/loop-03-sprung.png
+
+# --- F5: Eingabefelder im EQ ------------------------------------------------
+wennfehlt Kanalzug Track 1 @ Mix
+warte 1500
+klick Insert 1 Track 1 (leer)
+warte 1500
+> press Aizana EQ
+warte 3000
+
+> find Band Frequenz
+> find Band Gain
+> find Band Q
+> bild 1 /tmp/aizana_gui_loop/eq-00-felder.png
+
+# Werte eintippen statt ziehen — genau der Punkt: die Frequenz soll sich beim
+# Setzen des Gains NICHT mitverschieben.
+#
+# ACHTUNG (Werkzeug-Falle, real hineingelaufen): `tippe` schickt den GANZEN Rest
+# der Zeile an Fenster 0 — es zielt NICHT auf ein Element. Fuer ein Feld im
+# Plugin-Fenster muss man es anklicken (Einfachklick startet die Eingabe) und
+# dann mit `text <peer> ...` in dieses Fenster tippen.
+klick Band Frequenz
+warte 400
+> text 1 2500
+> key 1 return
+warte 800
+
+klick Band Gain
+warte 400
+> text 1 -4.8
+> key 1 return
+warte 800
+
+# NACHWEIS: die Zustandsanzeige traegt beide Werte im Namen. `find` vergleicht
+# exakt — steht dort etwas anderes, schlaegt die Zeile fehl.
+> find Band 1: 2.50 kHz / -4.8 dB / Q 0.71
+> bild 1 /tmp/aizana_gui_loop/eq-01-getippt.png
+
+# GEGENKONTROLLE: der Ausgangszustand darf NICHT mehr zu finden sein.
+# Diese Zeile MUSS fehlschlagen.
+> find Band 1: 40 Hz / 0.0 dB / Q 0.71

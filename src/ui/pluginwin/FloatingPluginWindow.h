@@ -33,6 +33,20 @@ public:
     /** Called when user clicks the native window close button. */
     void closeButtonPressed() override;
 
+    /**
+     * Transport-Tasten auch mit offenem Plugin-Fenster.
+     *
+     * Ohne das tat die Leertaste hier NICHTS ausser einem Systemton: der Fokus
+     * liegt beim Plugin-Fenster, die Taste erreicht MainComponent nie, und
+     * macOS quittiert eine unbeantwortete Taste mit NSBeep. Wer im EQ arbeitet
+     * und stoppen will, glaubt dann, die App haenge — dabei laeuft die
+     * Wiedergabe einfach weiter (User-Befund 2026-08-15).
+     *
+     * Greift nur, wenn kein Textfeld den Fokus hat: sonst koennte man in einem
+     * Plugin kein Leerzeichen mehr tippen.
+     */
+    bool keyPressed (const juce::KeyPress& key) override;
+
     te::Plugin& getPlugin() const noexcept { return plugin; }
 
     // ---- Fullscreen prevention ----
@@ -62,6 +76,8 @@ private:
     std::unique_ptr<PinButton> pinButton;
 
     // Native editor size (before zoom) — set during construction.
+    juce::int64 lastSpaceKeyTimeMs = 0;
+
     int nativeEditorW = 400;
     int nativeEditorH = 300;
     float currentZoom = 1.0f;

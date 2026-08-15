@@ -124,8 +124,17 @@ public:
         auto bcell = [&br] (int width) { auto c = br.removeFromLeft (width); br.removeFromLeft (4); return c; };
 
         bandCombo  .setBounds (bcell (80));
-        soloButton .setBounds (bcell (70));
-        muteButton .setBounds (bcell (70));
+        soloButton .setBounds (bcell (62));
+        muteButton .setBounds (bcell (62));
+
+        // F5: Werte eintippen. Beschriftung + Feld als Paar, damit klar ist,
+        // welche Zahl wohin gehoert.
+        freqCaption.setBounds (bcell (34));
+        freqField  .setBounds (bcell (86));
+        gainCaption.setBounds (bcell (36));
+        gainField  .setBounds (bcell (78));
+        qCaption   .setBounds (bcell (18));
+        qField     .setBounds (bcell (58));
         soloHintLabel.setBounds (br);
 
         // ---- Dynamik-Leiste ----
@@ -170,6 +179,20 @@ private:
     juce::TextButton   soloButton;
     juce::TextButton   muteButton;
     juce::Label        soloHintLabel;
+
+    //==========================================================================
+    // F5 — Werte eintippen (User-Befund 2026-08-15)
+    //
+    // "Man kann das auch eintippen von Hand" — und zwar aus einem konkreten
+    // Grund: wer die Frequenz schon gefunden hat, will sie beim Einstellen des
+    // Gains NICHT versehentlich mitverschieben. Ziehen aendert beides zugleich;
+    // ein Zahlenfeld aendert genau eine Groesse. Jeder uebliche EQ hat das.
+    //
+    // Editierbare Labels statt Slider: ein Slider mit Textfeld nimmt mehr Platz
+    // und laedt zum Ziehen ein — hier geht es ausdruecklich um das Gegenteil.
+    //==========================================================================
+    juce::Label freqCaption, gainCaption, qCaption;
+    juce::Label freqField,   gainField,   qField;
 
     juce::ToggleButton dynOnButton;
     juce::Slider       threshSlider  { juce::Slider::LinearBar, juce::Slider::TextBoxRight };
@@ -222,11 +245,44 @@ private:
         };
         addAndMakeVisible (muteButton);
 
+        auto setUpCaption = [this] (juce::Label& l, const juce::String& text)
+        {
+            l.setFont (juce::FontOptions (11.0f));
+            l.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
+            l.setText (text, juce::dontSendNotification);
+            l.setJustificationType (juce::Justification::centredRight);
+            addAndMakeVisible (l);
+        };
+
+        auto setUpField = [this] (juce::Label& l, const juce::String& name,
+                                  std::function<void()> onCommit)
+        {
+            l.setFont (juce::FontOptions (12.0f));
+            l.setColour (juce::Label::textColourId,       juce::Colour (0xffdddddd));
+            l.setColour (juce::Label::backgroundColourId, juce::Colour (0xff1e1e1e));
+            l.setColour (juce::Label::outlineColourId,    juce::Colour (0xff444444));
+            l.setJustificationType (juce::Justification::centred);
+            l.setEditable (true);          // Einfachklick genuegt — kein Doppelklick suchen
+            l.setTitle (name);
+            l.onTextChange = std::move (onCommit);
+            addAndMakeVisible (l);
+        };
+
+        setUpCaption (freqCaption, "Freq");
+        setUpCaption (gainCaption, "Gain");
+        setUpCaption (qCaption,    "Q");
+
+        setUpField (freqField, "Band Frequenz", [this] { commitFreqField(); });
+        setUpField (gainField, "Band Gain",     [this] { commitGainField(); });
+        setUpField (qField,    "Band Q",        [this] { commitQField(); });
+
         soloHintLabel.setFont (juce::FontOptions (11.0f));
         soloHintLabel.setColour (juce::Label::textColourId, juce::Colour (0xff888888));
-        soloHintLabel.setText (juce::String::fromUTF8 (
-                                   "Solo = nur diesen Bereich h\xc3\xb6ren \xc2\xb7 Mute = dieses Band aus"),
-                               juce::dontSendNotification);
+        // Zustandsanzeige statt Hinweistext: sie ist fuer den Anwender ein
+        // Ableseort und traegt denselben Text im NAMEN — damit ist der Zustand
+        // des Bandes auch ohne Bildschirm pruefbar (Hausregel aus den
+        // GUI-Testlaeufen: die Farbe allein beweist nichts).
+        soloHintLabel.setJustificationType (juce::Justification::centredLeft);
         addAndMakeVisible (soloHintLabel);
 
         refreshBandBarFromProcessor();
@@ -243,6 +299,100 @@ private:
         bandCombo.setSelectedId (b + 1, juce::dontSendNotification);
         refreshBandBarFromProcessor();
         refreshDynamicsFromProcessor();
+    }
+
+    //--------------------------------------------------------------------------
+    // F5 — Eingaben uebernehmen
+    //
+    // Nachsichtig lesen: "1k", "1 kHz", "1000" und "-4,8" (deutsches Komma)
+    // sollen alle funktionieren. Ein Feld, das die eigene Anzeige nicht wieder
+    // annimmt, ist eine Falle — genau deshalb wird auch mit demselben Format
+    // zurueckgeschrieben, in dem gelesen wird.
+    //--------------------------------------------------------------------------
+    static double parseNumber (juce::String text, bool& ok)
+    {
+        text = text.trim().replaceCharacter (',', '.');
+
+        double factor = 1.0;
+        if (text.endsWithIgnoreCase ("khz") || text.endsWithIgnoreCase ("k"))
+            factor = 1000.0;
+
+        // Alles ausser Ziffern, Punkt und Vorzeichen entfernen ("1.2 kHz" -> "1.2")
+        juce::String digits;
+        for (auto c : text)
+            if (juce::CharacterFunctions::isDigit (c) || c == '.' || c == '-' || c == '+')
+                digits << c;
+
+        ok = digits.containsAnyOf ("0123456789");
+        return digits.getDoubleValue() * factor;
+    }
+
+    void commitFreqField()
+    {
+        bool ok = false;
+        const double hz = parseNumber (freqField.getText(), ok);
+        if (ok)
+        {
+            auto b = proc.getBand (selectedDynBand);
+            b.frequencyHz = (float) juce::jlimit (20.0, 20000.0, hz);
+            proc.setBand (selectedDynBand, b);
+        }
+        refreshBandFields (true);
+    }
+
+    void commitGainField()
+    {
+        bool ok = false;
+        const double db = parseNumber (gainField.getText(), ok);
+        if (ok)
+        {
+            auto b = proc.getBand (selectedDynBand);
+            b.gainDB = (float) juce::jlimit (-18.0, 18.0, db);
+            proc.setBand (selectedDynBand, b);
+        }
+        refreshBandFields (true);
+    }
+
+    void commitQField()
+    {
+        bool ok = false;
+        const double q = parseNumber (qField.getText(), ok);
+        if (ok)
+        {
+            auto b = proc.getBand (selectedDynBand);
+            b.Q = (float) juce::jlimit (0.1, 30.0, q);
+            proc.setBand (selectedDynBand, b);
+        }
+        refreshBandFields (true);
+    }
+
+    /** Anzeige nachfuehren. Ein Feld, in dem gerade GETIPPT wird, bleibt in
+        Ruhe — sonst kaempft der Timer gegen die Hand des Users (dieselbe Regel
+        wie bei den Dynamik-Reglern). */
+    void refreshBandFields (bool force)
+    {
+        const auto b = proc.getBand (selectedDynBand);
+
+        auto put = [force] (juce::Label& l, const juce::String& text)
+        {
+            if (force || ! l.isBeingEdited())
+                l.setText (text, juce::dontSendNotification);
+        };
+
+        const auto freqText = b.frequencyHz >= 1000.0f
+                                ? juce::String (b.frequencyHz / 1000.0f, 2) + " kHz"
+                                : juce::String (b.frequencyHz, 0) + " Hz";
+        const auto gainText = juce::String (b.gainDB, 1) + " dB";
+        const auto qText    = juce::String (b.Q, 2);
+
+        put (freqField, freqText);
+        put (gainField, gainText);
+        put (qField,    qText);
+
+        const auto summary = "Band " + juce::String (selectedDynBand + 1) + ": "
+                             + freqText + " / " + gainText + " / Q " + qText;
+        soloHintLabel.setText (summary, juce::dontSendNotification);
+        soloHintLabel.setTitle (summary);
     }
 
     void refreshBandBarFromProcessor()
@@ -269,6 +419,8 @@ private:
 
         soloButton.repaint();
         muteButton.repaint();
+
+        refreshBandFields (false);
     }
 
     void buildDynamicsBar()
@@ -665,6 +817,9 @@ void EQProcessor::refreshCoefficientsFromParameters()
                                   || b.type == EQBandType::LowShelf
                                   || b.type == EQBandType::HighShelf);
         dynEffective[i] = b.dynOn && b.enabled && gainBearing;
+        dynActiveForUi[(size_t) i].store (dynEffective[i], std::memory_order_relaxed);
+        if (! dynEffective[i])
+            dynReductionDb[(size_t) i].store (0.0f, std::memory_order_relaxed);
 
         bands[i].dynOn          = b.dynOn;
         bands[i].dynThresholdDB = b.dynThresholdDB;
@@ -831,6 +986,24 @@ void EQProcessor::setBandEnabled (int bandIndex, bool shouldBeEnabled)
     setBand (bandIndex, b);   // spiegelt in den Parameter und rechnet neu
 }
 
+float EQProcessor::getDynamicGainReductionDb (int bandIndex) const
+{
+    if (bandIndex < 0 || bandIndex >= NumBands)
+        return 0.0f;
+
+    return dynActiveForUi[(size_t) bandIndex].load (std::memory_order_relaxed)
+             ? dynReductionDb[(size_t) bandIndex].load (std::memory_order_relaxed)
+             : 0.0f;
+}
+
+bool EQProcessor::isDynamicsActive (int bandIndex) const
+{
+    if (bandIndex < 0 || bandIndex >= NumBands)
+        return false;
+
+    return dynActiveForUi[(size_t) bandIndex].load (std::memory_order_relaxed);
+}
+
 bool EQProcessor::isBandEnabled (int bandIndex) const
 {
     if (bandIndex < 0 || bandIndex >= NumBands)
@@ -918,6 +1091,11 @@ void EQProcessor::updateDynamicsForSubBlock (const juce::AudioBuffer<float>& inp
 
         // Nur nach UNTEN: das Band senkt ab, wenn seine Frequenz zu laut wird.
         const float target = bands[i].gainDB - cutDB;
+
+        // Fuer die Anzeige (F4): der Wert, um den das Band GERADE zieht.
+        // Nur ein Store pro Teilblock, kein Lock — die Oberflaeche liest ihn
+        // im Timer und darf einen Zwischenwert verpassen.
+        dynReductionDb[(size_t) i].store (-cutDB, std::memory_order_relaxed);
 
         // 0,05 dB Schwelle: darunter ist die Aenderung unhoerbar, und jedes
         // Nachschreiben kostet einen Koeffizientensatz.
