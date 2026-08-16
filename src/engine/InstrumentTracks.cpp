@@ -122,10 +122,26 @@ namespace aizana
         if (dev == nullptr)
             return;
 
-        // Monitoring bewusst AUS: das Hoerbarmachen uebernimmt LiveMidiPreview
-        // ueber injectLiveMidiMessage (der Weg, der immer funktioniert). Stuende
-        // hier zusaetzlich Monitoring an, klaenge jede Note DOPPELT.
-        dev->setMonitorMode (te::InputDevice::MonitorMode::off);
+        // Monitoring AN.
+        //
+        // ⚠️ Die Erklaerung fuer ein Hin und Her, das den User zweimal Ton
+        // gekostet hat — hier festgehalten, damit es nicht ein drittes Mal
+        // passiert:
+        //
+        //   * Solange `setTarget` FEHLSCHLUG (die Geraete-Instanz existierte
+        //     nach dem Anlegen des virtuellen Geraets noch nicht), lag auf der
+        //     Spur gar kein Eingang. `injectLiveMidiMessage` war dann der
+        //     einzige Weg — und er funktionierte.
+        //   * Seit die Zuweisung zuverlaessig klappt (nachgereicht per
+        //     callAsync, plus beim Scharfschalten), hat die Spur einen echten
+        //     MIDI-Eingang. Damit haengt der hoerbare Weg an TEs Monitoring —
+        //     und das stand hier auf OFF. Ergebnis: wieder kein Ton.
+        //
+        // Also: das GERAET macht hoerbar (Monitoring automatic) UND nimmt auf.
+        // Ein Weg statt zwei halben. LiveMidiPreview injiziert nur noch dort,
+        // wo es keinen Geraete-Eingang gibt (Audiospur mit Instrument,
+        // Vorhoeren im Piano Roll) — sonst klaenge jede Note doppelt.
+        dev->setMonitorMode (te::InputDevice::MonitorMode::automatic);
 
         // ⚠️ ZEITPUNKT: wurde das Geraet gerade erst angelegt, laeuft TEs
         // `rescanMidiDeviceList` noch — die INSTANZ zu diesem Geraet existiert

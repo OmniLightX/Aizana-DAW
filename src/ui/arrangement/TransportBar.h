@@ -102,17 +102,16 @@ private:
     //   playhead position, Logic switches to record mode." Dazu die Option
     //   "Only during count-in" fuer den Klick.
     //
-    // Umsetzung: Wiedergabe beginnt N Takte frueher, das Metronom wird fuer die
-    // Dauer des Vorzaehlers ERZWUNGEN (und danach auf seinen alten Stand
-    // zurueckgesetzt), und aufgenommen wird ab dem eigentlichen Startpunkt —
-    // ueber TEs Punch-In, damit der Vorlauf NICHT im Clip landet.
+    // Umsetzung (zweiter Anlauf — der erste ueber TEs Punch-In fasste den
+    // Loop-Bereich des Anwenders an und blieb davor haengen): reine WIEDERGABE
+    // ab dem Vorzaehler-Anfang, Metronom fuer die Dauer erzwungen, und beim
+    // Erreichen des Aufnahmestarts wird auf Aufnahme umgeschaltet. An Loop,
+    // Punch und anderen Einstellungen wird NICHTS geaendert.
     int  countInBars = 0;                 // 0 = aus, sonst 1 / 2 / 4
 
-    bool countInActive       = false;     // laeuft gerade ein Vorzaehler?
-    bool metronomeWasEnabled = false;     // Stand vor dem Erzwingen
-    bool punchWasEnabled     = false;     // Stand von recordingPunchInOut
-    tracktion::TimeRange savedLoopRange;  // Benutzer-Schleife, wird wiederhergestellt
-    bool loopWasEnabled      = false;
+    bool   countInActive       = false;   // laeuft gerade ein Vorzaehler?
+    bool   metronomeWasEnabled = false;   // Klick-Stand vor dem Erzwingen
+    double countInTargetSecs   = 0.0;     // hier beginnt die eigentliche Aufnahme
 
     /** Startet die Aufnahme mit Vorzaehler. Getrennt von recordClicked, damit
         der Ablauf an einer Stelle steht und testbar bleibt. */

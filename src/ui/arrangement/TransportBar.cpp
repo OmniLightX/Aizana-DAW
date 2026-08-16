@@ -309,11 +309,20 @@ void TransportBar::timerCallback()
     // "klackt einfach die ganze Zeit".
     if (countInActive)
     {
-        const bool erreicht = ! transport.getLoopRange().isEmpty()
-                                && pos >= transport.getLoopRange().getStart();
-
-        if (erreicht || ! transport.isPlaying())
+        if (! transport.isPlaying())
+        {
+            // Abgebrochen (Stopp gedrueckt) — nur aufraeumen.
             finishCountIn();
+        }
+        else if (pos.inSeconds() >= countInTargetSecs - 0.001)
+        {
+            // Aufnahmestart erreicht: Klick aus, exakt auf den Startpunkt und
+            // aufnehmen. Der Vorlauf landet damit NICHT im Clip.
+            finishCountIn();
+            transport.stop (false, false);
+            transport.setPosition (tracktion::core::TimePosition::fromSeconds (countInTargetSecs));
+            transport.record (false);
+        }
     }
 
     // Format as M:SS:BB.mmm (bars not available without tempo analysis; use H:MM:SS.mmm)
@@ -645,47 +654,43 @@ void TransportBar::startRecordingWithCountIn()
     auto& transport = edit->getTransport();
     auto& ts        = edit->tempoSequence;
 
-    // Aufnahmestart = wo der Kopf steht (bzw. der Punch-Bereich beginnt).
-    const auto recStart = edit->recordingPunchInOut.get() && ! transport.getLoopRange().isEmpty()
-                            ? transport.getLoopRange().getStart()
-                            : transport.getPosition();
+    const auto recStart = transport.getPosition();
+    const auto bb       = ts.toBarsAndBeats (recStart);
 
-    const auto bb = ts.toBarsAndBeats (recStart);
-
-    // Auf den Taktanfang runden: gezaehlt wird in Takten, nicht ab einer
-    // krummen Position. Der Aufnahmestart selbst bleibt, wo er ist.
-    const int startBar = juce::jmax (0, bb.bars - countInBars);
+    // Gezaehlt wird in ganzen Takten, ab dem Takt, in dem die Aufnahme beginnt.
+    const int  startBar     = juce::jmax (0, bb.bars - countInBars);
     const auto countInStart = ts.toTime (tracktion::tempo::BarsAndBeats { startBar });
 
     if (countInStart >= recStart)
     {
-        // Kein Platz fuer einen Vorlauf (Aufnahme beginnt bei 0): ohne Zaehlen
-        // aufnehmen, statt still nichts zu tun.
+        // Kein Platz fuer einen Vorlauf (Aufnahme beginnt ganz vorn):
+        // ohne Zaehlen aufnehmen, statt still nichts zu tun.
         transport.record (false);
         return;
     }
 
-    // Zustaende sichern, die wir gleich umstellen.
+    // ⚠️ ZWEITER ANLAUF (2026-08-16). Der erste Versuch hat den Vorlauf ueber
+    // TEs PUNCH-IN gefahren: Loop-Bereich auf [Aufnahmestart, Ende] setzen,
+    // recordingPunchInOut an, dann aufnehmen. Das war zu clever — es fasst
+    // Loop-Bereich und Punch-Einstellung des Anwenders an, und im Zusammenspiel
+    // mit einem bereits gesetzten Loop-Bereich lief der Kopf vor dem Bereich
+    // ins Leere, ohne je in die Aufnahme zu gehen ("laeuft permanent vor und
+    // bleibt vor dem Loop-Bereich stehen").
+    //
+    // Jetzt der einfache, vorhersagbare Weg, der genau Logics Beschreibung
+    // folgt ("playback begins before the playhead position. When reaching the
+    // playhead position, Logic switches to record mode"): reine WIEDERGABE ab
+    // dem Vorzaehler-Anfang, und beim Erreichen des Aufnahmestarts wird auf
+    // Aufnahme umgeschaltet. Es wird NICHTS an Loop, Punch oder sonstigen
+    // Einstellungen angefasst — nur der Klick, und der auch nur voruebergehend.
     metronomeWasEnabled = appState.audioEngine.getMetronome().getEnabled();
-    punchWasEnabled     = edit->recordingPunchInOut.get();
-    loopWasEnabled      = transport.looping;
-    savedLoopRange      = transport.getLoopRange();
-
-    // Klick erzwingen — ein Vorzaehler ohne Klick waere keiner.
     appState.audioEngine.getMetronome().setEnabled (true);
 
-    // Punch-In auf den eigentlichen Aufnahmestart: der Kopf laeuft ab
-    // countInStart, aufgenommen wird erst ab recStart. Das ist exakt Logics
-    // Beschreibung ("when reaching the playhead position, Logic switches to
-    // record mode") — ohne Neustart des Transports, also ohne Hoerloch.
-    transport.looping = false;
-    transport.setLoopRange (tracktion::TimeRange (recStart, tracktion::core::TimePosition::fromSeconds (
-                                                                edit->getLength().inSeconds() + 3600.0)));
-    edit->recordingPunchInOut = true;
+    countInTargetSecs = recStart.inSeconds();
+    countInActive     = true;
 
-    countInActive = true;
     transport.setPosition (countInStart);
-    transport.record (false);
+    transport.play (false);
 }
 
 void TransportBar::finishCountIn()
@@ -695,19 +700,9 @@ void TransportBar::finishCountIn()
 
     countInActive = false;
 
-    // Alles zurueck, wie es war — ein Abhoerhilfsmittel darf die Session nicht
-    // umkonfiguriert hinterlassen.
+    // Klick zurueck auf den Stand des Anwenders — er soll nur WAEHREND des
+    // Vorzaehlers laufen (Logics "Only during count-in").
     appState.audioEngine.getMetronome().setEnabled (metronomeWasEnabled);
-
-    if (auto* edit = appState.editManager.getEdit())
-    {
-        edit->recordingPunchInOut = punchWasEnabled;
-
-        auto& transport = edit->getTransport();
-        if (! savedLoopRange.isEmpty())
-            transport.setLoopRange (savedLoopRange);
-        transport.looping = loopWasEnabled;
-    }
 }
 
 void TransportBar::mouseDown (const juce::MouseEvent& e)
