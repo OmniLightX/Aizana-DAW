@@ -2,6 +2,7 @@
 #include "ui/common/AizanaIcons.h"
 #include "AddTracksDialog.h"
 #include "engine/InstrumentTracks.h"
+#include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "plugins/BuiltInPluginFormat.h"
 #include <set>
 
@@ -1654,7 +1655,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
         juce::PopupMenu menu;
         menu.addItem (1, "Add Audio Track");
-        menu.addItem (2, juce::String::fromUTF8 ("Instrumentenspur hinzuf\xc3\xbcgen (Synth)"));
+        menu.addItem (2, juce::String::fromUTF8 ("Instrumentenspur hinzuf\xc3\xbcgen\xe2\x80\xa6"));
         menu.addSeparator();
         menu.addItem (3, "Paste Clip Here",
                       clipEditor.hasClipboardContents());
@@ -1682,9 +1683,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
                     // einen 4-Takt-Clip mitgeliefert. Vorher entstand hier eine Spur,
                     // die nur dem NAMEN nach MIDI war — ohne Clip gab es nichts
                     // aufzumachen, der Doppelklick lief ins Leere.
-                    createTracks (1, true, false,
-                                  "Synth " + juce::String (existingTracks.size() + 1),
-                                  "Aizana Synth");
+                    addInstrumentTrackWithBrowser();
                 }
                 else if (result == 3)
                 {
@@ -3093,4 +3092,70 @@ bool ArrangementView::deleteSelection()
     }
 
     return false;
+}
+
+
+//==============================================================================
+// Instrumentenspur mit freier Instrumentenwahl
+//
+// User-Befund 2026-08-16: "Synth ist schon vorbestimmt, ich kann nicht
+// auswaehlen — und wenn User ihre eigenen haben, wie z. B. Omnisphere, dann
+// kann man es gar nicht einfuegen. Es sollte universell sein wie bei Logic Pro
+// oder Fender Studio."
+//
+// Richtig: eine Instrumentenspur mit fest eingebautem Synth ist keine
+// Instrumentenspur, sondern eine Synth-Spur. Deshalb wird die Spur LEER
+// angelegt und der Anwender waehlt aus allen bekannten Instrumenten — den
+// eingebauten wie den installierten VST/AU.
+//==============================================================================
+
+void ArrangementView::addInstrumentTrackWithBrowser()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    // Nur Instrumente anbieten: ein Hall im Instrumenten-Slot waere ein
+    // stummer Kanal und sieht wie ein Fehler der App aus.
+    instrumentPluginList.clear();
+    for (const auto& desc : pluginScanner.getKnownPlugins().getTypes())
+        if (desc.isInstrument)
+            instrumentPluginList.addType (desc);
+
+    const int nr = te::getAudioTracks (*edit).size() + 1;
+
+    auto* track = aizana::createInstrumentTrack (
+        *edit, "Instrument " + juce::String (nr),
+        [] (te::AudioTrack&) { /* Instrument folgt aus dem Browser */ });
+
+    if (track == nullptr)
+        return;
+
+    juce::Component::SafePointer<ArrangementView> safe (this);
+    te::EditItemID trackID = track->itemID;
+
+    PluginBrowserPopup::showForComponent (
+        *this, instrumentPluginList,
+        [safe, trackID] (const juce::PluginDescription& desc)
+        {
+            if (safe == nullptr)
+                return;
+
+            auto* e = safe->appState.editManager.getEdit();
+            if (e == nullptr)
+                return;
+
+            // Die Spur ueber ihre ID wiederfinden — ein roher Zeiger koennte
+            // den Browser nicht ueberleben (I-11).
+            for (auto* t : te::getAudioTracks (*e))
+            {
+                if (t->itemID != trackID)
+                    continue;
+
+                if (auto* p = safe->pluginManager.insertPlugin (*t, desc))
+                    safe->pluginWindowManager.openPluginWindow (*p);
+
+                break;
+            }
+        });
 }

@@ -19,36 +19,23 @@ namespace aizana
         }
     }
 
-    // ── Zwei Wege, und der erste ist der wichtige ────────────────────────────
+    // ── BEIDE Wege gleichzeitig, und das ist Absicht ─────────────────────────
     //
-    // 1. UEBER DAS VIRTUELLE KEYBOARD-GERAET, wenn die Spur es als Eingang hat.
-    //    Nur so kommt das Gespielte am AUFNAHMEPFAD vorbei. Vorher ging alles
-    //    ausschliesslich ueber injectLiveMidiMessage — man hoerte die Noten,
-    //    aber die Aufnahme blieb leer, ohne jede Fehlermeldung (User-Befund
-    //    2026-08-15). In Logic ist das Musical-Typing-Fenster ausdruecklich eine
-    //    vollwertige Aufnahmequelle.
+    // GEHOERT wird ueber `injectLiveMidiMessage` — direkt in den Wiedergabe-Graphen
+    // der Spur. Das ist der Weg, der nachweislich funktioniert, unabhaengig von
+    // Geraeten, Monitoring und Transportzustand.
     //
-    // 2. DIREKT IN DEN WIEDERGABE-GRAPHEN, wenn es das Geraet nicht gibt oder
-    //    die Spur es nicht hoert (kein MIDI-System, Audiospur mit Instrument,
-    //    Vorhoeren im Piano Roll). Dann hoert man wenigstens etwas — lieber
-    //    Vorhoeren ohne Aufnahme als Stille ohne Hinweis.
-
-    static bool trackListensToKeyboard (te::Track* track)
-    {
-        auto* at = asAudioTrack (track);
-        if (at == nullptr)
-            return false;
-
-        auto* dev = getOrCreateKeyboardDevice (at->edit.engine);
-        if (dev == nullptr)
-            return false;
-
-        for (auto* instance : at->edit.getAllInputDevices())
-            if (&instance->getInputDevice() == dev && te::isOnTargetTrack (*instance, *at, 0))
-                return true;
-
-        return false;
-    }
+    // AUFGENOMMEN wird ueber das virtuelle Keyboard-Geraet. Nur dort kommt die
+    // Note am Aufnahmepfad vorbei (User-Befund: "die Melodie wird nicht
+    // aufgenommen"); in Logic ist das Musical-Typing-Fenster ausdruecklich eine
+    // vollwertige Aufnahmequelle.
+    //
+    // ⚠️ FEHLER, DEN ICH HIER SCHON GEMACHT HABE (2026-08-15): erst stand hier
+    // ein ENTWEDER-ODER — liegt das Geraet auf der Spur, geht die Note NUR
+    // dorthin. Ergebnis: gar kein Ton mehr, weil das Geraet ohne Monitoring
+    // nichts hoerbar macht. Ein funktionierender Weg wurde gegen einen
+    // bedingten getauscht. Deshalb jetzt beides, und das Monitoring des Geraets
+    // bleibt AUS (siehe routeKeyboardToTrack) — sonst hoerte man doppelt.
 
     void sendLivePreviewNoteOn (te::Track* track, int pitch, int velocity)
     {
@@ -56,13 +43,13 @@ namespace aizana
         if (at == nullptr)
             return;
 
-        if (trackListensToKeyboard (track)
-            && sendKeyboardNoteOn (at->edit.engine, pitch, velocity))
-            return;
-
+        // 1. Hoeren (immer)
         at->injectLiveMidiMessage (juce::MidiMessage::noteOn (1, pitch,
                                        (juce::uint8) juce::jlimit (1, 127, velocity)),
                                    uiSourceID());
+
+        // 2. Aufnehmen (wenn es das Geraet gibt)
+        sendKeyboardNoteOn (at->edit.engine, pitch, velocity);
     }
 
     void sendLivePreviewNoteOff (te::Track* track, int pitch)
@@ -71,10 +58,8 @@ namespace aizana
         if (at == nullptr)
             return;
 
-        if (trackListensToKeyboard (track) && sendKeyboardNoteOff (at->edit.engine, pitch))
-            return;
-
         at->injectLiveMidiMessage (juce::MidiMessage::noteOff (1, pitch), uiSourceID());
+        sendKeyboardNoteOff (at->edit.engine, pitch);
     }
 
     void sendLivePreviewAllNotesOff (te::Track* track)

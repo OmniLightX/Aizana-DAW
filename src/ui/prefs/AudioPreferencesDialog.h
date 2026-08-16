@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "audio/AudioEngine.h"
+#include "engine/EditManager.h"
 
 /**
  * AudioPreferencesDialog — Full audio device setup via JUCE's AudioDeviceSelectorComponent.
@@ -19,19 +20,33 @@ class AudioPreferencesDialog : public juce::Component,
                                 private juce::Timer
 {
 public:
-    explicit AudioPreferencesDialog (AudioEngine& engine);
+    AudioPreferencesDialog (AudioEngine& engine, EditManager* editManager);
     ~AudioPreferencesDialog() override;
 
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
-    static void show (AudioEngine& engine);
+    static void show (AudioEngine& engine, EditManager* editManager = nullptr);
 
 private:
     AudioEngine& audioEngine;
 
+    EditManager* editManager = nullptr;
+
     juce::AudioDeviceSelectorComponent deviceSelector;
     juce::Label                        latencyLabel;
+
+    // ---- Autosave (User-Wunsch 2026-08-15/16) ------------------------------
+    //
+    // Die Einstellung stand zuerst im PreferencesDialog — den oeffnet aber
+    // NIEMAND: Cmd+, und der Menuepunkt "Preferences..." fuehren beide hierher.
+    // Der Anwender fand sie folgerichtig nicht ("Ich sehe in den Einstellungen
+    // nicht die Option Autosave"). Sie gehoert dorthin, wo die Einstellungen
+    // tatsaechlich aufgehen.
+    juce::Label    autosaveLabel { {}, "Autosave:" };
+    juce::ComboBox autosaveCombo;
+
+    void autosaveIntervalChanged();
 
     void timerCallback() override;
     void updateLatencyLabel();

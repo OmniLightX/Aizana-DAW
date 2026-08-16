@@ -2,8 +2,9 @@
 
 //==============================================================================
 
-AudioPreferencesDialog::AudioPreferencesDialog (AudioEngine& engine)
+AudioPreferencesDialog::AudioPreferencesDialog (AudioEngine& engine, EditManager* em)
     : audioEngine (engine),
+      editManager (em),
       deviceSelector (engine.getDeviceManager(),
                       0,    // minAudioInputChannels
                       256,  // maxAudioInputChannels  (covers Apollo 64ch, 96ch, etc.)
@@ -21,10 +22,40 @@ AudioPreferencesDialog::AudioPreferencesDialog (AudioEngine& engine)
     latencyLabel.setColour (juce::Label::textColourId, juce::Colour (0xffaaaaaa));
     addAndMakeVisible (latencyLabel);
 
+    // ---- Autosave-Intervall ----
+    autosaveLabel.setFont (juce::FontOptions (12.0f));
+    autosaveLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    autosaveLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (autosaveLabel);
+
+    {
+        int id = 1;
+        for (int m : EditManager::kAutosaveMinutesChoices)
+            autosaveCombo.addItem (m == 0 ? juce::String::fromUTF8 ("aus")
+                                          : juce::String (m) + " Minuten", id++);
+
+        int sel = 1, i = 1;
+        const int current = editManager != nullptr ? editManager->getAutosaveIntervalMinutes() : 5;
+        for (int m : EditManager::kAutosaveMinutesChoices)
+        {
+            if (m == current) sel = i;
+            ++i;
+        }
+
+        autosaveCombo.setSelectedId (sel, juce::dontSendNotification);
+        autosaveCombo.setTitle ("Autosave Intervall");
+        autosaveCombo.setTooltip (juce::String::fromUTF8 (
+            "Wie oft Aizana die laufende Session automatisch sichert. "
+            "Es bleiben immer nur die letzten drei Sicherungen liegen."));
+        autosaveCombo.onChange = [this] { autosaveIntervalChanged(); };
+        autosaveCombo.setEnabled (editManager != nullptr);
+        addAndMakeVisible (autosaveCombo);
+    }
+
     updateLatencyLabel();
     startTimer (500);
 
-    setSize (560, 500);
+    setSize (560, 540);
 }
 
 AudioPreferencesDialog::~AudioPreferencesDialog()
@@ -38,6 +69,12 @@ void AudioPreferencesDialog::resized()
 {
     auto area = getLocalBounds();
     latencyLabel.setBounds (area.removeFromBottom (28).reduced (8, 4));
+
+    auto autoRow = area.removeFromBottom (30).reduced (8, 2);
+    autosaveLabel.setBounds (autoRow.removeFromLeft (110));
+    autoRow.removeFromLeft (6);
+    autosaveCombo.setBounds (autoRow.removeFromLeft (150));
+
     deviceSelector.setBounds (area);
 }
 
@@ -66,9 +103,9 @@ void AudioPreferencesDialog::updateLatencyLabel()
 
 //==============================================================================
 
-void AudioPreferencesDialog::show (AudioEngine& engine)
+void AudioPreferencesDialog::show (AudioEngine& engine, EditManager* em)
 {
-    auto* dialog = new AudioPreferencesDialog (engine);
+    auto* dialog = new AudioPreferencesDialog (engine, em);
 
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned (dialog);
@@ -78,4 +115,17 @@ void AudioPreferencesDialog::show (AudioEngine& engine)
     opts.useNativeTitleBar            = true;
     opts.resizable                    = true;
     opts.launchAsync();
+}
+
+
+void AudioPreferencesDialog::autosaveIntervalChanged()
+{
+    if (editManager == nullptr)
+        return;
+
+    const int index = autosaveCombo.getSelectedId() - 1;
+    const auto& choices = EditManager::kAutosaveMinutesChoices;
+
+    if (index >= 0 && index < (int) (sizeof (choices) / sizeof (choices[0])))
+        editManager->setAutosaveIntervalMinutes (choices[index]);
 }

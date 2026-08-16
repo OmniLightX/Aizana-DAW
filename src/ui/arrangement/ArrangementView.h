@@ -561,6 +561,22 @@ private:
     void createTracks (int count, bool midi, bool stereo, juce::String namePrefix,
                        juce::String instrument = {});
 
+    /**
+     * Instrumentenspur anlegen und den Anwender das Instrument WAEHLEN lassen —
+     * jedes, das die App kennt, also auch VST/AU von Drittanbietern
+     * (Omnisphere, Kontakt, …). Vorher war "Synth" fest verdrahtet; damit war
+     * die Instrumentenspur fuer alle unbrauchbar, die ihre eigenen Instrumente
+     * benutzen. Logic und Studio One legen ebenfalls eine LEERE
+     * Instrumentenspur an und laden hinein, was man braucht.
+     */
+    void addInstrumentTrackWithBrowser();
+
+    /** Nur die Instrumente aus der Plugin-Liste — ein Hall gehoert nicht in den
+        Instrumenten-Slot. Wird bei jedem Oeffnen neu aufgebaut (die Liste kann
+        sich durch einen Scan geaendert haben) und muss den Browser ueberleben,
+        deshalb Member. */
+    juce::KnownPluginList instrumentPluginList;
+
     // Rebuilds all header + TrackRow children from current Edit state
     void rebuildTrackRows();
     // Lays out all TrackRows vertically (called by resized() and after row expansion)

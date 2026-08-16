@@ -107,9 +107,10 @@ namespace aizana
             break;
         }
 
-        // Ohne Monitoring hoert man das eigene Spiel nur bei laufender Aufnahme —
-        // in Logic und Studio One hoert die ausgewaehlte Instrumentenspur immer mit.
-        dev->setMonitorMode (te::InputDevice::MonitorMode::automatic);
+        // Monitoring bewusst AUS: das Hoerbarmachen uebernimmt LiveMidiPreview
+        // ueber injectLiveMidiMessage (der Weg, der immer funktioniert). Stuende
+        // hier zusaetzlich Monitoring an, klaenge jede Note DOPPELT.
+        dev->setMonitorMode (te::InputDevice::MonitorMode::off);
     }
 
     te::AudioTrack* createInstrumentTrack (te::Edit& edit,

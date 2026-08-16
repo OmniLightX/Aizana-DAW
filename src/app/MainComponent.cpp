@@ -407,7 +407,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0) ||
         key == juce::KeyPress (',', juce::ModifierKeys::ctrlModifier, 0))
     {
-        AudioPreferencesDialog::show (appState.audioEngine);
+        AudioPreferencesDialog::show (appState.audioEngine, &appState.editManager);
         return true;
     }
 
@@ -882,7 +882,7 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
     switch (itemID)
     {
         case AizanaPreferences:
-            AudioPreferencesDialog::show (appState.audioEngine);
+            AudioPreferencesDialog::show (appState.audioEngine, &appState.editManager);
             break;
 
         case FileNewSession:    handleFileNew();          break;

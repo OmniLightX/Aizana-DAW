@@ -1,0 +1,30 @@
+# Freie Instrumentenwahl + Autosave-Einstellung
+#
+# Drei Befunde vom 2026-08-16:
+#   1. "Synth ist schon vorbestimmt" -> Instrumentenspur muss LEER entstehen und
+#      der Anwender waehlt aus ALLEN Instrumenten (auch VST/AU).
+#   2. Regression von mir: gar kein Ton mehr beim Spielen (hier nicht pruefbar,
+#      gehoert ins Ohr des Users — siehe Bericht).
+#   3. "Ich sehe die Autosave-Option nicht" -> sie stand im falschen Dialog.
+#
+# ERWARTET: 0 Fehler.
+
+vorn
+wennfehlt Spurbereich Track 1 @ Pro
+warte 2000
+
+# --- 1) Instrumentenspur: der Browser muss aufgehen -------------------------
+rklickin Spurbereich Track 1 @ 0.5 0.9
+warte 1200
+> press Instrumentenspur hinzufügen…
+warte 2500
+> peers
+> bild 0 /tmp/aizana_gui_inst2/wahl-00-browser.png
+> key 1 escape
+warte 800
+
+# --- 3) Autosave: NICHT hier pruefbar ---------------------------------------
+# Der Einstellungen-Dialog laesst sich vom Werkzeug nicht oeffnen: weder ueber
+# `menu` (meldet OK, oeffnet aber nichts) noch ueber Cmd+, — macOS-Kuerzel
+# gehoeren der nativen Menueleiste und erreichen die App nicht. Beides gemessen.
+# Der Nachweis gehoert deshalb in den Testlauf des Users.
