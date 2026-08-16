@@ -35,11 +35,13 @@ public:
         for (auto* l : { &countInLabel, &preRollLabel, &accentLabel, &levelLabel })
             addAndMakeVisible (l);
 
-        const char* segText[3] = { "Aus", "1", "2" };
+        // Vier Takte sind der Wert, mit dem in der Praxis eingezaehlt wird —
+        // "Klack, Klack, Klack, Klack, los". Deshalb gehoert er in die Auswahl.
+        const char* segText[4] = { "Aus", "1", "2", "4" };
         for (int i = 0; i < 3; ++i)
         {
             styleSeg (countInSeg[i], segText[i]);
-            countInSeg[i].setTooltip (juce::String::fromUTF8 ("Vorz\xc3\xa4hler \xe2\x80\x93 Anzahl Klick-Takte vor dem Aufnahmestart (Aus / 1 / 2 Takte)"));
+            countInSeg[i].setTooltip (juce::String::fromUTF8 ("Vorz\xc3\xa4hler \xe2\x80\x93 Klick-Takte vor dem Aufnahmestart. Der Vorlauf wird NICHT mit aufgenommen."));
             countInSeg[i].onClick = [this, i] { if (setCountIn) setCountIn (i); refresh(); };
             addAndMakeVisible (countInSeg[i]);
 
@@ -72,11 +74,12 @@ public:
     {
         const int ci = getCountIn ? getCountIn() : 0;
         const int pr = getPreRoll ? getPreRoll() : 0;
+        static const int countInValue[4] = { 0, 1, 2, 4 };
+        for (int i = 0; i < 4; ++i)
+            setSegOn (countInSeg[i], countInValue[i] == ci);
+
         for (int i = 0; i < 3; ++i)
-        {
-            setSegOn (countInSeg[i], i == ci);
             setSegOn (preRollSeg[i], i == pr);
-        }
 
         const bool acc = getAccent && getAccent();
         setSegOn (accentToggle, acc);
@@ -94,17 +97,17 @@ public:
         title.setBounds (area.removeFromTop (20));
         area.removeFromTop (8);
 
-        auto segRow = [&] (juce::Label& key, juce::TextButton (&seg)[3])
+        auto segRow = [&] (juce::Label& key, juce::TextButton* seg, int count)
         {
             auto row = area.removeFromTop (26);
             key.setBounds (row.removeFromLeft (150));
             const int w = 36;
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < count; ++i)
                 seg[i].setBounds (row.removeFromLeft (w).reduced (1, 2));
             area.removeFromTop (8);
         };
-        segRow (countInLabel, countInSeg);
-        segRow (preRollLabel, preRollSeg);
+        segRow (countInLabel, countInSeg, 4);
+        segRow (preRollLabel, preRollSeg, 3);
 
         auto accentRow = area.removeFromTop (26);
         accentLabel.setBounds (accentRow.removeFromLeft (150));
@@ -118,7 +121,7 @@ public:
 
 private:
     juce::Label title, countInLabel, preRollLabel, accentLabel, levelLabel;
-    juce::TextButton countInSeg[3], preRollSeg[3];
+    juce::TextButton countInSeg[4], preRollSeg[3];
     juce::TextButton accentToggle;
     juce::Slider levelSlider;
 

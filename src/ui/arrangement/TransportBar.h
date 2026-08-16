@@ -78,6 +78,49 @@ private:
      *  recordClicked(). Transient. Pairs with Auto-Punch (run-up not recorded). */
     int  preRollBars = 0;
 
+    // ---- Vorzaehler (Count-in) — eigener Zustand, NICHT TEs countInMode ------
+    //
+    // User-Befund 2026-08-16: "Der Vorzaehler klackt einfach die ganze Zeit und
+    // faengt nicht an." Zwei Ursachen, beide belegt:
+    //
+    //  1. ZWEI KLICKQUELLEN. Unser MetronomeGenerator ist von TEs eigenem Click
+    //     unabhaengig und klickt durchgehend, solange er an ist — auch waehrend
+    //     und nach dem Vorzaehler.
+    //  2. TEs `countInMode` spannt in TransportControl.cpp:1521 eine Schleife
+    //     von der Aufnahmeposition bis zum Songende auf und rollt per
+    //     `setRollInToLoop` hinein. Steht danach die BENUTZER-Schleife (der
+    //     Block direkt darunter ueberschreibt sie), rollt der Kopf in DIESE
+    //     hinein — und laeuft dort im Kreis, ohne je den Aufnahmestart zu
+    //     erreichen. Genau das Beschriebene.
+    //
+    // Deshalb bauen wir den Vorzaehler selbst, mit unserer einen Klickquelle,
+    // nach dem Vorbild der Referenz:
+    //   Studio One: "a count-off of the length indicated in the adjacent Bars
+    //   field occurs when the Record button is clicked" — er gehoert zur
+    //   AUFNAHME, nicht zur Wiedergabe, und ist von Pre-Roll getrennt.
+    //   Logic: "playback begins before the playhead position. When reaching the
+    //   playhead position, Logic switches to record mode." Dazu die Option
+    //   "Only during count-in" fuer den Klick.
+    //
+    // Umsetzung: Wiedergabe beginnt N Takte frueher, das Metronom wird fuer die
+    // Dauer des Vorzaehlers ERZWUNGEN (und danach auf seinen alten Stand
+    // zurueckgesetzt), und aufgenommen wird ab dem eigentlichen Startpunkt —
+    // ueber TEs Punch-In, damit der Vorlauf NICHT im Clip landet.
+    int  countInBars = 0;                 // 0 = aus, sonst 1 / 2 / 4
+
+    bool countInActive       = false;     // laeuft gerade ein Vorzaehler?
+    bool metronomeWasEnabled = false;     // Stand vor dem Erzwingen
+    bool punchWasEnabled     = false;     // Stand von recordingPunchInOut
+    tracktion::TimeRange savedLoopRange;  // Benutzer-Schleife, wird wiederhergestellt
+    bool loopWasEnabled      = false;
+
+    /** Startet die Aufnahme mit Vorzaehler. Getrennt von recordClicked, damit
+        der Ablauf an einer Stelle steht und testbar bleibt. */
+    void startRecordingWithCountIn();
+
+    /** Raeumt auf, was der Vorzaehler umgestellt hat (Metronom, Punch, Loop). */
+    void finishCountIn();
+
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */
     juce::TextButton modeButton   { "Einsteiger" };
