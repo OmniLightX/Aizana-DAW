@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "app/ApplicationState.h"
+#include "engine/CountIn.h"
 #include "ui/common/IconButton.h"
 
 /**
@@ -24,6 +25,15 @@ public:
     void resized() override;
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+
+    /** I-11: Der Edit wird gleich zerstoert. Ein laufender Vorlauf haelt
+        geliehenen Transport-Zustand — den vergessen wir hier, statt ihn an
+        einem sterbenden Edit zurueckgeben zu wollen. */
+    void detachFromEdit();
+
+    /** Neuer Edit ist da: Klick-Schalter uebernehmen, TEs globalen
+        Vorzaehler-Modus in den Ruhezustand bringen. */
+    void attachToEdit();
 
     /** Edit/Mix view switcher (Studio One style, adapted to Aizana' stacked
      *  layout): Edit = arrangement only, Mix = mixer shown large. Wired by
@@ -78,47 +88,19 @@ private:
      *  recordClicked(). Transient. Pairs with Auto-Punch (run-up not recorded). */
     int  preRollBars = 0;
 
-    // ---- Vorzaehler (Count-in) — eigener Zustand, NICHT TEs countInMode ------
+    // ---- Vorzaehler (Count-in) ---------------------------------------------
     //
-    // User-Befund 2026-08-16: "Der Vorzaehler klackt einfach die ganze Zeit und
-    // faengt nicht an." Zwei Ursachen, beide belegt:
+    // Takte Vorlauf: 0 = aus, sonst 1 / 2 / 4. Der Ablauf selbst steht in
+    // `CountInRecorder` (src/engine/CountIn.h) — dort ist auch begruendet,
+    // warum er nahtlos ist und warum die beiden Vorgaenger-Anlaeufe scheiterten.
     //
-    //  1. ZWEI KLICKQUELLEN. Unser MetronomeGenerator ist von TEs eigenem Click
-    //     unabhaengig und klickt durchgehend, solange er an ist — auch waehrend
-    //     und nach dem Vorzaehler.
-    //  2. TEs `countInMode` spannt in TransportControl.cpp:1521 eine Schleife
-    //     von der Aufnahmeposition bis zum Songende auf und rollt per
-    //     `setRollInToLoop` hinein. Steht danach die BENUTZER-Schleife (der
-    //     Block direkt darunter ueberschreibt sie), rollt der Kopf in DIESE
-    //     hinein — und laeuft dort im Kreis, ohne je den Aufnahmestart zu
-    //     erreichen. Genau das Beschriebene.
-    //
-    // Deshalb bauen wir den Vorzaehler selbst, mit unserer einen Klickquelle,
-    // nach dem Vorbild der Referenz:
-    //   Studio One: "a count-off of the length indicated in the adjacent Bars
-    //   field occurs when the Record button is clicked" — er gehoert zur
-    //   AUFNAHME, nicht zur Wiedergabe, und ist von Pre-Roll getrennt.
-    //   Logic: "playback begins before the playhead position. When reaching the
-    //   playhead position, Logic switches to record mode." Dazu die Option
-    //   "Only during count-in" fuer den Klick.
-    //
-    // Umsetzung (zweiter Anlauf — der erste ueber TEs Punch-In fasste den
-    // Loop-Bereich des Anwenders an und blieb davor haengen): reine WIEDERGABE
-    // ab dem Vorzaehler-Anfang, Metronom fuer die Dauer erzwungen, und beim
-    // Erreichen des Aufnahmestarts wird auf Aufnahme umgeschaltet. An Loop,
-    // Punch und anderen Einstellungen wird NICHTS geaendert.
+    // Vorzaehler und Pre-Roll sind DERSELBE Vorlauf; sie unterscheiden sich
+    // ausschliesslich darin, ob der Klick fuer die Dauer erzwungen wird
+    // (Logics „Only during count-in"). Zwei Mechaniken dafuer zu bauen waere
+    // zweimal dieselbe Fehlerquelle.
     int  countInBars = 0;                 // 0 = aus, sonst 1 / 2 / 4
 
-    bool   countInActive       = false;   // laeuft gerade ein Vorzaehler?
-    bool   metronomeWasEnabled = false;   // Klick-Stand vor dem Erzwingen
-    double countInTargetSecs   = 0.0;     // hier beginnt die eigentliche Aufnahme
-
-    /** Startet die Aufnahme mit Vorzaehler. Getrennt von recordClicked, damit
-        der Ablauf an einer Stelle steht und testbar bleibt. */
-    void startRecordingWithCountIn();
-
-    /** Raeumt auf, was der Vorzaehler umgestellt hat (Metronom, Punch, Loop). */
-    void finishCountIn();
+    CountInRecorder countIn;
 
     /** The Dial (Phase 2, Block A) — switch to the Einsteiger-Welt + assist toggle.
      *  Only visible in the Pro view, so the mode button always means "go to Beginner". */

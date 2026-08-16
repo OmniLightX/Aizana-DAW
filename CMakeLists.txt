@@ -216,6 +216,7 @@ target_sources(Aizana PRIVATE
     src/engine/EditManager.cpp
     src/engine/RemovableMediaGuard.cpp
     src/engine/TempoEngine.cpp
+    src/engine/CountIn.cpp
     src/engine/ClipEditor.cpp
     src/engine/ClipGainEnvelope.cpp
     src/engine/CompingEngine.cpp
@@ -232,7 +233,6 @@ target_sources(Aizana PRIVATE
     src/audio/AudioEngine.cpp
     src/audio/DropoutMonitor.cpp
     src/audio/AudioRecorder.cpp
-    src/audio/MetronomeGenerator.cpp
     # Plugin hosting (PLUG-01 through PLUG-04)
     src/plugins/ClapPluginFormat.cpp
     src/plugins/BuiltInPluginFormat.cpp

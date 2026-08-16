@@ -117,11 +117,17 @@ void EditManager::createNewEdit()
     // Ensure transport is stopped (it is by default, but be explicit)
     edit->getTransport().stop (false, false);
 
-    // Disable TE's built-in click track. Aizana uses MetronomeGenerator instead —
-    // a custom synthesiser that runs in AudioEngine::audioDeviceIOCallbackWithContext.
-    // TE's click track defaults to false for fresh edits, but saved edit state or
-    // future TE defaults could enable it, resulting in two simultaneous click generators.
-    edit->clickTrackEnabled = false;
+    // TEs Klickspur ist seit 2026-08-16 UNSER Metronom (siehe src/engine/CountIn.h).
+    // Hier stand vorher `edit->clickTrackEnabled = false;`, weil Aizana daneben einen
+    // eigenen, frei laufenden Klickgenerator hatte und zwei Quellen kollidiert
+    // waeren. Der eigene Generator ist weg — diese Zeile wuerde jetzt bei JEDEM
+    // Laden das Metronom des Anwenders stumm schalten. Der Zustand kommt aus der
+    // Session; die Transportleiste liest ihn beim Anhaengen aus.
+    //
+    // Der Vorzaehler-Modus dagegen ist eine GLOBALE Engine-Einstellung und wird nur
+    // fuer die Dauer eines Aufnahmestarts geliehen — im Ruhezustand gehoert er aus,
+    // sonst wuerde TE bei jedem Aufnehmen zusaetzlich vorzaehlen.
+    edit->setCountInMode (te::Edit::CountIn::none);
 
     // Allocate the playback context immediately so getAllInputDevices() returns live
     // InputDeviceInstance objects. Without this, getAllInputDevices() → getCurrentPlaybackContext()

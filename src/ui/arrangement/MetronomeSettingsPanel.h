@@ -41,7 +41,7 @@ public:
         for (int i = 0; i < 3; ++i)
         {
             styleSeg (countInSeg[i], segText[i]);
-            countInSeg[i].setTooltip (juce::String::fromUTF8 ("Vorz\xc3\xa4hler \xe2\x80\x93 Klick-Takte vor dem Aufnahmestart. Der Vorlauf wird NICHT mit aufgenommen."));
+            countInSeg[i].setTooltip (juce::String::fromUTF8 ("Vorz\xc3\xa4hler \xe2\x80\x93 Klick-Takte vor dem Aufnahmestart. Der Transport l\xc3\xa4uft dabei DURCH; der Vorlauf wird nicht mit aufgenommen. Bei Schleifen-Aufnahme z\xc3\xa4hlt die Engine max. 2 Takte ein."));
             countInSeg[i].onClick = [this, i] { if (setCountIn) setCountIn (i); refresh(); };
             addAndMakeVisible (countInSeg[i]);
 

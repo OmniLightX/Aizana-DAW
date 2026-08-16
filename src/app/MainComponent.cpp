@@ -34,6 +34,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
         clipEditor.clearClipboard();             // raw te::Clip* into the old Edit
         arrangementView.detachFromEdit();
         mixerView.detachFromEdit();
+        transportBar.detachFromEdit();           // laufender Vorzaehler haelt Edit-Zustand
     };
 
     appState.editManager.onEditChanged = [this]
@@ -43,6 +44,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
         compingEngine.attachToEdit();        // re-render active comps of the new edit
         arrangementView.attachToEdit();
         mixerView.attachToEdit();
+        transportBar.attachToEdit();             // Klick-Schalter aus der neuen Session
         resized();
     };
 

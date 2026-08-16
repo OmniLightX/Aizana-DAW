@@ -67,6 +67,8 @@ target_sources(engine_tests PRIVATE
     test_quantize.cpp
     test_plugin_param_automation.cpp
     test_tempo_engine.cpp
+    test_count_in.cpp
+    test_click_track.cpp
     test_edit_groups.cpp
     test_pan_value.cpp
     test_transport_keys.cpp
@@ -129,6 +131,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/EditManager.cpp
     ../src/engine/RemovableMediaGuard.cpp
     ../src/engine/TempoEngine.cpp
+    ../src/engine/CountIn.cpp
     ../src/engine/ClipEditor.cpp
     ../src/engine/ClipGainEnvelope.cpp
     ../src/engine/CompingEngine.cpp
@@ -144,7 +147,6 @@ target_sources(engine_tests PRIVATE
     ../src/engine/AutomationEngine.cpp
     ../src/audio/AudioRecorder.cpp
     ../src/audio/AudioEngine.cpp
-    ../src/audio/MetronomeGenerator.cpp
     ../src/plugins/ClapPluginFormat.cpp
     ../src/plugins/BuiltInPluginFormat.cpp
     ../src/plugins/PluginScanner.cpp

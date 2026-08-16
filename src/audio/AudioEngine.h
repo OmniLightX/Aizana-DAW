@@ -5,7 +5,6 @@
 #include <array>
 #include "metering/MeterProcessor.h"
 #include "metering/MasterMeterAudioProcessor.h"
-#include "MetronomeGenerator.h"
 
 namespace te = tracktion::engine;
 
@@ -33,7 +32,7 @@ namespace te = tracktion::engine;
  *   future processBlock() author sees it at the point of entry into the audio subsystem.
  *
  * Plan 01-17: AudioEngine inherits AudioIODeviceCallback so it can tap the secondary
- * output buffer for MetronomeGenerator mixing.
+ * output buffer for input peak metering.
  *
  * Plan 01-31: Removed standalone juce::AudioDeviceManager. Now holds te::Engine&
  * and delegates all device management to engine.getDeviceManager() (te::DeviceManager).
@@ -95,12 +94,6 @@ public:
     float getAndClearInputPeakDB (int channelIndex) noexcept;
 
     /**
-     * Returns the MetronomeGenerator for enabling/disabling the click track
-     * and syncing BPM. Called from TransportBar (message thread, via atomics).
-     */
-    MetronomeGenerator& getMetronome() noexcept { return metronome; }
-
-    /**
      * Returns the current output latency in milliseconds, or 0.0 if no device is open.
      *
      * Sum of output buffer latency + driver reported output latency. Use this
@@ -147,18 +140,18 @@ private:
     // Set to nullptr until initialise() registers the processor with TE.
     MasterMeterAudioProcessor* masterMeterAudioProcessorPtr { nullptr };
 
-    // masterMeterPrepared is kept for audioDeviceAboutToStart / audioDeviceStopped
-    // which still need to guard the MetronomeGenerator. It is NO LONGER used to gate
-    // meter tapping — MasterMeterAudioProcessor handles that inside TE's render pipeline.
+    // masterMeterPrepared is kept for audioDeviceAboutToStart / audioDeviceStopped.
+    // It is NOT used to gate meter tapping — MasterMeterAudioProcessor handles that
+    // inside TE's render pipeline.
+    //
+    // Der Klick lebt NICHT mehr hier. Bis 2026-08-16 mischte dieser Callback einen
+    // eigenen, FREI LAUFENDEN MetronomeGenerator dazu: er zaehlte Beats ab dem
+    // Einschalten, unabhaengig vom Abspielkopf — er klackte im Stillstand, seine
+    // Eins lag nicht auf der Eins des Songs, und Tempowechsel (T1.2) kannte er
+    // nicht. Ein Vorzaehler ist darauf nicht baubar. Jetzt macht das TEs ClickNode
+    // im Render-Graphen (sample-genau, Tempospur-treu, mit Klickbereich fuer den
+    // Vorzaehler) — siehe src/engine/CountIn.h.
     std::atomic<bool> masterMeterPrepared { false };
-
-    // MetronomeGenerator — synthesizes click audio directly into the output buffer.
-    // Parameters (BPM, enabled, beatsPerBar) communicated via std::atomic<> from
-    // the message thread. processBlock() called in audioDeviceIOCallbackWithContext.
-    // metronomePrepared guards against early CoreAudio callbacks arriving before
-    // prepare() fires on the message thread (mirrors masterMeterPrepared pattern).
-    MetronomeGenerator metronome;
-    std::atomic<bool> metronomePrepared { false };
 
     static constexpr int kMaxMeteredInputChannels = 64;
     std::array<std::atomic<float>, kMaxMeteredInputChannels> rawInputPeaks {};

@@ -90,8 +90,9 @@ TransportBar::TransportBar (ApplicationState& appState_)
     recordButton.onClick = [this] { recordClicked(); };
 
     // Vorzaehler-Einstellung aus den App-Einstellungen holen (ueberlebt den
-    // Neustart) und TEs eigenen Modus sicherheitshalber abschalten — er
-    // kollidiert mit unserer Schleife (siehe TransportBar.h).
+    // Neustart). TEs eigener Vorzaehler-Modus bleibt im Ruhezustand AUS — er
+    // ist eine globale Engine-Einstellung und wird nur fuer die Dauer eines
+    // einzelnen Aufnahmestarts geliehen (CountInRecorder).
     {
         auto& props = appState.editManager.getEngine().getPropertyStorage().getPropertiesFile();
         const int stored = props.getIntValue ("aizanaCountInBars", 0);
@@ -101,16 +102,33 @@ TransportBar::TransportBar (ApplicationState& appState_)
             e->setCountInMode (te::Edit::CountIn::none);
     }
 
-    // Metronome button — toggle, wired to MetronomeGenerator (blue when on)
+    // Metronome button — schaltet TEs KLICKSPUR (blau, wenn an).
+    //
+    // Vorher hing der Knopf an unserem eigenen MetronomeGenerator. Der lief
+    // FREI: er zaehlte Beats ab dem Moment des Einschaltens, unabhaengig vom
+    // Abspielkopf. Folgen, die der Anwender alle gehoert hat: er klackte auch
+    // im Stillstand („klackt einfach die ganze Zeit"), seine Eins lag
+    // irgendwo — nur nicht auf der Eins des Songs — und von der Tempospur
+    // (T1.2) wusste er nichts, sondern nur von EINEM BPM-Wert.
+    //
+    // Ein Vorzaehler auf so einem Klick ist prinzipiell unmoeglich: er muss
+    // die Takte VOR dem Aufnahmestart zaehlen, und dazu muss der Klick auf dem
+    // Raster des Songs sitzen. TEs ClickNode laeuft im Render-Graphen, ist
+    // sample-genau am Abspielkopf, folgt Tempo- und Taktartwechseln, betont
+    // die Eins — und kennt mit `Edit::setClickTrackRange` genau den Bereich,
+    // den ein Vorzaehler braucht.
     neutral (metronomeButton);
     metronomeButton.bgColourOn = juce::Colour (0xff2d4a6a);
     metronomeButton.setClickingTogglesState (true);
     metronomeButton.setTooltip ("Metronom");
     metronomeButton.onClick = [this]
     {
-        const bool enabled = metronomeButton.getToggleState();
-        appState.audioEngine.getMetronome().setEnabled (enabled);
+        if (auto* e = appState.editManager.getEdit())
+            e->clickTrackEnabled.setValue (metronomeButton.getToggleState(), nullptr);
     };
+
+    if (auto* e = appState.editManager.getEdit())
+        metronomeButton.setToggleState (e->clickTrackEnabled.get(), juce::dontSendNotification);
 
     // Loop button — toggles transport looping (primary-blue when on); synced by timerCallback
     neutral (loopButton);
@@ -303,27 +321,11 @@ void TransportBar::timerCallback()
     auto& transport = edit->getTransport();
     auto pos = transport.getPosition();
 
-    // Vorzaehler: sobald der Aufnahmestart erreicht ist (oder der Transport
-    // steht), die erzwungenen Einstellungen zuruecknehmen. Der Klick soll nur
-    // WAEHREND des Vorzaehlers laufen, nicht danach — genau das war der Befund
-    // "klackt einfach die ganze Zeit".
-    if (countInActive)
-    {
-        if (! transport.isPlaying())
-        {
-            // Abgebrochen (Stopp gedrueckt) — nur aufraeumen.
-            finishCountIn();
-        }
-        else if (pos.inSeconds() >= countInTargetSecs - 0.001)
-        {
-            // Aufnahmestart erreicht: Klick aus, exakt auf den Startpunkt und
-            // aufnehmen. Der Vorlauf landet damit NICHT im Clip.
-            finishCountIn();
-            transport.stop (false, false);
-            transport.setPosition (tracktion::core::TimePosition::fromSeconds (countInTargetSecs));
-            transport.record (false);
-        }
-    }
+    // Vorlauf: scharfschalten, sobald der Transport wirklich rollt, und den
+    // geliehenen Zustand zurueckgeben, sobald die Aufnahme endet. Der
+    // Aufnahmestart selbst haengt NICHT an diesem Timer — er steht im
+    // Punch-Bereich und ist damit sample-genau (siehe CountIn.h).
+    countIn.poll (*edit);
 
     // Format as M:SS:BB.mmm (bars not available without tempo analysis; use H:MM:SS.mmm)
     const double totalSeconds = pos.inSeconds();
@@ -337,8 +339,16 @@ void TransportBar::timerCallback()
 
     // Toggle button states based on playback
     playButton.setToggleState (transport.isPlaying(), juce::dontSendNotification);
-    recordButton.setToggleState (transport.isRecording(), juce::dontSendNotification);
+    // Waehrend des Vorzaehlers leuchtet AUFNAHME bereits — sie ist bestellt und
+    // punched an der Kante ein. Bliebe der Knopf dunkel, saehe der Vorlauf wie
+    // gewoehnliche Wiedergabe aus.
+    recordButton.setToggleState (transport.isRecording() || countIn.isActive(),
+                                 juce::dontSendNotification);
     loopButton.setToggleState (transport.looping.get(), juce::dontSendNotification);
+
+    // Klick-Schalter liegt jetzt im Edit (TEs Klickspur) — er wird also mit der
+    // Session gespeichert und kann sich durch Laden/Undo aendern.
+    metronomeButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
 
     // Keep the Dial's assist toggle in sync (assist can change from the Beginner view too)
     assistButton.setToggleState (appState.uiState.isAssistEnabled(), juce::dontSendNotification);
@@ -359,21 +369,8 @@ void TransportBar::timerCallback()
         updateTimeSigDisplay();
         updateAutoPunchButton();
 
-        // Keep metronome BPM in sync with the edit's current tempo
-        if (auto* editForBpm = appState.editManager.getEdit())
-        {
-            auto& seq = editForBpm->tempoSequence;
-            if (seq.getNumTempos() > 0)
-            {
-                const double bpm = seq.getTempo (0)->getBpm();
-                appState.audioEngine.getMetronome().setBpm (bpm);
-
-                // Sync beats per bar from time signature
-                if (seq.getNumTimeSigs() > 0)
-                    appState.audioEngine.getMetronome().setBeatsPerBar (
-                        seq.getTimeSig (0)->numerator);
-            }
-        }
+        // Kein BPM-Nachfuehren mehr: TEs Klickspur liest die Tempospur selbst
+        // und folgt damit auch Tempo- und Taktartwechseln (T1.2).
     }
 
     // Sample rate update — every ~2 seconds (60 ticks at 30ms = 1.8s)
@@ -470,7 +467,6 @@ void TransportBar::applyTimeSig (int numerator, int denominator)
         seq.getTimeSig (0)->setStringTimeSig (juce::String (numerator) + "/" + juce::String (denominator));
     }
 
-    appState.audioEngine.getMetronome().setBeatsPerBar (numerator);  // keep metronome in sync
     updateTimeSigDisplay();
 }
 
@@ -527,8 +523,8 @@ void TransportBar::showMetronomeMenu()
         props.setValue ("aizanaCountInBars", safe->countInBars);
         props.saveIfNeeded();
 
-        // TEs eigener Vorzaehler bleibt AUS: er spannt eine Schleife auf, die
-        // mit der Benutzer-Schleife kollidiert (siehe TransportBar.h).
+        // TEs globaler Vorzaehler-Modus bleibt im Ruhezustand AUS — er wird nur
+        // fuer die Dauer eines Aufnahmestarts geliehen (CountInRecorder).
         if (auto* e = safe->appState.editManager.getEdit())
             e->setCountInMode (CI::none);
     };
@@ -536,20 +532,60 @@ void TransportBar::showMetronomeMenu()
     panel->getPreRoll = [safe]() -> int { return safe != nullptr ? safe->preRollBars : 0; };
     panel->setPreRoll = [safe] (int n) { if (safe != nullptr) safe->preRollBars = juce::jlimit (0, 2, n); };
 
-    panel->getAccent = [safe]() -> bool { return safe != nullptr && safe->appState.audioEngine.getMetronome().getAccentEnabled(); };
-    panel->setAccent = [safe] (bool b) { if (safe != nullptr) safe->appState.audioEngine.getMetronome().setAccentEnabled (b); };
-    panel->getLevel  = [safe]() -> float { return safe != nullptr ? safe->appState.audioEngine.getMetronome().getLevel() : 1.0f; };
-    panel->setLevel  = [safe] (float l) { if (safe != nullptr) safe->appState.audioEngine.getMetronome().setLevel (l); };
+    // Betonung und Lautstaerke gehoeren jetzt zu TEs Klickspur (mit der Session
+    // gespeichert), nicht mehr zu einem frei laufenden Generator.
+    panel->getAccent = [safe]() -> bool
+    {
+        auto* e = safe != nullptr ? safe->appState.editManager.getEdit() : nullptr;
+        return e != nullptr && e->clickTrackEmphasiseBars.get();
+    };
+    panel->setAccent = [safe] (bool b)
+    {
+        if (auto* e = safe != nullptr ? safe->appState.editManager.getEdit() : nullptr)
+            e->clickTrackEmphasiseBars.setValue (b, nullptr);
+    };
+    panel->getLevel  = [safe]() -> float
+    {
+        auto* e = safe != nullptr ? safe->appState.editManager.getEdit() : nullptr;
+        return e != nullptr ? e->getClickTrackVolume() : 1.0f;
+    };
+    panel->setLevel  = [safe] (float l)
+    {
+        if (auto* e = safe != nullptr ? safe->appState.editManager.getEdit() : nullptr)
+            e->setClickTrackVolume (l);        // TE clampt auf 0.2 .. 1.0
+    };
 
     panel->refresh();
     juce::CallOutBox::launchAsynchronously (std::move (panel),
                                             metroMenuButton.getScreenBounds(), nullptr);
 }
 
+void TransportBar::detachFromEdit()
+{
+    countIn.detach();
+}
+
+void TransportBar::attachToEdit()
+{
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    edit->setCountInMode (te::Edit::CountIn::none);
+    metronomeButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
+    updateAutoPunchButton();
+}
+
 void TransportBar::toggleAutoPunch()
 {
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
+        return;
+
+    // Waehrend eines Vorlaufs gehoert der Punch-Schalter UNS (er traegt den
+    // sample-genauen Aufnahmestart). Den Anwender hier eingreifen zu lassen
+    // wuerde beim Zurueckgeben genau seinen Wunsch ueberschreiben.
+    if (countIn.ownsPunch())
         return;
 
     edit->recordingPunchInOut.setValue (! edit->recordingPunchInOut.get(), nullptr);
@@ -562,7 +598,13 @@ void TransportBar::updateAutoPunchButton()
     if (edit == nullptr)
         return;
 
-    autoPunchButton.setToggleState (edit->recordingPunchInOut.get(), juce::dontSendNotification);
+    // Solange der Vorlauf den Schalter geliehen hat, zeigen wir weiter den Wert
+    // des ANWENDERS — sonst leuchtete Auto-Punch bei jeder Aufnahme mit
+    // Vorzaehler von selbst auf und ginge danach wieder aus.
+    const bool shown = countIn.ownsPunch() ? countIn.userPunchValue()
+                                           : edit->recordingPunchInOut.get();
+
+    autoPunchButton.setToggleState (shown, juce::dontSendNotification);
 }
 
 void TransportBar::rewindClicked()
@@ -612,97 +654,27 @@ void TransportBar::recordClicked()
         return;
     }
 
-    // Vorzaehler hat Vorrang: er bringt seinen eigenen Vorlauf mit.
-    if (countInBars > 0)
+    // Nochmal AUFNAHME waehrend des Vorzaehlers = abbrechen. Der Knopf leuchtet
+    // in dieser Phase schon rot (die Aufnahme ist bestellt, nur noch nicht
+    // eingepuncht) — ein zweiter Druck muss ihn also loeschen und nicht einen
+    // zweiten Vorlauf bestellen.
+    if (countIn.isActive())
     {
-        startRecordingWithCountIn();
+        transport.stop (false, false);
+        countIn.poll (*edit);            // gibt Loop/Punch/Klick sofort zurueck
         return;
     }
 
-    // Pre-Roll: roll the transport back N bars before the record start so the
-    // performer hears a run-up. With Auto-Punch the recorded region stays the
-    // loop range (TE punches in/out), so the run-up itself is not captured.
-    if (preRollBars > 0)
-    {
-        auto& ts = edit->tempoSequence;
-        const auto recStart = edit->recordingPunchInOut.get()
-                                  ? transport.getLoopRange().getStart()
-                                  : transport.getPosition();
-        const auto bb        = ts.toBarsAndBeats (recStart);
-        const int  targetBar = juce::jmax (0, bb.bars - preRollBars);
-        transport.setPosition (ts.toTime (tracktion::tempo::BarsAndBeats { targetBar }));
-    }
+    // Vorzaehler und Pre-Roll sind DERSELBE Vorlauf — sie unterscheiden sich
+    // nur darin, ob der Klick fuer die Dauer erzwungen wird. Der Vorzaehler hat
+    // Vorrang, wenn beides eingestellt ist.
+    const int  runUpBars   = countInBars > 0 ? countInBars : preRollBars;
+    const bool forceClick  = countInBars > 0;
+
+    if (countIn.start (*edit, runUpBars, forceClick) != CountInRecorder::Outcome::noRunUp)
+        return;     // laeuft (oder wurde von TE abgelehnt) — nichts mehr zu tun
 
     transport.record (false);
-}
-
-//==============================================================================
-// Vorzaehler (Count-in)
-//
-// Ablauf wie in Studio One und Logic: Takte einstellen, AUFNAHME druecken,
-// N Takte Klick, dann laeuft die Aufnahme — und der Vorlauf landet NICHT im
-// Clip. Der Klick wird fuer die Dauer des Vorzaehlers erzwungen und danach auf
-// seinen alten Stand zurueckgesetzt (Logics "Only during count-in").
-//==============================================================================
-
-void TransportBar::startRecordingWithCountIn()
-{
-    auto* edit = appState.editManager.getEdit();
-    if (edit == nullptr)
-        return;
-
-    auto& transport = edit->getTransport();
-    auto& ts        = edit->tempoSequence;
-
-    const auto recStart = transport.getPosition();
-    const auto bb       = ts.toBarsAndBeats (recStart);
-
-    // Gezaehlt wird in ganzen Takten, ab dem Takt, in dem die Aufnahme beginnt.
-    const int  startBar     = juce::jmax (0, bb.bars - countInBars);
-    const auto countInStart = ts.toTime (tracktion::tempo::BarsAndBeats { startBar });
-
-    if (countInStart >= recStart)
-    {
-        // Kein Platz fuer einen Vorlauf (Aufnahme beginnt ganz vorn):
-        // ohne Zaehlen aufnehmen, statt still nichts zu tun.
-        transport.record (false);
-        return;
-    }
-
-    // ⚠️ ZWEITER ANLAUF (2026-08-16). Der erste Versuch hat den Vorlauf ueber
-    // TEs PUNCH-IN gefahren: Loop-Bereich auf [Aufnahmestart, Ende] setzen,
-    // recordingPunchInOut an, dann aufnehmen. Das war zu clever — es fasst
-    // Loop-Bereich und Punch-Einstellung des Anwenders an, und im Zusammenspiel
-    // mit einem bereits gesetzten Loop-Bereich lief der Kopf vor dem Bereich
-    // ins Leere, ohne je in die Aufnahme zu gehen ("laeuft permanent vor und
-    // bleibt vor dem Loop-Bereich stehen").
-    //
-    // Jetzt der einfache, vorhersagbare Weg, der genau Logics Beschreibung
-    // folgt ("playback begins before the playhead position. When reaching the
-    // playhead position, Logic switches to record mode"): reine WIEDERGABE ab
-    // dem Vorzaehler-Anfang, und beim Erreichen des Aufnahmestarts wird auf
-    // Aufnahme umgeschaltet. Es wird NICHTS an Loop, Punch oder sonstigen
-    // Einstellungen angefasst — nur der Klick, und der auch nur voruebergehend.
-    metronomeWasEnabled = appState.audioEngine.getMetronome().getEnabled();
-    appState.audioEngine.getMetronome().setEnabled (true);
-
-    countInTargetSecs = recStart.inSeconds();
-    countInActive     = true;
-
-    transport.setPosition (countInStart);
-    transport.play (false);
-}
-
-void TransportBar::finishCountIn()
-{
-    if (! countInActive)
-        return;
-
-    countInActive = false;
-
-    // Klick zurueck auf den Stand des Anwenders — er soll nur WAEHREND des
-    // Vorzaehlers laufen (Logics "Only during count-in").
-    appState.audioEngine.getMetronome().setEnabled (metronomeWasEnabled);
 }
 
 void TransportBar::mouseDown (const juce::MouseEvent& e)
