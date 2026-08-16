@@ -93,6 +93,17 @@ namespace aizana
     void routeKeyboardToTrack (te::AudioTrack& track);
 
     /**
+     * Beim Scharfschalten aufgerufen: stellt sicher, dass das Keyboard auf
+     * dieser Spur liegt UND die Aufnahme dafuer eingeschaltet ist.
+     *
+     * Das ist der Punkt, an dem "Ton ja, Aufnahme nein" entsteht: ohne
+     * `setRecordingEnabled` auf der richtigen Instanz hoert man sein Spiel,
+     * aber TE schreibt es nirgends hin. Liefert false, wenn es das Geraet oder
+     * seine Instanz (noch) nicht gibt.
+     */
+    bool armKeyboardForTrack (te::AudioTrack& track);
+
+    /**
      * Instrumentenspur anlegen: Spur ans Ende, Merkmal, leeren MIDI-Clip (damit
      * sofort etwas zum Doppelklicken da ist), Keyboard zuweisen — und dazwischen
      * das Instrument, das der Aufrufer einsetzt. EIN Undo-Schritt.

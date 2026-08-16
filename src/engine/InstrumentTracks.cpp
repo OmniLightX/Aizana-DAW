@@ -85,6 +85,36 @@ namespace aizana
         return true;
     }
 
+    te::InputDeviceInstance* findKeyboardInstance (te::Edit& edit)
+    {
+        auto* dev = getOrCreateKeyboardDevice (edit.engine);
+        if (dev == nullptr)
+            return nullptr;
+
+        for (auto* instance : edit.getAllInputDevices())
+            if (&instance->getInputDevice() == dev)
+                return instance;
+
+        return nullptr;
+    }
+
+    bool armKeyboardForTrack (te::AudioTrack& track)
+    {
+        auto* instance = findKeyboardInstance (track.edit);
+        if (instance == nullptr)
+            return false;
+
+        // Ziel setzen, falls es noch nicht steht. `setTarget` feuert einen
+        // AsyncUpdate (I-08) — deshalb wird der Aufnahme-Schalter unten NOCH
+        // EINMAL asynchron nachgezogen, sonst raeumt der Update ihn wieder ab.
+        if (! te::isOnTargetTrack (*instance, track, 0))
+            if (! instance->setTarget (track.itemID, true, nullptr).has_value())
+                return false;
+
+        instance->setRecordingEnabled (track.itemID, true);
+        return true;
+    }
+
     void routeKeyboardToTrack (te::AudioTrack& track)
     {
         auto& edit = track.edit;
@@ -92,25 +122,33 @@ namespace aizana
         if (dev == nullptr)
             return;
 
-        for (auto* instance : edit.getAllInputDevices())
-        {
-            if (&instance->getInputDevice() != dev)
-                continue;
-
-            // setTarget feuert einen AsyncUpdate — alles Weitere gehoert
-            // deshalb hinter callAsync (I-08). Hier reicht das Ziel selbst;
-            // Monitoring setzen wir direkt am Geraet, das ist unabhaengig davon.
-            auto result = instance->setTarget (track.itemID, true, nullptr);
-            if (! result.has_value())
-                return;
-
-            break;
-        }
-
         // Monitoring bewusst AUS: das Hoerbarmachen uebernimmt LiveMidiPreview
         // ueber injectLiveMidiMessage (der Weg, der immer funktioniert). Stuende
         // hier zusaetzlich Monitoring an, klaenge jede Note DOPPELT.
         dev->setMonitorMode (te::InputDevice::MonitorMode::off);
+
+        // ⚠️ ZEITPUNKT: wurde das Geraet gerade erst angelegt, laeuft TEs
+        // `rescanMidiDeviceList` noch — die INSTANZ zu diesem Geraet existiert
+        // im Edit dann noch gar nicht, und ein sofortiges setTarget liefe ins
+        // Leere (genau der Zustand, in dem "Ton ja, Aufnahme nein" entsteht).
+        // Deshalb die Zuweisung nachreichen, sobald die Message-Schlange durch
+        // ist. Der Aufnahme-Schalter folgt beim Scharfschalten ohnehin noch
+        // einmal (armKeyboardForTrack).
+        te::EditItemID id = track.itemID;
+        juce::MessageManager::callAsync ([&edit, id]
+        {
+            for (auto* t : te::getAudioTracks (edit))
+            {
+                if (t->itemID != id)
+                    continue;
+
+                if (auto* instance = findKeyboardInstance (edit))
+                    if (! te::isOnTargetTrack (*instance, *t, 0))
+                        instance->setTarget (t->itemID, true, nullptr);
+
+                break;
+            }
+        });
     }
 
     te::AudioTrack* createInstrumentTrack (te::Edit& edit,

@@ -750,6 +750,14 @@ void TrackHeader::refreshInputButton()
         inputName = inputName.substring (0, 17) + juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa6"));
 
     inputButton.setButtonText (inputName);
+
+    // Den ZUGEWIESENEN Eingang im Namen mitfuehren. Der Knopf zeigte ihn nur als
+    // Beschriftung — damit war von aussen nicht pruefbar, OB eine Zuweisung
+    // ueberhaupt zustande kam. Genau daran haette man den Fehler "ich hoere mein
+    // Spiel, aber es wird nicht aufgenommen" sofort gesehen.
+    inputButton.setTitle (juce::String::fromUTF8 ("Eingang waehlen ") + track.getName()
+                          + ": " + inputName);
+
     inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
                                           : "Audio Input — click to change");
 
@@ -1191,6 +1199,34 @@ void TrackHeader::armClicked()
 
     if (armed)
     {
+        // ---- Instrumentenspur: das virtuelle Keyboard scharf schalten -------
+        //
+        // Vorher lief hier NUR der Audio-Zweig: er suchte die erste beliebige
+        // Instanz auf der Spur bzw. griff sonst zum ersten Wave-Eingang. Fuer
+        // eine Instrumentenspur bedeutete das im schlechtesten Fall, dass ein
+        // AUDIO-Eingang scharfgeschaltet wurde und das gespielte MIDI nirgends
+        // landete — genau der Zustand "ich hoere mein Spiel, aber es wird nicht
+        // aufgenommen" (User-Befund 2026-08-16).
+        if (aizana::isInstrumentTrack (track))
+        {
+            if (aizana::armKeyboardForTrack (track))
+            {
+                // setTarget feuert einen AsyncUpdate, der den Aufnahme-Schalter
+                // wieder abraeumen kann — deshalb NOCH EINMAL hinterher (I-08),
+                // mit nullptr-Guard als Erstes im Lambda.
+                juce::MessageManager::callAsync (
+                    [safe = juce::Component::SafePointer<TrackHeader> (this)]
+                    {
+                        if (safe == nullptr) return;
+                        if (! (bool) safe->track.state.getProperty ("armed", false)) return;
+                        aizana::armKeyboardForTrack (safe->track);
+                    });
+
+                refreshInputButton();
+                return;
+            }
+        }
+
         // TE records only from tracks that have an InputDeviceInstance assigned and
         // recording-enabled. Check if one is already assigned.
         bool alreadyAssigned = false;
