@@ -4,6 +4,8 @@
 #include <juce_core/juce_core.h>
 #include "AizanaUIBehaviour.h"
 #include "WarpEngine.h"
+#include "SessionPaths.h"
+#include <optional>
 
 namespace te = tracktion::engine;
 
@@ -34,7 +36,16 @@ public:
     /** Load Edit from a .tracktion ValueTree XML file.
         Returns false (keeping the current Edit) if the file cannot be parsed —
         the caller should surface an error to the user instead of crashing. */
-    bool loadEdit (const juce::File& file);
+    /** Session laden.
+
+        @param file            die Datei, die GELESEN wird
+        @param adoptAsSession  optional: die Datei, die danach als Session gilt.
+                               Fuer die Wiederherstellung — der Schnappschuss
+                               liegt in `Sicherungen/`, weiterarbeiten und
+                               speichern soll man aber an der Session selbst,
+                               und relative Verweise muessen gegen SIE aufgeloest
+                               werden (I-07). */
+    bool loadEdit (const juce::File& file, juce::File adoptAsSession = {});
 
     /** Flush and save Edit state to a .tracktion ValueTree XML file. */
     void saveEdit (const juce::File& file);
@@ -60,6 +71,27 @@ public:
         Session (User-Befund 2026-08-18). Ohne gespeicherte Session:
         `~/Documents/Aizana/Unbenannte Session/`. */
     juce::File mediaDirectory() const;
+
+    //==============================================================================
+    /** Was nach einem Absturz zum Wiederherstellen bereitliegt. */
+    struct CrashRecovery
+    {
+        juce::File session;     ///< die Session, an der gearbeitet wurde
+        juce::File snapshot;    ///< der letzte Schnappschuss
+        juce::Time when;        ///< wann er geschrieben wurde
+    };
+
+    /** Gibt es einen unbeendeten Stand? Nur dann, wenn die letzte Sitzung NICHT
+        sauber beendet wurde — beim ordentlichen Beenden wird die Marke geloescht.
+        Der Schnappschuss muss ausserdem juenger sein als die Session selbst,
+        sonst gaebe es nichts zu gewinnen. */
+    static std::optional<CrashRecovery> findCrashRecovery();
+
+    /** Marke loeschen — beim sauberen Beenden und nach dem Wiederherstellen. */
+    static void clearCrashMarker();
+
+    /** Schnappschuss schreiben (Timer, und einmal sofort beim Sessionwechsel). */
+    void writeRecoverySnapshot();
 
     /** Aufnahmeziel + Edit-Name an die aktuelle Session anpassen. Wird bei
         jedem Sessionwechsel gerufen. */
@@ -99,7 +131,7 @@ public:
         the edit state on a background thread and atomically swaps it into place.
         Never touches plugins, files or thread priorities of the audio engine.
         Public + static for direct regression testing. */
-    static void writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
+    void writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
                                             const juce::File& target);
 
     /**
@@ -181,7 +213,31 @@ private:
     };
     AutosaveTimerImpl autosaveTimer { *this };
 
+    // ---- Wiederherstellung nach Absturz ----
+    //
+    // Der Autosave rotiert in grossen Abstaenden (Vorgabe 5 Minuten) und ist
+    // dafuer da, dass man auf einen frueheren Stand zurueck kann. Gegen einen
+    // ABSTURZ hilft er nicht: der Anwender hat es auf den Punkt gebracht —
+    // „Autosave bei 60 Minuten, Absturz bei 59, dann sind 59 Minuten Arbeit
+    // einfach weg." Deshalb ein zweites, unabhaengiges Netz: ein billiger
+    // Schnappschuss des ValueTree im Minutentakt, immer in DIESELBE Datei.
+    struct RecoveryTimerImpl : public juce::Timer
+    {
+        EditManager& owner;
+        explicit RecoveryTimerImpl (EditManager& o) : owner (o) {}
+        void timerCallback() override { owner.writeRecoverySnapshot(); }
+    };
+    RecoveryTimerImpl recoveryTimer { *this };
+
+    /** Schreibt Schnappschuesse im Hintergrund. EIN Thread genuegt (die Jobs
+        sind reine Datei-Schreiber und sollen sich nicht ueberholen), und der
+        Pool gehoert dem EditManager: sein Destruktor wartet auf laufende Jobs.
+        Vorher liefen die Schreiber losgeloest weiter — siehe Kommentar in
+        writeAutosaveSnapshotAsync. */
+    juce::ThreadPool snapshotPool { 1 };
+
     static constexpr int kAutosaveKeptCount    = 3;               // keep last 3
+    static constexpr int kRecoverySeconds      = 60;              // Netz gegen Absturz
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditManager)
 };

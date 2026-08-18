@@ -214,6 +214,7 @@ target_sources(Aizana PRIVATE
     src/generator/FaustEmitter.cpp
     src/generator/LocalComposer.cpp
     src/engine/EditManager.cpp
+    src/engine/SessionPaths.cpp
     src/engine/RemovableMediaGuard.cpp
     src/engine/TempoEngine.cpp
     src/engine/CountIn.cpp

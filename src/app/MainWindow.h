@@ -40,6 +40,9 @@ public:
         Geht durch dieselbe Tuer wie "Open Session…" — nur ohne Dateidialog. */
     bool openSession (const juce::File& file);
 
+    /** Beim Start: nach nicht gespeicherter Arbeit fragen (siehe MainComponent). */
+    void offerCrashRecovery();
+
 private:
     std::unique_ptr<ApplicationState> appState;
 

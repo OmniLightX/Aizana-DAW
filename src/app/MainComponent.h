@@ -87,6 +87,9 @@ public:
      */
     bool openSessionFile (const juce::File& file);
 
+    /** Beim Start: fragen, wenn die letzte Sitzung nicht sauber beendet wurde. */
+    void offerCrashRecovery();
+
     /** Access the PluginWindowManager for opening plugin editor windows. */
     PluginWindowManager& getPluginWindowManager() noexcept { return pluginWindowManager; }
 

@@ -81,6 +81,12 @@ void MainWindow::resized()
 #endif
 }
 
+void MainWindow::offerCrashRecovery()
+{
+    if (auto* mc = dynamic_cast<MainComponent*> (getContentComponent()))
+        mc->offerCrashRecovery();
+}
+
 bool MainWindow::openSession (const juce::File& file)
 {
     // Ueber das Inhalts-Component, damit es EXAKT derselbe Weg ist wie der

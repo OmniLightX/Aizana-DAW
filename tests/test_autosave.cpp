@@ -47,13 +47,14 @@ TEST_CASE ("writeAutosaveSnapshotAsync writes a loadable snapshot without touchi
     const auto dir    = makeTempDir ("snapshot");
     const auto target = dir.getChildFile ("session_autosave_1.tracktionedit");
 
+    EditManager em;      // der Schnappschuss-Pool gehoert jetzt der Instanz
     juce::ValueTree state ("EDIT");
     state.setProperty ("appVersion", "test", nullptr);
     juce::ValueTree track ("TRACK");
     track.setProperty ("name", "Vocals", nullptr);
     state.appendChild (track, nullptr);
 
-    EditManager::writeAutosaveSnapshotAsync (state.createCopy(), target);
+    em.writeAutosaveSnapshotAsync (state.createCopy(), target);
 
     const auto reloaded = waitForSnapshot (target);
     REQUIRE (reloaded.isValid());
@@ -71,14 +72,15 @@ TEST_CASE ("writeAutosaveSnapshotAsync overwrite keeps the slot consistent", "[a
     const auto dir    = makeTempDir ("overwrite");
     const auto target = dir.getChildFile ("session_autosave_2.tracktionedit");
 
+    EditManager em;
     juce::ValueTree first ("EDIT");
     first.setProperty ("marker", "one", nullptr);
-    EditManager::writeAutosaveSnapshotAsync (first.createCopy(), target);
+    em.writeAutosaveSnapshotAsync (first.createCopy(), target);
     REQUIRE (waitForSnapshot (target).isValid());
 
     juce::ValueTree second ("EDIT");
     second.setProperty ("marker", "two", nullptr);
-    EditManager::writeAutosaveSnapshotAsync (second.createCopy(), target);
+    em.writeAutosaveSnapshotAsync (second.createCopy(), target);
 
     const auto deadline = juce::Time::getMillisecondCounter() + 5000u;
     juce::ValueTree latest;

@@ -125,3 +125,112 @@ TEST_CASE ("Session: Aufnahmen landen im Medienordner der Session", "[persist][m
 
     dir.deleteRecursively();
 }
+
+//==============================================================================
+// Wiederherstellung nach Absturz.
+//
+// ANLASS (User, 2026-08-18): "Was ist, wenn das Programm einmal abstuerzt? Beim
+// Abstuerzen speichern Programme wie Studio One das ja auch immer noch, damit
+// man nicht dasitzt und denkt, jetzt ist mein ganzer Stand weg. Autosave bei
+// 60 Minuten, Absturz bei 59 — dann sind 59 Minuten Arbeit einfach weg."
+//
+// Der rotierende Autosave ist die Zeitmaschine, nicht das Netz. Das Netz ist ein
+// billiger Schnappschuss im Minutentakt plus eine MARKE, die beim sauberen
+// Beenden verschwindet. Nur ihr Ueberleben unterscheidet "abgestuerzt" von
+// "normal zugemacht" — und genau das wird hier geprueft.
+
+TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die Frage",
+           "[persist][recovery]")
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                   .getChildFile ("aizana_recovery_probe");
+    dir.deleteRecursively();
+    dir.createDirectory();
+
+    const auto sessionFile = dir.getChildFile ("Absturztest.tracktion");
+    EditManager::clearCrashMarker();
+
+    {
+        EditManager em;
+        em.createNewEdit();
+        em.saveEdit (sessionFile);
+
+        // ... und DANACH weitergearbeitet, ohne zu speichern. Das ist die
+        // Arbeit, die bei einem Absturz verloren waere.
+        auto& edit = *em.getEdit();
+        edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+        const auto spurenNachher = te::getAudioTracks (edit).size();
+
+        em.writeRecoverySnapshot();
+
+        // Der Schnappschuss wird im Hintergrund geschrieben — kurz warten.
+        const auto snapshot = aizana::sessionpaths::recoveryFile (sessionFile);
+        for (int i = 0; i < 200 && ! snapshot.existsAsFile(); ++i)
+            juce::Thread::sleep (10);
+
+        REQUIRE (snapshot.existsAsFile());
+        CHECK (snapshot.getParentDirectory().getFileName() == "Sicherungen");
+
+        // Die gespeicherte Session weiss von der neuen Spur NICHTS.
+        {
+            EditManager gespeichert;
+            REQUIRE (gespeichert.loadEdit (sessionFile));
+            CHECK (te::getAudioTracks (*gespeichert.getEdit()).size() == spurenNachher - 1);
+        }
+
+        // Die Marke sagt: hier ist eine Sitzung offen.
+        const auto gefunden = EditManager::findCrashRecovery();
+        REQUIRE (gefunden.has_value());
+        CHECK (gefunden->session  == sessionFile);
+        CHECK (gefunden->snapshot == snapshot);
+
+        // Und der Schnappschuss traegt die Arbeit wirklich.
+        EditManager wieder;
+        REQUIRE (wieder.loadEdit (gefunden->snapshot, gefunden->session));
+        CHECK (te::getAudioTracks (*wieder.getEdit()).size() == spurenNachher);
+
+        // WICHTIG: gespeichert wird an der SESSION, nicht im Sicherungsordner —
+        // sonst arbeitet man nach dem Wiederherstellen in einer Sicherung
+        // weiter (genau die Falle, in die der Anwender schon einmal gelaufen ist).
+        CHECK (wieder.getCurrentFile() == sessionFile);
+    }
+
+    // Sauber beendet = keine Frage beim naechsten Start.
+    EditManager::clearCrashMarker();
+    CHECK_FALSE (EditManager::findCrashRecovery().has_value());
+
+    dir.deleteRecursively();
+}
+
+TEST_CASE ("Absturz: nach dem Speichern gibt es nichts zu fragen", "[persist][recovery]")
+{
+    // Gegenkontrolle. Wer nach dem letzten Schnappschuss noch gespeichert hat,
+    // verliert nichts — dann darf die Frage NICHT kommen. Eine Frage, die man
+    // immer wegklickt, schuetzt niemanden mehr.
+    auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                   .getChildFile ("aizana_recovery_probe2");
+    dir.deleteRecursively();
+    dir.createDirectory();
+
+    const auto sessionFile = dir.getChildFile ("Sauber.tracktion");
+    EditManager::clearCrashMarker();
+
+    EditManager em;
+    em.createNewEdit();
+    em.saveEdit (sessionFile);
+    em.writeRecoverySnapshot();
+
+    const auto snapshot = aizana::sessionpaths::recoveryFile (sessionFile);
+    for (int i = 0; i < 200 && ! snapshot.existsAsFile(); ++i)
+        juce::Thread::sleep (10);
+    REQUIRE (snapshot.existsAsFile());
+
+    // Jetzt noch einmal speichern — die Session ist damit juenger.
+    juce::Thread::sleep (1100);      // Dateizeiten haben Sekundenaufloesung
+    em.saveEdit (sessionFile);
+
+    CHECK_FALSE (EditManager::findCrashRecovery().has_value());
+
+    EditManager::clearCrashMarker();
+    dir.deleteRecursively();
+}

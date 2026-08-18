@@ -1163,6 +1163,70 @@ void MainComponent::toggleMusicalTyping()
     menuItemsChanged();
 }
 
+void MainComponent::offerCrashRecovery()
+{
+    // Der Anwender hat die Luecke benannt: „Was ist, wenn das Programm einmal
+    // abstuerzt? Autosave bei 60 Minuten, Absturz bei 59 — dann sind 59 Minuten
+    // Arbeit einfach weg." Studio One und Logic fragen beim naechsten Start.
+    //
+    // Gefragt wird NUR, wenn die letzte Sitzung nicht sauber beendet wurde (die
+    // Marke lebt noch) UND der Schnappschuss juenger ist als die Session selbst.
+    // Sonst waere die Frage Laerm — und eine Frage, die man immer wegklickt,
+    // schuetzt niemanden mehr.
+    const auto info = EditManager::findCrashRecovery();
+
+    if (! info.has_value())
+        return;
+
+    const auto alter = juce::Time::getCurrentTime() - info->when;
+    const auto minuten = juce::jmax (1, (int) alter.inMinutes());
+
+    juce::String text;
+    text << juce::String::fromUTF8 ("Aizana wurde beim letzten Mal nicht ordentlich beendet.\n\n")
+         << juce::String::fromUTF8 ("Session:\x20") << info->session.getFileNameWithoutExtension() << "\n"
+         << juce::String::fromUTF8 ("Gesicherter Stand: ") << info->when.toString (false, true, false)
+         << " (vor " << minuten << (minuten == 1 ? " Minute)" : " Minuten)") << "\n\n"
+         << juce::String::fromUTF8 ("Diesen Stand wiederherstellen? Deine gespeicherte Session "
+                                    "bleibt unangetastet, bis du speicherst.");
+
+    juce::AlertWindow::showOkCancelBox (
+        juce::MessageBoxIconType::QuestionIcon,
+        juce::String::fromUTF8 ("Nicht gespeicherte Arbeit gefunden"),
+        text,
+        juce::String::fromUTF8 ("Wiederherstellen"),
+        juce::String::fromUTF8 ("Verwerfen"),
+        this,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<MainComponent> (this), info] (int result)
+    {
+        if (safe == nullptr)
+            return;
+
+        // In beiden Faellen ist die alte Marke erledigt: entweder wir arbeiten
+        // jetzt an dem Stand (dann setzt der naechste Schnappschuss eine neue),
+        // oder er ist verworfen.
+        EditManager::clearCrashMarker();
+
+        if (result == 0)
+            return;                       // „Verwerfen"
+
+        // Den Schnappschuss LESEN, aber die SESSION uebernehmen: gespeichert wird
+        // an der Session, und relative Verweise (Takes) loesen gegen sie auf.
+        if (safe->appState.editManager.loadEdit (info->snapshot, info->session))
+        {
+            safe->menuItemsChanged();
+        }
+        else
+        {
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::WarningIcon,
+                juce::String::fromUTF8 ("Wiederherstellen"),
+                juce::String::fromUTF8 ("Der gesicherte Stand liess sich nicht lesen:\n")
+                    + info->snapshot.getFullPathName());
+        }
+    }));
+}
+
 bool MainComponent::openSessionFile (const juce::File& file)
 {
     if (! file.existsAsFile())
@@ -1211,7 +1275,7 @@ void MainComponent::handleFileSaveAs()
 
     // JUCE 8: async FileChooser
     fileChooser = std::make_unique<juce::FileChooser> (
-        "Save Session As",
+        juce::String::fromUTF8 ("Session speichern unter \xe2\x80\xa6"),
         juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
         "*.tracktion");
 
@@ -1222,7 +1286,26 @@ void MainComponent::handleFileSaveAs()
             const auto result = fc.getResult();
             if (result != juce::File{})
             {
-                const auto file = result.withFileExtension (".tracktion");
+                // Am Dialog aendert sich NICHTS: der Anwender gibt weiterhin
+                // einen Namen und einen Ort an. Nur was daraus wird, ist jetzt
+                // ein ORDNER mit diesem Namen — so wie Studio One einen
+                // Song-Ordner anlegt und Logic ein Paket:
+                //
+                //   Mein Song/
+                //       Mein Song.tracktion
+                //       Mein Song Audio/      (Aufnahmen, Comps/, Bounces/)
+                //       Sicherungen/
+                //
+                // Vorher lag alles davon lose im gewaehlten Verzeichnis — bei
+                // einem Anwender also im Wurzelverzeichnis seiner SSD, und er
+                // hat es aufgeraeumt und dabei Takes verloren.
+                const auto file = aizana::sessionpaths::sessionFileForChosenPath (
+                                      result.withFileExtension (".tracktion"));
+
+                file.getParentDirectory().createDirectory();
+                aizana::sessionpaths::mediaFolder (file).createDirectory();
+                aizana::sessionpaths::backupFolder (file).createDirectory();
+
                 appState.editManager.saveEdit (file);
                 appState.editManager.setCurrentFile (file);
             }

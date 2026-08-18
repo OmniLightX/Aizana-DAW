@@ -1,0 +1,54 @@
+# Wiederherstellung nach Absturz — die Nachfrage beim Start und was sie bewirkt.
+#
+# ANLASS (User 2026-08-18): "Was ist, wenn das Programm einmal abstuerzt? Autosave
+# bei 60 Minuten, Absturz bei 59 — dann sind 59 Minuten Arbeit einfach weg."
+#
+# Aufbau (vom Aufrufer vorbereitet, siehe scripts/absturz-fixture.sh):
+#   <Ordner>/Absturztest.tracktion                      = die GESPEICHERTE Session
+#   <Ordner>/Sicherungen/Absturztest_Wiederherstellung… = der neuere Schnappschuss
+#   ~/Library/Aizana/offene-sitzung.json                = die Marke (= abgestuerzt)
+#
+# Der Schnappschuss enthaelt bewusst eine ANDERE Session — damit an den
+# Spurnamen zweifelsfrei abzulesen ist, welcher Stand geladen wurde. Ein
+# Schnappschuss, der genauso aussieht wie die Session, wuerde nichts beweisen.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/39-absturz-wiederherstellung.txt
+
+vorn
+warte 7000
+> peers
+bild ABSTURZ-01-nachfrage
+> tree 1 4
+
+# Wiederherstellen. Das Fenster der Nachfrage muss dafuer vorne sein — ein
+# modales Fenster nimmt Klicks nur an, wenn es den Fokus hat (im ersten Lauf real
+# hineingelaufen: der Klick meldete OK und passierte nichts).
+> front 1
+warte 800
+klick Wiederherstellen
+warte 4000
+> peers
+> spuren
+> zustand
+bild ABSTURZ-02-wiederhergestellt
+
+# ============================================================ ERGEBNIS 2026-08-18
+#
+# Vor dem Klick:  zwei Fenster — peer 0 "Aizana", peer 1 "Nicht gespeicherte
+#                 Arbeit gefunden" mit den Knoepfen "Wiederherstellen" und
+#                 "Verwerfen".
+# Nach dem Klick: nur noch peer 0 — und geladen ist der SCHNAPPSCHUSS, nicht die
+#                 gespeicherte Session. Ablesbar an den Spurnamen:
+#                   "1.Makar… · 2.Chorus_1 · 3.Chorus Unterspur_1 · … · Track 8"
+#                 (Schnappschuss) statt "1. prod. by Veysigz … · Doubles L …"
+#                 (gespeicherte Session). Mutes und Loop-Bereich kommen mit:
+#                 drei Spuren m=1, LOOPVON=77.000 LOOPBIS=80.500.
+#
+# FALLE, real hineingelaufen: ohne `> front 1` meldet der Klick brav OK und
+# passiert NICHTS — ein modales Fenster nimmt Klicks nur an, wenn es den Fokus
+# hat. Wieder die Fehlalarm-Klasse des Werkzeugs: "OK" heisst nur "abgeschickt".
+#
+# Was dieser Lauf NICHT zeigt (dafuer der Engine-Test [recovery]): dass nach dem
+# Wiederherstellen die SESSION die Zieldatei ist und nicht die Sicherung — sonst
+# arbeitet man im Sicherungsordner weiter.

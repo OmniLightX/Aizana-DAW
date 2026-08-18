@@ -142,7 +142,7 @@ void EditManager::createNewEdit()
 }
 
 //==============================================================================
-bool EditManager::loadEdit (const juce::File& file)
+bool EditManager::loadEdit (const juce::File& file, juce::File adoptAsSession)
 {
     // Rename-Migration Cloudes→Aizana: upgrade pre-rename sessions in place BEFORE
     // TE parses them — old files carry cloudes* track properties, built-in plugin
@@ -179,8 +179,12 @@ bool EditManager::loadEdit (const juce::File& file)
 
     // TE's default filePathResolver (sibling-based) lacks the legacy fallback for
     // take refs recorded in unsaved sessions (see createNewEdit) — install ours.
-    setCurrentFile (file);
-    const auto editFile = file;
+    // Beim Wiederherstellen wird eine Datei GELESEN, aber eine andere ist die
+    // Session: der Schnappschuss liegt in `Sicherungen/`, und relative
+    // Dateiverweise (Takes!) muessen weiter gegen die SESSION aufgeloest werden —
+    // sonst zeigt jeder Verweis eine Ebene daneben (I-07).
+    const auto editFile = adoptAsSession != juce::File() ? adoptAsSession : file;
+    setCurrentFile (editFile);
     edit->editFileRetriever = [editFile] { return editFile; };
     edit->filePathResolver = [editFile] (const juce::String& desc) -> juce::File
     {
@@ -293,8 +297,7 @@ juce::File EditManager::mediaDirectory() const
     // Ohne gespeicherte Session gibt es keinen Sessionordner — dann in die
     // Dokumente, aber ebenfalls in einen benannten Ordner, nie irgendwohin.
     if (currentSessionFile.existsAsFile())
-        return currentSessionFile.getParentDirectory()
-                 .getChildFile (currentSessionFile.getFileNameWithoutExtension() + " Audio");
+        return aizana::sessionpaths::mediaFolder (currentSessionFile);
 
     return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
              .getChildFile ("Aizana").getChildFile ("Unbenannte Session");
@@ -310,7 +313,7 @@ juce::String EditManager::recordingFilenameMask() const
     // alten Aufnahmen („_Track 8_Take_1.wav"): eine Datei, der man nicht ansieht,
     // wozu sie gehoert. Also setzen wir den Sessionnamen direkt ein.
     const auto sessionName = currentSessionFile.existsAsFile()
-                               ? currentSessionFile.getFileNameWithoutExtension()
+                               ? aizana::sessionpaths::sessionStemFrom (currentSessionFile)
                                : juce::String ("Unbenannt");
 
     return mediaDirectory().getFullPathName() + juce::File::getSeparatorString()
@@ -342,10 +345,15 @@ void EditManager::setCurrentFile (const juce::File& file)
             autosaveTimer.startTimer (mins * 60 * 1000);
         else
             autosaveTimer.stopTimer();
+
+        // Das Netz gegen den Absturz laeuft UNABHAENGIG vom Autosave-Abstand —
+        // auch dann, wenn der Anwender den Autosave ganz abgeschaltet hat.
+        recoveryTimer.startTimer (kRecoverySeconds * 1000);
     }
     else
     {
         autosaveTimer.stopTimer();
+        recoveryTimer.stopTimer();
     }
 }
 
@@ -354,10 +362,15 @@ void EditManager::performAutosave()
     if (edit == nullptr || ! currentSessionFile.existsAsFile())
         return;
 
-    // Build autosave filename: {SessionName}_autosave_N.tracktionedit
-    // We rotate 3 slots: _autosave_1, _autosave_2, _autosave_3
-    const auto stem = currentSessionFile.getFileNameWithoutExtension();
-    const auto dir  = currentSessionFile.getParentDirectory();
+    // Sicherungen liegen im UNTERORDNER der Session, nicht daneben.
+    //
+    // Vorher hiessen sie `<Name>_autosave_N.tracktionedit` und lagen gleichwertig
+    // neben der Session: neuer als sie, in jedem Dateidialog obenauf. Ein Anwender
+    // hat prompt eine geoeffnet und darin weitergearbeitet — auf seiner Platte
+    // stand danach `<Name>_autosave_1_autosave_2`. Ein Sicherungsstand darf nicht
+    // aussehen wie das Projekt.
+    const auto dir = aizana::sessionpaths::backupFolder (currentSessionFile);
+    dir.createDirectory();
 
     // Find the next slot (rotate among kAutosaveKeptCount slots)
     // The slot with the oldest modification time gets overwritten.
@@ -368,7 +381,7 @@ void EditManager::performAutosave()
     for (int i = 1; i <= kAutosaveKeptCount; ++i)
     {
         const auto candidate = dir.getChildFile (
-            stem + "_autosave_" + juce::String (i) + ".tracktionedit");
+            aizana::sessionpaths::backupFileName (currentSessionFile, i));
 
         if (! candidate.existsAsFile())
         {
@@ -413,7 +426,17 @@ void EditManager::performAutosave()
 void EditManager::writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
                                               const juce::File& target)
 {
-    juce::Thread::launch ([tree = std::move (exclusiveStateCopy), target]
+    // Auf dem EIGENEN Pool, nicht als losgeloester Thread.
+    //
+    // `juce::Thread::launch` startet einen Thread, den niemand mehr einholt: er
+    // schreibt weiter, waehrend der EditManager (und mit ihm die Engine) schon
+    // zerlegt wird. Solange das nur alle paar Minuten passierte, fiel es nicht
+    // auf — mit dem Wiederherstellungs-Schnappschuss im Minutentakt schon:
+    // im vollen Testlauf 2026-08-18 ein SIGSEGV, das beim Einzellauf desselben
+    // Tests nie auftrat (ein klassisches Zeichen fuer „Leben ueber die eigene
+    // Lebenszeit hinaus"). Der Pool gehoert dem EditManager; sein Destruktor
+    // wartet auf laufende Jobs, bevor irgendetwas anderes zerlegt wird.
+    snapshotPool.addJob ([tree = std::move (exclusiveStateCopy), target]
     {
         if (auto xml = tree.createXml())
         {
@@ -426,13 +449,108 @@ void EditManager::writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy
     });
 }
 
+//==============================================================================
+// Wiederherstellung nach Absturz
+//
+// Der Anwender hat die Luecke benannt: „Was ist, wenn das Programm einmal
+// abstuerzt? Autosave bei 60 Minuten, Absturz bei 59 — dann sind 59 Minuten
+// Arbeit einfach weg." Genau dafuer ist der rotierende Autosave nicht gedacht;
+// er ist die Zeitmaschine, nicht das Netz.
+//
+// Also ein zweiter, unabhaengiger Weg, so wie ihn Studio One und Logic fahren:
+//   * ein billiger Schnappschuss des ValueTree im MINUTENTAKT, immer in DIESELBE
+//     Datei (`Sicherungen/<Name>_Wiederherstellung.tracktionedit`),
+//   * eine MARKE in den App-Daten, die sagt „hier ist eine Sitzung offen",
+//   * beim sauberen Beenden wird die Marke geloescht.
+// Existiert die Marke beim naechsten Start, ist die letzte Sitzung NICHT sauber
+// beendet worden — und nur dann wird gefragt.
+//
+// Der Schnappschuss laeuft ueber denselben playback-sicheren Weg wie der
+// Autosave waehrend der Wiedergabe (ValueTree-Kopie, Schreiben im Hintergrund):
+// er darf NIE ein Dropout verursachen, sonst schaltet ihn jeder wieder ab.
+
+namespace
+{
+    juce::File crashMarkerFile()
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                       .getChildFile ("Aizana");
+        dir.createDirectory();
+        return dir.getChildFile ("offene-sitzung.json");
+    }
+}
+
+std::optional<EditManager::CrashRecovery> EditManager::findCrashRecovery()
+{
+    const auto marker = crashMarkerFile();
+
+    if (! marker.existsAsFile())
+        return {};                       // sauber beendet — nichts zu tun
+
+    auto json = juce::JSON::parse (marker.loadFileAsString());
+    const juce::File session  (json.getProperty ("session",  {}).toString());
+    const juce::File snapshot (json.getProperty ("snapshot", {}).toString());
+
+    if (! snapshot.existsAsFile())
+    {
+        marker.deleteFile();             // nichts zu holen — Marke weg
+        return {};
+    }
+
+    // Ist der Schnappschuss ueberhaupt juenger als die Session? Wer nach dem
+    // letzten Schnappschuss noch gespeichert hat, verliert nichts — dann waere
+    // die Frage nur Laerm.
+    if (session.existsAsFile()
+        && snapshot.getLastModificationTime() <= session.getLastModificationTime())
+    {
+        marker.deleteFile();
+        return {};
+    }
+
+    CrashRecovery r;
+    r.session  = session;
+    r.snapshot = snapshot;
+    r.when     = snapshot.getLastModificationTime();
+    return r;
+}
+
+void EditManager::clearCrashMarker()
+{
+    crashMarkerFile().deleteFile();
+}
+
+void EditManager::writeRecoverySnapshot()
+{
+    if (edit == nullptr || ! currentSessionFile.existsAsFile())
+        return;
+
+    const auto target = aizana::sessionpaths::recoveryFile (currentSessionFile);
+    target.getParentDirectory().createDirectory();
+
+    // Bei STEHENDEM Transport zusaetzlich die Plugin-Staende einsammeln — das
+    // suspendiert kurz jedes Plugin und ist nur deshalb vertretbar, weil nichts
+    // laeuft. Waehrend der Wiedergabe NICHT (M13: genau das verursachte die
+    // Aussetzer beim Autosave-Tick).
+    if (! edit->getTransport().isPlaying())
+        edit->flushState();
+
+    writeAutosaveSnapshotAsync (edit->state.createCopy(), target);
+
+    // Marke aktualisieren: WELCHE Session, WELCHER Schnappschuss. Sie ist der
+    // einzige Unterschied zwischen „abgestuerzt" und „sauber beendet".
+    juce::DynamicObject::Ptr o (new juce::DynamicObject());
+    o->setProperty ("session",  currentSessionFile.getFullPathName());
+    o->setProperty ("snapshot", target.getFullPathName());
+    o->setProperty ("zeit",     juce::Time::getCurrentTime().toISO8601 (true));
+    crashMarkerFile().replaceWithText (juce::JSON::toString (o.get()));
+}
+
 juce::File EditManager::getLatestAutosave (const juce::File& sessionFile) const
 {
     if (! sessionFile.existsAsFile())
         return {};
 
-    const auto stem = sessionFile.getFileNameWithoutExtension();
-    const auto dir  = sessionFile.getParentDirectory();
+    const auto dir = aizana::sessionpaths::backupFolder (sessionFile);
 
     juce::File latestFile;
     juce::Time latestTime;
@@ -440,7 +558,7 @@ juce::File EditManager::getLatestAutosave (const juce::File& sessionFile) const
     for (int i = 1; i <= kAutosaveKeptCount; ++i)
     {
         const auto candidate = dir.getChildFile (
-            stem + "_autosave_" + juce::String (i) + ".tracktionedit");
+            aizana::sessionpaths::backupFileName (sessionFile, i));
 
         if (candidate.existsAsFile() &&
             candidate.getLastModificationTime() > latestTime)

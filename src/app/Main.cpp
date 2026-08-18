@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "MicrophonePermission.h"
 #include "LegacyMigration.h"
+#include "engine/EditManager.h"
 #include "plugins/OutOfProcessPluginScanner.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
 #include "testing/UiTestHook.h"
@@ -154,6 +155,9 @@ public:
             {
                 mainWindow = std::make_unique<MainWindow> (getApplicationName());
                 openPendingSession();
+
+                if (mainWindow != nullptr)
+                    mainWindow->offerCrashRecovery();
             });
             return;
         }
@@ -178,12 +182,22 @@ public:
             {
                 mainWindow = std::make_unique<MainWindow> (getApplicationName());
                 openPendingSession();
+
+                // Erst NACH dem Oeffnen einer eventuell mitgegebenen Session
+                // fragen — sonst ueberschriebe die Wiederherstellung sie sofort.
+                if (mainWindow != nullptr)
+                    mainWindow->offerCrashRecovery();
             });
         });
     }
 
     void shutdown() override
     {
+        // SAUBER beendet — die Marke der offenen Sitzung faellt weg. Ihr
+        // VORHANDENSEIN beim naechsten Start ist der einzige Unterschied
+        // zwischen „abgestuerzt" und „normal zugemacht"; genau daran haengt die
+        // Nachfrage nach der Wiederherstellung.
+        EditManager::clearCrashMarker();
         mainWindow.reset();
     }
 

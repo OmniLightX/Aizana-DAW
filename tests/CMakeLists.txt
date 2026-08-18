@@ -70,6 +70,7 @@ target_sources(engine_tests PRIVATE
     test_count_in.cpp
     test_click_track.cpp
     test_session_state.cpp
+    test_session_paths.cpp
     test_edit_groups.cpp
     test_pan_value.cpp
     test_transport_keys.cpp
@@ -130,6 +131,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/AiLiveProtocol.cpp
     ../src/ai/OnnxModelRunner.cpp
     ../src/engine/EditManager.cpp
+    ../src/engine/SessionPaths.cpp
     ../src/engine/RemovableMediaGuard.cpp
     ../src/engine/TempoEngine.cpp
     ../src/engine/CountIn.cpp
