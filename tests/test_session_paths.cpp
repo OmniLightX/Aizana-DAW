@@ -44,11 +44,12 @@ TEST_CASE ("Sicherungen liegen im Unterordner und heissen nach der Session", "[s
 
 TEST_CASE ("Aus einer Sicherung wird wieder der Sessionname — auch aus der Kette", "[sessionpaths]")
 {
-    // Genau die Dateinamen, die auf der SSD des Anwenders lagen.
-    CHECK (sp::sessionStemFrom (juce::File ("/x/TestSong_autosave_1.tracktionedit"))
-             == "TestSong");
-    CHECK (sp::sessionStemFrom (juce::File ("/x/TestSong_autosave_1_autosave_2.tracktionedit"))
-             == "TestSong");
+    // Dieselbe Form wie die Dateinamen, die real auf der Platte des Anwenders
+    // lagen (Name hier neutralisiert).
+    CHECK (sp::sessionStemFrom (juce::File ("/x/Alte Session_autosave_1.tracktionedit"))
+             == "Alte Session");
+    CHECK (sp::sessionStemFrom (juce::File ("/x/Alte Session_autosave_1_autosave_2.tracktionedit"))
+             == "Alte Session");
     CHECK (sp::sessionStemFrom (juce::File ("/x/Mein Song_Sicherung_3.tracktionedit"))
              == "Mein Song");
     CHECK (sp::sessionStemFrom (juce::File ("/x/Mein Song_Wiederherstellung.tracktionedit"))
@@ -65,7 +66,7 @@ TEST_CASE ("Eine Sicherung als Auswahl landet wieder im Session-Ordner", "[sessi
 {
     // Wer versehentlich eine Sicherung oeffnet und dann speichert, soll auf dem
     // STAMM landen und keine neue Kette anfangen.
-    const juce::File sicherung ("/Volumes/SSD/TestSong_autosave_1.tracktionedit");
+    const juce::File sicherung ("/Volumes/SSD/Alte Session_autosave_1.tracktionedit");
     CHECK (sp::sessionFileForChosenPath (sicherung).getFullPathName()
-             == "/Volumes/SSD/TestSong/TestSong.tracktion");
+             == "/Volumes/SSD/Alte Session/Alte Session.tracktion");
 }
