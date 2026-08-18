@@ -9,6 +9,7 @@
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
 #include "plugins/oop/OutOfProcessPluginInstance.h"
 #include "testing/UiTestHook.h"
+#include "engine/CountIn.h"
 
 namespace te = tracktion::engine;
 
@@ -154,6 +155,76 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // Tuer — waehrend ein Automat blind Knoepfe drueckt, bleibt sie zu.
     if (! aizana::uitest::isArmed())
         aiLiveServer.start();
+
+   #if AIZANA_UITEST_HOOK
+    // MESSGERAETE fuer den GUI-Testlauf (nur in diesem Build uebersetzt).
+    //
+    // Der Hook liest sonst nur den Component-Baum. Damit sind Namen und Groessen
+    // pruefbar — der KLANG aber nicht, und der Transportzustand auch nicht.
+    // Genau daran scheiterte die Metronom-Pruefung: „klackt es gerade?" ist eine
+    // Frage an den AUSGANG, nicht an einen Schalter. Die Sonde liest ausschliesslich.
+    if (aizana::uitest::isArmed())
+    {
+        aizana::uitest::setEngineProbe ([this] (const juce::String& frage) -> juce::String
+        {
+            auto* edit = appState.editManager.getEdit();
+
+            if (edit == nullptr)
+                return "ERR keine Session";
+
+            auto& transport = edit->getTransport();
+
+            if (frage == "pegel")
+            {
+                auto* ctx = transport.getCurrentPlaybackContext();
+
+                if (ctx == nullptr)
+                    return "ERR kein Wiedergabekontext";
+
+                // Der ClickNode wird in den Geraeteknoten summiert, die
+                // Master-Messung sitzt darueber — der Klick laeuft hier also mit
+                // durch. Der Spitzenwert gilt seit dem letzten Abruf, deshalb
+                // liest der Hook zweimal: einmal leeren, Fenster abwarten, ablesen.
+                static tracktion::engine::LevelMeasurer::Client client;
+                static tracktion::engine::LevelMeasurer* angehaengt = nullptr;
+
+                if (angehaengt != &ctx->masterLevels)
+                {
+                    ctx->masterLevels.addClient (client);
+                    angehaengt = &ctx->masterLevels;
+                }
+
+                float spitze = -100.0f;
+
+                for (int ch = 0; ch < 2; ++ch)
+                    spitze = std::max (spitze, client.getAndClearAudioLevel (ch).dB);
+
+                return "PEGEL " + juce::String (spitze, 1);
+            }
+
+            if (frage == "zustand")
+            {
+                const auto klickBereich = edit->getClickTrackRange();
+                const auto loop         = transport.getLoopRange();
+                juce::String z;
+                z << "POS=" << juce::String (transport.getPosition().inSeconds(), 3)
+                  << " PLAY="  << (int) transport.isPlaying()
+                  << " REC="   << (int) transport.isRecording()
+                  << " LOOP="  << (int) transport.looping.get()
+                  << " LOOPVON=" << juce::String (loop.getStart().inSeconds(), 3)
+                  << " LOOPBIS=" << juce::String (loop.getEnd().inSeconds(), 3)
+                  << " PUNCH=" << (int) edit->recordingPunchInOut.get()
+                  << " KLICK=" << (int) edit->clickTrackEnabled.get()
+                  << " KLICKVON=" << juce::String (klickBereich.getStart().inSeconds(), 3)
+                  << " KLICKBIS=" << juce::String (klickBereich.getEnd().inSeconds(), 3)
+                  << " RECKLICK=" << (int) countin::getClickWhileRecording (*edit);
+                return z;
+            }
+
+            return "ERR unbekannte Frage: " + frage;
+        });
+    }
+   #endif
 
     // M13-Diagnose: XRun-Logger — jeder hörbare Aussetzer landet mit Zeitstempel,
     // Buffer/CPU und App-Kontext in ~/Library/Aizana/logs/dropouts.log, damit die

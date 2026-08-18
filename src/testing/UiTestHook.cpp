@@ -103,6 +103,13 @@ int indexOfPeer (const juce::ComponentPeer* peer)
     return -1;
 }
 
+/** Slot fuer die Engine-Sonde (siehe UiTestHook.h). Nur im Test-Build. */
+EngineProbe& engineProbeSlot()
+{
+    static EngineProbe probe;
+    return probe;
+}
+
 juce::String describe (juce::Component& c)
 {
     auto label = c.getTitle();
@@ -702,6 +709,40 @@ struct Hook::Impl : public juce::Thread
                    "| menu [top item] | warte <ms> | quit\n"
                    "OK";
 
+        if (cmd == "pegel" || cmd == "zustand")
+        {
+            // MESSGERAETE. `pegel` misst den Spitzenpegel am Master ueber ein
+            // Zeitfenster — der Klick laeuft dort mit durch (ClickNode wird in
+            // den Geraeteknoten summiert, die Master-Messung sitzt darueber).
+            // Damit ist „klackt es gerade?" eine MESSUNG am Ausgang und nicht
+            // die Frage an einen Schalter.
+            auto probe = engineProbeSlot();
+
+            if (! probe)
+                return "ERR keine Engine-Sonde eingehaengt";
+
+            // Antwortformat des Harness: Datenzeilen mit "| ", Abschluss "OK".
+            // Ohne den Abschluss liest der Harness bis zur Zeitueberschreitung —
+            // im ersten Anlauf real hineingelaufen.
+            auto rahmen = [] (const juce::String& zeile)
+            {
+                return zeile.startsWith ("ERR") ? zeile : "| " + zeile + "\nOK";
+            };
+
+            if (cmd == "zustand")
+                return onMessageThread ([&probe, &rahmen] { return rahmen (probe ("zustand")); });
+
+            const int fensterMs = args.size() > 1 ? juce::jlimit (20, 20000, (int) num (1)) : 400;
+
+            // Erst leeren (der Spitzenwert ist ein „seit dem letzten Abruf"), dann
+            // das Fenster verstreichen lassen, dann ablesen.
+            onMessageThread ([&probe] { return probe ("pegel"); });
+
+            juce::Thread::sleep (fensterMs);
+
+            return onMessageThread ([&probe, &rahmen] { return rahmen (probe ("pegel")); });
+        }
+
         if (cmd == "peers")
             return onMessageThread ([] { return cmdPeers(); });
 
@@ -911,6 +952,11 @@ std::unique_ptr<Hook> Hook::armIfRequested()
 
     armedFlag.store (true);
     return std::unique_ptr<Hook> (new Hook());
+}
+
+void setEngineProbe (EngineProbe p)
+{
+    engineProbeSlot() = std::move (p);
 }
 
 } // namespace aizana::uitest

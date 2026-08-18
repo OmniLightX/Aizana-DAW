@@ -1,0 +1,148 @@
+# Block V, der eigentliche Befund: hoert der Klick am Aufnahmestart auf?
+#
+# Gemessen wird der Spitzenpegel am MASTER (`> pegel <ms>`) — einmal WAEHREND des
+# Vorzaehlers und einmal WAEHREND der Aufnahme. Vorzaehler 4 Takte = 8 s bei
+# 120 BPM, das Fenster passt also bequem in beide Phasen.
+#
+# Vier Durchgaenge:
+#   K  Kontrolle  — Aufnahme ohne jeden Klick. Misst den Grundpegel (Mikrofon/
+#                   Monitoring). OHNE diese Zahl waere "still" nicht von
+#                   "Mikrofon leise" zu unterscheiden.
+#   A  V9         — Metronom AUS + Vorzaehler: zaehlt, dann Ruhe.
+#   B  V10        — Metronom AN + "Klick bei Aufnahme: An": laeuft durch (Beatbau).
+#   C  V10b       — Metronom AN + "Klick bei Aufnahme: Aus": zaehlt, dann Ruhe.
+#                   DAS ist der Befund vom 17.08.
+#
+# Nach jedem Durchgang wird die Aufnahme rueckgaengig gemacht, sonst spielt der
+# eben aufgenommene Clip beim naechsten Durchgang mit und verfaelscht die Messung.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/36-block-v-klick-bei-aufnahme.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+klick Aufnahmebereit Track 1
+warte 1500
+> zustand
+
+# ============================================== K: Kontrolle (kein Klick, kein Vorzaehler)
+klick Metronom-Einstellungen
+warte 1200
+klick Vorzähler Aus
+warte 500
+taste escape
+warte 800
+klick Zum Anfang
+warte 800
+klick Aufnahme
+warte 1500
+> zustand
+> pegel 4000
+klick Stopp
+warte 2500
+klick Spurbereich Track 1
+warte 500
+taste z cmd
+warte 1500
+
+# ============================================== A: V9 — Metronom AUS + Vorzaehler 4
+klick Metronom-Einstellungen
+warte 1200
+klick Vorzähler 4
+warte 500
+taste escape
+warte 800
+> zustand
+klick Zum Anfang
+warte 800
+klick Aufnahme
+> pegel 5000
+warte 4000
+> zustand
+> pegel 4000
+klick Stopp
+warte 2500
+> zustand
+warte 2500
+klick Spurbereich Track 1
+warte 500
+taste z cmd
+warte 1500
+
+# ============================================== B: V10 — Metronom AN, Klick bei Aufnahme An
+klick Metronom
+warte 800
+> zustand
+klick Zum Anfang
+warte 800
+klick Aufnahme
+> pegel 5000
+warte 4000
+> zustand
+> pegel 4000
+klick Stopp
+warte 2500
+> zustand
+warte 2500
+klick Spurbereich Track 1
+warte 500
+taste z cmd
+warte 1500
+
+# ============================================== C: V10b — Metronom AN, Klick bei Aufnahme AUS
+klick Metronom-Einstellungen
+warte 1200
+klick Klick bei Aufnahme: An
+warte 600
+> tree 1 6
+taste escape
+warte 800
+> zustand
+> zustand
+klick Zum Anfang
+warte 800
+klick Aufnahme
+> pegel 5000
+warte 4000
+> zustand
+> pegel 4000
+klick Stopp
+warte 2500
+> zustand
+warte 2500
+> zustand
+bild V10b-nach-der-aufnahme
+
+# ============================================================ ERGEBNIS 2026-08-18
+#
+# Gemessen wurde der SPITZENPEGEL AM MASTER, also das, was auch aus den Boxen
+# kaeme — nicht der Zustand eines Schalters.
+#
+#   Durchgang                                   Vorzaehler   Aufnahme
+#   K  Kontrolle (kein Klick, kein Vorzaehler)      —        -100,0 dB
+#   A  V9  Metronom AUS + Vorzaehler 4            -6,8 dB    -100,0 dB
+#   B  V10 Metronom AN + Klick bei Aufnahme An    -6,8 dB      -6,8 dB
+#   C  V10b Metronom AN + Klick bei Aufnahme Aus  -6,8 dB    -100,0 dB   <- der Befund
+#
+# Die Kontrolle K ist der Punkt, an dem der Test steht oder faellt: sie zeigt,
+# dass „still" wirklich still ist und nicht bloss ein leises Mikrofon.
+#
+# Der Mechanismus ist in derselben Zeile mitzulesen: waehrend des Vorlaufs steht
+# KLICK=0 mit KLICKVON=-4,500 / KLICKBIS=-0,250 (Klick nur im Bereich), nach dem
+# Stoppen wieder KLICK=1 und Bereich 0/0 — der Metronom-Knopf des Anwenders ist
+# also nur GELIEHEN und kommt zurueck.
+#
+# Nebenbefund und ECHTER FEHLER, hier gefangen: der geliehene Loop-Bereich kam
+# NICHT zurueck. `TransportControl::setLoopRange()` klemmt das Ende auf
+# `edit.getLength() + Edit::getMaximumLength() * 0.75`; gemerkt hatten wir den
+# ungeklemmten Wunschwert. Der Vergleich in giveBack() schlug deshalb immer fehl
+# („der Anwender hat den Bereich selbst gezogen") und der Bereich blieb auf
+# 129600 stehen. Jetzt wird nach dem Setzen zurueckgelesen — nach jedem Durchgang
+# steht LOOPVON/LOOPBIS wieder auf dem Wert des Anwenders.
+#
+# Nebenbefund (Grenze, kein Fehler): direkt am SONGANFANG reicht der Vorlauf nur
+# bis -4,5 s (2 Takte + 0,5 s), auch wenn 4 Takte eingestellt sind. TE klemmt das
+# Positionieren auf `-getNumCountInBeats()` Beats - 0,5 s, und mehr als zwei Takte
+# kennt TEs Vorzaehler-Modus nicht. Steht jetzt im Tooltip.

@@ -1,0 +1,44 @@
+# Block V, akustisch: klackt es gerade WIRKLICH?
+#
+# Gemessen wird der Spitzenpegel am MASTER (`> pegel <ms>`). Der Klick wird in den
+# Geraeteknoten summiert, die Master-Messung sitzt darueber — was hier ankommt, ist
+# das, was auch aus den Boxen kaeme. Die Session ist leer, es gibt also keine
+# andere Schallquelle.
+#
+# Schwelle: Klick vorhanden = Spitze deutlich ueber -40 dB; Stille = unter -60 dB.
+# Der Kontrolllauf ganz unten misst den Grundpegel bei laufender Aufnahme OHNE
+# Klick — ohne den waere „still" nicht von „Mikrofon leise" zu unterscheiden.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/35-block-v-klick-messen.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+> zustand
+
+# ============================================================ V1: Stillstand
+# Metronom AN, NICHTS abspielen. Der alte freilaufende Generator haette hier
+# geklackt — das war der Ausgangsbefund.
+klick Metronom
+warte 500
+> zustand
+> pegel 1500
+
+# ============================================================ V2: Wiedergabe
+klick Wiedergabe
+warte 500
+> pegel 1500
+klick Stopp
+warte 800
+
+# ============================================================ V5: Metronom AUS
+klick Metronom
+warte 500
+klick Wiedergabe
+warte 500
+> pegel 1500
+klick Stopp
+warte 1000
+> zustand

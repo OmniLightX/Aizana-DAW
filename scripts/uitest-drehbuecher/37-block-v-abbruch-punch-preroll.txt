@@ -1,0 +1,100 @@
+# Block V, Rest-Mechanik: Abbruch (V15/V16), Auto-Punch (V13), Pre-Roll (V17).
+#
+# Alles ueber `> zustand` gemessen — Position, Play/Rec, Loop-Bereich, Punch-
+# Schalter, Klick-Schalter und Klickbereich in einer Zeile. Die Invariante bei
+# JEDEM dieser Punkte lautet: was dem Anwender gehoert (Loop-Bereich, Punch,
+# Klick), steht nach dem Lauf unveraendert da.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/37-block-v-abbruch-punch-preroll.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+klick Aufnahmebereit Track 1
+warte 1500
+
+# Vorzaehler 4, Metronom aus (Ausgangslage)
+klick Metronom-Einstellungen
+warte 1200
+klick Vorzähler 4
+warte 500
+taste escape
+warte 800
+klick Zum Anfang
+warte 600
+> zustand
+
+# ====================================================== V15: STOPP im Vorzaehler
+klick Aufnahme
+warte 1200
+> zustand
+klick Stopp
+warte 1500
+> zustand
+> tree 0 3
+
+# ================================== V16: nochmal AUFNAHME waehrend des Vorzaehlers
+klick Zum Anfang
+warte 600
+klick Aufnahme
+warte 1200
+klick Aufnahme
+warte 1500
+> zustand
+> tree 0 3
+
+# ====================================================== V13: mit Auto-Punch AN
+klick Zum Anfang
+warte 600
+klick Auto-Punch
+warte 600
+> zustand
+klick Aufnahme
+warte 1500
+> zustand
+klick Stopp
+warte 2500
+> zustand
+klick Auto-Punch
+warte 600
+
+# ====================================================== V17: Pre-Roll statt Vorzaehler
+klick Metronom-Einstellungen
+warte 1200
+klick Vorzähler Aus
+warte 400
+klick Pre-Roll 2
+warte 400
+taste escape
+warte 800
+klick Zum Anfang
+warte 600
+klick Aufnahme
+> pegel 2500
+> zustand
+klick Stopp
+warte 2500
+> zustand
+bild V17-nach-preroll
+
+# ============================================================ ERGEBNIS 2026-08-18
+#
+# V15 STOPP im Vorzaehler: waehrend des Vorlaufs POS=-3,316 PLAY=1 REC=1 PUNCH=1
+#   (geliehen), danach PLAY=0 REC=0, LOOPVON/BIS=0/0, PUNCH=0, Klickbereich 0/0.
+#   Kein Clip im Baum. Sauberer Abbruch, alles zurueckgegeben.
+#
+# V16 nochmal AUFNAHME im Vorzaehler: danach PLAY=0 REC=0, alles zurueckgegeben,
+#   kein Clip, kein zweiter Vorlauf.
+#
+# V13 AUTO-PUNCH: vorher PUNCH=1 (der Schalter des Anwenders). Waehrend der
+#   Aufnahme bleibt LOOPVON/BIS unveraendert — bei eingeschaltetem Auto-Punch
+#   leihen wir den Bereich gar nicht erst, weil er dann bereits den Aufnahmestart
+#   traegt. Der Vorzaehler zaehlt trotzdem (KLICKVON=-4,500). Nach dem Stoppen
+#   steht PUNCH weiterhin auf 1.
+#
+# V17 PRE-ROLL 2 (Vorzaehler aus, Metronom aus): PEGEL -100,0 waehrend des
+#   Vorlaufs = KEIN erzwungener Klick, und kein Klickbereich gesetzt
+#   (KLICKVON/BIS=0/0) — der Unterschied zum Vorzaehler ist damit gemessen und
+#   nicht nur behauptet. Der Transport laeuft dabei (POS=-1,515 PLAY=1 REC=1).

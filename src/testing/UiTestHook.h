@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <functional>
 
 /*
     AIZANA_UITEST_HOOK — In-App-Maussteuerung fuer GUI-Testlaeufe.
@@ -61,6 +62,28 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Hook)
 };
+
+/**
+ * MESSGERAET (nur im Test-Build): eine Sonde in die laufende Engine.
+ *
+ * Der Hook liest sonst ausschliesslich den Component-Baum — damit sind Namen und
+ * Groessen pruefbar, aber nicht der KLANG und nicht der Transportzustand. Genau
+ * das fehlte beim Metronom: „klackt es gerade?" ist keine Frage an ein
+ * Bedienelement, sondern an den Ausgang.
+ *
+ * `MainComponent` haengt die Sonde ein, wenn der Hook scharf ist; ohne Hook wird
+ * dieser ganze Abschnitt gar nicht uebersetzt. Die Sonde LIEST nur — sie schaltet
+ * nichts und veraendert nichts, sonst waere sie ein zweiter Bedienweg.
+ *
+ * Antworten (Klartext, eine Zeile):
+ *   "pegel"   -> "PEGEL <dB>"                    Spitzenpegel am MASTER seit dem
+ *                                                letzten Abruf (der Klick laeuft
+ *                                                mit durch die Master-Messung).
+ *   "zustand" -> "POS=.. PLAY=.. REC=.. LOOP=.. LOOPVON=.. LOOPBIS=.. PUNCH=..
+ *                 KLICK=.. KLICKVON=.. KLICKBIS=.. VORZAEHLER=.. RECKLICK=.."
+ */
+using EngineProbe = std::function<juce::String (const juce::String& frage)>;
+void setEngineProbe (EngineProbe);
 
 /**
  * True, sobald der Hook scharf ist.

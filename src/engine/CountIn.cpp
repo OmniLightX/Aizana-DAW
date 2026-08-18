@@ -172,6 +172,14 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars,
         // scharfschalten. Geliehen — wird in giveBack() zurueckgegeben.
         appliedLoopRange = { recordStart, te::Edit::getMaximumEditEnd() };
         transport.setLoopRange (appliedLoopRange);
+
+        // ZURUECKLESEN, was TE tatsaechlich gespeichert hat: setLoopRange()
+        // KLEMMT auf `edit.getLength() + Edit::getMaximumLength() * 0.75`. Merkt
+        // man sich den ungeklemmten Wunschwert, schlaegt der Vergleich in
+        // giveBack() fehl — wir hielten unseren eigenen Bereich fuer den des
+        // Anwenders und gaben ihn nie zurueck. Im Messlauf 2026-08-18 gefangen:
+        // nach der Aufnahme stand LOOPBIS auf 129600 statt auf dem alten Wert.
+        appliedLoopRange = transport.getLoopRange();
         edit.recordingPunchInOut.setValue (true, nullptr);
         borrowedPunch = true;
     }
