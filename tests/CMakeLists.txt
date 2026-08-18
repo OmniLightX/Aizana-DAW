@@ -69,6 +69,7 @@ target_sources(engine_tests PRIVATE
     test_tempo_engine.cpp
     test_count_in.cpp
     test_click_track.cpp
+    test_session_state.cpp
     test_edit_groups.cpp
     test_pan_value.cpp
     test_transport_keys.cpp

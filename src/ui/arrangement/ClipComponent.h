@@ -190,7 +190,13 @@ private:
     // Der Zeiger ist nullptr, solange keine aufloesbare Quelldatei existiert.
     juce::SharedResourcePointer<AudioThumbnailPool> thumbnailPool;
     juce::AudioThumbnail*           thumbnail       { nullptr };
+    juce::Rectangle<int>            takesBadgeHit;   ///< Trefferflaeche des Takes-Badges (aus paint)
+
+    juce::Rectangle<float> takesBadgeBounds() const;
+    void showTakesMenu();
+
     bool                            thumbnailLoaded { false };
+    juce::File                      thumbnailFile;   ///< Quelle der aktuell gezeigten Wellenform (Take-/Comp-Wechsel)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ClipComponent)
 };

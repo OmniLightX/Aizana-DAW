@@ -57,6 +57,7 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
             thumbnail = &thumbnailPool->forFile (audioFile);
             thumbnail->addChangeListener (this);
             thumbnailLoaded = true;
+            thumbnailFile   = audioFile;
         }
     }
 }
@@ -77,17 +78,33 @@ void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce:
         return;
     }
 
-    if (thumbnailLoaded || tree != clip.state) return;
+    if (tree != clip.state) return;
 
+    // Die QUELLE eines Clips kann sich im Betrieb aendern:
+    //   * Take-Wechsel (Select Take / Klick auf das Badge),
+    //   * fertiger Comp (CompingEngine rendert und schiebt die Datei unter),
+    //   * Bounce/Tuning/Warp, die den Clip auf eine neue Datei setzen.
+    //
+    // Bis 2026-08-18 stand hier `if (thumbnailLoaded ...) return;` — die
+    // Wellenform wurde also GENAU EINMAL geladen und danach nie wieder. Im
+    // Arrangement blieb deshalb der zuletzt aufgenommene Take stehen, waehrend
+    // in Wahrheit laengst der zusammengesetzte Comp klang: man hoerte das
+    // Ergebnis, sah es aber nicht (User-Befund, Comping).
     if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
     {
         const juce::File audioFile = waveClip->getSourceFileReference().getFile();
-        if (audioFile.existsAsFile())
-        {
-            thumbnail = &thumbnailPool->forFile (audioFile);
-            thumbnail->addChangeListener (this);
-            thumbnailLoaded = true;
-        }
+
+        if (! audioFile.existsAsFile() || audioFile == thumbnailFile)
+            return;
+
+        if (thumbnail != nullptr)
+            thumbnail->removeChangeListener (this);
+
+        thumbnail = &thumbnailPool->forFile (audioFile);
+        thumbnail->addChangeListener (this);
+        thumbnailLoaded = true;
+        thumbnailFile   = audioFile;
+        repaint();
     }
 }
 
@@ -207,10 +224,8 @@ void ClipComponent::paint (juce::Graphics& g)
 
     if (badgeWidth > 0.0f)
     {
-        const auto badgeRect = juce::Rectangle<float> (bounds.getRight() - 1.0f - badgeWidth,
-                                                        bounds.getY() + 2.0f,
-                                                        badgeWidth - 2.0f,
-                                                        kHeaderHeight - 4.0f);
+        const auto badgeRect = takesBadgeBounds();
+        takesBadgeHit = badgeRect.toNearestInt();
         g.setColour (juce::Colours::white.withAlpha (0.18f));
         g.fillRoundedRectangle (badgeRect, 2.0f);
         g.setColour (juce::Colours::white.withAlpha (0.85f));
@@ -649,6 +664,60 @@ juce::Rectangle<float> ClipComponent::getRightTrimZone() const
 
 //==============================================================================
 
+juce::Rectangle<float> ClipComponent::takesBadgeBounds() const
+{
+    // Dieselbe Geometrie wie in paint() — deshalb hier als EINE Quelle, sonst
+    // driften Zeichnung und Trefferflaeche auseinander.
+    constexpr float badgeW = 30.0f;
+    constexpr float headerH = 16.0f;
+    const auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+    return { bounds.getRight() - 1.0f - badgeW, bounds.getY() + 2.0f,
+             badgeW - 2.0f, headerH - 4.0f };
+}
+
+void ClipComponent::showTakesMenu()
+{
+    // Take-Wechsel DIREKT am Clip — so macht es Logic („click the Take Folder
+    // name to open a menu of takes and comps"), und so hat es der Anwender
+    // erwartet: bis 2026-08-18 fuehrte der einzige Weg ueber Rechtsklick, und
+    // das Badge war reine Anzeige.
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+
+    if (waveClip == nullptr)
+        return;
+
+    const int total = waveClip->getNumTakes (false);
+
+    if (total <= 1)
+        return;
+
+    const int active   = clipEditor.getActiveTake (*waveClip);
+    const bool comped  = waveClip->state.getChildWithName (CompingEngine::compType).isValid();
+
+    juce::PopupMenu m;
+    m.addSectionHeader (juce::String::fromUTF8 ("Aufnahme ausw\xc3\xa4hlen"));
+
+    for (int i = 0; i < total; ++i)
+        m.addItem (100 + i, "Take " + juce::String (i + 1) + " von " + juce::String (total),
+                   true, ! comped && i == active);
+
+    if (comped)
+    {
+        m.addSeparator();
+        m.addItem (1, juce::String::fromUTF8 ("Zusammengesetzt (Comp)"), true, true);
+    }
+
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                     [this, safe = juce::Component::SafePointer<ClipComponent> (this)] (int r)
+    {
+        if (safe == nullptr || r == 0)
+            return;
+
+        if (r >= 100)
+            clipEditor.setActiveTake (clip, r - 100);
+    });
+}
+
 void ClipComponent::mouseDown (const juce::MouseEvent& e)
 {
     // ---- Defensive: clean up leaked unbounded-mouse state from a prior interaction ----
@@ -659,6 +728,15 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
     {
         const_cast<juce::MouseInputSource&> (e.source).enableUnboundedMouseMovement (false, false);
         activeFadeDrag = FadeDragType::None;
+    }
+
+    // Klick auf das Takes-Badge oeffnet die Take-Auswahl (Logic-Verhalten) und
+    // startet KEINEN Clip-Drag — sonst verschoebe jeder Menueaufruf den Clip.
+    if (e.mods.isLeftButtonDown() && ! takesBadgeHit.isEmpty()
+        && takesBadgeHit.contains (e.getPosition()))
+    {
+        showTakesMenu();
+        return;
     }
 
     // ---- Eraser tool (Studio One parity): a left-click anywhere on the clip deletes it.

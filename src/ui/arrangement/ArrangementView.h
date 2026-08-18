@@ -271,6 +271,23 @@ private:
         // Signal to users that the ruler is an interactive scrub target
         juce::MouseCursor getMouseCursor() override;
 
+        /** Den gezeichneten Bereich aus der SESSION nachziehen.
+
+            Das Lineal fuehrte seinen Loop-Bereich bis 2026-08-18 nur selbst und
+            schrieb ihn beim Ziehen in die Engine — gelesen hat es ihn NIE. Nach
+            dem Oeffnen einer Session zeigte es deshalb immer seine Vorgabe
+            (1,0-5,0 s) statt des gespeicherten Bereichs; der naechste Zug haette
+            den echten Bereich zusaetzlich ueberschrieben.
+
+            Waehrend eines Zuges und waehrend der Transport laeuft wird NICHT
+            nachgezogen: der Vorzaehler leiht sich den Loop-Bereich fuer den
+            sample-genauen Einstieg (siehe CountIn.h) und gibt ihn danach zurueck
+            — das darf im Lineal nicht als wandernder Bereich aufblitzen. */
+        void syncLoopFromEdit();
+
+        /** Loop-Bereich in den Namen des Lineals schreiben (VoiceOver + Testlauf). */
+        void updateLoopTitle();
+
     private:
         ApplicationState& appState;
         double& pixelsPerSecond;
@@ -310,6 +327,8 @@ private:
         double snapTime (double timeSecs, bool bypassSnap) const;
 
         void applyLoopRange (double inSecs, double outSecs, bool enableLooping);
+
+
 
         enum class DragTarget { None, LoopIn, LoopOut, Seek, LoopNew, LoopMove };
         DragTarget dragging = DragTarget::None;

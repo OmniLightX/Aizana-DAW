@@ -221,6 +221,19 @@ MainComponent::MainComponent (ApplicationState& appState_)
                 return z;
             }
 
+            if (frage == "spuren")
+            {
+                // Mute/Solo je Spur — die Frage „stehen die Mutes nach dem Laden
+                // noch?" ist sonst nur am Bild oder am Ohr zu beantworten.
+                juce::String z;
+
+                for (auto* t : tracktion::engine::getAudioTracks (*edit))
+                    z << t->getName() << "[m=" << (int) t->isMuted (false)
+                      << ",s=" << (int) t->isSolo (false) << "] ";
+
+                return z.trim();
+            }
+
             return "ERR unbekannte Frage: " + frage;
         });
     }

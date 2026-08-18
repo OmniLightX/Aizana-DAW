@@ -709,7 +709,7 @@ struct Hook::Impl : public juce::Thread
                    "| menu [top item] | warte <ms> | quit\n"
                    "OK";
 
-        if (cmd == "pegel" || cmd == "zustand")
+        if (cmd == "pegel" || cmd == "zustand" || cmd == "spuren")
         {
             // MESSGERAETE. `pegel` misst den Spitzenpegel am Master ueber ein
             // Zeitfenster — der Klick laeuft dort mit durch (ClickNode wird in
@@ -729,8 +729,8 @@ struct Hook::Impl : public juce::Thread
                 return zeile.startsWith ("ERR") ? zeile : "| " + zeile + "\nOK";
             };
 
-            if (cmd == "zustand")
-                return onMessageThread ([&probe, &rahmen] { return rahmen (probe ("zustand")); });
+            if (cmd != "pegel")
+                return onMessageThread ([&probe, &rahmen, &cmd] { return rahmen (probe (cmd)); });
 
             const int fensterMs = args.size() > 1 ? juce::jlimit (20, 20000, (int) num (1)) : 400;
 

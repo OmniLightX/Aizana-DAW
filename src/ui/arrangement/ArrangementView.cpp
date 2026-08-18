@@ -162,6 +162,44 @@ double ArrangementView::RulerStrip::snapTime (double timeSecs, bool bypassSnap) 
     return juce::jmax (0.0, std::round (timeSecs / gridResolution) * gridResolution);
 }
 
+void ArrangementView::RulerStrip::updateLoopTitle()
+{
+    // Der Bereich steht im NAMEN des Lineals — sonst ist er nur ein gelber
+    // Balken: von VoiceOver nicht zu benennen und von einem Testlauf nicht zu
+    // pruefen. Genau deshalb blieb monatelang unbemerkt, dass das Lineal seinen
+    // eigenen Bereich zeichnete statt den der Session.
+    setTitle (juce::String::fromUTF8 ("Lineal \xc2\xb7 Loop ") + juce::String (loopInSecs, 3)
+                + "-" + juce::String (loopOutSecs, 3) + " s");
+}
+
+void ArrangementView::RulerStrip::syncLoopFromEdit()
+{
+    if (dragging != DragTarget::None)
+        return;
+
+    auto* edit = appState.editManager.getEdit();
+    if (edit == nullptr)
+        return;
+
+    auto& transport = edit->getTransport();
+
+    // Waehrend Wiedergabe/Aufnahme nicht nachziehen — dann gehoert der Bereich
+    // moeglicherweise gerade dem Vorzaehler (geliehen, wird zurueckgegeben).
+    if (transport.isPlaying() || transport.isRecording())
+        return;
+
+    const auto r = transport.getLoopRange();
+
+    if (std::abs (r.getStart().inSeconds() - loopInSecs)  < 1.0e-6
+     && std::abs (r.getEnd().inSeconds()   - loopOutSecs) < 1.0e-6)
+        return;
+
+    loopInSecs  = r.getStart().inSeconds();
+    loopOutSecs = r.getEnd().inSeconds();
+    updateLoopTitle();
+    repaint();
+}
+
 void ArrangementView::RulerStrip::applyLoopRange (double inSecs, double outSecs,
                                                   bool enableLooping)
 {
@@ -176,6 +214,8 @@ void ArrangementView::RulerStrip::applyLoopRange (double inSecs, double outSecs,
     transport.setLoopRange (tracktion::TimeRange (
         tracktion::TimePosition::fromSeconds (loopInSecs),
         tracktion::TimePosition::fromSeconds (loopOutSecs)));
+
+    updateLoopTitle();
 
     // Logic schaltet den Cycle-Modus beim Aufziehen automatisch ein — wer einen
     // Bereich zieht, will ihn hoeren. (Und es schliesst die Luecke, dass der
@@ -1143,6 +1183,9 @@ void ArrangementView::timerCallback()
         juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
 
     wasRecordingLastTick = isRecording;
+
+    // Loop-Bereich aus der Session nachziehen (Sessionwechsel, Undo, KI-Studio).
+    rulerStrip.syncLoopFromEdit();
 
     if (std::abs (newPos - playheadPositionSecs) > 0.001)
     {

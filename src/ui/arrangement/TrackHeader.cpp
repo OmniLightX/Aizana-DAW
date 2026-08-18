@@ -138,9 +138,16 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
         startTimerHz (30);
     }
 
-    // Namen fuer Bedienungshilfen/Automatisierung sofort setzen — refresh()
-    // laeuft beim Aufbau nicht zwingend, sonst blieben die Knoepfe namenlos.
-    updateAccessibleNames();
+    // Zustand UND Namen sofort aus der Spur holen.
+    //
+    // Hier stand vorher nur `updateAccessibleNames()`, mit der Begruendung
+    // „refresh() laeuft beim Aufbau nicht zwingend". Genau das war der Fehler:
+    // ein frisch gebauter Spurkopf zeigte M und S IMMER aus, egal was in der
+    // Spur stand. Beim Laden einer Session werden alle Spurkoepfe neu gebaut —
+    // also sahen sieben gemutete Spuren nach dem Oeffnen unmuted aus, obwohl
+    // die Engine sie korrekt stumm hielt (User-Befund 2026-08-18, an der echten
+    // Session nachgemessen: mute="1" in der Datei, m=1 in der Engine, Knopf aus).
+    refresh();
 }
 
 TrackHeader::~TrackHeader()
@@ -437,9 +444,15 @@ void TrackHeader::updateAccessibleNames()
     // mehrdeutig: bei zwoelf Spuren gibt es zwoelf gleichnamige Elemente, und ein
     // Klick trifft irgendeines davon, ohne dass es auffaellt.
     // Der sichtbare Text bleibt "M"/"S"/"REC"/"I" — setTitle zeichnet nichts.
+    // Der ZUSTAND gehoert mit in den Namen: „stumm" ist sonst nur eine Farbe —
+    // fuer VoiceOver unhoerbar und fuer einen Testlauf unpruefbar. Genau daran
+    // ist der Befund vom 2026-08-18 lange unentdeckt geblieben (Spurkopf zeigte
+    // nach dem Laden nie den echten Mute-Zustand).
     const auto n = track.getName();
-    muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n);
-    soloButton   .setTitle ("Solo " + n);
+    const juce::String muteState = track.isMuted (false) ? " (stumm)" : "";
+    const juce::String soloState = track.isSolo  (false) ? " (solo)"  : "";
+    muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n + muteState);
+    soloButton   .setTitle ("Solo " + n + soloState);
     armButton    .setTitle (juce::String::fromUTF8 ("Aufnahmebereit ") + n);
     monitorButton.setTitle (juce::String::fromUTF8 ("Eingang mithoeren ") + n);
     inputButton  .setTitle (juce::String::fromUTF8 ("Eingang waehlen ") + n);
@@ -1182,12 +1195,14 @@ void TrackHeader::muteClicked()
     // so subsequent S/M keyboard shortcuts know which track to target.
     if (onSelectionRequest) onSelectionRequest (this);
     mixerEngine.setMute (track, muteButton.getToggleState());
+    updateAccessibleNames();          // der Zustand steht mit im Namen
 }
 
 void TrackHeader::soloClicked()
 {
     if (onSelectionRequest) onSelectionRequest (this);
     mixerEngine.setSolo (track, soloButton.getToggleState());
+    updateAccessibleNames();
 }
 
 void TrackHeader::armClicked()

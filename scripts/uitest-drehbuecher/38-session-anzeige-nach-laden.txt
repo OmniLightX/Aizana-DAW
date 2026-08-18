@@ -1,0 +1,44 @@
+# Session-Zustand NACH dem Oeffnen — zeigt die Oberflaeche, was in der Datei steht?
+#
+# ANLASS (User-Befund 2026-08-18): "Ich hatte Spuren gemutet und einen Loop-Bereich
+# gezogen. Session gespeichert, wieder aufgemacht — die Mutes sind weg und der Loop
+# sitzt woanders."
+#
+# Die Engine war unschuldig (Test [persist]: Mute und Loop ueberleben die Datei).
+# Der Fehler lag in der ANZEIGE, und beides war lange unentdeckt, weil beide
+# Zustaende NUR ALS FARBE existierten — nicht pruefbar, nicht vorlesbar. Deshalb
+# tragen sie jetzt ihren Zustand im Namen:
+#   * M-Knopf:  "Stumm <Spur> (stumm)"
+#   * Lineal:   "Lineal · Loop <von>-<bis> s"
+#
+# Dieses Drehbuch braucht eine Session mit gemuteten Spuren und gesetztem
+# Loop-Bereich. Pfad ueber AIZANA_UITEST_OPEN mitgeben:
+#
+#   AIZANA_UITEST_OPEN="/pfad/zur/session.tracktion" \
+#     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/38-session-anzeige-nach-laden.txt
+
+vorn
+warte 7000
+wennfehlt Spur hinzufuegen @ Pro
+warte 2500
+
+# Was die ENGINE geladen hat …
+> zustand
+> spuren
+
+# … und was die OBERFLAECHE daraus macht. Beides muss uebereinstimmen.
+> tree 0 4
+bild SESSION-01-nach-dem-oeffnen
+
+# ============================================================ ERGEBNIS 2026-08-18
+# Gefahren auf der echten Session des Anwenders (Kopie).
+#
+# VORHER:
+#   Engine:      LOOPVON=19.800 LOOPBIS=49.300, sieben Spuren m=1
+#   Oberflaeche: alle M-Knoepfe dunkel, gelber Loop-Balken bei ~0,9-4,8 s
+#                (= die eingebaute Vorgabe 1,0-5,0 des Lineals)
+#
+# NACHHER:
+#   Sieben Knoepfe heissen "Stumm <Spur> (stumm)" — genau die sieben, die in der
+#   Datei mute="1" tragen. Das Lineal heisst "Lineal · Loop 19.800-49.300 s".
+#   Der falsche Balken am Songanfang ist weg.
