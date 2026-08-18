@@ -55,6 +55,19 @@ public:
      */
     juce::File getLatestAutosave (const juce::File& sessionFile) const;
 
+    /** Der Medienordner DIESER Session: `<Session-Ordner>/<Name> Audio/`.
+        Dort liegen Aufnahmen, Comps und Bounces — nicht mehr lose neben der
+        Session (User-Befund 2026-08-18). Ohne gespeicherte Session:
+        `~/Documents/Aizana/Unbenannte Session/`. */
+    juce::File mediaDirectory() const;
+
+    /** Aufnahmeziel + Edit-Name an die aktuelle Session anpassen. Wird bei
+        jedem Sessionwechsel gerufen. */
+    void applyRecordingLocation();
+
+    /** Die Aufnahme-Maske, die TEs WaveInputDevice bekommt (rein, testbar). */
+    juce::String recordingFilenameMask() const;
+
     // ---- Autosave-Intervall (User-Wunsch 2026-08-15) ------------------------
     //
     // Fest verdrahtete 2 Minuten waren nicht verhandelbar; wer stundenlang an

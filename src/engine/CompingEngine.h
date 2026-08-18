@@ -123,7 +123,7 @@ private:
                                       const juce::Array<Section>& sections,
                                       const juce::File& destFile);
 
-    static juce::File compCacheDirectory();
+    juce::File compCacheDirectory() const;
     static juce::String compHash (const te::EditItemID&,
                                   const juce::Array<juce::File>&,
                                   const juce::Array<Section>&);

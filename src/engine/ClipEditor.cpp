@@ -452,7 +452,7 @@ te::WaveAudioClip* ClipEditor::bounceClipInPlace (te::WaveAudioClip& clip, bool 
     // Rendered files live next to the session; unsaved sessions use the temp dir
     const auto sessionFile = editManager.getCurrentFile();
     auto bounceDir = sessionFile.existsAsFile()
-        ? sessionFile.getParentDirectory().getChildFile ("Bounces")
+        ? editManager.mediaDirectory().getChildFile ("Bounces")
         : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("AizanaBounces");
     bounceDir.createDirectory();
 
@@ -591,7 +591,7 @@ te::Clip* ClipEditor::mergeClips (const juce::Array<te::Clip*>& clips)
 
     const auto sessionFile = editManager.getCurrentFile();
     auto bounceDir = sessionFile.existsAsFile()
-        ? sessionFile.getParentDirectory().getChildFile ("Bounces")
+        ? editManager.mediaDirectory().getChildFile ("Bounces")
         : juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("AizanaBounces");
     bounceDir.createDirectory();
 

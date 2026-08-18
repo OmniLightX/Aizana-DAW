@@ -76,6 +76,7 @@ void EditManager::createNewEdit()
 
     currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
     unsavedDir.setAsCurrentWorkingDirectory();
+    applyRecordingLocation();     // Aufnahmen in <Unsaved Recordings>/Untitled Audio/
 
     // The session file must EXIST on disk even before the first save:
     // TE stores relative source refs (e.g. loop-take files) via
@@ -214,6 +215,13 @@ void EditManager::saveEdit (const juce::File& file)
     // Use EditFileOperations for the canonical save path — handles the .tracktion format
     // that Tracktion Engine reloads correctly.
     te::EditFileOperations (*edit).saveAs (file, true);
+
+    // Die gespeicherte Datei IST ab jetzt die Session — daran haengen Autosave
+    // UND der Medienordner (Aufnahmen/Comps/Bounces). Wer nur `saveEdit` ruft
+    // und das vergisst, nimmt danach weiter ins alte Verzeichnis auf.
+    // (Der Autosave selbst geht NICHT hierdurch, sondern direkt ueber
+    // EditFileOperations — er darf die Session nicht umhaengen.)
+    setCurrentFile (file);
 }
 
 //==============================================================================
@@ -264,9 +272,67 @@ juce::UndoManager& EditManager::getUndoManager()
 //==============================================================================
 // Autosave
 
+juce::File EditManager::mediaDirectory() const
+{
+    // ALLES, was zu einer Session gehoert, liegt in EINEM Ordner neben ihr:
+    //   <Session-Ordner>/<Sessionname> Audio/
+    //
+    // ANLASS (User-Befund 2026-08-18): Aufnahmen landeten bis dahin LOSE im
+    // Ordner der Session — bei ihm also direkt im Wurzelverzeichnis seiner SSD,
+    // zwischen Logic- und Studio-One-Ordnern, und mit Namen wie
+    // „_Track 8_Take_1.wav" (der fuehrende Unterstrich, weil der Edit gar keinen
+    // Namen hatte). Er hat sie aufgeraeumt — voellig zu Recht, nichts daran sah
+    // nach Projektinhalt aus — und damit waren seine Takes weg: der
+    // Comping-Editor meldete nur noch „Quelldatei nicht gefunden".
+    //
+    // TE bestimmt das Aufnahmeziel ueber `WaveInputDevice::filenameMask`; ohne
+    // Project-Verwaltung (I-07: Aizana nutzt direkte Dateiverweise) faellt
+    // `%projectdir%` auf das Verzeichnis der Edit-Datei zurueck. Genau dieser
+    // Fallback war die Ursache.
+    //
+    // Ohne gespeicherte Session gibt es keinen Sessionordner — dann in die
+    // Dokumente, aber ebenfalls in einen benannten Ordner, nie irgendwohin.
+    if (currentSessionFile.existsAsFile())
+        return currentSessionFile.getParentDirectory()
+                 .getChildFile (currentSessionFile.getFileNameWithoutExtension() + " Audio");
+
+    return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+             .getChildFile ("Aizana").getChildFile ("Unbenannte Session");
+}
+
+juce::String EditManager::recordingFilenameMask() const
+{
+    // Dateiname: <Session>_<Spur>_Take_<n>.
+    //
+    // TEs Platzhalter %edit% ist hier NICHT brauchbar: `Edit::getName()` liest den
+    // Namen aus dem ProjectItem, und ohne Project-Verwaltung (I-07) gibt es keines
+    // — der Name ist immer leer. Genau daher der fuehrende Unterstrich in den
+    // alten Aufnahmen („_Track 8_Take_1.wav"): eine Datei, der man nicht ansieht,
+    // wozu sie gehoert. Also setzen wir den Sessionnamen direkt ein.
+    const auto sessionName = currentSessionFile.existsAsFile()
+                               ? currentSessionFile.getFileNameWithoutExtension()
+                               : juce::String ("Unbenannt");
+
+    return mediaDirectory().getFullPathName() + juce::File::getSeparatorString()
+             + sessionName + "_%track%_Take_%take%";
+}
+
+void EditManager::applyRecordingLocation()
+{
+    mediaDirectory().createDirectory();
+
+    const auto mask = recordingFilenameMask();
+    auto& dm = engine.getDeviceManager();
+
+    for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
+        if (auto* d = dm.getWaveInDevice (i))
+            d->setFilenameMask (mask);
+}
+
 void EditManager::setCurrentFile (const juce::File& file)
 {
     currentSessionFile = file;
+    applyRecordingLocation();
 
     if (file.existsAsFile())
     {

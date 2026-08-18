@@ -384,10 +384,17 @@ juce::File CompingEngine::renderCompNow (te::WaveAudioClip& clip)
 }
 
 //==============================================================================
-juce::File CompingEngine::compCacheDirectory()
+juce::File CompingEngine::compCacheDirectory() const
 {
-    auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                   .getChildFile ("Aizana Comps");
+    // Comps gehoeren zur SESSION, nicht in den Papierkorb des Systems.
+    //
+    // Hier stand bis 2026-08-18 der TEMP-Ordner. Der fertige Comp ist aber die
+    // Quelle des Clips — liegt er im Temp, ist er nach einem Neustart oder einer
+    // Systemaufraeumung weg, und der Clip zeigt ins Leere. Genau dieses Bild
+    // („Quelldatei nicht gefunden") hat der Anwender gemeldet, dort noch aus
+    // einem anderen Grund (er hatte die lose herumliegenden Aufnahmen selbst
+    // geloescht). Beide Wege enden gleich, also werden beide dichtgemacht.
+    auto dir = editManager.mediaDirectory().getChildFile ("Comps");
     dir.createDirectory();
     return dir;
 }

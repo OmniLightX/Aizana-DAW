@@ -60,3 +60,68 @@ TEST_CASE ("Session: Mute und Loop-Bereich ueberleben Speichern+Oeffnen", "[pers
 
     tmp.deleteFile();
 }
+
+//==============================================================================
+// Aufnahmen, Comps und Bounces gehoeren zur SESSION — nicht lose daneben.
+//
+// ANLASS (User-Befund 2026-08-18, mit Bild): auf seiner SSD lagen im
+// WURZELVERZEICHNIS Dateien namens "_Track 8_Take_1.wav" — zwischen seinen
+// Logic- und Studio-One-Ordnern. Er hat sie aufgeraeumt, weil nichts daran nach
+// Projektinhalt aussah, und damit waren die Takes seiner Comping-Aufnahme weg
+// ("Quelldatei nicht gefunden" in jeder Take-Spur).
+//
+// Ursache: TE bestimmt das Aufnahmeziel ueber `WaveInputDevice::filenameMask`.
+// Deren Vorgabe beginnt mit %projectdir%, und ohne Project-Verwaltung (I-07)
+// faellt das auf das Verzeichnis der Edit-Datei zurueck — bei einer Session im
+// Wurzelverzeichnis also dorthin. Der fuehrende Unterstrich kam von %edit%:
+// `Edit::getName()` liest den Namen aus dem ProjectItem, das es hier nie gibt.
+
+TEST_CASE ("Session: Aufnahmen landen im Medienordner der Session", "[persist][media]")
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                   .getChildFile ("aizana_media_probe");
+    dir.deleteRecursively();
+    dir.createDirectory();
+
+    auto sessionFile = dir.getChildFile ("Mein Lied.tracktion");
+
+    EditManager em;
+    em.createNewEdit();
+    em.saveEdit (sessionFile);
+
+    REQUIRE (sessionFile.existsAsFile());
+
+    // 1. Der Medienordner haengt an der Session und traegt ihren Namen.
+    const auto media = em.mediaDirectory();
+    CHECK (media.getFileName() == "Mein Lied Audio");
+    CHECK (media.getParentDirectory() == dir);
+    CHECK (media.isDirectory());                       // wird angelegt
+
+    // 2. Das Aufnahmeziel zeigt DORTHIN — und nicht mehr neben die Session.
+    const auto mask = em.recordingFilenameMask();
+    INFO ("Maske: " << mask);
+
+    CHECK (mask.startsWith (media.getFullPathName()));
+
+    // Der Dateiname traegt den Sessionnamen — kein fuehrender Unterstrich mehr,
+    // dem man nicht ansieht, wozu er gehoert. Und KEIN %edit%: das bliebe leer.
+    CHECK (mask.contains ("Mein Lied_%track%_Take_%take%"));
+    CHECK_FALSE (mask.contains ("%edit%"));
+
+    // Gegenkontrolle: die alte Ablage lag DIREKT neben der Session. Genau das
+    // darf nicht mehr passieren.
+    CHECK_FALSE (juce::File (mask).getParentDirectory() == dir);
+
+    // 3. Ohne gespeicherte Session trotzdem ein benannter, SCHREIBBARER Ort —
+    //    nie das Arbeitsverzeichnis (TEs Fallback), nie der Systempapierkorb.
+    {
+        EditManager frisch;
+        frisch.createNewEdit();
+        const auto ungespeichert = frisch.mediaDirectory();
+        INFO ("Ungespeichert: " << ungespeichert.getFullPathName());
+        CHECK (ungespeichert.getFileName().endsWith (" Audio"));
+        CHECK (ungespeichert.getParentDirectory().getFileName() == "Unsaved Recordings");
+    }
+
+    dir.deleteRecursively();
+}
