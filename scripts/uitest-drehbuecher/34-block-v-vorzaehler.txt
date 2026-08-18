@@ -1,0 +1,126 @@
+# Block V — Vorzaehler NAHTLOS + „Klick bei Aufnahme" (Befund 2026-08-17).
+#
+# Der Befund des Anwenders: „der Klicker hoert nicht auf, sobald die Aufnahme
+# beginnt" — und zwar mit EINGESCHALTETEM Metronom. Genau diese Ausgangslage
+# wird hier gefahren.
+#
+# Messgroessen (nichts wird vom Bild abgelesen):
+#   * V6 NAHTLOS  — die ZEITANZEIGE der Transportleiste, mehrfach abgegriffen.
+#     Laeuft sie ueber den Aufnahmestart hinweg monoton weiter, gab es kein
+#     Stoppen und keinen Sprung. Ein „stop + setPosition + record" waere hier
+#     als Ruecksprung sichtbar — genau daran ist Anlauf 2 gescheitert.
+#   * V7 CLIP-ANFANG — die gespeicherte Session: der aufgenommene Clip muss bei
+#     Takt 5 (8,0 s bei 120 BPM) anfangen, nicht bei 0.
+#   * Der Zustand des neuen Schalters steht in seinem NAMEN
+#     („Klick bei Aufnahme: Aus"), ist also pruefbar und nicht nur farbig.
+#
+# Aufruf:
+#   ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/34-block-v-vorzaehler.txt
+
+vorn
+warte 2500
+wennfehlt Spur hinzufuegen @ Pro
+warte 2000
+
+# ---------------------------------------------------- Ausgangslage: Metronom AN
+klick Metronom
+warte 800
+
+# ------------------------------------- Vorzaehler 4 Takte + Klick bei Aufnahme AUS
+klick Metronom-Einstellungen
+warte 1200
+> tree 1 6
+bild V-01-popover-vor-einstellung
+klick Vorzähler 4
+warte 600
+klick Klick bei Aufnahme: An
+warte 600
+> tree 1 6
+bild V-02-popover-nach-einstellung
+taste escape
+warte 800
+
+# Der Tastaturfokus muss zurueck ins Hauptfenster, sonst nimmt niemand die
+# Pfeiltasten an (im ersten Lauf real hineingelaufen: „Taste nicht angenommen").
+klick Spurbereich Track 1
+warte 800
+
+# ---------------------------------------------- Aufnahmestart auf Takt 5 legen
+# Shift+Rechts schiebt den Abspielkopf je einen TAKT weiter.
+taste right shift
+taste right shift
+taste right shift
+taste right shift
+warte 600
+> tree 0 3
+bild V-03-kopf-auf-takt-5
+
+# ------------------------------------------------------- scharf und aufnehmen
+klick Aufnahmebereit Track 1
+warte 1500
+klick Aufnahme
+
+# Vier Takte Vorlauf = 8 s bei 120 BPM. Die Zeitanzeige wird waehrend des
+# Vorlaufs UND waehrend der Aufnahme abgegriffen.
+warte 1500
+> tree 0 3
+warte 2000
+> tree 0 3
+warte 2000
+> tree 0 3
+warte 2000
+> tree 0 3
+warte 2000
+> tree 0 3
+warte 2000
+> tree 0 3
+warte 2000
+> tree 0 3
+bild V-04-waehrend-der-aufnahme
+klick Stopp
+warte 4000
+> tree 0 3
+bild V-05-nach-der-aufnahme
+
+# ------------------------------------------------------ speichern und nachsehen
+menu 1 3
+warte 4000
+bild V-06-nach-save
+
+# ============================================================ ERGEBNIS 2026-08-17
+#
+# Lauf mit EINGESCHALTETEM Metronom (die Ausgangslage des Anwenders).
+#
+# V6 NAHTLOS — die Zeitanzeige ueber den Aufnahmestart hinweg:
+#   -0:00:00.527 → 1.477 → 3.482 → 5.509 → 7.504 → 9.498 → 11.536
+#   Der Vorlauf beginnt bei -2,0 s (VOR dem Songanfang), der Aufnahmestart lag
+#   bei 7,190 s. Die Anzeige laeuft monoton durch, in gleichmaessigen ~2-s-
+#   Schritten, ohne Ruecksprung und ohne Stillstand — es gibt also weder ein
+#   Stoppen noch ein Neupositionieren am Umschaltpunkt. Genau daran war Anlauf 2
+#   gescheitert; ein „stop + setPosition + record" waere hier als Ruecksprung in
+#   der Reihe sichtbar.
+#
+# V7 CLIP-ANFANG — der aufgenommene Clip liegt bei x=438, seine Spur bei x=-281,
+#   der Massstab ist 100 px/s: (438 - (-281)) / 100 = 7,190 s. Das ist EXAKT der
+#   Aufnahmepunkt und NICHT der Vorlaufanfang (-2,0 s). Der Vorzaehler steht
+#   also nicht mit im Clip (V8, mechanische Haelfte). Breite 454 px = 4,54 s,
+#   gestoppt wurde bei 11,760 s → 11,760 - 7,190 = 4,57 s. Passt.
+#
+# Der neue Schalter ist ueber seinen NAMEN pruefbar:
+#   vorher „Klick bei Aufnahme: An" → nach dem Klick „Klick bei Aufnahme: Aus".
+#
+# DREI ECHTE FEHLER hat dieser Lauf gefunden (alle gefixt):
+#   1. „VorzÃ¤hler" — juce::String(const char*) nimmt rohe UTF-8-Bytes NICHT als
+#      UTF-8 an; es braucht String::fromUTF8. Dieselbe Klasse wie die
+#      Mojibake-Befunde aus der UX-Welle.
+#   2. Die Zelle „4" des Vorzaehlers war 0 px BREIT: 14 + 150 + 4x36 = 308 px
+#      passten nicht in ein 288 px breites Popover. Sie war also weder sichtbar
+#      noch anklickbar — der Wert, mit dem in der Praxis eingezaehlt wird.
+#      (Davor war sie ueberhaupt nicht erzeugt worden, siehe Panel-Kommentar.)
+#   3. „0:00:00.-527" — negative Zeiten liessen das Vorzeichen in die
+#      Millisekunden durchschlagen. Erst der Vorzaehler macht negative
+#      Positionen ueberhaupt erreichbar, deshalb fiel es nie vorher auf.
+#
+# Was dieser Lauf NICHT belegt: ob es im Kopfhoerer wirklich still wird. Der
+# Klick ist maschinell an TEs ClickGenerator gemessen (engine_tests "[recclick]"),
+# das Ohr bleibt V9/V10.

@@ -83,6 +83,55 @@ namespace countin
         double lengthSecs() const noexcept { return recordStartSecs - countInStartSecs; }
     };
 
+    /** Was der Klick waehrend eines Aufnahmestarts tun soll.
+
+        TEs `ClickGenerator::isMutedAtTime()` kennt genau zwei Stellschrauben:
+        den Schalter `clickTrackEnabled` und einen Klickbereich. Der Bereich
+        wirkt NUR, solange der Schalter AUS ist (`if (! clickEnabled) return
+        ! range.contains (time);`) — steht der Schalter an, klingt der Klick
+        ueberall und der Bereich ist wirkungslos. Genau daran hing der Befund
+        vom 2026-08-17: wer das Metronom eingeschaltet hatte, hoerte es durch
+        die ganze Aufnahme, egal was der Vorzaehler setzte. */
+    struct ClickSetup
+    {
+        bool enabled = false;                  ///< Wert fuer `clickTrackEnabled`
+        tracktion::TimeRange range;            ///< leer = kein Bereich
+    };
+
+    /** Die Regel, nach der Logic Pro und Studio One den Klick beim Aufnehmen
+        behandeln — hier als reine Funktion, damit sie golden-testbar ist.
+
+        Recherchiert am 2026-08-17:
+          * Logic Pro: „Click while playing" (= unser Metronom-Knopf),
+            „Click while recording" und darunter „Only during count-in" —
+            letzteres ist ausdruecklich als Unterpunkt von „Click while
+            recording" definiert.
+          * Studio One / Fender Studio Pro: „Click in play" und „Click in
+            precount only" im Metronom-Fenster.
+
+        Beide trennen also **Wiedergabe** und **Aufnahme**, und beide kennen den
+        Fall „zaehlt vor, schweigt dann". Ohne diese Trennung ist Gesang nicht
+        aufnehmbar; mit permanentem Klick ist Beatbau nicht moeglich. Es sind
+        zwei verschiedene Paar Schuhe.
+
+        `clickWhileRecording` ist bewusst ein MODIFIKATOR, keine eigene Quelle:
+        es entscheidet, ob der Klick des Anwenders ab dem Aufnahmestart
+        WEITERlaeuft. Steht das Metronom aus, bleibt die Aufnahme still — sonst
+        finge es beim Aufnehmen ploetzlich von selbst an zu klacken.
+
+        @param userClickOn         Metronom-Knopf des Anwenders
+        @param countInClick        Vorzaehler bestellt (Pre-Roll: false)
+        @param clickWhileRecording „Klick bei Aufnahme" aus den Einstellungen
+        @param runUp               Vorlaufbereich (leer = kein Vorlauf) */
+    ClickSetup decideClick (bool userClickOn, bool countInClick, bool clickWhileRecording,
+                            tracktion::TimeRange runUp);
+
+    /** „Klick bei Aufnahme" — liegt in der SESSION (wie `clickTrackEnabled`),
+        nicht in einer globalen Einstellung. Vorgabe: an (Logics Vorgabe, und
+        der Beatbau-Fall). */
+    bool getClickWhileRecording (te::Edit&);
+    void setClickWhileRecording (te::Edit&, bool);
+
     /** Vorlauf-Anfang: `recordStart` wird auf seine Taktlinie ABGERUNDET, von dort
         gehen `bars` ganze Takte zurueck.
 
@@ -124,13 +173,22 @@ public:
 
     /** Startet den Vorlauf.
 
-        @param bars        Takte Vorlauf (>0)
-        @param forceClick  true = Klick fuer die Dauer des Vorlaufs erzwingen
-                           (Vorzaehler); false = Klick so lassen, wie er ist
-                           (Pre-Roll).
-        @returns           was passiert ist — bei `noRunUp` muss der Aufrufer
-                           selbst `transport.record()` rufen, sonst NICHT. */
-    Outcome start (te::Edit&, int bars, bool forceClick);
+        @param bars                Takte Vorlauf (>0)
+        @param countInClick        true = Klick fuer die Dauer des Vorlaufs
+                                   erzwingen (Vorzaehler); false = Klick so
+                                   lassen, wie er ist (Pre-Roll).
+        @param clickWhileRecording false = der Klick hoert am Aufnahmestart auf
+                                   (`countin::decideClick`).
+        @returns                   was passiert ist — bei `noRunUp` muss der
+                                   Aufrufer selbst `transport.record()` rufen,
+                                   sonst NICHT. */
+    Outcome start (te::Edit&, int bars, bool countInClick, bool clickWhileRecording);
+
+    /** Fuer die Aufnahme OHNE Vorlauf: haelt den Klick ab dem Aufnahmestart
+        still, wenn „Klick bei Aufnahme" aus ist, und gibt ihn beim Stoppen
+        zurueck. Erst NACH `transport.record()` rufen — dann ist der geliehene
+        Zustand an die laufende Aufnahme gebunden. */
+    void holdClickForRecording (te::Edit&, bool clickWhileRecording);
 
     /** Aus dem Transport-Timer. Schaltet die Aufnahme scharf, sobald der
         Transport wirklich rollt, und gibt den geliehenen Zustand zurueck,
@@ -149,6 +207,13 @@ public:
     bool ownsPunch() const noexcept      { return borrowedPunch; }
     bool userPunchValue() const noexcept { return savedPunch; }
 
+    /** Dasselbe fuer den Klick-Schalter: waehrend wir ihn halten (z. B. „Klick
+        bei Aufnahme AUS" bei eingeschaltetem Metronom) zeigt die
+        Transportleiste weiter den Wert des ANWENDERS — sonst ginge sein
+        Metronom-Knopf beim Aufnehmen sichtbar aus und danach wieder an. */
+    bool ownsClick() const noexcept      { return borrowedClick; }
+    bool userClickValue() const noexcept { return savedClick; }
+
 private:
     enum class Phase { idle, rollingIn, recording };
 
@@ -156,8 +221,14 @@ private:
 
     Phase phase = Phase::idle;
 
+    void borrowClick (te::Edit&, countin::ClickSetup);
+
     bool borrowedPunch = false;   ///< haben wir Loop-Bereich + Punch geliehen?
     bool savedPunch    = false;   ///< Punch-Schalter des Anwenders
+
+    bool borrowedClick = false;   ///< haben wir den Klick-Schalter geliehen?
+    bool savedClick    = false;   ///< Metronom-Knopf des Anwenders
+    bool sawRecording  = false;   ///< die Aufnahme lief wirklich an
     tracktion::TimeRange savedLoopRange, appliedLoopRange;
 
     tracktion::TimePosition runUpStart, recordStart;

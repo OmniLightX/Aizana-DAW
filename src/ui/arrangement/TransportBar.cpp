@@ -123,6 +123,15 @@ TransportBar::TransportBar (ApplicationState& appState_)
     metronomeButton.setTooltip ("Metronom");
     metronomeButton.onClick = [this]
     {
+        // Waehrend wir den Klick-Schalter halten (Vorzaehler / „Klick bei
+        // Aufnahme AUS") gehoert er nicht dem Anwender — sonst schriebe sein
+        // Druck in einen geliehenen Wert, den wir gleich ueberschreiben.
+        if (countIn.ownsClick())
+        {
+            metronomeButton.setToggleState (countIn.userClickValue(), juce::dontSendNotification);
+            return;
+        }
+
         if (auto* e = appState.editManager.getEdit())
             e->clickTrackEnabled.setValue (metronomeButton.getToggleState(), nullptr);
     };
@@ -327,14 +336,20 @@ void TransportBar::timerCallback()
     // Punch-Bereich und ist damit sample-genau (siehe CountIn.h).
     countIn.poll (*edit);
 
-    // Format as M:SS:BB.mmm (bars not available without tempo analysis; use H:MM:SS.mmm)
+    // Format as H:MM:SS.mmm. NEGATIVE Zeiten sind seit dem Vorzaehler normal (der
+    // Vorlauf liegt vor dem Songanfang) — vorher konnte der Kopf dort nie stehen.
+    // Die alte Rechnung liess das Vorzeichen in die MILLISEKUNDEN durchschlagen
+    // und zeigte „0:00:00.-527"; im Testlauf 2026-08-17 real abgelesen.
     const double totalSeconds = pos.inSeconds();
-    const int hours   = (int)(totalSeconds / 3600.0);
-    const int minutes = (int)(std::fmod (totalSeconds, 3600.0) / 60.0);
-    const int seconds = (int)std::fmod (totalSeconds, 60.0);
-    const int millis  = (int)(std::fmod (totalSeconds, 1.0) * 1000.0);
+    const bool   negative     = totalSeconds < 0.0;
+    const double abs_         = std::abs (totalSeconds);
+    const int hours   = (int)(abs_ / 3600.0);
+    const int minutes = (int)(std::fmod (abs_, 3600.0) / 60.0);
+    const int seconds = (int)std::fmod (abs_, 60.0);
+    const int millis  = (int)(std::fmod (abs_, 1.0) * 1000.0);
 
-    auto text = juce::String::formatted ("%d:%02d:%02d.%03d", hours, minutes, seconds, millis);
+    auto text = juce::String (negative ? "-" : "")
+                  + juce::String::formatted ("%d:%02d:%02d.%03d", hours, minutes, seconds, millis);
     positionLabel.setText (text, juce::dontSendNotification);
 
     // Toggle button states based on playback
@@ -348,7 +363,9 @@ void TransportBar::timerCallback()
 
     // Klick-Schalter liegt jetzt im Edit (TEs Klickspur) — er wird also mit der
     // Session gespeichert und kann sich durch Laden/Undo aendern.
-    metronomeButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
+    metronomeButton.setToggleState (countIn.ownsClick() ? countIn.userClickValue()
+                                                       : edit->clickTrackEnabled.get(),
+                                    juce::dontSendNotification);
 
     // Keep the Dial's assist toggle in sync (assist can change from the Beginner view too)
     assistButton.setToggleState (appState.uiState.isAssistEnabled(), juce::dontSendNotification);
@@ -529,6 +546,19 @@ void TransportBar::showMetronomeMenu()
             e->setCountInMode (CI::none);
     };
 
+    panel->getClickWhileRec = [safe]() -> bool
+    {
+        if (safe == nullptr) return true;
+        auto* e = safe->appState.editManager.getEdit();
+        return e != nullptr ? countin::getClickWhileRecording (*e) : true;
+    };
+    panel->setClickWhileRec = [safe] (bool on)
+    {
+        if (safe == nullptr) return;
+        if (auto* e = safe->appState.editManager.getEdit())
+            countin::setClickWhileRecording (*e, on);
+    };
+
     panel->getPreRoll = [safe]() -> int { return safe != nullptr ? safe->preRollBars : 0; };
     panel->setPreRoll = [safe] (int n) { if (safe != nullptr) safe->preRollBars = juce::jlimit (0, 2, n); };
 
@@ -669,12 +699,17 @@ void TransportBar::recordClicked()
     // nur darin, ob der Klick fuer die Dauer erzwungen wird. Der Vorzaehler hat
     // Vorrang, wenn beides eingestellt ist.
     const int  runUpBars   = countInBars > 0 ? countInBars : preRollBars;
-    const bool forceClick  = countInBars > 0;
+    const bool countInClick = countInBars > 0;
+    const bool clickWhileRec = countin::getClickWhileRecording (*edit);
 
-    if (countIn.start (*edit, runUpBars, forceClick) != CountInRecorder::Outcome::noRunUp)
+    if (countIn.start (*edit, runUpBars, countInClick, clickWhileRec) != CountInRecorder::Outcome::noRunUp)
         return;     // laeuft (oder wurde von TE abgelehnt) — nichts mehr zu tun
 
     transport.record (false);
+
+    // Auch OHNE Vorlauf gilt „Klick bei Aufnahme": wer mit laufendem Metronom
+    // ohne Vorzaehler aufnimmt, will denselben Klick-Ausstieg.
+    countIn.holdClickForRecording (*edit, clickWhileRec);
 }
 
 void TransportBar::mouseDown (const juce::MouseEvent& e)

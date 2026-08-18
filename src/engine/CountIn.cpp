@@ -29,6 +29,53 @@ countin::Plan countin::makePlan (te::TempoSequence& ts,
 }
 
 //==============================================================================
+countin::ClickSetup countin::decideClick (bool userClickOn, bool countInClick,
+                                          bool clickWhileRecording, TimeRange runUp)
+{
+    ClickSetup setup;
+
+    // Der Klick des Anwenders laeuft durch — der Bereich waere hier ohnehin
+    // wirkungslos (ClickGenerator wertet ihn nur bei ausgeschaltetem Schalter
+    // aus), also setzen wir ihn gar nicht erst.
+    if (userClickOn && clickWhileRecording)
+    {
+        setup.enabled = true;
+        return setup;
+    }
+
+    // Ab hier gilt: ab dem Aufnahmestart ist Ruhe. Der Schalter muss dafuer AUS
+    // sein, denn nur dann wirkt der Bereich. Im Vorlauf klingt es, wenn ein
+    // Vorzaehler bestellt ist ODER der Anwender sein Metronom ohnehin anhat
+    // (dann ist der Vorlauf ja Wiedergabe).
+    setup.enabled = false;
+
+    if (countInClick || userClickOn)
+        setup.range = runUp;
+
+    return setup;
+}
+
+//==============================================================================
+namespace
+{
+    const juce::Identifier clickWhileRecordingID ("aizanaClickWhileRecording");
+}
+
+bool countin::getClickWhileRecording (te::Edit& edit)
+{
+    // Vorgabe AN: so verhaelt sich Logic („Click while recording" ist gesetzt,
+    // „Only during count-in" nicht), und der Beatbau braucht es so.
+    return (bool) edit.state.getProperty (clickWhileRecordingID, true);
+}
+
+void countin::setClickWhileRecording (te::Edit& edit, bool shouldClick)
+{
+    // Ohne UndoManager — wie TE es mit `clickTrackEnabled` selbst haelt: eine
+    // Abhoer-Einstellung gehoert nicht in die Rueckgaengig-Kette des Anwenders.
+    edit.state.setProperty (clickWhileRecordingID, shouldClick, nullptr);
+}
+
+//==============================================================================
 namespace
 {
     /** Zwei Bereiche gelten als gleich, wenn beide Kanten auf eine Mikrosekunde
@@ -52,7 +99,8 @@ namespace
     }
 }
 
-CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars, bool forceClick)
+CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars,
+                                                 bool countInClick, bool clickWhileRecording)
 {
     auto& transport = edit.getTransport();
 
@@ -74,6 +122,12 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars, bool 
     // laesst die Take-Mechanik unberuehrt. TE kennt 1 oder 2 Takte.
     if (transport.looping)
     {
+        // Den Klickbereich setzt hier TE selbst (performRecord() rechnet ihn aus
+        // den Vorzaehler-Beats). Uns bleibt der SCHALTER: soll die Aufnahme
+        // still sein, muss er aus — sonst ist TEs Bereich wirkungslos.
+        borrowClick (edit, countin::decideClick (edit.clickTrackEnabled.get(),
+                                                 countInClick, clickWhileRecording, {}));
+
         const auto saved = edit.getCountInMode();
         edit.setCountInMode (bars >= 2 ? te::Edit::CountIn::twoBar
                                        : te::Edit::CountIn::oneBar);
@@ -81,7 +135,17 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars, bool 
         transport.record (false);       // laeuft synchron durch performRecord()
 
         edit.setCountInMode (saved);
-        return transport.isRecording() ? Outcome::nativeLoopRollIn : Outcome::failed;
+
+        if (! transport.isRecording())
+        {
+            giveBack (edit);
+            return Outcome::failed;
+        }
+
+        // Geliehen bleibt geliehen, bis die Aufnahme endet — poll() raeumt auf.
+        phase         = Phase::recording;
+        sawRecording  = true;
+        return Outcome::nativeLoopRollIn;
     }
 
     // ---- Normalfall: einrollen und einpunchen ---------------------------
@@ -97,6 +161,7 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars, bool 
     savedLoopRange = transport.getLoopRange();
     savedPunch     = punchAlreadyOn;
     borrowedPunch  = false;
+    borrowedClick  = false;
     recordStart    = plannedRecStart;
 
     if (! punchAlreadyOn)
@@ -147,15 +212,17 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars, bool 
     // „1-2-3-4-5". TE macht es in seinem eigenen Vorzaehler genauso und
     // begruendet es zusaetzlich damit, keinen Block zu hoeren, der direkt auf
     // einem Schlag beginnt.
-    if (forceClick)
     {
         auto& ts = edit.tempoSequence;
         const auto clickEnd = ts.toTime (ts.toBeats (recordStart) - BeatDuration::fromBeats (0.5));
+        const TimeRange runUp { runUpStart, std::max (runUpStart, clickEnd) };
 
-        edit.setClickTrackRange ({ runUpStart, std::max (runUpStart, clickEnd) });
+        borrowClick (edit, countin::decideClick (edit.clickTrackEnabled.get(),
+                                                 countInClick, clickWhileRecording, runUp));
     }
 
-    phase = Phase::rollingIn;
+    phase        = Phase::rollingIn;
+    sawRecording = false;
     return Outcome::rollingIn;
 }
 
@@ -198,7 +265,8 @@ void CountInRecorder::poll (te::Edit& edit)
 
         if (transport.isRecording())
         {
-            phase = Phase::recording;
+            phase        = Phase::recording;
+            sawRecording = true;
         }
         else
         {
@@ -213,14 +281,54 @@ void CountInRecorder::poll (te::Edit& edit)
     // Aufnahme abgeschlossen ist: EditPlaybackContext::stopRecording() liest
     // `transport.getLoopRange()` fuer den Punch-Ausstieg noch waehrend des
     // Stoppens.
-    if (! transport.isRecording())
+    if (transport.isRecording())
+    {
+        sawRecording = true;
+        return;
+    }
+
+    // `sawRecording` verhindert, dass wir gleich beim ersten Tick aufraeumen,
+    // falls die Aufnahme erst einen Moment spaeter wirklich anlaeuft.
+    if (sawRecording || ! transport.isPlaying())
         giveBack (edit);
+}
+
+void CountInRecorder::holdClickForRecording (te::Edit& edit, bool clickWhileRecording)
+{
+    if (phase != Phase::idle || ! edit.getTransport().isRecording())
+        return;
+
+    // Kein Vorlauf, also auch kein Vorlaufbereich: entweder der Klick laeuft
+    // weiter, oder er ist ab jetzt still.
+    const auto setup = countin::decideClick (edit.clickTrackEnabled.get(),
+                                             false, clickWhileRecording, {});
+
+    if (setup.enabled == edit.clickTrackEnabled.get() && edit.getClickTrackRange().isEmpty())
+        return;                         // nichts zu leihen
+
+    borrowedPunch = false;
+    borrowClick (edit, setup);
+    phase         = Phase::recording;
+    sawRecording  = true;
+}
+
+void CountInRecorder::borrowClick (te::Edit& edit, countin::ClickSetup setup)
+{
+    if (! borrowedClick)
+    {
+        savedClick    = edit.clickTrackEnabled.get();
+        borrowedClick = true;
+    }
+
+    edit.clickTrackEnabled.setValue (setup.enabled, nullptr);
+    edit.setClickTrackRange (setup.range);
 }
 
 void CountInRecorder::detach() noexcept
 {
     phase         = Phase::idle;
     borrowedPunch = false;
+    borrowedClick = false;
 }
 
 void CountInRecorder::giveBack (te::Edit& edit)
@@ -228,6 +336,9 @@ void CountInRecorder::giveBack (te::Edit& edit)
     auto& transport = edit.getTransport();
 
     edit.setClickTrackRange ({});
+
+    if (borrowedClick)
+        edit.clickTrackEnabled.setValue (savedClick, nullptr);
 
     if (borrowedPunch)
     {
@@ -240,5 +351,7 @@ void CountInRecorder::giveBack (te::Edit& edit)
     }
 
     borrowedPunch = false;
+    borrowedClick = false;
     phase         = Phase::idle;
+    sawRecording  = false;
 }
