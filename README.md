@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Resources/brand/aizana-banner.png" alt="Aizana by Aizanagi — open-source AI-assisted Digital Audio Workstation" width="820">
+</p>
+
 # Aizana
 
 An open-source, **AI-first DAW** built on JUCE 8 and Tracktion Engine for macOS. Mixing-first design: familiar enough that anyone starts immediately, with AI that turns intent into normal, reviewable, one-undo DAW actions — built for beginners and pros over the same session.
@@ -65,6 +69,10 @@ acts on your session:
 
 - Multi-track recording with loop **takes and comping**, punch in/out, and
   input monitoring
+- **Seamless count-in:** the transport rolls through the count bars and punches
+  in sample-accurately, with no stop or gap at the switch. The click is
+  separately switchable for playback and for recording, so it can count you in
+  and then fall silent (vocals) or keep running (beat making)
 - Studio One-style **docked editor** (Edit | Mix | Browse) with dedicated
   audio-clip and MIDI editing workspaces
 - **Audio bend/warp** (transient-snapped warp markers), **tempo track** with
@@ -87,6 +95,29 @@ acts on your session:
   **out-of-process hosting** (crash- and hang-isolated plugins, opt-in via
   environment flag)
 - Export to WAV / AIFF (mixdown and stems) at 44.1/48/96 kHz
+
+### Sessions, files & crash safety
+
+Everything belonging to a session lives in one folder next to it, the way Studio
+One and Logic organise a project:
+
+```
+My Song/
+    My Song.tracktion        the session
+    My Song Audio/           recordings, plus Comps/ and Bounces/
+    Sicherungen/             backups + crash snapshot
+```
+
+- **Recordings, comps and bounces are written into that folder** — never loose
+  next to the session or into the system temp directory.
+- **Rotating autosave** (interval configurable, three slots) to step back to an
+  earlier state. The folder name is German (`Sicherungen`) because the app's
+  interface currently is; see *Known Limitations*.
+- **Crash recovery:** a cheap state snapshot is written every minute and a marker
+  is cleared on clean shutdown. If the marker survives, the last session ended in
+  a crash — only then does Aizana offer to restore, and only if the snapshot is
+  newer than the saved session. Restoring writes back to the session, not into
+  the backup folder.
 
 ## Requirements
 
@@ -143,6 +174,9 @@ defined no-op and Aizana falls back to its heuristics).
   exhaustively tested; out-of-process hosting is experimental and off by default.
 - **Model weights are not bundled** (see below) — stem separation downloads them on
   first use.
+- **The interface is largely German** at this point, with English left in places.
+  A consistent language pass (and a language switch) is still open; folder names
+  Aizana creates, such as `Sicherungen`, follow the interface language.
 
 ## AI Model Weights
 
