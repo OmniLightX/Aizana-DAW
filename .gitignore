@@ -80,8 +80,3 @@ xtra mds/
 /Stems_*/
 /*.mp3
 /*.wav
-
-# Uebergabedatei fuer externe Code-Reviews. Wird vom Stop-Hook
-# (.claude/codex_hook.sh) nach jedem C++-Commit neu geschrieben —
-# gehoert deshalb nicht in die Versionierung.
-REVIEW_REQUEST.md
