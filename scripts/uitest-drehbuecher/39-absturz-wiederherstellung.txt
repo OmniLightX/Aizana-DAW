@@ -5,7 +5,7 @@
 #
 # Aufbau (vom Aufrufer vorbereitet, siehe scripts/absturz-fixture.sh):
 #   <Ordner>/Absturztest.tracktion                      = die GESPEICHERTE Session
-#   <Ordner>/Sicherungen/Absturztest_Wiederherstellung… = der neuere Schnappschuss
+#   <Ordner>/Backups/Absturztest_Wiederherstellung… = der neuere Schnappschuss
 #   ~/Library/Aizana/offene-sitzung.json                = die Marke (= abgestuerzt)
 #
 # Der Schnappschuss enthaelt bewusst eine ANDERE Session — damit an den

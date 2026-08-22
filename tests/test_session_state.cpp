@@ -169,7 +169,7 @@ TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die F
             juce::Thread::sleep (10);
 
         REQUIRE (snapshot.existsAsFile());
-        CHECK (snapshot.getParentDirectory().getFileName() == "Sicherungen");
+        CHECK (snapshot.getParentDirectory().getFileName() == "Backups");
 
         // Die gespeicherte Session weiss von der neuen Spur NICHTS.
         {

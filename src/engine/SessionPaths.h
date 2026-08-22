@@ -20,7 +20,7 @@
         Mein Song/
             Mein Song.tracktion          <- die Session selbst
             Mein Song Audio/             <- Aufnahmen, darin Comps/ und Bounces/
-            Sicherungen/                 <- Autosave-Staende + Wiederherstellung
+            Backups/                     <- Autosave-Staende + Wiederherstellung
 
     ## Warum reine Funktionen
 
@@ -39,7 +39,7 @@ namespace aizana::sessionpaths
     inline const char* sessionExtension() { return ".tracktion"; }
 
     /** Ordnername fuer Sicherungen INNERHALB des Session-Ordners. */
-    inline const char* backupFolderName() { return "Sicherungen"; }
+    inline const char* backupFolderName() { return "Backups"; }
 
     /** Die Session-Datei, die aus einer Dialog-Auswahl werden soll.
 
@@ -61,7 +61,12 @@ namespace aizana::sessionpaths
     /** `<Session-Ordner>/<Name> Audio/` — Aufnahmen, darin Comps/ und Bounces/. */
     juce::File mediaFolder (const juce::File& sessionFile);
 
-    /** `<Session-Ordner>/Sicherungen/`. */
+    /** `<Session-Ordner>/Backups/`.
+
+        Der Ordnername ist ENGLISCH, obwohl die Oberflaeche deutsch ist — das ist
+        der Weg der Referenzen: Studio One legt auch im deutschen Programm
+        `Media`/`Mixdown`/`History` an, Logic `Audio Files`/`Bounces`. Auf der
+        Platte englisch, in der Oberflaeche deutsch. */
     juce::File backupFolder (const juce::File& sessionFile);
 
     /** Name eines rotierenden Sicherungsstandes (1-basiert). */

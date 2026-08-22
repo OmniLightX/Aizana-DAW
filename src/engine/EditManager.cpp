@@ -180,7 +180,7 @@ bool EditManager::loadEdit (const juce::File& file, juce::File adoptAsSession)
     // TE's default filePathResolver (sibling-based) lacks the legacy fallback for
     // take refs recorded in unsaved sessions (see createNewEdit) — install ours.
     // Beim Wiederherstellen wird eine Datei GELESEN, aber eine andere ist die
-    // Session: der Schnappschuss liegt in `Sicherungen/`, und relative
+    // Session: der Schnappschuss liegt in `Backups/`, und relative
     // Dateiverweise (Takes!) muessen weiter gegen die SESSION aufgeloest werden —
     // sonst zeigt jeder Verweis eine Ebene daneben (I-07).
     const auto editFile = adoptAsSession != juce::File() ? adoptAsSession : file;
@@ -362,7 +362,7 @@ void EditManager::performAutosave()
     if (edit == nullptr || ! currentSessionFile.existsAsFile())
         return;
 
-    // Sicherungen liegen im UNTERORDNER der Session, nicht daneben.
+    // Die Sicherungen liegen im UNTERORDNER der Session, nicht daneben.
     //
     // Vorher hiessen sie `<Name>_autosave_N.tracktionedit` und lagen gleichwertig
     // neben der Session: neuer als sie, in jedem Dateidialog obenauf. Ein Anwender
@@ -459,7 +459,7 @@ void EditManager::writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy
 //
 // Also ein zweiter, unabhaengiger Weg, so wie ihn Studio One und Logic fahren:
 //   * ein billiger Schnappschuss des ValueTree im MINUTENTAKT, immer in DIESELBE
-//     Datei (`Sicherungen/<Name>_Wiederherstellung.tracktionedit`),
+//     Datei (`Backups/<Name>_Wiederherstellung.tracktionedit`),
 //   * eine MARKE in den App-Daten, die sagt „hier ist eine Sitzung offen",
 //   * beim sauberen Beenden wird die Marke geloescht.
 // Existiert die Marke beim naechsten Start, ist die letzte Sitzung NICHT sauber

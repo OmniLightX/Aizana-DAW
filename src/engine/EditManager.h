@@ -41,7 +41,7 @@ public:
         @param file            die Datei, die GELESEN wird
         @param adoptAsSession  optional: die Datei, die danach als Session gilt.
                                Fuer die Wiederherstellung — der Schnappschuss
-                               liegt in `Sicherungen/`, weiterarbeiten und
+                               liegt in `Backups/`, weiterarbeiten und
                                speichern soll man aber an der Session selbst,
                                und relative Verweise muessen gegen SIE aufgeloest
                                werden (I-07). */

@@ -22,7 +22,7 @@ TEST_CASE ("Session-Ordner: aus der Dialog-Auswahl wird ein Ordner", "[sessionpa
     CHECK (datei.getFullPathName() == "/Volumes/SSD/Mein Song/Mein Song.tracktion");
     CHECK (sp::sessionFolder (datei).getFullPathName() == "/Volumes/SSD/Mein Song");
     CHECK (sp::mediaFolder (datei).getFullPathName()   == "/Volumes/SSD/Mein Song/Mein Song Audio");
-    CHECK (sp::backupFolder (datei).getFullPathName()  == "/Volumes/SSD/Mein Song/Sicherungen");
+    CHECK (sp::backupFolder (datei).getFullPathName()  == "/Volumes/SSD/Mein Song/Backups");
 }
 
 TEST_CASE ("Session-Ordner: wird NICHT doppelt geschachtelt", "[sessionpaths]")
@@ -39,7 +39,7 @@ TEST_CASE ("Sicherungen liegen im Unterordner und heissen nach der Session", "[s
 
     CHECK (sp::backupFileName (datei, 2) == "Mein Song_Sicherung_2.tracktionedit");
     CHECK (sp::recoveryFile (datei).getFullPathName()
-             == "/Volumes/SSD/Mein Song/Sicherungen/Mein Song_Wiederherstellung.tracktionedit");
+             == "/Volumes/SSD/Mein Song/Backups/Mein Song_Wiederherstellung.tracktionedit");
 }
 
 TEST_CASE ("Aus einer Sicherung wird wieder der Sessionname — auch aus der Kette", "[sessionpaths]")

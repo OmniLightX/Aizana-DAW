@@ -105,14 +105,13 @@ One and Logic organise a project:
 My Song/
     My Song.tracktion        the session
     My Song Audio/           recordings, plus Comps/ and Bounces/
-    Sicherungen/             backups + crash snapshot
+    Backups/                 backups + crash snapshot
 ```
 
 - **Recordings, comps and bounces are written into that folder** — never loose
   next to the session or into the system temp directory.
 - **Rotating autosave** (interval configurable, three slots) to step back to an
-  earlier state. The folder name is German (`Sicherungen`) because the app's
-  interface currently is; see *Known Limitations*.
+  earlier state.
 - **Crash recovery:** a cheap state snapshot is written every minute and a marker
   is cleared on clean shutdown. If the marker survives, the last session ended in
   a crash — only then does Aizana offer to restore, and only if the snapshot is
@@ -175,8 +174,9 @@ defined no-op and Aizana falls back to its heuristics).
 - **Model weights are not bundled** (see below) — stem separation downloads them on
   first use.
 - **The interface is largely German** at this point, with English left in places.
-  A consistent language pass (and a language switch) is still open; folder names
-  Aizana creates, such as `Sicherungen`, follow the interface language.
+  A consistent language pass (and a language switch) is still open. Folder names
+  Aizana writes to disk are English (`<Name> Audio`, `Comps`, `Bounces`,
+  `Backups`), the way Studio One and Logic keep them English on a German system.
 
 ## AI Model Weights
 

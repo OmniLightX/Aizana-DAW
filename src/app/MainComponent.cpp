@@ -828,7 +828,7 @@ void MainComponent::hideCompingEditor()
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "Aizana", "File", "Edit", "View", "Song", "Export" };
+    return { "Aizana", "Datei", "Bearbeiten", "Ansicht", "Song", "Export" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /*name*/)
@@ -840,17 +840,17 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
     switch (index)
     {
         case 0:  // Aizana
-            menu.addItem (AizanaPreferences, "Preferences...", true);
+            menu.addItem (AizanaPreferences, juce::String::fromUTF8 ("Einstellungen…"), true);
             break;
 
         case 1:  // File
-            menu.addItem (FileNewSession,  "New Session",     true);
-            menu.addItem (FileOpen,        "Open Session...", true);
+            menu.addItem (FileNewSession,  "Neue Session", true);
+            menu.addItem (FileOpen,        juce::String::fromUTF8 ("Session öffnen…"), true);
             menu.addSeparator();
-            menu.addItem (FileSave,        "Save",            hasEdit);
-            menu.addItem (FileSaveAs,      "Save As...",      hasEdit);
+            menu.addItem (FileSave,        "Speichern", hasEdit);
+            menu.addItem (FileSaveAs,      juce::String::fromUTF8 ("Speichern unter…"), hasEdit);
             menu.addSeparator();
-            menu.addItem (FileImportAudio, "Import Audio...", hasEdit);
+            menu.addItem (FileImportAudio, juce::String::fromUTF8 ("Audio importieren…"), hasEdit);
             menu.addItem (FileImportStems,
                           juce::String::fromUTF8 ("Stems importieren (KI-Setup)…"), hasEdit);
             break;
@@ -860,16 +860,16 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             {
                 auto& undoManager = appState.editManager.getUndoManager();
                 menu.addItem (EditUndo,
-                              "Undo " + undoManager.getUndoDescription(),
+                              juce::String::fromUTF8 ("Rückgängig ") + undoManager.getUndoDescription(),
                               undoManager.canUndo());
                 menu.addItem (EditRedo,
-                              "Redo " + undoManager.getRedoDescription(),
+                              "Wiederholen " + undoManager.getRedoDescription(),
                               undoManager.canRedo());
             }
             else
             {
-                menu.addItem (EditUndo, "Undo", false);
-                menu.addItem (EditRedo, "Redo", false);
+                menu.addItem (EditUndo, juce::String::fromUTF8 ("Rückgängig"), false);
+                menu.addItem (EditRedo, "Wiederholen", false);
             }
             break;
 
@@ -879,7 +879,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           appState.uiState.getMode() == UIStateManager::UIMode::Beginner);
             menu.addSeparator();
             menu.addItem (ViewToggleMixer,
-                          mixerVisible ? "Hide Mixer" : "Show Mixer",
+                          mixerVisible ? "Mixer ausblenden" : "Mixer anzeigen",
                           true,
                           mixerVisible);
             menu.addItem (ViewToggleInspector,
@@ -887,13 +887,13 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
                           true,
                           inspectorVisible);
             menu.addSeparator();
-            menu.addItem (ScanPlugins, "Scan Plugins...", true);
-            menu.addItem (ViewReopenOnboarding, "Onboarding wiederholen...", true);
+            menu.addItem (ScanPlugins, juce::String::fromUTF8 ("Nach Plug-Ins suchen…"), true);
+            menu.addItem (ViewReopenOnboarding, juce::String::fromUTF8 ("Onboarding wiederholen…"), true);
             break;
 
         case 4:  // Song Setup
         {
-            menu.addItem (SongSetupAudioIO, "Audio I/O Setup...", true);
+            menu.addItem (SongSetupAudioIO, juce::String::fromUTF8 ("Audiogerät einrichten…"), true);
             menu.addItem (SongSeparateStems,
                           juce::String::fromUTF8 ("Song in Stems trennen (KI)…"),
                           hasEdit && ! stemSeparationEngine.isBusy());
@@ -943,8 +943,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             break;
 
         case 5:  // Export
-            menu.addItem (ExportMixdown, "Export Mixdown...", hasEdit);
-            menu.addItem (ExportStems,   "Export Stems...",   hasEdit);
+            menu.addItem (ExportMixdown, juce::String::fromUTF8 ("Mix exportieren…"), hasEdit);
+            menu.addItem (ExportStems,   juce::String::fromUTF8 ("Stems exportieren…"), hasEdit);
             break;
 
         default:
@@ -1079,17 +1079,17 @@ void MainComponent::handleFileNew()
         // JUCE 8: showYesNoCancelBox async variant
         juce::AlertWindow::showYesNoCancelBox (
             juce::MessageBoxIconType::QuestionIcon,
-            "New Session",
-            "Save current session before creating a new one?",
-            "Save", "Don't Save", "Cancel",
+            "Neue Session",
+            juce::String::fromUTF8 ("Aktuelle Session vor dem Anlegen einer neuen speichern?"),
+            "Speichern", "Nicht speichern", "Abbrechen",
             nullptr,
             juce::ModalCallbackFunction::create ([this] (int choice)
             {
-                if (choice == 1)       // "Save"
+                if (choice == 1)       // "Speichern"
                     handleFileSave();
-                else if (choice == 0)  // "Cancel"
+                else if (choice == 0)  // "Abbrechen"
                     return;
-                // choice == 2 ("Don't Save") — discard and continue
+                // choice == 2 ("Nicht speichern") — verwerfen und weiter
                 appState.editManager.createNewEdit();
                 menuItemsChanged();
             }));
@@ -1294,7 +1294,7 @@ void MainComponent::handleFileSaveAs()
                 //   Mein Song/
                 //       Mein Song.tracktion
                 //       Mein Song Audio/      (Aufnahmen, Comps/, Bounces/)
-                //       Sicherungen/
+                //       Backups/
                 //
                 // Vorher lag alles davon lose im gewaehlten Verzeichnis — bei
                 // einem Anwender also im Wurzelverzeichnis seiner SSD, und er
