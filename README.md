@@ -173,10 +173,11 @@ defined no-op and Aizana falls back to its heuristics).
   exhaustively tested; out-of-process hosting is experimental and off by default.
 - **Model weights are not bundled** (see below) — stem separation downloads them on
   first use.
-- **The interface is largely German** at this point, with English left in places.
-  A consistent language pass (and a language switch) is still open. Folder names
-  Aizana writes to disk are English (`<Name> Audio`, `Comps`, `Bounces`,
-  `Backups`), the way Studio One and Logic keep them English on a German system.
+- **The interface is German.** A language switch is not currently planned;
+  `docs/SPRACHE.md` explains the reasoning and what one would actually cost.
+  Folder names Aizana writes to disk are English (`<Name> Audio`, `Comps`,
+  `Bounces`, `Backups`), the way Studio One and Logic keep them English on a
+  German system.
 
 ## AI Model Weights
 
