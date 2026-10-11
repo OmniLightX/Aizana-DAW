@@ -142,6 +142,7 @@ TEST_CASE ("Session: Aufnahmen landen im Medienordner der Session", "[persist][m
 TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die Frage",
            "[persist][recovery]")
 {
+    juce::ScopedJuceInitialiser_GUI initialiseJuce;
     auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
                    .getChildFile ("aizana_recovery_probe");
     dir.deleteRecursively();
@@ -193,6 +194,20 @@ TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die F
         // sonst arbeitet man nach dem Wiederherstellen in einer Sicherung
         // weiter (genau die Falle, in die der Anwender schon einmal gelaufen ist).
         CHECK (wieder.getCurrentFile() == sessionFile);
+        SECTION ("Save immediately after recovery") {}
+        SECTION ("Save after delayed engine initialisation")
+        {
+            // The running app dispatches TE's delayed post-load dirty reset.
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        }
+
+        // A recovered snapshot is unsaved work relative to the original file.
+        // Saving immediately (without another edit) must persist that work.
+        wieder.saveEdit (sessionFile);
+        CHECK_FALSE (wieder.getEdit()->hasChangedSinceSaved());
+        EditManager erneut;
+        REQUIRE (erneut.loadEdit (sessionFile));
+        CHECK (te::getAudioTracks (*erneut.getEdit()).size() == spurenNachher);
     }
 
     // Sauber beendet = keine Frage beim naechsten Start.

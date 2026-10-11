@@ -218,7 +218,16 @@ void EditManager::saveEdit (const juce::File& file)
 
     // Use EditFileOperations for the canonical save path — handles the .tracktion format
     // that Tracktion Engine reloads correctly.
-    te::EditFileOperations (*edit).saveAs (file, true);
+    // An explicit Save must also write a recovered snapshot: TE considers a
+    // loaded edit clean (including a delayed reset), although the adopted
+    // original file can still contain older work. saveAs(currentFile) would
+    // silently skip that write. Different destinations retain TE's Save As path.
+    te::EditFileOperations operations (*edit);
+    const bool saved = file == operations.getEditFile()
+        ? operations.save (true, true, false)
+        : operations.saveAs (file, true);
+    if (! saved)
+        return;
 
     // Die gespeicherte Datei IST ab jetzt die Session — daran haengen Autosave
     // UND der Medienordner (Aufnahmen/Comps/Bounces). Wer nur `saveEdit` ruft
