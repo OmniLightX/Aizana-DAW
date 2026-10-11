@@ -29,6 +29,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // (live-test finding 2026-07-02: app crashed when reopening a session).
     appState.editManager.onEditWillChange = [this]
     {
+        undoMenuObserver.detach();
         pluginWindowManager.closeAllWindows();   // windows hold te::Plugin& into the old Edit
         dockedEditorPanel.clear();               // editor holds clip refs into the old Edit
         hideCompingEditor();                     // comping editor targets an old clip
@@ -40,6 +41,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
 
     appState.editManager.onEditChanged = [this]
     {
+        undoMenuObserver.bind (&appState.editManager.getUndoManager());
         inputBusManager.initialiseDefaultBuses();
         inputBusManager.applyToEngine();
         compingEngine.attachToEdit();        // re-render active comps of the new edit
@@ -301,6 +303,8 @@ MainComponent::MainComponent (ApplicationState& appState_)
     addChildComponent (proAssistRail);
 
     appState.uiState.addChangeListener (this);
+    if (auto* edit = appState.editManager.getEdit())
+        undoMenuObserver.bind (&edit->getUndoManager());
 
     // Allow this component to receive key events
     setWantsKeyboardFocus (true);
@@ -370,6 +374,7 @@ void MainComponent::handleReopenOnboarding()
 
 MainComponent::~MainComponent()
 {
+    undoMenuObserver.detach();
     // Stop the live bridge first: closes the loopback socket, joins its thread, and
     // removes the discovery file so no stale port is advertised after shutdown.
     aiLiveServer.stop();

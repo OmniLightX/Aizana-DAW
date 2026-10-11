@@ -306,3 +306,48 @@ TEST_CASE ("MixerEngine: bus and FX channels can send to another FX bus, never t
     // Reverb → Reverb (self-send = direct feedback) must be refused
     CHECK (mixer.createFXSend (*reverbFx, *reverbFx, -6.0f) == nullptr);
 }
+
+TEST_CASE ("Mixer toggles preserve state across undo and redo", "[mixer][undo-toggle]")
+{
+    EditManager em;
+    em.createNewEdit();
+    MixerEngine mixer (em);
+    auto* track = getFirstAudioTrack (*em.getEdit());
+    REQUIRE (track != nullptr);
+    auto& um = em.getUndoManager();
+    um.clearUndoHistory();
+
+    SECTION ("mute and unmute are separate undo steps")
+    {
+        mixer.setMute (*track, true);
+        REQUIRE (track->isMuted (false));
+        REQUIRE (um.canUndo());
+        CHECK (um.getUndoDescription() == "Mute track");
+        REQUIRE (um.undo());
+        CHECK_FALSE (track->isMuted (false));
+        REQUIRE (um.redo());
+        CHECK (track->isMuted (false));
+        mixer.setMute (*track, false);
+        REQUIRE (um.undo());
+        CHECK (track->isMuted (false));
+        REQUIRE (um.undo());
+        CHECK_FALSE (track->isMuted (false));
+    }
+    SECTION ("solo restores the previous isolation state too")
+    {
+        track->setSoloIsolate (true);
+        mixer.setSolo (*track, true);
+        REQUIRE (track->isSolo (false));
+        CHECK_FALSE (track->isSoloIsolate (false));
+        REQUIRE (um.canUndo());
+        REQUIRE (um.undo());
+        CHECK_FALSE (track->isSolo (false));
+        CHECK (track->isSoloIsolate (false));
+        REQUIRE (um.redo());
+        CHECK (track->isSolo (false));
+        CHECK_FALSE (track->isSoloIsolate (false));
+        mixer.setSolo (*track, false);
+        REQUIRE (um.undo());
+        CHECK (track->isSolo (false));
+    }
+}

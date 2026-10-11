@@ -296,3 +296,62 @@ TEST_CASE ("EditManager: loadEdit on an unreadable file fails gracefully and kee
 
     bogus.deleteFile();
 }
+
+#include "app/UndoMenuObserver.h"
+
+TEST_CASE ("Undo menu refresh follows actions and safely switches sessions", "[undo][undo-menu]")
+{
+    juce::ScopedJuceInitialiser_GUI juceInit;
+    auto first = std::make_unique<juce::UndoManager>();
+    juce::UndoManager second;
+    juce::UndoManager* current = first.get();
+    bool canUndo = false, canRedo = false;
+    juce::String description;
+    int updates = 0;
+    UndoMenuObserver observer ([&]
+    {
+        ++updates;
+        canUndo = current != nullptr && current->canUndo();
+        canRedo = current != nullptr && current->canRedo();
+        description = current != nullptr ? current->getUndoDescription() : juce::String();
+    });
+    observer.bind (current);
+    CHECK_FALSE (canUndo);
+    juce::ValueTree state ("TEST");
+    first->beginNewTransaction ("Mute track");
+    state.setProperty ("mute", true, first.get());
+    first->dispatchPendingMessages();
+    CHECK (canUndo);
+    CHECK_FALSE (canRedo);
+    CHECK (description == "Mute track");
+    REQUIRE (first->undo());
+    first->dispatchPendingMessages();
+    CHECK_FALSE (canUndo);
+    CHECK (canRedo);
+    REQUIRE (first->redo());
+    first->dispatchPendingMessages();
+    CHECK (canUndo);
+    CHECK_FALSE (canRedo);
+
+    // Switch before old-session destruction; even a queued old notification
+    // must not refresh the menu for the replacement session.
+    state.setProperty ("mute", false, first.get());
+    current = &second;
+    observer.bind (current);
+    CHECK_FALSE (canUndo);
+    CHECK_FALSE (canRedo);
+    auto count = updates;
+    first->dispatchPendingMessages();
+    CHECK (updates == count);
+    first.reset();
+    second.beginNewTransaction ("Add Audio Track");
+    state.addChild (juce::ValueTree ("TRACK"), -1, &second);
+    second.dispatchPendingMessages();
+    CHECK (canUndo);
+    CHECK (description == "Add Audio Track");
+    observer.detach();
+    count = updates;
+    second.clearUndoHistory();
+    second.dispatchPendingMessages();
+    CHECK (updates == count);
+}

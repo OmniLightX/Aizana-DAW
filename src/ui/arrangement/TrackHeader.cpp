@@ -449,8 +449,8 @@ void TrackHeader::updateAccessibleNames()
     // ist der Befund vom 2026-08-18 lange unentdeckt geblieben (Spurkopf zeigte
     // nach dem Laden nie den echten Mute-Zustand).
     const auto n = track.getName();
-    const juce::String muteState = track.isMuted (false) ? " (stumm)" : "";
-    const juce::String soloState = track.isSolo  (false) ? " (solo)"  : "";
+    const juce::String muteState = (bool) track.state.getProperty (te::IDs::mute) ? " (stumm)" : "";
+    const juce::String soloState = (bool) track.state.getProperty (te::IDs::solo) ? " (solo)" : "";
     muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n + muteState);
     soloButton   .setTitle ("Solo " + n + soloState);
     armButton    .setTitle (juce::String::fromUTF8 ("Aufnahmebereit ") + n);
@@ -466,8 +466,10 @@ void TrackHeader::refresh()
 {
     updateAccessibleNames();
 
-    muteButton.setToggleState (track.isMuted (false), juce::dontSendNotification);
-    soloButton.setToggleState (track.isSolo  (false), juce::dontSendNotification);
+    // This can run inside the ValueTree notification, before TE updates its
+    // CachedValues. Read the committed properties so Undo displays the new state.
+    muteButton.setToggleState ((bool) track.state.getProperty (te::IDs::mute), juce::dontSendNotification);
+    soloButton.setToggleState ((bool) track.state.getProperty (te::IDs::solo), juce::dontSendNotification);
 
     // Sync monitor button: lit when the assigned input is in automatic or on mode
     bool isMonitoring = false;

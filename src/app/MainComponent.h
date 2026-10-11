@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "ui/instruments/MusicalTypingWindow.h"
 #include "ApplicationState.h"
+#include "UndoMenuObserver.h"
 #include "engine/MixerEngine.h"
 #include "engine/InputBusManager.h"
 #include "engine/AutomationEngine.h"
@@ -114,6 +115,7 @@ public:
 
 private:
     ApplicationState& appState;
+    UndoMenuObserver undoMenuObserver { [this] { menuItemsChanged(); } };
 
     // Engine objects — owned by MainComponent, shared with UI components.
     // Declaration order matters: objects are initialised in declaration order.
