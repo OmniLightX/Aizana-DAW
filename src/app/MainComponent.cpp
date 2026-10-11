@@ -484,6 +484,22 @@ void MainComponent::resized()
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    // Use the same save path as File > Save, including Save As for a new session.
+    if (key == juce::KeyPress ('s', juce::ModifierKeys::commandModifier, 0) ||
+        key == juce::KeyPress ('s', juce::ModifierKeys::ctrlModifier, 0))
+    {
+        handleFileSave();
+        return true;
+    }
+
+    // Studio One / Fender Studio Pro: Cmd+Option+S (Ctrl+Alt+S) is Save As.
+    if (key == juce::KeyPress ('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0) ||
+        key == juce::KeyPress ('s', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0))
+    {
+        handleFileSaveAs();
+        return true;
+    }
+
     // Cmd+K / Ctrl+K: Pro-Assist command palette (Sketch 004). Pro mode only — the
     // Beginner world already has its own always-on command bar.
     if ((key == juce::KeyPress ('k', juce::ModifierKeys::commandModifier, 0) ||
@@ -1262,7 +1278,7 @@ void MainComponent::handleFileSave()
 
     // If no current session file is set, fall through to Save As
     const auto file = appState.editManager.getCurrentFile();
-    if (file.existsAsFile())
+    if (! appState.editManager.needsSaveAs())
     {
         appState.editManager.saveEdit (file);
     }
@@ -1278,10 +1294,16 @@ void MainComponent::handleFileSaveAs()
     if (edit == nullptr)
         return;
 
-    // JUCE 8: async FileChooser
+    // Guide first save explicitly; subsequent Save As starts at the current song.
+    const bool firstSave = appState.editManager.needsSaveAs();
+    const auto initialFile = firstSave
+        ? juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+              .getChildFile ("Unbenannte Session.tracktion")
+        : appState.editManager.getCurrentFile();
     fileChooser = std::make_unique<juce::FileChooser> (
-        juce::String::fromUTF8 ("Session speichern unter \xe2\x80\xa6"),
-        juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
+        firstSave ? juce::String::fromUTF8 ("Session erstmals speichern — Name und Speicherort wählen")
+                  : juce::String::fromUTF8 ("Session speichern unter …"),
+        initialFile,
         "*.tracktion");
 
     fileChooser->launchAsync (
@@ -1312,7 +1334,6 @@ void MainComponent::handleFileSaveAs()
                 aizana::sessionpaths::backupFolder (file).createDirectory();
 
                 appState.editManager.saveEdit (file);
-                appState.editManager.setCurrentFile (file);
             }
             fileChooser.reset();
         });

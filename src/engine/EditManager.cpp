@@ -75,6 +75,7 @@ void EditManager::createNewEdit()
     unsavedDir.createDirectory();
 
     currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
+    hasChosenSaveDestination = false;
     unsavedDir.setAsCurrentWorkingDirectory();
     applyRecordingLocation();     // Aufnahmen in <Unsaved Recordings>/Untitled Audio/
 
@@ -235,6 +236,7 @@ void EditManager::saveEdit (const juce::File& file)
     // (Der Autosave selbst geht NICHT hierdurch, sondern direkt ueber
     // EditFileOperations — er darf die Session nicht umhaengen.)
     setCurrentFile (file);
+    hasChosenSaveDestination = true; // Only after an explicit save succeeds.
 }
 
 //==============================================================================
@@ -344,6 +346,13 @@ void EditManager::applyRecordingLocation()
 void EditManager::setCurrentFile (const juce::File& file)
 {
     currentSessionFile = file;
+    // Recovery can adopt the internal recording placeholder too. Compare full
+    // reserved paths, not the name: a user's song named Untitled is still named.
+    const auto placeholder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+        .getChildFile ("Aizana/Unsaved Recordings/Untitled.tracktionedit");
+    const auto fallback = juce::File::getSpecialLocation (juce::File::tempDirectory)
+        .getChildFile ("Aizana Unsaved Recordings/Untitled.tracktionedit");
+    hasChosenSaveDestination = file != juce::File() && file != placeholder && file != fallback;
     applyRecordingLocation();
 
     if (file.existsAsFile())

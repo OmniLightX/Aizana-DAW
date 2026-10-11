@@ -60,6 +60,9 @@ public:
     /** Returns the current session file (may be invalid if no file has been set). */
     juce::File getCurrentFile() const { return currentSessionFile; }
 
+    /** True until the user has chosen a session destination (not the recording placeholder). */
+    bool needsSaveAs() const { return ! hasChosenSaveDestination || ! currentSessionFile.existsAsFile(); }
+
     /**
      * Returns the most recent autosave file for the given session, or an
      * invalid File if no autosave exists yet.
@@ -203,6 +206,7 @@ private:
 
     // ---- Autosave (RESEARCH.md Open Question 4) ----
     juce::File currentSessionFile;  // set by setCurrentFile()
+    bool hasChosenSaveDestination = false;
 
     // Autosave timer — fires every 2 minutes on the message thread
     struct AutosaveTimerImpl : public juce::Timer

@@ -19,6 +19,30 @@
 #include <catch2/catch_approx.hpp>
 #include "engine/EditManager.h"
 
+TEST_CASE ("Session: recording placeholder does not count as a chosen save destination", "[persist][save-destination]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    EditManager em;
+    em.createNewEdit();
+    REQUIRE (em.getCurrentFile().existsAsFile());
+    REQUIRE (em.needsSaveAs());
+    const auto recordingPlaceholder = em.getCurrentFile();
+
+    const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                          .getNonexistentChildFile ("aizana-save-destination", ".tracktion");
+    em.saveEdit (file);
+    REQUIRE (file.existsAsFile());
+    CHECK_FALSE (em.needsSaveAs());
+    REQUIRE (em.loadEdit (file, recordingPlaceholder));
+    CHECK (em.needsSaveAs());
+    em.createNewEdit();
+    CHECK (em.needsSaveAs());
+    REQUIRE (em.loadEdit (file));
+    CHECK_FALSE (em.needsSaveAs());
+    file.deleteFile();
+    CHECK (em.needsSaveAs());
+}
+
 TEST_CASE ("Session: Mute und Loop-Bereich ueberleben Speichern+Oeffnen", "[persist][probe]")
 {
     auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory)
