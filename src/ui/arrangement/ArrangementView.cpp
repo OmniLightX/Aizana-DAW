@@ -773,6 +773,7 @@ void ArrangementView::detachFromEdit()
     timelineContainer.removeAllChildren();
     trackHeaders.clear();
     trackRows.clear();
+    displayedTracks.clear();
 }
 
 void ArrangementView::attachToEdit()
@@ -1245,8 +1246,8 @@ void ArrangementView::createTracks (int count, bool midi, bool stereo,
 
     auto& um = appState.editManager.getUndoManager();
     um.beginNewTransaction (count == 1
-        ? juce::String ("Add ") + (midi ? "MIDI" : "Audio") + " Track"
-        : "Add " + juce::String (count) + (midi ? " MIDI Tracks" : " Audio Tracks"));
+        ? juce::String::fromUTF8 (midi ? "Instrumentenspur hinzufügen" : "Audiospur hinzufügen")
+        : juce::String (count) + juce::String::fromUTF8 (midi ? " Instrumentenspuren hinzufügen" : " Audiospuren hinzufügen"));
 
     const juce::String base = namePrefix.isNotEmpty() ? namePrefix
                                                      : (midi ? "Instrument" : "Audio");
@@ -1697,7 +1698,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
         const int    clickY     = e.y;
 
         juce::PopupMenu menu;
-        menu.addItem (1, "Add Audio Track");
+        menu.addItem (1, juce::String::fromUTF8 ("Audiospur hinzufügen"));
         menu.addItem (2, juce::String::fromUTF8 ("Instrumentenspur hinzuf\xc3\xbcgen\xe2\x80\xa6"));
         menu.addSeparator();
         menu.addItem (3, "Paste Clip Here",
@@ -1711,7 +1712,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
                 if (result == 1)
                 {
-                    appState.editManager.getUndoManager().beginNewTransaction ("Add Audio Track");
+                    appState.editManager.getUndoManager().beginNewTransaction (juce::String::fromUTF8 ("Audiospur hinzufügen"));
                     auto t = edit->insertNewAudioTrack (
                         te::TrackInsertPoint (nullptr, lastTrack), nullptr);
                     if (t != nullptr)
@@ -2218,6 +2219,7 @@ void ArrangementView::rebuildTrackRows()
     timelineContainer.removeAllChildren();
     trackHeaders.clear();
     trackRows.clear();
+    displayedTracks.clear();
 
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
@@ -2231,6 +2233,8 @@ void ArrangementView::rebuildTrackRows()
         // Bus and FX channels are mixer-only — skip them in the arrangement
         if (! MixerEngine::isAudioChannel (*audioTrack))
             continue;
+
+        displayedTracks.add (te::AudioTrack::Ptr (audioTrack));
 
         // Track header (left panel) — passes plugin management refs for right-click menu
         auto* header = trackHeaders.add (new TrackHeader (*audioTrack,

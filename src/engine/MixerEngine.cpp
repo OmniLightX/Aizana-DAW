@@ -81,7 +81,7 @@ void MixerEngine::setSolo (te::AudioTrack& track, bool solo)
     jassert (edit != nullptr);
 
     auto& um = edit->getUndoManager();
-    um.beginNewTransaction (solo ? "Solo track" : "Unsolo track");
+    um.beginNewTransaction (solo ? "Spur solo schalten" : "Solo aufheben");
     // TE setters bypass undo. Property listeners update the live track state.
     // Clear isolation BEFORE solo, in the same transaction, including its undo.
     track.state.setProperty (te::IDs::soloIsolate, false, &um);
@@ -94,7 +94,7 @@ void MixerEngine::setMute (te::AudioTrack& track, bool mute)
     jassert (edit != nullptr);
 
     auto& um = edit->getUndoManager();
-    um.beginNewTransaction (mute ? "Mute track" : "Unmute track");
+    um.beginNewTransaction (mute ? "Spur stummschalten" : "Stummschaltung aufheben");
     track.state.setProperty (te::IDs::mute, mute, &um);
 }
 

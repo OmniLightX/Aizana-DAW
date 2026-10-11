@@ -550,6 +550,8 @@ private:
     ZoomViewport     timelineViewport;
     juce::Component  timelineContainer; // sized to fit all clips
 
+    // Track removal is synchronous, UI rebuild deferred: retain model until teardown.
+    juce::Array<te::AudioTrack::Ptr> displayedTracks;
     juce::OwnedArray<TrackHeader> trackHeaders;
     juce::OwnedArray<TrackRow>    trackRows;
 

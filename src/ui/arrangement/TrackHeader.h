@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "engine/MixerEngine.h"
+#include "engine/TrackMeterSubscription.h"
 #include "engine/InputBusManager.h"
 #include "engine/AutomationEngine.h"
 #include "plugins/PluginManager.h"
@@ -158,8 +159,7 @@ private:
     // as the mixer: te::LevelMeasurer::Client on the track's LevelMeterPlugin,
     // polled at 30 Hz on the message thread — never touches the audio thread.
     void timerCallback() override;
-    te::LevelMeasurer::Client levelClient;
-    bool  levelClientAdded = false;
+    std::unique_ptr<aizana::TrackMeterSubscription> levelSubscription;
     float meterDb          = -100.0f;
 
     bool selected = false;

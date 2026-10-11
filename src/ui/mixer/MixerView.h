@@ -4,6 +4,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include "app/ApplicationState.h"
 #include "engine/MixerEngine.h"
+#include "engine/TrackMeterSubscription.h"
 #include "metering/MeterProcessor.h"
 #include "ChannelStrip.h"
 #include "BusFXStrip.h"
@@ -104,6 +105,9 @@ private:
     /** VCA channel strips (group faders) — rightmost before Master. */
     juce::OwnedArray<VCAStrip> vcaStrips;
 
+    // Keep tracks alive until all deferred strip teardown has finished.
+    juce::Array<te::AudioTrack::Ptr> displayedTracks;
+
     // Per-track MeterProcessors — one per strip, fed via LevelMeterPlugin peak
     // data synthesised into 512-sample blocks so libebur128 produces per-track LUFS.
     std::map<te::AudioTrack*, std::unique_ptr<MeterProcessor>> meterProcessors;
@@ -111,7 +115,7 @@ private:
     // Per-track LevelMeasurer clients — registered with each track's built-in
     // LevelMeterPlugin::measurer so the audio thread fills them with peak dBFS
     // data on every render block. Read and cleared in timerCallback().
-    std::map<te::AudioTrack*, std::unique_ptr<te::LevelMeasurer::Client>> levelClients;
+    std::map<te::AudioTrack*, std::unique_ptr<aizana::TrackMeterSubscription>> levelClients;
 
     struct TrackInputLevelClient
     {

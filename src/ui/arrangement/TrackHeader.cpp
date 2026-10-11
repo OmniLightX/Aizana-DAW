@@ -76,7 +76,7 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     // Input selector — Studio One style: small button below M/S/REC/I, click = popup
     inputButton.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff252525));
     inputButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xff888888));
-    inputButton.setTooltip ("Audio Input — click to change");
+    inputButton.setTooltip (juce::String::fromUTF8 ("Audioeingang wählen"));
     inputButton.onClick = [this] { showInputMenu(); };
     populateInputSelector();
 
@@ -86,7 +86,7 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     stereoButton.setColour (juce::TextButton::textColourOffId,  juce::Colour (0xff888888));
     stereoButton.setColour (juce::TextButton::textColourOnId,   juce::Colours::white);
     stereoButton.setClickingTogglesState (false);  // I-04: drive state explicitly
-    stereoButton.setTooltip ("Mono / Stereo track — click to toggle (does not change hardware input)");
+    stereoButton.setTooltip (juce::String::fromUTF8 ("Spurformat Mono/Stereo umschalten (Hardwareeingang bleibt unverändert)"));
     stereoButton.onClick = [this] { toggleTrackStereo(); };
 
     colourBar.onClick = [this] { showTrackColourMenu(); };
@@ -131,12 +131,8 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     track.state.addListener (this);
 
     // Live level meter behind the dB scale — same source as the mixer strip.
-    if (auto* levelPlugin = track.getLevelMeterPlugin())
-    {
-        levelPlugin->measurer.addClient (levelClient);
-        levelClientAdded = true;
-        startTimerHz (30);
-    }
+    levelSubscription = std::make_unique<aizana::TrackMeterSubscription> (track);
+    startTimerHz (30);
 
     // Zustand UND Namen sofort aus der Spur holen.
     //
@@ -152,16 +148,15 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
 
 TrackHeader::~TrackHeader()
 {
-    if (levelClientAdded)
-        if (auto* levelPlugin = track.getLevelMeterPlugin())
-            levelPlugin->measurer.removeClient (levelClient);
+    stopTimer();
     track.state.removeListener (this);
+    levelSubscription.reset();
 }
 
 void TrackHeader::timerCallback()
 {
-    const auto levelL = levelClient.getAndClearAudioLevel (0);
-    const auto levelR = levelClient.getAndClearAudioLevel (1);
+    const auto levelL = levelSubscription->client.getAndClearAudioLevel (0);
+    const auto levelR = levelSubscription->client.getAndClearAudioLevel (1);
     const float peak  = juce::jmax (levelL.dB, levelR.dB);
 
     // Rise instantly, fall smoothly (ballistics like the mixer meter)
@@ -528,8 +523,8 @@ bool TrackHeader::isMidiTrack() const
 void TrackHeader::populateInputSelector()
 {
     // Update tooltip to reflect the track type
-    inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
-                                          : "Audio Input — click to change");
+    inputButton.setTooltip (isMidiTrack() ? juce::String::fromUTF8 ("MIDI-Eingang wählen")
+                                          : juce::String::fromUTF8 ("Audioeingang wählen"));
     refreshInputButton();
 }
 
@@ -773,8 +768,8 @@ void TrackHeader::refreshInputButton()
     inputButton.setTitle (juce::String::fromUTF8 ("Eingang waehlen ") + track.getName()
                           + ": " + inputName);
 
-    inputButton.setTooltip (isMidiTrack() ? "MIDI Input — click to change"
-                                          : "Audio Input — click to change");
+    inputButton.setTooltip (isMidiTrack() ? juce::String::fromUTF8 ("MIDI-Eingang wählen")
+                                          : juce::String::fromUTF8 ("Audioeingang wählen"));
 
     // Keep the Mono/Stereo button in sync with whatever input is now assigned.
     refreshStereoButton();

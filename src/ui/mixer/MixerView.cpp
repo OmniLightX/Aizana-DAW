@@ -18,7 +18,7 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
     channelStripContainer.onRightClick = [this] (const juce::MouseEvent& e) { showContextMenu (e); };
 
     // Visible Add-Channel entry point — same menu as the background right-click
-    addChannelButton.setTooltip ("Bus-, FX- oder VCA-Channel hinzuf\xc3\xbcgen");
+    addChannelButton.setTooltip (juce::String::fromUTF8 ("Bus-, FX- oder VCA-Kanal hinzufügen"));
     addChannelButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2e2e2e));
     addChannelButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
     addChannelButton.onClick = [this] { showAddChannelMenu (&addChannelButton); };
@@ -46,10 +46,8 @@ MixerView::~MixerView()
     detachInputLevelClients();
 
     // Unregister level clients from TE's LevelMeterPlugin before destruction.
-    for (auto& [track, client] : levelClients)
-        if (auto* lp = track->getLevelMeterPlugin())
-            lp->measurer.removeClient (*client);
-    levelClients.clear();
+    for (auto& [track, subscription] : levelClients)
+        subscription->detach();
 
     // Clear strips (they reference MeterProcessors); then clear MeterProcessors
     strips.clear();
@@ -57,6 +55,8 @@ MixerView::~MixerView()
     vcaStrips.clear();
     masterStrip.reset();
     meterProcessors.clear();
+    levelClients.clear();
+    displayedTracks.clear();
 }
 
 void MixerView::resized()
@@ -184,10 +184,8 @@ void MixerView::clearStrips()
     // Unregister level clients before clearing — the referenced tracks must
     // still be alive here (on an Edit swap this runs from detachFromEdit()
     // BEFORE the old Edit is destroyed).
-    for (auto& [track, client] : levelClients)
-        if (auto* lp = track->getLevelMeterPlugin())
-            lp->measurer.removeClient (*client);
-    levelClients.clear();
+    for (auto& [track, subscription] : levelClients)
+        subscription->detach();
     detachInputLevelClients();
 
     channelStripContainer.removeAllChildren();
@@ -196,6 +194,8 @@ void MixerView::clearStrips()
     vcaStrips.clear();
     masterStrip.reset();
     meterProcessors.clear();
+    levelClients.clear();
+    displayedTracks.clear();
 }
 
 void MixerView::detachFromEdit()
@@ -225,6 +225,9 @@ void MixerView::rebuildStrips()
     if (edit == nullptr)
         return;
 
+    for (auto* t : te::getAudioTracks (*edit))
+        displayedTracks.add (te::AudioTrack::Ptr (t));
+
     // ---- Audio track strips (plain audio channels only) ----
     for (auto* audioTrack : te::getAudioTracks (*edit))
     {
@@ -236,10 +239,7 @@ void MixerView::rebuildStrips()
         auto* meterPtr = meter.get();
         meterProcessors[audioTrack] = std::move (meter);
 
-        auto client = std::make_unique<te::LevelMeasurer::Client>();
-        if (auto* levelPlugin = audioTrack->getLevelMeterPlugin())
-            levelPlugin->measurer.addClient (*client);
-        levelClients[audioTrack] = std::move (client);
+        levelClients[audioTrack] = std::make_unique<aizana::TrackMeterSubscription> (*audioTrack);
 
         auto* strip = strips.add (new ChannelStrip (*audioTrack, mixerEngine, *meterPtr,
                                                      pluginManager, pluginWindowManager,
@@ -287,10 +287,7 @@ void MixerView::rebuildStrips()
         auto* meterPtr = meter.get();
         meterProcessors[audioTrack] = std::move (meter);
 
-        auto client = std::make_unique<te::LevelMeasurer::Client>();
-        if (auto* levelPlugin = audioTrack->getLevelMeterPlugin())
-            levelPlugin->measurer.addClient (*client);
-        levelClients[audioTrack] = std::move (client);
+        levelClients[audioTrack] = std::make_unique<aizana::TrackMeterSubscription> (*audioTrack);
 
         auto* strip = busFXStrips.add (new BusFXStrip (*audioTrack, mixerEngine, *meterPtr,
                                                         pluginManager, pluginWindowManager,
@@ -573,8 +570,8 @@ void MixerView::timerCallback()
             auto it = levelClients.find (&audioTrack);
             if (it != levelClients.end())
             {
-                const auto levelL = it->second->getAndClearAudioLevel (0);
-                const auto levelR = it->second->getAndClearAudioLevel (1);
+                const auto levelL = it->second->client.getAndClearAudioLevel (0);
+                const auto levelR = it->second->client.getAndClearAudioLevel (1);
                 peakDB = juce::jmax (levelL.dB, levelR.dB);
             }
         }

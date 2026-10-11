@@ -322,7 +322,7 @@ TEST_CASE ("Mixer toggles preserve state across undo and redo", "[mixer][undo-to
         mixer.setMute (*track, true);
         REQUIRE (track->isMuted (false));
         REQUIRE (um.canUndo());
-        CHECK (um.getUndoDescription() == "Mute track");
+        CHECK (um.getUndoDescription() == "Spur stummschalten");
         REQUIRE (um.undo());
         CHECK_FALSE (track->isMuted (false));
         REQUIRE (um.redo());
@@ -349,5 +349,39 @@ TEST_CASE ("Mixer toggles preserve state across undo and redo", "[mixer][undo-to
         mixer.setSolo (*track, false);
         REQUIRE (um.undo());
         CHECK (track->isSolo (false));
+    }
+}
+
+#include "engine/TrackMeterSubscription.h"
+
+TEST_CASE ("Track meter detaches from its original plugin after insertion undo", "[mixer][meter-lifetime]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto& edit = *em.getEdit();
+    auto& um = edit.getUndoManager();
+    um.clearUndoHistory();
+    for (int iteration = 0; iteration < 3; ++iteration)
+    {
+        um.beginNewTransaction ("Add metered track");
+        auto track = edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+        REQUIRE (track != nullptr);
+        juce::ReferenceCountedObjectPtr<te::LevelMeterPlugin> original (track->getLevelMeterPlugin());
+        REQUIRE (original != nullptr);
+        aizana::TrackMeterSubscription subscription (*track);
+        juce::AudioBuffer<float> buffer (2, 32);
+        for (int c = 0; c < 2; ++c)
+            for (int i = 0; i < 32; ++i)
+                buffer.setSample (c, i, 0.5f);
+        original->measurer.processBuffer (buffer, 0, 32);
+        REQUIRE (subscription.client.getAndClearAudioLevel (0).dB > -10.0f);
+        REQUIRE (um.undo());
+        REQUIRE (track->getLevelMeterPlugin() == nullptr);
+        subscription.detach();
+        subscription.client.getAndClearAudioLevel (0);
+        original->measurer.processBuffer (buffer, 0, 32);
+        CHECK (subscription.client.getAndClearAudioLevel (0).dB <= -99.0f);
+        REQUIRE (um.redo());
+        subscription.detach(); // idempotent even after the plugin returns
     }
 }

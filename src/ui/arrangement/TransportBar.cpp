@@ -167,7 +167,7 @@ TransportBar::TransportBar (ApplicationState& appState_)
 
     // Tap Tempo button
     neutral (tapTempoButton);
-    tapTempoButton.setTooltip ("Tap Tempo — im Takt klicken (Reset nach 2 s)");
+    tapTempoButton.setTooltip (juce::String::fromUTF8 ("Tempo tippen: im Takt klicken (Neustart nach 2 s Pause)"));
     tapTempoButton.onClick = [this] { tapTempoClicked(); };
 
     // Auto-Punch — icon toggle; record only within the Loop In/Out markers (red when armed).
