@@ -7,6 +7,12 @@
 TransportBar::TransportBar (ApplicationState& appState_)
     : appState (appState_)
 {
+    countIn.beforeRecording = [safe = juce::Component::SafePointer<TransportBar> (this)]
+    {
+        if (safe != nullptr)
+            safe->appState.editManager.applyRecordingLocation();
+    };
+
     // Style position label
     positionLabel.setJustificationType (juce::Justification::centred);
     positionLabel.setText ("0:00:00.000", juce::dontSendNotification);
@@ -705,6 +711,7 @@ void TransportBar::recordClicked()
     if (countIn.start (*edit, runUpBars, countInClick, clickWhileRec) != CountInRecorder::Outcome::noRunUp)
         return;     // laeuft (oder wurde von TE abgelehnt) — nichts mehr zu tun
 
+    appState.editManager.applyRecordingLocation();
     transport.record (false);
 
     // Auch OHNE Vorlauf gilt „Klick bei Aufnahme": wer mit laufendem Metronom

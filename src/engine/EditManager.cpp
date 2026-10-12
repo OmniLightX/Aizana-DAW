@@ -9,6 +9,25 @@
 using TimePos = tracktion::core::TimePosition;
 using TimeRng = tracktion::core::TimeRange;
 
+namespace
+{
+    juce::File crashMarkerFile();
+
+    void visitFileSources (juce::ValueTree tree,
+                          const std::function<void (juce::ValueTree, const juce::String&)>& visit)
+    {
+        if ((tree.hasType (te::IDs::AUDIOCLIP) || tree.hasType (te::IDs::TAKE)
+             || tree.hasType (te::IDs::EDITCLIP)) && tree.hasProperty (te::IDs::source))
+        {
+            const auto source = tree[te::IDs::source].toString();
+            if (source.isNotEmpty() && ! te::ProjectItemID (source).isValid())
+                visit (tree, source);
+        }
+        for (auto child : tree)
+            visitFileSources (child, visit);
+    }
+}
+
 //==============================================================================
 EditManager::EditManager()
 {
@@ -42,6 +61,8 @@ EditManager::~EditManager() = default;
 //==============================================================================
 void EditManager::createNewEdit()
 {
+    savedSourceAliases.clear();
+    originalSourceResolver = {};
     // Create a fresh Edit with a single audio track.
     // The engine owns the Edit's UndoManager — all subsequent mutations route
     // through edit->getUndoManager() (the SINGLE shared undo manager per CONTEXT.md).
@@ -77,7 +98,6 @@ void EditManager::createNewEdit()
     currentSessionFile = unsavedDir.getChildFile ("Untitled.tracktionedit");
     hasChosenSaveDestination = false;
     unsavedDir.setAsCurrentWorkingDirectory();
-    applyRecordingLocation();     // Aufnahmen in <Unsaved Recordings>/Untitled Audio/
 
     // The session file must EXIST on disk even before the first save:
     // TE stores relative source refs (e.g. loop-take files) via
@@ -86,6 +106,8 @@ void EditManager::createNewEdit()
     // one extra "../" into every stored take path (= unresolvable sources).
     if (! currentSessionFile.existsAsFile())
         currentSessionFile.create();
+
+    applyRecordingLocation(); // The placeholder must exist before deriving the media path.
 
     if (edit != nullptr)
     {
@@ -172,6 +194,8 @@ bool EditManager::loadEdit (const juce::File& file, juce::File adoptAsSession)
             onEditWillChange();
     }
 
+    savedSourceAliases.clear();
+    originalSourceResolver = {};
     edit = std::move (newEdit);
     warpRenderWatcher.attach (*edit);
 
@@ -206,37 +230,182 @@ bool EditManager::loadEdit (const juce::File& file, juce::File adoptAsSession)
 }
 
 //==============================================================================
-void EditManager::saveEdit (const juce::File& file)
+juce::Result EditManager::saveEdit (const juce::File& file)
 {
     if (edit == nullptr)
+        return juce::Result::fail ("Keine Session geladen.");
+    const auto previousSession = currentSessionFile;
+
+    if (edit->getTransport().isRecording() && (needsSaveAs() || file != currentSessionFile))
     {
-        jassertfalse;
-        return;
+        // Copying a still-growing WAV would publish a truncated take and pin
+        // the resolver to that incomplete copy. Finalise the take first.
+        return juce::Result::fail ("Bitte die Aufnahme beenden und danach erneut speichern.");
+    }
+    if (! file.getParentDirectory().createDirectory())
+    {
+        return juce::Result::fail (file.getParentDirectory().getFullPathName());
     }
 
-    // Flush pending state changes into the ValueTree before serialising
-    edit->flushState();
+    // Let TE serialize plugin/control state, but never publish an XML file whose
+    // media have not been collected yet. The staging file is a sibling, so the
+    // final replacement is on the same volume and keeps an existing save intact.
+    juce::TemporaryFile pending (file);
+    te::CustomControlSurface::saveAllSettings (engine);
+    edit->getParameterControlMappings().saveToEdit();
+    if (! te::EditFileOperations (*edit).writeToFile (pending.getFile(), false))
+    {
+        return juce::Result::fail (file.getFullPathName());
+    }
+    auto xml = juce::XmlDocument::parse (pending.getFile());
+    if (xml == nullptr)
+    {
+        return juce::Result::fail ("Session-Schnappschuss ist ungueltig.");
+    }
+    auto snapshot = juce::ValueTree::fromXml (*xml);
+    auto aliases = savedSourceAliases;
+    const auto media = aizana::sessionpaths::mediaFolder (file);
+    const auto oldMedia = mediaDirectory();
+    std::map<juce::String, juce::File> collected;
+    juce::String error;
 
-    // Use EditFileOperations for the canonical save path — handles the .tracktion format
-    // that Tracktion Engine reloads correctly.
-    // An explicit Save must also write a recovered snapshot: TE considers a
-    // loaded edit clean (including a delayed reset), although the adopted
-    // original file can still contain older work. saveAs(currentFile) would
-    // silently skip that write. Different destinations retain TE's Save As path.
-    te::EditFileOperations operations (*edit);
-    const bool saved = file == operations.getEditFile()
-        ? operations.save (true, true, false)
-        : operations.saveAs (file, true);
-    if (! saved)
-        return;
+    const auto collect = [&] (const juce::File& original) -> juce::File
+    {
+        if (error.isNotEmpty())
+            return {};
+        if (! original.existsAsFile())
+        {
+            error = "Audiodatei fehlt: " + original.getFullPathName();
+            return {};
+        }
+        auto found = collected.find (original.getFullPathName());
+        juce::File target;
+        if (found != collected.end())
+            target = found->second;
+        else
+        {
+            if (original.isAChildOf (media))
+                target = original;
+            else
+            {
+                if (edit->getTransport().isRecording())
+                {
+                    error = "Bitte die Aufnahme vor dem Einsammeln externer Audiodateien beenden.";
+                    return {};
+                }
+                // Retain Comps/Bounces and other owned subdirectories. External
+                // imports are collected beside recordings with collision-safe names.
+                target = original.isAChildOf (oldMedia)
+                    ? media.getChildFile (original.getRelativePathFrom (oldMedia))
+                    : media.getChildFile (original.getFileName());
+                if (target.existsAsFile() && ! target.hasIdenticalContentTo (original))
+                    target = target.getNonexistentSibling();
+                if (! target.existsAsFile())
+                {
+                    if (! target.getParentDirectory().createDirectory())
+                    {
+                        error = "Medienordner nicht schreibbar: " + target.getParentDirectory().getFullPathName();
+                        return {};
+                    }
+                    juce::TemporaryFile copy (target);
+                    if (! original.copyFileTo (copy.getFile()) || ! copy.overwriteTargetFileWithTemporary())
+                    {
+                        error = "Audiodatei konnte nicht kopiert werden: " + original.getFullPathName();
+                        return {};
+                    }
+                }
+            }
+            collected.emplace (original.getFullPathName(), target);
+        }
+        return target;
+    };
 
-    // Die gespeicherte Datei IST ab jetzt die Session — daran haengen Autosave
-    // UND der Medienordner (Aufnahmen/Comps/Bounces). Wer nur `saveEdit` ruft
-    // und das vergisst, nimmt danach weiter ins alte Verzeichnis auf.
-    // (Der Autosave selbst geht NICHT hierdurch, sondern direkt ueber
-    // EditFileOperations — er darf die Session nicht umhaengen.)
+    // Retain owned media even when currently present only in undo history.
+    // Preserving occupied recording filenames also prevents a new take from
+    // reusing an old alias after Save As with the same session basename.
+    if (oldMedia != media && oldMedia.isDirectory())
+        for (const auto& owned : oldMedia.findChildFiles (juce::File::findFiles, true))
+        {
+            if (file.getParentDirectory().isAChildOf (oldMedia)
+                && owned.isAChildOf (file.getParentDirectory()))
+                continue; // A destination inside the old media tree must not collect itself.
+            const auto target = collect (owned);
+            if (error.isNotEmpty())
+                break;
+            aliases.emplace (owned.getFullPathName(), target);
+            aliases.emplace (owned.getRelativePathFrom (currentSessionFile.getParentDirectory()), target);
+        }
+    for (auto& entry : aliases)
+        if (auto it = collected.find (entry.second.getFullPathName()); it != collected.end())
+            entry.second = it->second;
+
+    visitFileSources (snapshot, [&] (juce::ValueTree node, const juce::String& source)
+    {
+        const auto target = collect (te::SourceFileReference::findFileFromString (*edit, source));
+        if (error.isNotEmpty())
+            return;
+        // Detached tree only: editing state and undo actions are not mutated.
+        node.setProperty (te::IDs::source, target.getRelativePathFrom (file.getParentDirectory()), nullptr);
+        aliases[source] = target;
+    });
+    if (error.isNotEmpty())
+    {
+        return juce::Result::fail (error);
+    }
+    xml = snapshot.createXml();
+    if (xml == nullptr || ! xml->writeTo (pending.getFile()) || ! pending.overwriteTargetFileWithTemporary())
+    {
+        return juce::Result::fail (file.getFullPathName());
+    }
+
+    // Commit the new identity only after publication. Immutable captures keep
+    // resolver calls independent of subsequent map mutations and manager lifetime.
+    if (! originalSourceResolver)
+        originalSourceResolver = edit->filePathResolver;
+    savedSourceAliases = std::move (aliases);
+    edit->editFileRetriever = [file] { return file; };
+    edit->filePathResolver = [file, map = savedSourceAliases, fallback = originalSourceResolver]
+                            (const juce::String& source) -> juce::File
+    {
+        if (auto it = map.find (source); it != map.end())
+            return it->second;
+        if (juce::File::isAbsolutePath (source))
+            return juce::File (source);
+        auto local = file.getParentDirectory().getChildFile (source);
+        if (local.existsAsFile())
+            return local;
+        return fallback ? fallback (source) : local;
+    };
     setCurrentFile (file);
-    hasChosenSaveDestination = true; // Only after an explicit save succeeds.
+    hasChosenSaveDestination = true;
+    edit->resetChangedStatus();
+    engine.getEngineBehaviour().editHasBeenSaved (*edit, file);
+    edit->sendSourceFileUpdate();
+    // A successful explicit save supersedes this session's recovery marker,
+    // including when both files happen to have the same filesystem timestamp.
+    const auto marker = crashMarkerFile();
+    const auto markerSession = juce::JSON::parse (marker.loadFileAsString())
+                                   .getProperty ("session", {}).toString();
+    if (markerSession == previousSession.getFullPathName() || markerSession == file.getFullPathName())
+        marker.deleteFile();
+    return juce::Result::ok();
+}
+
+juce::ValueTree EditManager::snapshotWithResolvedSources() const
+{
+    auto snapshot = edit->state.createCopy();
+    // Recovery/backup files live in Backups, but are adopted as the session on
+    // restore. Normalize against that session, never the backup's own directory.
+    visitFileSources (snapshot, [&] (juce::ValueTree node, const juce::String& source)
+    {
+        const auto resolved = te::SourceFileReference::findFileFromString (*edit, source);
+        if (resolved == juce::File())
+            return;
+        const auto root = currentSessionFile.getParentDirectory();
+        node.setProperty (te::IDs::source,
+            resolved.isAChildOf (root) ? resolved.getRelativePathFrom (root) : resolved.getFullPathName(), nullptr);
+    });
+    return snapshot;
 }
 
 //==============================================================================
@@ -338,9 +507,9 @@ void EditManager::applyRecordingLocation()
     const auto mask = recordingFilenameMask();
     auto& dm = engine.getDeviceManager();
 
-    for (int i = 0; i < dm.getNumWaveInDevices(); ++i)
-        if (auto* d = dm.getWaveInDevice (i))
-            d->setFilenameMask (mask);
+    // Flush pending device rebuilds: new inputs restore their old per-device mask.
+    for (auto* device : dm.getWaveInputDevices())
+        device->setFilenameMask (mask);
 }
 
 void EditManager::setCurrentFile (const juce::File& file)
@@ -432,13 +601,19 @@ void EditManager::performAutosave()
         // current; hosted-plugin state blobs are as fresh as the last full flush
         // (load / manual save / stopped autosave) — bounded staleness, zero audio
         // impact. createCopy() hands the background thread an exclusively-owned tree.
-        writeAutosaveSnapshotAsync (edit->state.createCopy(), oldestFile);
+        writeAutosaveSnapshotAsync (snapshotWithResolvedSources(), oldestFile);
         return;
     }
 
     // Transport stopped: full-fidelity autosave. The plugin suspends are inaudible.
     edit->flushState();
-    te::EditFileOperations (*edit).saveAs (oldestFile, true);
+    const auto snapshot = snapshotWithResolvedSources();
+    if (auto xml = snapshot.createXml())
+    {
+        juce::TemporaryFile pending (oldestFile);
+        if (xml->writeTo (pending.getFile()))
+            pending.overwriteTargetFileWithTemporary();
+    }
 }
 
 void EditManager::writeAutosaveSnapshotAsync (juce::ValueTree exclusiveStateCopy,
@@ -519,7 +694,9 @@ std::optional<EditManager::CrashRecovery> EditManager::findCrashRecovery()
     // letzten Schnappschuss noch gespeichert hat, verliert nichts — dann waere
     // die Frage nur Laerm.
     if (session.existsAsFile()
-        && snapshot.getLastModificationTime() <= session.getLastModificationTime())
+        && (snapshot.getLastModificationTime() < session.getLastModificationTime()
+            || (snapshot.getLastModificationTime() == session.getLastModificationTime()
+                && snapshot.hasIdenticalContentTo (session))))
     {
         marker.deleteFile();
         return {};
@@ -552,7 +729,7 @@ void EditManager::writeRecoverySnapshot()
     if (! edit->getTransport().isPlaying())
         edit->flushState();
 
-    writeAutosaveSnapshotAsync (edit->state.createCopy(), target);
+    writeAutosaveSnapshotAsync (snapshotWithResolvedSources(), target);
 
     // Marke aktualisieren: WELCHE Session, WELCHER Schnappschuss. Sie ist der
     // einzige Unterschied zwischen „abgestuerzt" und „sauber beendet".

@@ -132,6 +132,8 @@ CountInRecorder::Outcome CountInRecorder::start (te::Edit& edit, int bars,
         edit.setCountInMode (bars >= 2 ? te::Edit::CountIn::twoBar
                                        : te::Edit::CountIn::oneBar);
 
+        if (beforeRecording)
+            beforeRecording();
         transport.record (false);       // laeuft synchron durch performRecord()
 
         edit.setCountInMode (saved);
@@ -243,6 +245,11 @@ void CountInRecorder::poll (te::Edit& edit)
 
     if (phase == Phase::rollingIn)
     {
+        // Preparing a newly selected input may rebuild the playback graph.
+        // Check readiness only AFTER that rebuild has been dispatched.
+        if (beforeRecording)
+            beforeRecording();
+
         if (! transport.isPlaying())
         {
             giveBack (edit);            // abgebrochen (Stopp gedrueckt)
@@ -257,7 +264,7 @@ void CountInRecorder::poll (te::Edit& edit)
         // ihn festlegt.
         auto* ctx = transport.getCurrentPlaybackContext();
 
-        if (ctx == nullptr || ! ctx->getSyncPoint().has_value())
+        if (ctx == nullptr || ! ctx->isPlaybackGraphAllocated() || ! ctx->getSyncPoint().has_value())
         {
             if (transport.getPosition() >= recordStart)
             {

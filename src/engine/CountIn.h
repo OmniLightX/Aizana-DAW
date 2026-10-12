@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditManager.h"
+#include <functional>
 
 namespace te = tracktion::engine;
 
@@ -170,6 +171,10 @@ public:
         nativeLoopRollIn, ///< TEs eigener Vorzaehler rollt in die Schleife — fertig
         failed            ///< TE hat die Aufnahme abgelehnt; Zustand ist zurueckgegeben
     };
+
+    /** Message-thread preparation immediately before each actual record call,
+        including the delayed start after pre-roll. Must not replace the Edit. */
+    std::function<void()> beforeRecording;
 
     /** Startet den Vorlauf.
 

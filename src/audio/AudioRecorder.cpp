@@ -39,9 +39,11 @@ void AudioRecorder::startRecording()
         return;
     }
 
+    editManager.applyRecordingLocation();
+
     // Tracktion Engine's transport record() handles:
     //   - Routing audio input → WaveAudioClip
-    //   - Writing to a new audio file in the edit's temp directory
+    //   - Writing to a new audio file in the current session media directory
     //   - Wiring the new clip into the armed track's clip list
     //
     // The second parameter (false) means: do not pre-roll before recording.

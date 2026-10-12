@@ -18,6 +18,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include "engine/EditManager.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioRecorder.h"
 
 TEST_CASE ("Session: recording placeholder does not count as a chosen save destination", "[persist][save-destination]")
 {
@@ -195,6 +197,9 @@ TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die F
 
         REQUIRE (snapshot.existsAsFile());
         CHECK (snapshot.getParentDirectory().getFileName() == "Backups");
+        // Fast atomic saves can share a filesystem timestamp with recovery.
+        // A different snapshot must not be discarded merely because of that tie.
+        REQUIRE (snapshot.setLastModificationTime (sessionFile.getLastModificationTime()));
 
         // Die gespeicherte Session weiss von der neuen Spur NICHTS.
         {
@@ -204,6 +209,8 @@ TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die F
         }
 
         // Die Marke sagt: hier ist eine Sitzung offen.
+        INFO ("Session mtime: " << sessionFile.getLastModificationTime().toMilliseconds()
+              << "; snapshot mtime: " << snapshot.getLastModificationTime().toMilliseconds());
         const auto gefunden = EditManager::findCrashRecovery();
         REQUIRE (gefunden.has_value());
         CHECK (gefunden->session  == sessionFile);
@@ -229,6 +236,7 @@ TEST_CASE ("Absturz: der Schnappschuss traegt die Arbeit, die Marke stellt die F
         // Saving immediately (without another edit) must persist that work.
         wieder.saveEdit (sessionFile);
         CHECK_FALSE (wieder.getEdit()->hasChangedSinceSaved());
+        CHECK_FALSE (EditManager::findCrashRecovery().has_value());
         EditManager erneut;
         REQUIRE (erneut.loadEdit (sessionFile));
         CHECK (te::getAudioTracks (*erneut.getEdit()).size() == spurenNachher);
@@ -272,4 +280,37 @@ TEST_CASE ("Absturz: nach dem Speichern gibt es nichts zu fragen", "[persist][re
 
     EditManager::clearCrashMarker();
     dir.deleteRecursively();
+}
+
+
+TEST_CASE ("Recording refreshes a late input device's stale session destination", "[persist][media][recording-destination]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    EditManager em;
+    em.createNewEdit();
+    auto& engine = em.getEngine();
+    auto& dm = engine.getDeviceManager();
+    dm.dispatchPendingUpdates();
+
+    // Real TE input objects, but no CoreAudio device: simulate a device appearing
+    // AFTER File > New and restoring its per-device destination from an old edit.
+    const auto name = "Aizana destination regression " + juce::Uuid().toString();
+    const te::WaveDeviceDescription description (name, 0, -1, false);
+    const auto staleMask = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                               .getChildFile ("previous-session/Previous_%track%_%take%")
+                               .getFullPathName();
+    {
+        te::WaveInputDevice previous (engine, "test", description, te::InputDevice::waveDevice);
+        previous.setFilenameMask (staleMask);
+    }
+    auto* lateInput = dm.waveInputs.add (new te::WaveInputDevice (
+        engine, "test", description, te::InputDevice::waveDevice));
+    REQUIRE (lateInput->getFilenameMask() == staleMask);
+
+    AudioEngine audio (engine); // Deliberately not initialised: no hardware needed.
+    AudioRecorder recorder (em, audio);
+    recorder.startRecording();
+    CHECK (lateInput->getFilenameMask() == em.recordingFilenameMask());
+    CHECK (lateInput->getFilenameMask().contains ("Unsaved Recordings"));
+    recorder.stopRecording();
 }

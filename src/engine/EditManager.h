@@ -6,6 +6,7 @@
 #include "WarpEngine.h"
 #include "SessionPaths.h"
 #include <optional>
+#include <map>
 
 namespace te = tracktion::engine;
 
@@ -48,7 +49,7 @@ public:
     bool loadEdit (const juce::File& file, juce::File adoptAsSession = {});
 
     /** Flush and save Edit state to a .tracktion ValueTree XML file. */
-    void saveEdit (const juce::File& file);
+    juce::Result saveEdit (const juce::File& file);
 
     /**
      * Set the current session file path.
@@ -97,7 +98,8 @@ public:
     void writeRecoverySnapshot();
 
     /** Aufnahmeziel + Edit-Name an die aktuelle Session anpassen. Wird bei
-        jedem Sessionwechsel gerufen. */
+        jedem Sessionwechsel und direkt vor jedem Aufnahmestart aufgerufen,
+        damit neu erzeugte Eingabegeraete keinen alten Zielpfad behalten. */
     void applyRecordingLocation();
 
     /** Die Aufnahme-Maske, die TEs WaveInputDevice bekommt (rein, testbar). */
@@ -207,6 +209,13 @@ private:
     // ---- Autosave (RESEARCH.md Open Question 4) ----
     juce::File currentSessionFile;  // set by setCurrentFile()
     bool hasChosenSaveDestination = false;
+
+    // Save copies media and rewrites only the detached disk snapshot. Existing
+    // undo actions retain their original source strings; resolve those to the
+    // collected files without adding a "Save" step to the editing history.
+    std::map<juce::String, juce::File> savedSourceAliases;
+    std::function<juce::File (const juce::String&)> originalSourceResolver;
+    juce::ValueTree snapshotWithResolvedSources() const;
 
     // Autosave timer — fires every 2 minutes on the message thread
     struct AutosaveTimerImpl : public juce::Timer

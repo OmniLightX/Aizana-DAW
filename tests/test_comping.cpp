@@ -263,3 +263,125 @@ TEST_CASE ("CompingEngine: render mixes the right take into the right region", "
 
     rendered.deleteFile();
 }
+
+TEST_CASE ("Save collects active and alternate takes without changing undo", "[comping][save-media]")
+{
+    CompFixture fx;
+    auto destination = fx.dir.getChildFile ("Saved").getChildFile ("Song.tracktion");
+    REQUIRE (destination.getParentDirectory().createDirectory());
+    // Recording uses relative references, while imported takes may be absolute.
+    fx.clip->getSourceFileReference().setToDirectFileReference (fx.takeFiles[2], true);
+    fx.editor->setActiveTake (*fx.clip, 0);
+    const auto undoName = fx.em.getUndoManager().getUndoDescription();
+    fx.em.saveEdit (destination);
+    REQUIRE (destination.existsAsFile());
+    CHECK (fx.em.getUndoManager().getUndoDescription() == undoName);
+    CHECK (fx.em.getEdit()->editFileRetriever() == destination);
+    for (auto file : fx.comping->getTakeFiles (*fx.clip))
+    {
+        CHECK (file.existsAsFile());
+        CHECK (file.isAChildOf (destination.getParentDirectory()));
+    }
+    fx.em.getUndoManager().undo();
+    CHECK (fx.editor->getActiveTake (*fx.clip) == 2);
+    CHECK (fx.clip->getSourceFileReference().getFile().existsAsFile());
+    fx.em.getUndoManager().redo();
+    CHECK (fx.editor->getActiveTake (*fx.clip) == 0);
+
+    EditManager reopened;
+    REQUIRE (reopened.loadEdit (destination));
+    auto* clip = dynamic_cast<te::WaveAudioClip*> (te::getAudioTracks (*reopened.getEdit())[0]->getClips()[0]);
+    REQUIRE (clip != nullptr);
+    CompingEngine comps (reopened);
+    for (auto file : comps.getTakeFiles (*clip))
+    {
+        CHECK (file.existsAsFile());
+        CHECK (file.isAChildOf (destination.getParentDirectory()));
+    }
+    CHECK (clip->getSourceFileReference().getFile().existsAsFile());
+
+    // A different user's/root location must not depend on the original absolute
+    // recording path. The complete project folder is portable after Save.
+    const auto movedFolder = fx.dir.getChildFile ("Moved project");
+    REQUIRE (destination.getParentDirectory().copyDirectoryTo (movedFolder));
+    EditManager portable;
+    REQUIRE (portable.loadEdit (movedFolder.getChildFile (destination.getFileName())));
+    auto* moved = dynamic_cast<te::WaveAudioClip*> (te::getAudioTracks (*portable.getEdit())[0]->getClips()[0]);
+    REQUIRE (moved != nullptr);
+    CHECK (moved->getSourceFileReference().getFile().isAChildOf (movedFolder));
+    CompingEngine movedComps (portable);
+    for (auto file : movedComps.getTakeFiles (*moved))
+    {
+        CHECK (file.existsAsFile());
+        CHECK (file.isAChildOf (movedFolder));
+    }
+}
+
+TEST_CASE ("Save As retains an intermediate session recording that only undo references", "[comping][save-media]")
+{
+    CompFixture fx;
+    const auto first = fx.dir.getChildFile ("First/Song.tracktion");
+    fx.em.saveEdit (first);
+    REQUIRE (first.existsAsFile());
+    auto recording = writeConstantWav (fx.em.mediaDirectory(), "Song_Track 1_Take_1.wav", 0.7f);
+    auto* track = te::getAudioTracks (*fx.em.getEdit())[0];
+    auto* clip = dynamic_cast<te::WaveAudioClip*> (track->insertNewClip (te::TrackItem::Type::wave,
+        "recording after first save", { TimeRng (TimePos::fromSeconds (3), TimePos::fromSeconds (5)), {} }, nullptr));
+    REQUIRE (clip != nullptr);
+    clip->getSourceFileReference().setToDirectFileReference (recording, true);
+    const auto descriptor = clip->state[te::IDs::source].toString();
+    auto state = clip->state;
+    fx.em.getUndoManager().beginNewTransaction ("Delete recording");
+    state.getParent().removeChild (state, &fx.em.getUndoManager());
+    const auto second = fx.dir.getChildFile ("Second/Song.tracktion");
+    fx.em.saveEdit (second);
+    REQUIRE (second.existsAsFile());
+    REQUIRE (fx.em.getUndoManager().undo());
+    const auto restored = te::SourceFileReference::findFileFromString (*fx.em.getEdit(), descriptor);
+    CHECK (restored.existsAsFile());
+    CHECK (restored.isAChildOf (second.getParentDirectory()));
+    CHECK (restored.hasIdenticalContentTo (recording));
+    // The old name must be occupied, so the recording allocator cannot reuse
+    // a descriptor that still belongs to the historical take.
+    CHECK (fx.em.mediaDirectory().getChildFile (recording.getFileName()).existsAsFile());
+    const auto next = writeConstantWav (fx.em.mediaDirectory(), "Song_Track 1_Take_2.wav", 0.9f);
+    CHECK (te::SourceFileReference::findFileFromString (*fx.em.getEdit(),
+        next.getRelativePathFrom (second.getParentDirectory())) == next);
+}
+
+TEST_CASE ("Save collects colliding external filenames without overwriting audio", "[comping][save-media]")
+{
+    CompFixture fx;
+    const auto destination = fx.dir.getChildFile ("Collision/Song.tracktion");
+    const auto media = aizana::sessionpaths::mediaFolder (destination);
+    REQUIRE (media.createDirectory());
+    const auto existing = writeConstantWav (media, fx.takeFiles[0].getFileName(), 0.8f);
+    fx.em.saveEdit (destination);
+    REQUIRE (destination.existsAsFile());
+    CHECK_THAT (meanLevelBetween (existing, 0.1, 0.4), Catch::Matchers::WithinAbs (0.8, 0.02));
+    const auto takes = fx.comping->getTakeFiles (*fx.clip);
+    CHECK (takes[0] != existing);
+    CHECK_THAT (meanLevelBetween (takes[0], 0.1, 0.4), Catch::Matchers::WithinAbs (0.1, 0.02));
+    fx.em.saveEdit (destination);
+    CHECK (fx.comping->getTakeFiles (*fx.clip)[0] == takes[0]);
+}
+
+TEST_CASE ("Missing media keeps the last successful save and current identity", "[comping][save-media]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CompFixture fx;
+    const auto destination = fx.dir.getChildFile ("Failure/Song.tracktion");
+    fx.em.saveEdit (destination);
+    REQUIRE (destination.existsAsFile());
+    const auto previous = destination.loadFileAsString();
+    const auto missing = fx.comping->getTakeFiles (*fx.clip)[0];
+    REQUIRE (missing.deleteFile()); // Only a generated fixture's collected copy.
+    fx.em.getEdit()->markAsChanged();
+    const auto result = fx.em.saveEdit (destination);
+    CHECK (result.failed());
+    CHECK (result.getErrorMessage().contains ("Audiodatei fehlt"));
+    CHECK (destination.loadFileAsString() == previous);
+    CHECK (fx.em.getCurrentFile() == destination);
+    CHECK (fx.em.getEdit()->editFileRetriever() == destination);
+    CHECK (fx.em.getEdit()->hasChangedSinceSaved());
+}

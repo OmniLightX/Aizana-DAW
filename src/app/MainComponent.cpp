@@ -1280,7 +1280,11 @@ void MainComponent::handleFileSave()
     const auto file = appState.editManager.getCurrentFile();
     if (! appState.editManager.needsSaveAs())
     {
-        appState.editManager.saveEdit (file);
+        const auto saved = appState.editManager.saveEdit (file);
+        if (saved.failed())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                "Session speichern", juce::String::fromUTF8 ("Die Session wurde nicht gespeichert:\n")
+                    + saved.getErrorMessage());
     }
     else
     {
@@ -1333,7 +1337,11 @@ void MainComponent::handleFileSaveAs()
                 aizana::sessionpaths::mediaFolder (file).createDirectory();
                 aizana::sessionpaths::backupFolder (file).createDirectory();
 
-                appState.editManager.saveEdit (file);
+                const auto saved = appState.editManager.saveEdit (file);
+                if (saved.failed())
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                        "Session speichern", juce::String::fromUTF8 ("Die Session wurde nicht gespeichert:\n")
+                            + saved.getErrorMessage());
             }
             fileChooser.reset();
         });
