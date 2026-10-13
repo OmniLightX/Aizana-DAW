@@ -40,6 +40,8 @@ namespace te = tracktion::engine;
  */
 class AudioClipEditor : public juce::Component,
                         private juce::ValueTree::Listener,
+                        private te::SelectableListener,
+                        private juce::ChangeListener,
                         private juce::Timer,
                         private juce::ScrollBar::Listener
 {
@@ -210,6 +212,11 @@ private:
     juce::ScrollBar hScroll { false };
 
     juce::SharedResourcePointer<AudioThumbnailPool> thumbnailPool;
+    juce::File thumbnailFile;
+    void refreshThumbnail();
+    void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
+    void selectableObjectChanged (te::Selectable*) override { refreshThumbnail(); repaint(); }
+    void selectableObjectAboutToBeDeleted (te::Selectable*) override {}
     juce::AudioThumbnail thumbnail { 512, thumbnailPool->formatManager, thumbnailPool->cache };
 
     // Nachbar-Clips derselben Spur werden gedimmt mitgezeichnet (S1: die Edit-

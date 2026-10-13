@@ -18,7 +18,8 @@ namespace aizana_access
 
 void CompingEngine::setSourceOverride (te::Clip& clip, const juce::File& file)
 {
-    (clip.*aizana_access::setCurrentSourceFileFn()) (file);
+    (clip.*aizana_access::setCurrentSourceFileFn())
+        (file == juce::File() ? clip.getSourceFileReference().getFile() : file);
 }
 
 //==============================================================================
@@ -76,7 +77,7 @@ void CompingEngine::attachToEdit()
     for (auto* track : te::getAudioTracks (*edit))
         for (auto* clip : track->getClips())
             if (auto* wc = dynamic_cast<te::WaveAudioClip*> (clip))
-                if (hasComp (*wc))
+                if (isCompActive (*wc))
                     scheduleRenderForClipState (wc->state);
 }
 
@@ -90,7 +91,10 @@ juce::ValueTree CompingEngine::getOrCreateCompTree (te::WaveAudioClip& clip, juc
 {
     auto existing = getCompTree (clip);
     if (existing.isValid())
+    {
+        existing.setProperty ("active", true, &um);
         return existing;
+    }
 
     // Seed the new comp with the currently active take across the whole range,
     // so starting to comp never silences material outside the first drag.
@@ -106,6 +110,22 @@ juce::ValueTree CompingEngine::getOrCreateCompTree (te::WaveAudioClip& clip, juc
 bool CompingEngine::hasComp (const te::WaveAudioClip& clip) const
 {
     return getCompTree (clip).isValid();
+}
+
+bool CompingEngine::isCompActive (const te::WaveAudioClip& clip)
+{
+    auto comp = clip.state.getChildWithName (compType);
+    return comp.isValid() && (bool) comp.getProperty ("active", true);
+}
+
+void CompingEngine::selectComp (te::WaveAudioClip& clip)
+{
+    auto comp = clip.state.getChildWithName (compType);
+    if (! comp.isValid() || isCompActive (clip))
+        return;
+    auto& um = clip.edit.getUndoManager();
+    um.beginNewTransaction ("Select comp");
+    comp.setProperty ("active", true, &um);
 }
 
 juce::Array<CompingEngine::Section> CompingEngine::readSections (const juce::ValueTree& compTree) const
@@ -274,17 +294,18 @@ void CompingEngine::selectWholeTake (te::WaveAudioClip& clip, int takeIndex)
     if (! take.isValid())
         return;
 
-    auto& um = editManager.getUndoManager();
+    auto& um = clip.edit.getUndoManager();
     um.beginNewTransaction ("Select take");
 
-    auto comp = getCompTree (clip);
+    auto comp = clip.state.getChildWithName (compType);
     if (comp.isValid())
-        clip.state.removeChild (comp, &um);
+        comp.setProperty ("active", false, &um);
 
     // TE's WaveAudioClip::setCurrentTake REMOVES a take whose source has no
     // ProjectItem (always the case for our direct-file loop takes). Switching
     // the clip's source string directly is the project-less equivalent.
     clip.state.setProperty (te::IDs::source, take.getProperty (te::IDs::source).toString(), &um);
+    setSourceOverride (clip, {});
 }
 
 //==============================================================================
@@ -316,7 +337,7 @@ void CompingEngine::timerCallback()
     {
         if (auto* wc = dynamic_cast<te::WaveAudioClip*> (te::findClipForID (*edit, id)))
         {
-            if (hasComp (*wc))
+            if (isCompActive (*wc))
                 startRenderJob (*wc);
             else
                 setSourceOverride (*wc, {});   // comp removed (clear/undo) → raw take
@@ -324,50 +345,67 @@ void CompingEngine::timerCallback()
     }
 }
 
+juce::String CompingEngine::renderRevision (const te::WaveAudioClip& clip)
+{
+    // Save As changes resolved file paths but preserves these live descriptors.
+    // Validate the exact user choices independently of the location-based cache key.
+    return clip.state.getChildWithName (te::IDs::TAKES).toXmlString()
+         + clip.state.getChildWithName (compType).toXmlString();
+}
+
 void CompingEngine::startRenderJob (te::WaveAudioClip& clip)
 {
     const auto clipID    = clip.itemID;
+    if (! isCompActive (clip))
+        return;
     const auto takeFiles = getTakeFiles (clip);
     const auto sections  = getSections (clip);
     if (takeFiles.isEmpty() || sections.isEmpty())
         return;
 
+    const auto sourceRoot = clip.edit.state;
+    const auto sourceHash = renderRevision (clip);
     const auto destFile = compCacheDirectory().getChildFile (
         "comp_" + clipID.toString() + "_" + compHash (clipID, takeFiles, sections) + ".wav");
 
     if (destFile.existsAsFile())
     {
-        applyRenderedFile (clipID, destFile);
+        applyRenderedFile (clipID, destFile, sourceRoot, sourceHash);
         return;
     }
 
-    renderPool.addJob ([this, aliveFlag = alive, clipID, takeFiles, sections, destFile]
+    renderPool.addJob ([this, aliveFlag = alive, clipID, takeFiles, sections, destFile, sourceRoot, sourceHash]
     {
         const auto result = renderCompFile (takeFiles, sections, destFile);
         if (result == juce::File())
             return;
 
-        juce::MessageManager::callAsync ([this, aliveFlag, clipID, result]
+        juce::MessageManager::callAsync ([this, aliveFlag, clipID, result, sourceRoot, sourceHash]
         {
             if (! aliveFlag->load())
                 return;
-            applyRenderedFile (clipID, result);
+            applyRenderedFile (clipID, result, sourceRoot, sourceHash);
         });
     });
 }
 
-void CompingEngine::applyRenderedFile (te::EditItemID clipID, const juce::File& file)
+void CompingEngine::applyRenderedFile (te::EditItemID clipID, const juce::File& file,
+                                      const juce::ValueTree& sourceRoot,
+                                      const juce::String& sourceHash)
 {
     auto* edit = editManager.getEdit();
-    if (edit == nullptr)
+    if (edit == nullptr || edit->state != sourceRoot)
         return;
     if (auto* wc = dynamic_cast<te::WaveAudioClip*> (te::findClipForID (*edit, clipID)))
-        if (hasComp (*wc))   // user may have cleared the comp while rendering
+        if (isCompActive (*wc)
+            && renderRevision (*wc) == sourceHash)
             setSourceOverride (*wc, file);
 }
 
 juce::File CompingEngine::renderCompNow (te::WaveAudioClip& clip)
 {
+    if (! isCompActive (clip))
+        return {};
     const auto takeFiles = getTakeFiles (clip);
     const auto sections  = getSections (clip);
     if (takeFiles.isEmpty() || sections.isEmpty())

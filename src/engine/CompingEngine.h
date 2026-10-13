@@ -58,6 +58,8 @@ public:
     // Queries (message thread)
 
     bool hasComp (const te::WaveAudioClip&) const;
+    static bool isCompActive (const te::WaveAudioClip&);
+    static void selectComp (te::WaveAudioClip&);
     juce::Array<Section> getSections (const te::WaveAudioClip&) const;
 
     /** Resolved take source files, in take order (empty File when unresolvable). */
@@ -87,8 +89,8 @@ public:
     void clearComp (te::WaveAudioClip&);
 
     /** Select a whole take as the clip source (replacement for TE's broken
-        setCurrentTake on direct-file takes); also removes any active comp. */
-    void selectWholeTake (te::WaveAudioClip&, int takeIndex);
+        setCurrentTake on direct-file takes); retains the comp for comparison. */
+    static void selectWholeTake (te::WaveAudioClip&, int takeIndex);
 
     //==========================================================================
     /** Synchronous render + apply, used by tests (UI path is debounced/async).
@@ -103,6 +105,7 @@ public:
     static void setSourceOverride (te::Clip&, const juce::File&);
 
 private:
+    friend struct CompingEngineTestAccess;
     EditManager& editManager;
     juce::ValueTree attachedRoot;
     juce::Array<te::EditItemID> pendingClips;
@@ -114,9 +117,11 @@ private:
     juce::Array<Section> readSections (const juce::ValueTree& compTree) const;
     void writeSections (juce::ValueTree& compTree, const juce::Array<Section>&, juce::UndoManager&);
 
+    static juce::String renderRevision (const te::WaveAudioClip&);
     void scheduleRenderForClipState (juce::ValueTree clipState);
     void startRenderJob (te::WaveAudioClip&);
-    void applyRenderedFile (te::EditItemID, const juce::File&);
+    void applyRenderedFile (te::EditItemID, const juce::File&,
+                            const juce::ValueTree& sourceRoot, const juce::String& sourceHash);
 
     /** Pure render core — background-thread-safe, only touches copied data. */
     static juce::File renderCompFile (const juce::Array<juce::File>& takeFiles,

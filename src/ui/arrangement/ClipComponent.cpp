@@ -39,31 +39,15 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
 
     // Audio formats are registered once in the shared AudioThumbnailPool.
 
-    // Load thumbnail from source file for WaveAudioClip.
-    // Also register as ValueTree::Listener so we catch the case where TE's recording
-    // pipeline sets IDs::source AFTER the clip is inserted into the track's ValueTree
-    // (valueTreeChildAdded fires → rebuildTrackRows → ClipComponent constructed before
-    // source is propagated to the CachedValue). Without this listener, recorded clips
-    // always show solid-colour blocks with no waveform.
-    if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
-    {
+    clip.addSelectableListener (this);
+    if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
         clip.state.addListener (this);
-
-        const juce::File audioFile = waveClip->getSourceFileReference().getFile();
-        if (audioFile.existsAsFile())
-        {
-            // Aus dem Pool: eine Instanz je Quelldatei, die Neubauten dieser
-            // Component ueberlebt. setSource passiert dort genau einmal.
-            thumbnail = &thumbnailPool->forFile (audioFile);
-            thumbnail->addChangeListener (this);
-            thumbnailLoaded = true;
-            thumbnailFile   = audioFile;
-        }
-    }
+    refreshThumbnail();
 }
 
 ClipComponent::~ClipComponent()
 {
+    clip.removeSelectableListener (this);
     clip.state.removeListener (this);
     if (thumbnail != nullptr)
         thumbnail->removeChangeListener (this);
@@ -80,32 +64,29 @@ void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce:
 
     if (tree != clip.state) return;
 
-    // Die QUELLE eines Clips kann sich im Betrieb aendern:
-    //   * Take-Wechsel (Select Take / Klick auf das Badge),
-    //   * fertiger Comp (CompingEngine rendert und schiebt die Datei unter),
-    //   * Bounce/Tuning/Warp, die den Clip auf eine neue Datei setzen.
-    //
-    // Bis 2026-08-18 stand hier `if (thumbnailLoaded ...) return;` — die
-    // Wellenform wurde also GENAU EINMAL geladen und danach nie wieder. Im
-    // Arrangement blieb deshalb der zuletzt aufgenommene Take stehen, waehrend
-    // in Wahrheit laengst der zusammengesetzte Comp klang: man hoerte das
-    // Ergebnis, sah es aber nicht (User-Befund, Comping).
-    if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip))
+    // ValueTree source writes may precede TE's effective source update;
+    // SelectableListener also refreshes after that asynchronous update.
+    refreshThumbnail();
+}
+
+void ClipComponent::refreshThumbnail()
+{
+    auto* waveClip = dynamic_cast<te::WaveAudioClip*> (&clip);
+    if (waveClip == nullptr) return;
+    const auto audioFile = waveClip->getCurrentSourceFile();
+    if (audioFile == thumbnailFile) return;
+    if (thumbnail != nullptr) thumbnail->removeChangeListener (this);
+    thumbnail = nullptr;
+    thumbnailLoaded = false;
+    thumbnailFile = juce::File();
+    if (audioFile.existsAsFile())
     {
-        const juce::File audioFile = waveClip->getSourceFileReference().getFile();
-
-        if (! audioFile.existsAsFile() || audioFile == thumbnailFile)
-            return;
-
-        if (thumbnail != nullptr)
-            thumbnail->removeChangeListener (this);
-
         thumbnail = &thumbnailPool->forFile (audioFile);
         thumbnail->addChangeListener (this);
         thumbnailLoaded = true;
-        thumbnailFile   = audioFile;
-        repaint();
+        thumbnailFile = audioFile;
     }
+    repaint();
 }
 
 void ClipComponent::setSelected (bool shouldBeSelected)
@@ -184,7 +165,7 @@ void ClipComponent::paint (juce::Graphics& g)
     {
         numTakes       = waveClip->getNumTakes (false);
         currentTakeIdx = juce::jmax (0, clipEditor.getActiveTake (*waveClip));
-        compActive     = waveClip->state.getChildWithName (CompingEngine::compType).isValid();
+        compActive     = CompingEngine::isCompActive (*waveClip);
     }
     const float badgeWidth = (numTakes > 1 && getWidth() >= 50) ? 30.0f : 0.0f;
 
@@ -692,7 +673,8 @@ void ClipComponent::showTakesMenu()
         return;
 
     const int active   = clipEditor.getActiveTake (*waveClip);
-    const bool comped  = waveClip->state.getChildWithName (CompingEngine::compType).isValid();
+    const bool comped  = CompingEngine::isCompActive (*waveClip);
+    const bool savedComp = waveClip->state.getChildWithName (CompingEngine::compType).isValid();
 
     juce::PopupMenu m;
     m.addSectionHeader (juce::String::fromUTF8 ("Aufnahme ausw\xc3\xa4hlen"));
@@ -701,10 +683,10 @@ void ClipComponent::showTakesMenu()
         m.addItem (100 + i, "Take " + juce::String (i + 1) + " von " + juce::String (total),
                    true, ! comped && i == active);
 
-    if (comped)
+    if (savedComp)
     {
         m.addSeparator();
-        m.addItem (1, juce::String::fromUTF8 ("Zusammengesetzt (Comp)"), true, true);
+        m.addItem (1, juce::String::fromUTF8 ("Zusammengesetzt (Comp)"), true, comped);
     }
 
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
@@ -715,6 +697,9 @@ void ClipComponent::showTakesMenu()
 
         if (r >= 100)
             clipEditor.setActiveTake (clip, r - 100);
+        else if (r == 1)
+            if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&clip))
+                CompingEngine::selectComp (*wc);
     });
 }
 

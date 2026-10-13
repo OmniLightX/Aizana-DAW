@@ -23,7 +23,8 @@ class ClipEditor;
  */
 class ClipComponent : public juce::Component,
                       public juce::ChangeListener,
-                      public juce::ValueTree::Listener
+                      public juce::ValueTree::Listener,
+                      private te::SelectableListener
 {
 public:
     ClipComponent (te::Clip& clip, EditManager& editManager, ClipEditor& clipEditor,
@@ -105,6 +106,9 @@ public:
     juce::Rectangle<float> getGainHandleRect() const;
 
 private:
+    void refreshThumbnail();
+    void selectableObjectChanged (te::Selectable*) override { refreshThumbnail(); repaint(); }
+    void selectableObjectAboutToBeDeleted (te::Selectable*) override {}
     /** Context-menu action: estimate BPM from the clip's source audio on a
         background thread, then offer to set the song tempo (undoable). */
     void detectTempoFromClip();

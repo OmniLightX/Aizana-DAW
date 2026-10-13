@@ -763,8 +763,6 @@ void ClipEditor::deleteClips (const juce::Array<te::Clip*>& clips)
 void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 {
     auto& undoManager = editManager.getUndoManager();
-    undoManager.beginNewTransaction ("Set active take");
-
     if (auto* wc = dynamic_cast<te::WaveAudioClip*> (&comp))
     {
         auto takes = wc->state.getChildWithName (te::IDs::TAKES);
@@ -773,21 +771,12 @@ void ClipEditor::setActiveTake (te::Clip& comp, int takeIndex)
 
         if (take.isValid() && wc->edit.engine.getProjectManager().getProjectItem (id) == nullptr)
         {
-            // Direct-file take (project-less loop recording): TE's setCurrentTake
-            // REMOVES a take whose ProjectItemID can't be resolved — switch the
-            // clip's source string directly instead (the project-less equivalent).
-            // An active Aizana comp would keep overriding the audio, so drop it.
-            auto compTree = wc->state.getChildWithName (CompingEngine::compType);
-            if (compTree.isValid())
-                wc->state.removeChild (compTree, &undoManager);
-            CompingEngine::setSourceOverride (*wc, {});
-            wc->state.setProperty (te::IDs::source,
-                                   take.getProperty (te::IDs::source).toString(),
-                                   &undoManager);
+            CompingEngine::selectWholeTake (*wc, takeIndex);
             return;
         }
     }
 
+    undoManager.beginNewTransaction ("Set active take");
     comp.setCurrentTake (takeIndex);
 }
 

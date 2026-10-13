@@ -29,9 +29,9 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
 {
     // Waveform source — shared app-wide thumbnail cache (finished reads survive
     // component destruction, so reopening the editor repaints instantly).
-    const auto audioFile = clip.getSourceFileReference().getFile();
-    if (audioFile.existsAsFile())
-        thumbnail.setSource (new juce::FileInputSource (audioFile));
+    thumbnail.addChangeListener (this);
+    clip.addSelectableListener (this);
+    refreshThumbnail();
 
     nameLabel.setText (clip.getName(), juce::dontSendNotification);
     nameLabel.setFont (juce::FontOptions (13.0f, juce::Font::bold));
@@ -159,7 +159,20 @@ AudioClipEditor::AudioClipEditor (te::WaveAudioClip& clip_, EditManager& editMan
 
 AudioClipEditor::~AudioClipEditor()
 {
+    thumbnail.removeChangeListener (this);
+    clip.removeSelectableListener (this);
     clip.state.removeListener (this);
+}
+
+void AudioClipEditor::refreshThumbnail()
+{
+    const auto file = clip.getCurrentSourceFile();
+    if (file == thumbnailFile) return;
+    thumbnailFile = juce::File();
+    thumbnail.clear();
+    if (file.existsAsFile() && thumbnail.setSource (new juce::FileInputSource (file)))
+        thumbnailFile = file;
+    repaint();
 }
 
 //==============================================================================
@@ -573,7 +586,7 @@ void AudioClipEditor::paintNeighbourClips (juce::Graphics& g, const juce::Rectan
         g.setColour (juce::Colours::white.withAlpha (0.05f));
         g.fillRect (r);
 
-        if (auto* thumb = neighbourThumbFor (wave->getSourceFileReference().getFile()))
+        if (auto* thumb = neighbourThumbFor (wave->getCurrentSourceFile()))
             if (thumb->getTotalLength() > 0.0)
             {
                 const double nOffset = wave->getPosition().getOffset().inSeconds();

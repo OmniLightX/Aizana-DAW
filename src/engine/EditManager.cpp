@@ -380,7 +380,9 @@ juce::Result EditManager::saveEdit (const juce::File& file)
     hasChosenSaveDestination = true;
     edit->resetChangedStatus();
     engine.getEngineBehaviour().editHasBeenSaved (*edit, file);
-    edit->sendSourceFileUpdate();
+    // Saving changes only the serialized snapshot and resolver aliases.
+    // A source refresh would discard transient comp/processed playback sources.
+    // Original media remains available to the open edit until it is reloaded.
     // A successful explicit save supersedes this session's recovery marker,
     // including when both files happen to have the same filesystem timestamp.
     const auto marker = crashMarkerFile();

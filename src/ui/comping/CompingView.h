@@ -51,6 +51,7 @@ private:
     CompingEngine& compingEngine;
 
     juce::TextButton clearCompButton;
+    juce::TextButton selectCompButton;
 
     // Lane geometry
     static constexpr int kHeaderHeight = 28;

@@ -37,6 +37,14 @@ CompingView::CompingView (te::WaveAudioClip& clip, EditManager& em, CompingEngin
     };
     addAndMakeVisible (clearCompButton);
 
+    selectCompButton.setButtonText (juce::String::fromUTF8 ("Comp anhören"));
+    selectCompButton.setTooltip (juce::String::fromUTF8 ("Zur gespeicherten Zusammenstellung zurückwechseln."));
+    selectCompButton.onClick = [this]
+    {
+        if (auto* wc = getClip())
+            CompingEngine::selectComp (*wc);
+    };
+    addAndMakeVisible (selectCompButton);
     clip.state.addListener (this);
 }
 
@@ -128,7 +136,7 @@ void CompingView::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (11.0f));
     g.drawText (juce::String::fromUTF8 (
                     "Über eine Take-Spur ziehen = Bereich aus diesem Take · Klick = Abschnitt wechseln"),
-                header.reduced (10, 0).withTrimmedLeft (310).withTrimmedRight (130),
+                header.reduced (10, 0).withTrimmedLeft (310).withTrimmedRight (260),
                 juce::Justification::centredLeft, true);
 
     if (wc == nullptr || numTakes == 0)
@@ -136,7 +144,7 @@ void CompingView::paint (juce::Graphics& g)
 
     const auto sections = compingEngine.getSections (*wc);
     const int activeTake = compingEngine.getActiveTakeIndex (*wc);
-    const bool compActive = ! sections.isEmpty();
+    const bool compActive = CompingEngine::isCompActive (*wc);
 
     // ---- Lanes ----
     for (int lane = 0; lane < numTakes; ++lane)
@@ -229,6 +237,7 @@ void CompingView::paint (juce::Graphics& g)
 void CompingView::resized()
 {
     clearCompButton.setBounds (getWidth() - 130, 3, 120, kHeaderHeight - 6);
+    selectCompButton.setBounds (getWidth() - 260, 3, 120, kHeaderHeight - 6);
 }
 
 //==============================================================================

@@ -385,3 +385,146 @@ TEST_CASE ("Missing media keeps the last successful save and current identity", 
     CHECK (fx.em.getEdit()->editFileRetriever() == destination);
     CHECK (fx.em.getEdit()->hasChangedSinceSaved());
 }
+
+TEST_CASE ("Comp playback survives saving and Save As", "[comping][comp-source]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto rendered = fx.comping->renderCompNow (*fx.clip);
+    REQUIRE (rendered.existsAsFile());
+    const auto originalTake = fx.clip->state[te::IDs::source].toString();
+    const auto first = fx.dir.getChildFile ("Saved/Song.tracktion");
+    REQUIRE (fx.em.saveEdit (first).wasOk());
+    CHECK (fx.clip->getCurrentSourceFile() == rendered);
+    REQUIRE (fx.em.saveEdit (fx.dir.getChildFile ("Second/Song.tracktion")).wasOk());
+    CHECK (fx.clip->getCurrentSourceFile() == rendered);
+    CHECK (fx.clip->state[te::IDs::source].toString() == originalTake);
+}
+
+TEST_CASE ("Clearing a comp source override restores the selected take", "[comping][comp-source]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    REQUIRE (fx.comping->renderCompNow (*fx.clip).existsAsFile());
+    fx.comping->clearComp (*fx.clip);
+    // Exercise the same reset used by the deferred clear/undo handler.
+    CompingEngine::setSourceOverride (*fx.clip, {});
+    REQUIRE (fx.clip->getCurrentSourceFile() == fx.clip->getSourceFileReference().getFile());
+    REQUIRE (fx.clip->getCurrentSourceFile().existsAsFile());
+}
+
+
+struct CompingEngineTestAccess
+{
+    static void complete (CompingEngine& engine, te::EditItemID id,
+                          const juce::File& file, const juce::ValueTree& root,
+                          const juce::String& hash)
+    {
+        engine.applyRenderedFile (id, file, root, hash);
+    }
+    static juce::String hash (CompingEngine& engine, te::WaveAudioClip& clip)
+    {
+        return engine.renderRevision (clip);
+    }
+};
+
+TEST_CASE ("Late comp completion cannot replace a newer comp", "[comping][comp-source]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto oldFile = fx.comping->renderCompNow (*fx.clip);
+    const auto oldHash = CompingEngineTestAccess::hash (*fx.comping, *fx.clip);
+    const auto root = fx.em.getEdit()->state;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 1);
+    const auto newest = fx.comping->renderCompNow (*fx.clip);
+    REQUIRE (newest != oldFile);
+    CompingEngineTestAccess::complete (*fx.comping, fx.clip->itemID, oldFile, root, oldHash);
+    REQUIRE (fx.clip->getCurrentSourceFile() == newest);
+}
+
+TEST_CASE ("Comp completion from another edit is ignored even with matching clip ID", "[comping][comp-source]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto current = fx.comping->renderCompNow (*fx.clip);
+    const auto hash = CompingEngineTestAccess::hash (*fx.comping, *fx.clip);
+    const auto differentRoot = fx.em.getEdit()->state.createCopy();
+    CompingEngineTestAccess::complete (*fx.comping, fx.clip->itemID, fx.takeFiles[0], differentRoot, hash);
+    REQUIRE (fx.clip->getCurrentSourceFile() == current);
+}
+
+TEST_CASE ("Comp render finishing after Save As still applies unchanged choices", "[comping][comp-source]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto rendered = fx.comping->renderCompNow (*fx.clip);
+    const auto hash = CompingEngineTestAccess::hash (*fx.comping, *fx.clip);
+    const auto root = fx.em.getEdit()->state;
+    CompingEngine::setSourceOverride (*fx.clip, {});
+    REQUIRE (fx.em.saveEdit (fx.dir.getChildFile ("Relocated/Song.tracktion")).wasOk());
+    CompingEngineTestAccess::complete (*fx.comping, fx.clip->itemID, rendered, root, hash);
+    REQUIRE (fx.clip->getCurrentSourceFile() == rendered);
+}
+
+TEST_CASE ("Whole-take comparison preserves the assembled comp", "[comping][comp-preserve]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto sections = fx.comping->getSections (*fx.clip);
+    SECTION ("Take menu") { fx.editor->setActiveTake (*fx.clip, 1); }
+    SECTION ("Take lane") { fx.comping->selectWholeTake (*fx.clip, 1); }
+    REQUIRE (fx.comping->hasComp (*fx.clip));
+    const auto retained = fx.comping->getSections (*fx.clip);
+    REQUIRE (retained.size() == sections.size());
+    for (int i = 0; i < sections.size(); ++i)
+    {
+        REQUIRE (retained[i].takeIndex == sections[i].takeIndex);
+        REQUIRE (retained[i].endTime == sections[i].endTime);
+    }
+    REQUIRE (fx.comping->getActiveTakeIndex (*fx.clip) == 1);
+}
+
+TEST_CASE ("Comp comparison restores audio and survives undo and session reload", "[comping][comp-preserve]")
+{
+    CompFixture fx;
+    fx.comping->applyTakeSection (*fx.clip, 0.5, 1.0, 0);
+    const auto rendered = fx.comping->renderCompNow (*fx.clip);
+    REQUIRE (rendered.existsAsFile());
+    const auto revision = CompingEngineTestAccess::hash (*fx.comping, *fx.clip);
+    fx.em.getUndoManager().clearUndoHistory();
+    fx.editor->setActiveTake (*fx.clip, 1);
+    REQUIRE_FALSE (CompingEngine::isCompActive (*fx.clip));
+    REQUIRE (fx.clip->getCurrentSourceFile() == fx.takeFiles[1]);
+    CompingEngineTestAccess::complete (*fx.comping, fx.clip->itemID, rendered,
+                                      fx.em.getEdit()->state, revision);
+    REQUIRE (fx.clip->getCurrentSourceFile() == fx.takeFiles[1]);
+    REQUIRE (fx.em.getUndoManager().undo());
+    REQUIRE (CompingEngine::isCompActive (*fx.clip));
+    REQUIRE (fx.comping->renderCompNow (*fx.clip) == rendered);
+    REQUIRE (fx.em.getUndoManager().redo());
+    REQUIRE_FALSE (CompingEngine::isCompActive (*fx.clip));
+    const auto destination = fx.dir.getChildFile ("Compare/Song.tracktion");
+    REQUIRE (fx.em.saveEdit (destination).wasOk());
+    EditManager reopened;
+    REQUIRE (reopened.loadEdit (destination));
+    auto* clip = dynamic_cast<te::WaveAudioClip*> (te::getAudioTracks (*reopened.getEdit())[0]->getClips()[0]);
+    REQUIRE (clip != nullptr);
+    CompingEngine comps (reopened);
+    comps.attachToEdit();
+    REQUIRE (comps.hasComp (*clip));
+    REQUIRE_FALSE (CompingEngine::isCompActive (*clip));
+    REQUIRE (comps.getSections (*clip).size() == 3);
+    REQUIRE (comps.getActiveTakeIndex (*clip) == 1);
+    CompingEngine::selectComp (*clip);
+    REQUIRE (CompingEngine::isCompActive (*clip));
+    const auto restored = comps.renderCompNow (*clip);
+    REQUIRE (restored.existsAsFile());
+    REQUIRE_THAT (meanLevelBetween (restored, 0.6, 0.9), Catch::Matchers::WithinAbs (0.1, 0.001));
+    REQUIRE_THAT (meanLevelBetween (restored, 1.2, 1.7), Catch::Matchers::WithinAbs (0.3, 0.001));
+    REQUIRE (reopened.saveEdit (destination).wasOk());
+    REQUIRE (clip->getCurrentSourceFile() == restored);
+    REQUIRE (reopened.getUndoManager().undo());
+    REQUIRE_FALSE (CompingEngine::isCompActive (*clip));
+    REQUIRE (reopened.getUndoManager().redo());
+    REQUIRE (CompingEngine::isCompActive (*clip));
+}
