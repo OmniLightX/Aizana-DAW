@@ -392,3 +392,103 @@ TEST_CASE ("Instrument-Ausgangsstufe: weiche Begrenzung", "[instrument][gain]")
     // Symmetrisch: kein DC-Versatz durch die Begrenzung.
     CHECK (softClip (-2.5f) == -softClip (2.5f));
 }
+
+// B3: compare actual samples, not merely parameter values or non-zero peaks.
+namespace
+{
+    using SynthSettings = std::vector<std::pair<juce::String, float>>;
+    std::vector<float> renderSynthProbe (const SynthSettings& settings,
+                                         std::vector<int> notes = {60})
+    {
+        SynthProcessor p;
+        for (const auto& setting : settings)
+        {
+            bool found = false;
+            for (auto* parameter : p.getParameters())
+                if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter);
+                    ranged != nullptr && ranged->paramID == setting.first)
+                {
+                    ranged->setValueNotifyingHost (ranged->convertTo0to1 (setting.second));
+                    found = true;
+                }
+            REQUIRE (found);
+        }
+        p.prepareToPlay (kSR, kBlock);
+        std::vector<float> result;
+        for (int block = 0; block < 180; ++block)
+        {
+            juce::AudioBuffer<float> audio (2, kBlock);
+            juce::MidiBuffer midi;
+            for (int note : notes)
+            {
+                if (block == 0) midi.addEvent (juce::MidiMessage::noteOn (1, note, 0.4f), 0);
+                if (block == 90) midi.addEvent (juce::MidiMessage::noteOff (1, note), 0);
+            }
+            p.processBlock (audio, midi);
+            result.insert (result.end(), audio.getReadPointer (0), audio.getReadPointer (0) + kBlock);
+        }
+        return result;
+    }
+    double probeRms (const std::vector<float>& audio, int firstBlock, int lastBlock)
+    {
+        double energy = 0;
+        for (int i = firstBlock * kBlock; i < lastBlock * kBlock; ++i)
+            energy += audio[(size_t) i] * audio[(size_t) i];
+        return std::sqrt (energy / ((lastBlock - firstBlock) * kBlock));
+    }
+}
+
+TEST_CASE ("Synth B3: every sound control changes rendered samples", "[synth][b3]")
+{
+    const auto baseline = renderSynthProbe ({});
+    const SynthSettings variants {{"wave",1}, {"wave",2}, {"wave",3},
+        {"cutoff",300}, {"resonance",0.8f}, {"attack",0.4f}, {"decay",0.8f},
+        {"sustain",0.2f}, {"release",0.8f}, {"filterEnv",0}, {"volume",0.4f}};
+    for (const auto& setting : variants)
+    {
+        INFO (setting.first << "=" << setting.second);
+        const auto changed = renderSynthProbe ({setting});
+        double difference = 0;
+        bool finite = true;
+        for (size_t i = 0; i < changed.size(); ++i)
+        {
+            finite = finite && std::isfinite (changed[i]);
+            difference += std::abs (changed[i] - baseline[i]);
+        }
+        CHECK (finite);
+        CHECK (difference / changed.size() > 1.0e-4);
+    }
+}
+
+TEST_CASE ("Synth B3: attack and release shape the measured envelope", "[synth][b3]")
+{
+    const auto fast = renderSynthProbe ({{"attack",0.001f},{"release",0.01f}});
+    const auto slow = renderSynthProbe ({{"attack",0.6f},{"release",0.8f}});
+    CHECK (probeRms (slow, 0, 5) < probeRms (fast, 0, 5) * 0.3);
+    CHECK (probeRms (fast, 100, 110) < 1.0e-6);
+    CHECK (probeRms (slow, 100, 110) > 0.001);
+    CHECK (probeRms (slow, 170, 180) < 1.0e-6);
+}
+
+TEST_CASE ("Synth B3: chord retains all four independent voices", "[synth][b3]")
+{
+    const SynthSettings quiet {{"volume",0.1f},{"filterEnv",0}};
+    const std::vector<int> notes {48,55,60,64};
+    const auto chord = renderSynthProbe (quiet, notes);
+    std::vector<float> sum (chord.size());
+    for (int note : notes)
+    {
+        const auto voice = renderSynthProbe (quiet, {note});
+        CHECK (probeRms (voice, 20, 80) > 0.001);
+        for (size_t i = 0; i < sum.size(); ++i) sum[i] += voice[i];
+    }
+    float error = 0;
+    bool finite = true;
+    for (size_t i = 0; i < sum.size(); ++i)
+    {
+        finite = finite && std::isfinite (sum[i]) && std::isfinite (chord[i]);
+        error = std::max (error, std::abs (sum[i] - chord[i]));
+    }
+    CHECK (finite);
+    CHECK (error < 1.0e-5f);
+}
