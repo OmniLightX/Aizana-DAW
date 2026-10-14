@@ -37,10 +37,10 @@ public:
     // ValueTree::Listener — reloads thumbnail if source property is set after construction
     // (TE's recording pipeline sets IDs::source on the newly-added clip's ValueTree state)
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
-    void valueTreeChildAdded      (juce::ValueTree&, juce::ValueTree&) override {}
-    void valueTreeChildRemoved    (juce::ValueTree&, juce::ValueTree&, int) override {}
-    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override {}
-    void valueTreeParentChanged   (juce::ValueTree&) override {}
+    void valueTreeChildAdded      (juce::ValueTree&, juce::ValueTree&) override { repaint(); }
+    void valueTreeChildRemoved    (juce::ValueTree&, juce::ValueTree&, int) override { repaint(); }
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { repaint(); }
+    void valueTreeParentChanged   (juce::ValueTree&) override { repaint(); }
     void mouseDown        (const juce::MouseEvent& e) override;
     void mouseDrag        (const juce::MouseEvent& e) override;
     void mouseUp          (const juce::MouseEvent& e) override;

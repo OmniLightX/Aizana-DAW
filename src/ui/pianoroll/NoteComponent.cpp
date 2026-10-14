@@ -21,7 +21,7 @@ void NoteComponent::refreshTitle()
     // adressierbar — und ihre Position damit nicht messbar. Mehrere Noten
     // derselben Tonhoehe teilen den Namen; find meldet das als mehrdeutig,
     // statt stillschweigend die erstbeste zu nehmen.
-    setTitle ("Note " + juce::MidiMessage::getMidiNoteName (note.getNoteNumber(), true, true, 3));
+    setTitle ("Note " + juce::MidiMessage::getMidiNoteName (note.getNoteNumber(), true, true, 4));
 }
 
 void NoteComponent::setInScale (bool inScaleFlag)
@@ -84,6 +84,7 @@ void NoteComponent::paint (juce::Graphics& g)
 
 void NoteComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (parent.isNoteRebuildPending()) return;
     // Right-click = delete note
     if (e.mods.isRightButtonDown())
     {
@@ -112,6 +113,7 @@ void NoteComponent::mouseDown (const juce::MouseEvent& e)
 
 void NoteComponent::mouseDrag (const juce::MouseEvent& e)
 {
+    if (parent.isNoteRebuildPending()) return;
     if (e.mods.isRightButtonDown())
         return;
 

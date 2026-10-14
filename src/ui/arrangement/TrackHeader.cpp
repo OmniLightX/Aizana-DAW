@@ -70,7 +70,7 @@ TrackHeader::TrackHeader (te::AudioTrack&       track_,
     // Wire button callbacks — explicit toggle before handler so getToggleState() reads new value
     muteButton.onClick    = [this] { muteButton.setToggleState    (!muteButton.getToggleState(),    juce::dontSendNotification); muteClicked();    };
     soloButton.onClick    = [this] { soloButton.setToggleState    (!soloButton.getToggleState(),    juce::dontSendNotification); soloClicked();    };
-    armButton.onClick     = [this] { armButton.setToggleState     (!armButton.getToggleState(),     juce::dontSendNotification); armClicked();     };
+    armButton.onClick     = [this] { toggleArm(); };
     monitorButton.onClick = [this] { monitorButton.setToggleState (!monitorButton.getToggleState(), juce::dontSendNotification); monitorClicked(); };
 
     // Input selector — Studio One style: small button below M/S/REC/I, click = popup
@@ -186,7 +186,7 @@ void TrackHeader::timerCallback()
 
 void TrackHeader::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier& id)
 {
-    if (id == te::IDs::mute || id == te::IDs::solo)
+    if (id == te::IDs::mute || id == te::IDs::solo || id == juce::Identifier ("armed"))
     {
         refresh();
         return;
@@ -448,7 +448,8 @@ void TrackHeader::updateAccessibleNames()
     const juce::String soloState = (bool) track.state.getProperty (te::IDs::solo) ? " (solo)" : "";
     muteButton   .setTitle (juce::String::fromUTF8 ("Stumm ") + n + muteState);
     soloButton   .setTitle ("Solo " + n + soloState);
-    armButton    .setTitle (juce::String::fromUTF8 ("Aufnahmebereit ") + n);
+    armButton    .setTitle (juce::String::fromUTF8 ("Aufnahmebereit ") + n
+                            + ((bool) track.state.getProperty ("armed", false) ? " an" : " aus"));
     monitorButton.setTitle (juce::String::fromUTF8 ("Eingang mithoeren ") + n);
     inputButton  .setTitle (juce::String::fromUTF8 ("Eingang waehlen ") + n);
     stereoButton .setTitle (juce::String::fromUTF8 ("Mono/Stereo ") + n);
@@ -465,6 +466,8 @@ void TrackHeader::refresh()
     // CachedValues. Read the committed properties so Undo displays the new state.
     muteButton.setToggleState ((bool) track.state.getProperty (te::IDs::mute), juce::dontSendNotification);
     soloButton.setToggleState ((bool) track.state.getProperty (te::IDs::solo), juce::dontSendNotification);
+
+    armButton.setToggleState ((bool) track.state.getProperty ("armed", false), juce::dontSendNotification);
 
     // Sync monitor button: lit when the assigned input is in automatic or on mode
     bool isMonitoring = false;

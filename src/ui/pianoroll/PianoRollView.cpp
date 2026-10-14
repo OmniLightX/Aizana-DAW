@@ -31,7 +31,7 @@ void PianoRollView::PianoKeyboard::paint (juce::Graphics& g)
     // Draw white keys first, then black keys on top
     for (int pitch = 0; pitch < 128; ++pitch)
     {
-        const float y    = owner.yAtPitch (pitch);
+        const float y    = owner.yAtPitch (pitch) - getY();
         const float rowBottom = y + static_cast<float> (rowH);
         if (rowBottom < 0.0f || y > static_cast<float> (h))
             continue;
@@ -63,7 +63,7 @@ void PianoRollView::PianoKeyboard::paint (juce::Graphics& g)
         if (!isMidiBlackKey (pitch))
             continue;
 
-        const float y = owner.yAtPitch (pitch);
+        const float y = owner.yAtPitch (pitch) - getY();
         const float rowBottom = y + static_cast<float> (rowH);
         if (rowBottom < 0.0f || y > static_cast<float> (h))
             continue;
@@ -82,7 +82,7 @@ void PianoRollView::PianoKeyboard::paint (juce::Graphics& g)
     // Highlight the actively-pressed key in blue
     if (activePreviewNote >= 0)
     {
-        const float ky = owner.yAtPitch (activePreviewNote);
+        const float ky = owner.yAtPitch (activePreviewNote) - getY();
         const float kh = static_cast<float> (owner.rowHeightPx());
         g.setColour (juce::Colour (0xff4488ff).withAlpha (0.75f));
         g.fillRect (juce::Rectangle<float> (0.0f, ky,
@@ -96,10 +96,7 @@ void PianoRollView::PianoKeyboard::paint (juce::Graphics& g)
 
 int PianoRollView::PianoKeyboard::pitchFromY (float y) const noexcept
 {
-    // owner.pitchAtY maps a y-coordinate (relative to PianoRollView) to a MIDI pitch.
-    // PianoKeyboard is a direct child of PianoRollView with identical y-offset, so
-    // local y == PianoRollView-local y for the keyboard strip.
-    return juce::jlimit (0, 127, owner.pitchAtY (y));
+    return owner.pitchAtY (y + getY());
 }
 
 void PianoRollView::PianoKeyboard::startPreviewNote (int pitch)
@@ -310,6 +307,21 @@ PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
     qApplyBtn.onClick = [this] { applyQuantize(); };
     addAndMakeVisible (qApplyBtn);
 
+    fitNotesButton.setTitle ("Alle Noten anzeigen");
+    fitNotesButton.setTooltip ("Tonbereich und Zeit auf die vorhandenen Noten anpassen");
+    fitNotesButton.onClick = [this] { fitOnResize = true; resized(); repaint(); };
+    pitchZoomIn.setTitle ("Tonhoehen vergroessern");
+    pitchZoomOut.setTitle ("Tonhoehen verkleinern");
+    pitchZoomIn.onClick = [this] { setVerticalZoom (rowH * 1.25); };
+    pitchZoomOut.onClick = [this] { setVerticalZoom (rowH / 1.25); };
+    for (auto* button : { &fitNotesButton, &pitchZoomIn, &pitchZoomOut })
+    {
+        button->setClickingTogglesState (false);
+        addAndMakeVisible (button);
+    }
+    noteLayer.setInterceptsMouseClicks (false, true);
+    addAndMakeVisible (noteLayer);
+
     // ---- Sub-lanes ----
     velocityLane = std::make_unique<VelocityLane> (clip, *this, editManager);
     addAndMakeVisible (*velocityLane);
@@ -365,22 +377,28 @@ void PianoRollView::resized()
 
     // Header row
     const int headerH = kHeaderHeight;
+    const int toolbarH = 32;
     {
         int x = kKeyboardWidth;
         const int ctrlW = 90;
-        keySelector.setBounds   (x, 2, ctrlW, headerH - 4);   x += ctrlW + 4;
-        scaleSelector.setBounds (x, 2, ctrlW + 20, headerH - 4); x += ctrlW + 24;
-        quantizeGrid.setBounds  (x, 2, 70, headerH - 4);       x += 74;
+        keySelector.setBounds   (x, 2, ctrlW, toolbarH - 4);   x += ctrlW + 4;
+        scaleSelector.setBounds (x, 2, ctrlW + 20, toolbarH - 4); x += ctrlW + 24;
+        quantizeGrid.setBounds  (x, 2, 70, toolbarH - 4);       x += 74;
 
         // Quantize-Bar (E7): Strength | Swing | Q
-        qStrength.setBounds (x, 2, 120, headerH - 4);          x += 124;
-        qSwing.setBounds    (x, 2, 120, headerH - 4);          x += 124;
-        qApplyBtn.setBounds (x, 2, 28, headerH - 4);
+        qStrength.setBounds (x, 2, 120, toolbarH - 4);          x += 124;
+        qSwing.setBounds    (x, 2, 120, toolbarH - 4);          x += 124;
+        qApplyBtn.setBounds (x, 2, 28, toolbarH - 4); x += 32;
+        fitNotesButton.setBounds (x, 2, 90, toolbarH - 4); x += 94;
+        pitchZoomOut.setBounds (x, 2, 24, toolbarH - 4); x += 26;
+        pitchZoomIn.setBounds (x, 2, 24, toolbarH - 4);
     }
 
     // Calculate grid area height
     const int lanesH = kVelocityLaneH + kCCLaneH + takesH + kScrollBarThickness;
-    const int gridH  = h - headerH - lanesH;
+    const int gridH  = juce::jmax (1, h - headerH - lanesH);
+    noteLayer.setBounds (kKeyboardWidth, headerH, juce::jmax (1, w - kKeyboardWidth - kScrollBarThickness), gridH);
+    if (fitOnResize) fitNotesInView();
 
     // Piano keyboard
     pianoKeyboard.setBounds (0, headerH, kKeyboardWidth, gridH);
@@ -388,14 +406,15 @@ void PianoRollView::resized()
     // Vertical scroll bar (right edge of grid area)
     vScrollBar.setBounds (w - kScrollBarThickness, headerH, kScrollBarThickness, gridH);
     vScrollBar.setRangeLimits (0.0, kTotalPitches * rowH);
-    vScrollBar.setCurrentRange (scrollBeat * rowH, gridH);
+    scrollPitch = juce::jlimit (juce::jmin (127, (int) std::ceil (gridH / rowH) - 1), 127, scrollPitch);
+    vScrollBar.setCurrentRange ((127 - scrollPitch) * rowH, gridH, juce::dontSendNotification);
 
     // Horizontal scroll bar (bottom of entire content area)
     const int hScrollY = h - kScrollBarThickness;
     hScrollBar.setBounds (kKeyboardWidth, hScrollY, w - kKeyboardWidth - kScrollBarThickness, kScrollBarThickness);
     const double totalBeats = clip.getLengthInBeats().inBeats() + 8.0;
     hScrollBar.setRangeLimits (0.0, totalBeats * ppb);
-    hScrollBar.setCurrentRange (scrollBeat * ppb, (w - kKeyboardWidth - kScrollBarThickness));
+    hScrollBar.setCurrentRange (scrollBeat * ppb, (w - kKeyboardWidth - kScrollBarThickness), juce::dontSendNotification);
 
     // Sub-lanes
     int laneY = headerH + gridH;
@@ -461,8 +480,8 @@ void PianoRollView::paint (juce::Graphics& g)
         {
             g.setColour (juce::Colours::lightgrey);
             g.drawText (juce::String (beat / 4 + 1),
-                        static_cast<int> (x) + 2, 2,
-                        40, kHeaderHeight - 4,
+                        static_cast<int> (x) + 2, 34,
+                        40, kHeaderHeight - 36,
                         juce::Justification::centredLeft, false);
         }
     }
@@ -542,6 +561,11 @@ void PianoRollView::paint (juce::Graphics& g)
         }
     }
 
+}
+
+void PianoRollView::paintOverChildren (juce::Graphics& g)
+{
+    g.reduceClipRegion (noteLayer.getBounds());
     // ---- Marquee rubber-band selection rectangle ----
     if (isMarqueeActive)
     {
@@ -576,7 +600,7 @@ double PianoRollView::beatAtX (float x) const noexcept
 int PianoRollView::pitchAtY (float y) const noexcept
 {
     const double relative = (y - kHeaderHeight) / rowH;
-    return juce::jlimit (0, 127, scrollPitch - static_cast<int> (relative));
+    return juce::jlimit (0, 127, scrollPitch - static_cast<int> (std::floor (relative)));
 }
 
 bool PianoRollView::isInScale (int pitch) const noexcept
@@ -591,7 +615,8 @@ bool PianoRollView::isInScale (int pitch) const noexcept
 
 void PianoRollView::setHorizontalZoom (double pixelsPerBeat_)
 {
-    ppb = juce::jlimit (10.0, 400.0, pixelsPerBeat_);
+    fitOnResize = false;
+    ppb = juce::jlimit (1.0, 400.0, pixelsPerBeat_);
     resized();
     repaint();
     velocityLane->repaintLane();
@@ -600,7 +625,10 @@ void PianoRollView::setHorizontalZoom (double pixelsPerBeat_)
 
 void PianoRollView::setVerticalZoom (double rowHeightPixels)
 {
-    rowH = juce::jlimit (4.0, 40.0, rowHeightPixels);
+    fitOnResize = false;
+    const double centrePitch = scrollPitch - noteLayer.getHeight() / (2.0 * rowH);
+    rowH = juce::jlimit (1.0, 40.0, rowHeightPixels);
+    scrollPitch = juce::jlimit (0, 127, juce::roundToInt (centrePitch + noteLayer.getHeight() / (2.0 * rowH)));
     resized();
     repaint();
 }
@@ -734,6 +762,7 @@ void PianoRollView::deselectAll()
 
 void PianoRollView::deleteSelectedNotes()
 {
+    if (noteRebuildPending) return;
     auto& um = editManager.getUndoManager();
     um.beginNewTransaction ("Delete Selected Notes");
 
@@ -744,7 +773,7 @@ void PianoRollView::deleteSelectedNotes()
             toDelete.add (&nc->getNote());
 
     for (auto* n : toDelete)
-        removeNote (*n);
+        clip.getSequence().removeNote (*n, &um);
 }
 
 //==============================================================================
@@ -752,6 +781,7 @@ void PianoRollView::deleteSelectedNotes()
 //==============================================================================
 void PianoRollView::applyQuantize()
 {
+    if (noteRebuildPending) return;
     const double grid     = 4.0 / getGridDivisionDenominator();   // beats (4/4)
     const double strength = qStrength.getValue() / 100.0;
     const double swing    = qSwing.getValue()    / 100.0;
@@ -777,7 +807,7 @@ void PianoRollView::updateMarqueeSelection()
 {
     for (auto* nc : noteComponents)
     {
-        const bool intersects = marqueeRect.intersects (nc->getBounds().toFloat());
+        const bool intersects = marqueeRect.intersects (nc->getBounds().translated (noteLayer.getX(), noteLayer.getY()).toFloat());
         nc->setSelected (intersects);
     }
 }
@@ -804,7 +834,7 @@ void PianoRollView::rebuildNoteComponents()
                 deselectAll();
                 clicked->setSelected (true);
             };
-            addAndMakeVisible (nc);
+            noteLayer.addAndMakeVisible (nc);
             updateNoteComponentBounds (*nc);
         }
     }
@@ -812,13 +842,14 @@ void PianoRollView::rebuildNoteComponents()
 
 void PianoRollView::updateNoteComponentBounds (NoteComponent& nc)
 {
+    if (noteRebuildPending) return;
     const auto& note = nc.getNote();
     const float x    = xAtBeat (note.getStartBeat().inBeats());
     const float y    = yAtPitch (note.getNoteNumber());
     const float w    = static_cast<float> (note.getLengthBeats().inBeats() * ppb);
     const float h    = static_cast<float> (rowH);
 
-    nc.setBounds (static_cast<int> (x), static_cast<int> (y),
+    nc.setBounds (static_cast<int> (x) - noteLayer.getX(), static_cast<int> (y) - noteLayer.getY(),
                   juce::jmax (4, static_cast<int> (w)), static_cast<int> (h));
 
     nc.refreshTitle();   // Tonhoehe kann sich per Drag geaendert haben
@@ -826,6 +857,7 @@ void PianoRollView::updateNoteComponentBounds (NoteComponent& nc)
 
 void PianoRollView::updateAllNoteScaleColors()
 {
+    if (noteRebuildPending) return;
     for (auto* nc : noteComponents)
         nc->setInScale (isInScale (nc->getNote().getNoteNumber()));
 }
@@ -837,7 +869,7 @@ void PianoRollView::updateAllNoteScaleColors()
 void PianoRollView::mouseDown (const juce::MouseEvent& e)
 {
     // Only handle left-click in the grid area (not on keyboard or header)
-    if (e.x < kKeyboardWidth || e.y < kHeaderHeight)
+    if (! noteLayer.getBounds().contains (e.getPosition()))
         return;
 
     if (e.mods.isRightButtonDown())
@@ -862,7 +894,7 @@ void PianoRollView::mouseDown (const juce::MouseEvent& e)
 
 void PianoRollView::mouseDrag (const juce::MouseEvent& e)
 {
-    if (e.x < kKeyboardWidth || e.y < kHeaderHeight)
+    if (! noteLayer.getBounds().contains (e.getPosition()))
         return;
 
     if (!e.mods.isLeftButtonDown())
@@ -913,7 +945,12 @@ bool PianoRollView::keyPressed (const juce::KeyPress& key)
 void PianoRollView::mouseWheelMove (const juce::MouseEvent& e,
                                      const juce::MouseWheelDetails& wheel)
 {
-    if (e.mods.isCtrlDown() || e.mods.isCommandDown())
+    fitOnResize = false;
+    if ((e.mods.isCtrlDown() || e.mods.isCommandDown()) && e.mods.isShiftDown())
+    {
+        setVerticalZoom (rowH * (1.0 + wheel.deltaY));
+    }
+    else if (e.mods.isCtrlDown() || e.mods.isCommandDown())
     {
         // Ctrl+scroll = horizontal zoom
         setHorizontalZoom (ppb * (1.0 + wheel.deltaY * 0.2));
@@ -922,7 +959,7 @@ void PianoRollView::mouseWheelMove (const juce::MouseEvent& e,
     {
         // Shift+scroll = vertical scroll (pitch)
         scrollPitch = juce::jlimit (0, 127,
-                                    scrollPitch + static_cast<int> (wheel.deltaY * 3));
+                                    scrollPitch + juce::roundToInt (wheel.deltaY * 24));
         repaint();
         pianoKeyboard.repaint();
         for (auto* nc : noteComponents)
@@ -939,10 +976,13 @@ void PianoRollView::mouseWheelMove (const juce::MouseEvent& e,
         velocityLane->repaintLane();
         ccLane->repaintLane();
     }
+    resized();
+    repaint();
 }
 
 void PianoRollView::scrollBarMoved (juce::ScrollBar* bar, double newScrollPos)
 {
+    fitOnResize = false;
     if (bar == &hScrollBar)
     {
         scrollBeat = newScrollPos / ppb;
@@ -954,7 +994,7 @@ void PianoRollView::scrollBarMoved (juce::ScrollBar* bar, double newScrollPos)
     }
     else if (bar == &vScrollBar)
     {
-        scrollPitch = static_cast<int> (newScrollPos / rowH);
+        scrollPitch = juce::jlimit (0, 127, 127 - juce::roundToInt (newScrollPos / rowH));
         repaint();
         pianoKeyboard.repaint();
         for (auto* nc : noteComponents)
@@ -968,15 +1008,15 @@ void PianoRollView::scrollBarMoved (juce::ScrollBar* bar, double newScrollPos)
 
 void PianoRollView::valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&)
 {
-    juce::MessageManager::callAsync ([this] { rebuildNoteComponents(); repaint(); });
+    scheduleNoteRebuild();
 }
 
 void PianoRollView::valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int)
 {
-    juce::MessageManager::callAsync ([this] { rebuildNoteComponents(); repaint(); });
+    scheduleNoteRebuild();
 }
 
-void PianoRollView::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier&)
+void PianoRollView::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& id)
 {
     // Bis hierher war diese Methode LEER — Noten hinzufuegen/loeschen loeste einen
     // Rebuild aus, eine geaenderte Noten-POSITION dagegen nichts. Folge: beim Ziehen
@@ -987,8 +1027,49 @@ void PianoRollView::valueTreePropertyChanged (juce::ValueTree& tree, const juce:
     // Gemessen (GUI-Lauf 12.08.): Note bei x=440, Drag um +60 px -> Anzeige weiter
     // 440; nach erzwungenem Rebuild stand sie bei exakt 500. Die Engine hatte die
     // Note also korrekt bewegt, nur die Anzeige hing hinterher.
-    if (tree.hasType (te::IDs::NOTE))
+    if (tree == clip.state && id == te::IDs::currentTake)
+        scheduleNoteRebuild();
+    else if (tree.hasType (te::IDs::NOTE))
         scheduleNoteBoundsUpdate();
+}
+
+void PianoRollView::scheduleNoteRebuild()
+{
+    if (noteRebuildPending) return;
+    noteRebuildPending = true;
+    noteLayer.setVisible (false); // Removed notes must not remain interactive until the rebuild.
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<PianoRollView> (this)]
+    {
+        if (safe == nullptr) return;
+        safe->noteRebuildPending = false;
+        safe->rebuildNoteComponents();
+        safe->noteLayer.setVisible (true);
+        safe->repaint();
+        safe->velocityLane->repaintLane();
+    });
+}
+
+void PianoRollView::fitNotesInView()
+{
+    const auto& notes = clip.getSequence().getNotes();
+    int low = 48, high = 72;
+    double first = 0, last = juce::jmax (4.0, clip.getLengthInBeats().inBeats());
+    if (! notes.isEmpty())
+    {
+        low = 127; high = 0; first = std::numeric_limits<double>::max(); last = 0;
+        for (auto* n : notes)
+        {
+            low = juce::jmin (low, n->getNoteNumber());
+            high = juce::jmax (high, n->getNoteNumber());
+            first = juce::jmin (first, n->getStartBeat().inBeats());
+            last = juce::jmax (last, n->getStartBeat().inBeats() + n->getLengthBeats().inBeats());
+        }
+    }
+    const int rows = juce::jmax (12, high - low + 5);
+    rowH = juce::jlimit (1.0, 24.0, noteLayer.getHeight() / (double) rows);
+    scrollPitch = juce::jlimit (0, 127, juce::roundToInt ((high + low) * 0.5 + noteLayer.getHeight() / (2.0 * rowH)));
+    scrollBeat = juce::jmax (0.0, first - 0.5);
+    ppb = juce::jlimit (1.0, 400.0, noteLayer.getWidth() / juce::jmax (4.0, last - scrollBeat + 0.5));
 }
 
 void PianoRollView::scheduleNoteBoundsUpdate()
@@ -1006,6 +1087,7 @@ void PianoRollView::scheduleNoteBoundsUpdate()
             return;
 
         safe->noteBoundsUpdatePending = false;
+        if (safe->noteRebuildPending) return;
 
         for (auto* nc : safe->noteComponents)
             safe->updateNoteComponentBounds (*nc);

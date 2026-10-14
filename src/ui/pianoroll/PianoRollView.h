@@ -46,6 +46,9 @@ public:
 
     void resized() override;
     void paint   (juce::Graphics& g) override;
+    void paintOverChildren (juce::Graphics& g) override;
+    void fitNotesInView();
+    bool isNoteRebuildPending() const noexcept { return noteRebuildPending; }
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp   (const juce::MouseEvent& e) override;
@@ -88,7 +91,7 @@ private:
     int    scrollPitch = 60;  // vertical scroll — MIDI pitch at top row
 
     static constexpr int kKeyboardWidth = 40;
-    static constexpr int kHeaderHeight  = 32;
+    static constexpr int kHeaderHeight  = 64;
     static constexpr int kTotalPitches  = 128;
 
     // ---- Scale / key locking ----
@@ -105,6 +108,12 @@ private:
     juce::Slider     qStrength;     // 0..100 % (default 100)
     juce::Slider     qSwing;        // 0..100 % (default 0)
     juce::TextButton qApplyBtn { "Q" };
+    juce::TextButton fitNotesButton { "Alle Noten" };
+    juce::TextButton pitchZoomIn { "+" }, pitchZoomOut { "-" };
+    bool fitOnResize = true;
+    juce::Component noteLayer;
+    void scheduleNoteRebuild();
+    bool noteRebuildPending = false;
     void applyQuantize();           // Selektion, sonst alle Noten — 1 Undo
 
     // ---- Scroll bars ----

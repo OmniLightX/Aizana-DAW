@@ -1,4 +1,5 @@
 #include "ClipComponent.h"
+#include "MidiClipPreview.h"
 #include "ArrangementView.h"
 #include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
@@ -40,8 +41,7 @@ ClipComponent::ClipComponent (te::Clip& clip_, EditManager& editManager_,
     // Audio formats are registered once in the shared AudioThumbnailPool.
 
     clip.addSelectableListener (this);
-    if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
-        clip.state.addListener (this);
+    clip.state.addListener (this);
     refreshThumbnail();
 }
 
@@ -55,6 +55,11 @@ ClipComponent::~ClipComponent()
 
 void ClipComponent::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& prop)
 {
+    if (dynamic_cast<te::MidiClip*> (&clip) != nullptr)
+    {
+        repaint();
+        return;
+    }
     // Mute changes (mute tool, dock editor, undo) redraw the dimmed look immediately.
     if (tree == clip.state && prop == te::IDs::mute)
     {
@@ -216,6 +221,33 @@ void ClipComponent::paint (juce::Graphics& g)
             : "T" + juce::String (currentTakeIdx + 1) + "/" + juce::String (numTakes);
         g.drawText (badgeText, badgeRect.toNearestInt(), juce::Justification::centred, false);
         g.setFont (juce::FontOptions (11.0f)); // restore font for subsequent draw calls
+    }
+
+    if (auto* midi = dynamic_cast<te::MidiClip*> (&clip))
+    {
+        const auto notes = aizana::midiClipPreview (*midi);
+        if (! notes.empty())
+        {
+            const auto area = bounds.withTrimmedTop (kHeaderHeight + 3.0f).reduced (2.0f);
+            if (! area.isEmpty())
+            {
+                int low = 127, high = 0;
+                for (const auto& n : notes) { low = juce::jmin (low, n.pitch); high = juce::jmax (high, n.pitch); }
+                const float row = area.getHeight() / juce::jmax (12, high - low + 3);
+                const float centre = (high + low) * 0.5f;
+                const double duration = juce::jmax (0.001, clip.getPosition().getLength().inSeconds());
+                juce::Graphics::ScopedSaveState saved (g);
+                g.reduceClipRegion (area.toNearestInt());
+                g.setColour (juce::Colours::white.withAlpha (0.8f));
+                for (const auto& n : notes)
+                {
+                    const float x = area.getX() + float (n.start / duration) * area.getWidth();
+                    const float y = area.getCentreY() + (centre - n.pitch) * row;
+                    g.fillRect (x, y, juce::jmax (2.0f, float ((n.end - n.start) / duration) * area.getWidth()),
+                                juce::jmax (1.0f, juce::jmin (4.0f, row * 0.8f)));
+                }
+            }
+        }
     }
 
     // ---- Waveform thumbnail (WaveAudioClip only) ----
