@@ -1498,6 +1498,9 @@ void ClipComponent::mouseDoubleClick (const juce::MouseEvent& e)
     // Double-click on a MIDI clip -> open Piano Roll in docked bottom panel
     if (auto* midiClip = dynamic_cast<te::MidiClip*> (&clip))
     {
+        // The lower click zone starts a range without selecting. The dock follows
+        // selection, so explicitly select before opening it for this clip.
+        if (onSelectRequest) onSelectRequest (this);
         if (auto* mainComp = findParentComponentOfClass<MainComponent>())
             mainComp->showPianoRoll (*midiClip);
     }

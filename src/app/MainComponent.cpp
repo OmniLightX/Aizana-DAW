@@ -464,8 +464,9 @@ void MainComponent::resized()
         if (mixerHeightPx == 0)
             mixerHeightPx = (int)(totalAvail * 0.50f);
 
-        const int maxDockHeight = juce::jmax (kMixerMinHeight, totalAvail - kArrangementMinHeight);
-        mixerHeightPx = juce::jlimit (kMixerMinHeight, maxDockHeight, mixerHeightPx);
+        const int minDockHeight = activeBottomDock == BottomDock::Edit ? 320 : kMixerMinHeight;
+        const int maxDockHeight = juce::jmax (minDockHeight, totalAvail - kArrangementMinHeight);
+        mixerHeightPx = juce::jlimit (minDockHeight, maxDockHeight, mixerHeightPx);
         auto dockArea = area.removeFromBottom (mixerHeightPx);
 
         if (activeBottomDock == BottomDock::Mix)

@@ -2281,7 +2281,10 @@ void ArrangementView::rebuildTrackRows()
             {
                 if (clicked->isSelected() && selectedClips.size() > 1)
                 {
-                    // Keep the group selected; drag will start on the whole selection.
+                    // Keep the group selected for dragging, but make the clicked
+                    // clip primary so the dock also follows explicit double-clicks.
+                    selectedClips.removeAllInstancesOf (clicked);
+                    selectedClips.insert (0, clicked);
                     grabKeyboardFocus();
                     return;
                 }

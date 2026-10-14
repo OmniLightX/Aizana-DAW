@@ -309,7 +309,7 @@ PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
 
     fitNotesButton.setTitle ("Alle Noten anzeigen");
     fitNotesButton.setTooltip ("Tonbereich und Zeit auf die vorhandenen Noten anpassen");
-    fitNotesButton.onClick = [this] { fitOnResize = true; resized(); repaint(); };
+    fitNotesButton.onClick = [this] { overviewMode = true; fitOnResize = true; resized(); repaint(); };
     pitchZoomIn.setTitle ("Tonhoehen vergroessern");
     pitchZoomOut.setTitle ("Tonhoehen verkleinern");
     pitchZoomIn.onClick = [this] { setVerticalZoom (rowH * 1.25); };
@@ -319,6 +319,15 @@ PianoRollView::PianoRollView (te::MidiClip& clip_, EditManager& editManager_)
         button->setClickingTogglesState (false);
         addAndMakeVisible (button);
     }
+    controllerButton.setTitle ("Controller-Spur anzeigen");
+    controllerButton.setClickingTogglesState (false);
+    controllerButton.onClick = [this]
+    {
+        controllerVisible = !controllerVisible;
+        controllerButton.setToggleState (controllerVisible, juce::dontSendNotification);
+        resized(); repaint();
+    };
+    addAndMakeVisible (controllerButton);
     noteLayer.setInterceptsMouseClicks (false, true);
     addAndMakeVisible (noteLayer);
 
@@ -368,8 +377,8 @@ void PianoRollView::resized()
     const int h = bounds.getHeight();
 
     static constexpr int kScrollBarThickness = 12;
-    static constexpr int kVelocityLaneH      = 80;
-    static constexpr int kCCLaneH            = 60;
+    const int kVelocityLaneH = juce::jlimit (28, 48, h / 8);
+    const int kCCLaneH = controllerVisible ? 60 : 0;
     static constexpr int kTakesH             = 30;
 
     // Determine how much height takes panel needs
@@ -391,7 +400,8 @@ void PianoRollView::resized()
         qApplyBtn.setBounds (x, 2, 28, toolbarH - 4); x += 32;
         fitNotesButton.setBounds (x, 2, 90, toolbarH - 4); x += 94;
         pitchZoomOut.setBounds (x, 2, 24, toolbarH - 4); x += 26;
-        pitchZoomIn.setBounds (x, 2, 24, toolbarH - 4);
+        pitchZoomIn.setBounds (x, 2, 24, toolbarH - 4); x += 28;
+        controllerButton.setBounds (x, 2, 36, toolbarH - 4);
     }
 
     // Calculate grid area height
@@ -421,6 +431,7 @@ void PianoRollView::resized()
     velocityLane->setBounds (kKeyboardWidth, laneY, w - kKeyboardWidth - kScrollBarThickness, kVelocityLaneH);
     laneY += kVelocityLaneH;
 
+    ccLane->setVisible (controllerVisible);
     ccLane->setBounds (kKeyboardWidth, laneY, w - kKeyboardWidth - kScrollBarThickness, kCCLaneH);
     laneY += kCCLaneH;
 
@@ -440,15 +451,9 @@ void PianoRollView::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds();
     const int w = bounds.getWidth();
-    const int h = bounds.getHeight();
-
-    static constexpr int kVelocityLaneH = 80;
-    static constexpr int kCCLaneH       = 60;
     static constexpr int kScrollBarThick = 12;
-    const int takesH = (takesPanel != nullptr) ? 30 : 0;
-    const int lanesH = kVelocityLaneH + kCCLaneH + takesH + kScrollBarThick;
-    const int gridH  = h - kHeaderHeight - lanesH;
-    const int gridW  = w - kKeyboardWidth - kScrollBarThick;
+    const int gridH = noteLayer.getHeight();
+    const int gridW = noteLayer.getWidth();
 
     // ---- Background ----
     g.fillAll (juce::Colour (0xff1e1e1e));
@@ -1066,7 +1071,17 @@ void PianoRollView::fitNotesInView()
         }
     }
     const int rows = juce::jmax (12, high - low + 5);
-    rowH = juce::jlimit (1.0, 24.0, noteLayer.getHeight() / (double) rows);
+    rowH = juce::jlimit (overviewMode ? 1.0 : 12.0, 24.0,
+                           noteLayer.getHeight() / (double) rows);
+    if (! overviewMode && ! notes.isEmpty())
+    {
+        // Outlying pitches must not shrink the editing grid to hairlines.
+        // Start around the median performed pitch; All Notes remains an overview.
+        std::vector<int> pitches;
+        for (auto* n : notes) pitches.push_back (n->getNoteNumber());
+        std::sort (pitches.begin(), pitches.end());
+        low = high = pitches[pitches.size() / 2];
+    }
     scrollPitch = juce::jlimit (0, 127, juce::roundToInt ((high + low) * 0.5 + noteLayer.getHeight() / (2.0 * rowH)));
     scrollBeat = juce::jmax (0.0, first - 0.5);
     ppb = juce::jlimit (1.0, 400.0, noteLayer.getWidth() / juce::jmax (4.0, last - scrollBeat + 0.5));

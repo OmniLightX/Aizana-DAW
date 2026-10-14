@@ -110,6 +110,9 @@ private:
     juce::TextButton qApplyBtn { "Q" };
     juce::TextButton fitNotesButton { "Alle Noten" };
     juce::TextButton pitchZoomIn { "+" }, pitchZoomOut { "-" };
+    juce::TextButton controllerButton { "CC" };
+    bool controllerVisible = false;
+    bool overviewMode = false;
     bool fitOnResize = true;
     juce::Component noteLayer;
     void scheduleNoteRebuild();
