@@ -1,4 +1,5 @@
 #pragma once
+#include "TrackHeaderSelection.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -430,6 +431,7 @@ private:
 
     // ---- Track selection and drag-to-reorder ----
     TrackHeader* selectedTrackHeader = nullptr;
+    TrackHeaderSelection<tracktion::engine::EditItemID> trackHeaderSelection;
     int          dragOverRowIndex    = -1;  // row index for drop indicator line; -1 = none
 
     // ---- Inter-track drag guard ----
@@ -499,7 +501,7 @@ private:
         Einzige Quelle dieser Umrechnung — siehe Kommentar in der Implementierung. */
     int viewYToContainerY (int yInView) const;
 
-    void setSelectedTrackHeader (TrackHeader* header);
+    void setSelectedTrackHeader (TrackHeader* header, bool toggle = false);
 
     // ---- Marker lane (named song markers) — sits above the ruler ----
     MarkerLane markerLane;

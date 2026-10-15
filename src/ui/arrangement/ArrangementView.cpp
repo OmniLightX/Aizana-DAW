@@ -765,6 +765,7 @@ void ArrangementView::detachFromEdit()
 
     selectedClips.clear();
     selectedTrackHeader = nullptr;
+    trackHeaderSelection.clear();
     ghostDragActive = false;
     ghostSourceComp = nullptr;
     isInterTrackDragActive = false;
@@ -1393,8 +1394,10 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         {
             if (selectedTrackHeader != nullptr)
             {
-                // toggleMute() sets button state directly (no TE read-back) — guarantees visual update.
-                selectedTrackHeader->toggleMute();
+                juce::Array<te::AudioTrack*> targets;
+                for (auto* h : trackHeaders)
+                    if (trackHeaderSelection.contains (h->getTrack().itemID)) targets.add (&h->getTrack());
+                appState.mixerEngine.toggleMuteGroup (targets);
             }
             else if (! selectedClips.isEmpty())
             {
@@ -1422,8 +1425,10 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         {
             if (selectedTrackHeader != nullptr)
             {
-                // toggleSolo() sets button state directly (no TE read-back) — guarantees visual update.
-                selectedTrackHeader->toggleSolo();
+                juce::Array<te::AudioTrack*> targets;
+                for (auto* h : trackHeaders)
+                    if (trackHeaderSelection.contains (h->getTrack().itemID)) targets.add (&h->getTrack());
+                appState.mixerEngine.toggleSoloGroup (targets);
             }
             else if (! selectedClips.isEmpty())
             {
@@ -2237,8 +2242,8 @@ void ArrangementView::rebuildTrackRows()
         headerContainer.addAndMakeVisible (header);
 
         // Wire selection callback — left-click on header notifies ArrangementView
-        header->onSelectionRequest = [this] (TrackHeader* h) {
-            setSelectedTrackHeader (h);
+        header->onSelectionRequest = [this] (TrackHeader* h, bool toggle) {
+            setSelectedTrackHeader (h, toggle);
         };
 
         // Wire colour-change callback — repaint headers + timeline (rows + clips)
@@ -2379,14 +2384,16 @@ void ArrangementView::rebuildTrackRows()
 
     // Re-resolve the selection captured above onto the freshly built components
     // (selection survives splits/rebuilds; deleted clips simply drop out).
-    if (selectedTrackID.isValid())
-        for (auto* header : trackHeaders)
-            if (header->getTrack().itemID == selectedTrackID)
-            {
+    std::vector<te::EditItemID> liveTrackIDs;
+    for (auto* header : trackHeaders) liveTrackIDs.push_back (header->getTrack().itemID);
+    trackHeaderSelection.retain (liveTrackIDs);
+    for (auto* header : trackHeaders)
+        if (trackHeaderSelection.contains (header->getTrack().itemID))
+        {
+            header->setSelected (true);
+            if (selectedTrackHeader == nullptr || header->getTrack().itemID == selectedTrackID)
                 selectedTrackHeader = header;
-                header->setSelected (true);
-                break;
-            }
+        }
 
     if (! selectedClipIDs.empty())
         for (auto* row : trackRows)
@@ -2703,19 +2710,17 @@ void ArrangementView::importFilesAsTracks (const juce::Array<juce::File>& audioF
 //==============================================================================
 // Track selection
 
-void ArrangementView::setSelectedTrackHeader (TrackHeader* header)
+void ArrangementView::setSelectedTrackHeader (TrackHeader* header, bool toggle)
 {
-    if (selectedTrackHeader != nullptr && selectedTrackHeader != header)
-        selectedTrackHeader->setSelected (false);
-
-    selectedTrackHeader = header;
-
-    if (header != nullptr)
-        header->setSelected (true);
-
-    // Reclaim keyboard focus so S/M/R shortcuts work after TrackHeader clicks.
-    // TrackHeader mouseDown never bubbles to ArrangementView::mouseDown(), so focus
-    // must be grabbed here explicitly — same pattern as MixerView::setMixerSelectedTrack().
+    if (header == nullptr) trackHeaderSelection.clear();
+    else trackHeaderSelection.select (header->getTrack().itemID, toggle);
+    selectedTrackHeader = nullptr;
+    for (auto* h : trackHeaders)
+    {
+        const bool selected = trackHeaderSelection.contains (h->getTrack().itemID);
+        h->setSelected (selected);
+        if (selected && (selectedTrackHeader == nullptr || h == header)) selectedTrackHeader = h;
+    }
     grabKeyboardFocus();
 }
 

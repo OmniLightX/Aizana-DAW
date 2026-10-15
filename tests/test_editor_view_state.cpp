@@ -139,3 +139,18 @@ TEST_CASE ("AutomationLane mapping: viewport origin puts points under the wavefo
     // Regressions-Check des alten Fehlbilds: OHNE origin wäre der Punkt 34s zu früh
     CHECK_THAT (AutomationLane::laneXToTime (100.0f, pps, 0.0), WithinAbs (2.0, 1e-6));
 }
+
+#include "ui/arrangement/TrackHeaderSelection.h"
+TEST_CASE ("Track headers: command toggles selection and rebuild prunes removed IDs", "[trackselection]")
+{
+    TrackHeaderSelection<int> s;
+    s.select (1, false); s.select (2, true);
+    REQUIRE (s.contains (1)); REQUIRE (s.contains (2));
+    s.select (1, true); CHECK_FALSE (s.contains (1)); REQUIRE (s.contains (2));
+    s.select (2, true); CHECK (s.values().empty());
+    s.select (1, false); s.select (2, true); s.select (3, false);
+    REQUIRE (s.values().size() == 1); REQUIRE (s.contains (3));
+    s.select (2, true); s.retain ({ 2, 4 });
+    REQUIRE (s.values().size() == 1); CHECK (s.contains (2));
+    s.clear(); CHECK (s.values().empty());
+}

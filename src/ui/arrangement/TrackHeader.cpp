@@ -390,7 +390,7 @@ void TrackHeader::mouseDown (const juce::MouseEvent& e)
     {
         // Notify ArrangementView to update selection
         if (onSelectionRequest)
-            onSelectionRequest (this);
+            onSelectionRequest (this, e.mods.isCommandDown());
     }
 
     if (e.mods.isRightButtonDown())
@@ -799,7 +799,7 @@ void TrackHeader::refreshStereoButton()
 void TrackHeader::toggleTrackStereo()
 {
     // Clicking selects the track (Studio One behaviour) so S/M/R shortcuts target it.
-    if (onSelectionRequest) onSelectionRequest (this);
+    if (onSelectionRequest) onSelectionRequest (this, false);
 
     // Pure track channel-format flip — stored on the track state, undoable. It does
     // NOT reconfigure the hardware input (no setDeviceInChannelStereo), so it never
@@ -1193,14 +1193,14 @@ void TrackHeader::muteClicked()
 {
     // Clicking any button implicitly selects the track (Studio One behaviour),
     // so subsequent S/M keyboard shortcuts know which track to target.
-    if (onSelectionRequest) onSelectionRequest (this);
+    if (onSelectionRequest) onSelectionRequest (this, false);
     mixerEngine.setMute (track, muteButton.getToggleState());
     updateAccessibleNames();          // der Zustand steht mit im Namen
 }
 
 void TrackHeader::soloClicked()
 {
-    if (onSelectionRequest) onSelectionRequest (this);
+    if (onSelectionRequest) onSelectionRequest (this, false);
     mixerEngine.setSolo (track, soloButton.getToggleState());
     updateAccessibleNames();
 }

@@ -92,7 +92,7 @@ public:
     void populateInputSelector();
 
     // Callback: called by mouseDown (left click) to notify ArrangementView
-    std::function<void (TrackHeader*)> onSelectionRequest;
+    std::function<void (TrackHeader*, bool)> onSelectionRequest;
 
     /** Called after the track colour changes so ArrangementView can repaint the
      *  row wash + clips (which read the same colour via AizanaTrackColours). */
