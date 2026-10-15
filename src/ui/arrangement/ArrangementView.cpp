@@ -910,33 +910,23 @@ void ArrangementView::paint (juce::Graphics& g)
         g.fillRect (0, indicatorY - 1, getWidth(), 2);
     }
 
-    // ---- Selected clip highlights ----
-    if (! selectedClips.isEmpty())
-    {
-        const int timelineLeft = kHeaderWidth;
-        const int timelineTop  = kTimelineTopY;
+    // Selected clips paint their own highlight inside the clipped viewport.
+    // Duplicating it here paints scrolled-off clip bounds behind the toolbar.
 
-        g.setColour (juce::Colours::dodgerblue.withAlpha (0.25f));
-        for (auto* cc : selectedClips)
-        {
-            if (cc == nullptr) continue;
-            auto* row = cc->getParentComponent();   // clipArea
-            if (row == nullptr || row->getParentComponent() == nullptr) continue;
-            auto* trackRow = row->getParentComponent();  // TrackRow
-
-            auto bounds = cc->getBounds()
-                .translated (row->getX() + trackRow->getX(),
-                             row->getY() + trackRow->getY())
-                .translated (timelineLeft - timelineViewport.getViewPositionX(),
-                             timelineTop  - timelineViewport.getViewPositionY());
-
-            g.fillRect (bounds);
-        }
-    }
 }
 
 void ArrangementView::paintOverChildren (juce::Graphics& g)
 {
+    // Parent overlays do not inherit the viewport's child clipping. Keep their
+    // original timeline coordinates, but never paint over headers or scrollbars.
+    const juce::Graphics::ScopedSaveState overlayState (g);
+    const auto visibleTimeline = juce::Rectangle<int> (
+        timelineViewport.getX(), timelineViewport.getY(),
+        timelineViewport.getMaximumVisibleWidth(),
+        timelineViewport.getMaximumVisibleHeight());
+    if (! g.reduceClipRegion (visibleTimeline))
+        return;
+
     // Drawn AFTER all child components (clips, tracks) so all overlays are
     // always visible on top — paint() would be invisible behind the opaque TrackRows.
 
