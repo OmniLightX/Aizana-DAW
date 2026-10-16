@@ -9,12 +9,14 @@ class TrackHeaderSelection
 public:
     void select (ID id, bool toggle)
     {
+        active = true;
         if (! toggle) { ids = { id }; return; }
         auto it = std::find (ids.begin(), ids.end(), id);
         if (it == ids.end()) ids.push_back (id);
         else ids.erase (it);
     }
-    void clear() { ids.clear(); }
+    void clear() { ids.clear(); active = false; }
+    bool isActive() const { return active; }
     bool contains (ID id) const { return std::find (ids.begin(), ids.end(), id) != ids.end(); }
     const std::vector<ID>& values() const { return ids; }
     void retain (const std::vector<ID>& live)
@@ -25,4 +27,5 @@ public:
     }
 private:
     std::vector<ID> ids;
+    bool active = false;
 };

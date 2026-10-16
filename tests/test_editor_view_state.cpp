@@ -147,10 +147,10 @@ TEST_CASE ("Track headers: command toggles selection and rebuild prunes removed 
     s.select (1, false); s.select (2, true);
     REQUIRE (s.contains (1)); REQUIRE (s.contains (2));
     s.select (1, true); CHECK_FALSE (s.contains (1)); REQUIRE (s.contains (2));
-    s.select (2, true); CHECK (s.values().empty());
+    s.select (2, true); CHECK (s.values().empty()); CHECK (s.isActive());
     s.select (1, false); s.select (2, true); s.select (3, false);
     REQUIRE (s.values().size() == 1); REQUIRE (s.contains (3));
     s.select (2, true); s.retain ({ 2, 4 });
     REQUIRE (s.values().size() == 1); CHECK (s.contains (2));
-    s.clear(); CHECK (s.values().empty());
+    s.clear(); CHECK (s.values().empty()); CHECK_FALSE (s.isActive());
 }

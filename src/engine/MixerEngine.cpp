@@ -733,3 +733,42 @@ void MixerEngine::clearSidechainSource (te::Plugin& plugin)
             gate->setSidechainKeyEnabled (false);
     }
 }
+
+void MixerEngine::toggleMuteGroup (const juce::Array<te::AudioTrack*>& tracks)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr || tracks.isEmpty()) return;
+    juce::Array<te::AudioTrack*> targets;
+    bool enable = false;
+    for (auto* t : tracks)
+        if (t != nullptr && &t->edit == edit)
+        {
+            targets.addIfNotAlreadyThere (t);
+            enable = enable || ! t->isMuted (false);
+        }
+    if (targets.isEmpty()) return;
+    auto& um = edit->getUndoManager();
+    um.beginNewTransaction (enable ? "Spuren stummschalten" : "Stummschaltung aufheben");
+    for (auto* t : targets) t->state.setProperty (te::IDs::mute, enable, &um);
+}
+void MixerEngine::toggleSoloGroup (const juce::Array<te::AudioTrack*>& tracks)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr || tracks.isEmpty()) return;
+    juce::Array<te::AudioTrack*> targets;
+    bool enable = false;
+    for (auto* t : tracks)
+        if (t != nullptr && &t->edit == edit)
+        {
+            targets.addIfNotAlreadyThere (t);
+            enable = enable || ! t->isSolo (false);
+        }
+    if (targets.isEmpty()) return;
+    auto& um = edit->getUndoManager();
+    um.beginNewTransaction (enable ? "Spuren solo schalten" : "Solo aufheben");
+    for (auto* t : targets)
+    {
+        t->state.setProperty (te::IDs::soloIsolate, false, &um);
+        t->state.setProperty (te::IDs::solo, enable, &um);
+    }
+}

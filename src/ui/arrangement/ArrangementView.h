@@ -502,6 +502,7 @@ private:
     int viewYToContainerY (int yInView) const;
 
     void setSelectedTrackHeader (TrackHeader* header, bool toggle = false);
+    void toggleSelectedTrackHeaders (bool solo);
 
     // ---- Marker lane (named song markers) — sits above the ruler ----
     MarkerLane markerLane;

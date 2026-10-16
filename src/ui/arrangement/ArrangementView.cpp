@@ -1392,12 +1392,9 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         }
         if (key.getKeyCode() == 'm' || key.getKeyCode() == 'M')
         {
-            if (selectedTrackHeader != nullptr)
+            if (trackHeaderSelection.isActive())
             {
-                juce::Array<te::AudioTrack*> targets;
-                for (auto* h : trackHeaders)
-                    if (trackHeaderSelection.contains (h->getTrack().itemID)) targets.add (&h->getTrack());
-                appState.mixerEngine.toggleMuteGroup (targets);
+                toggleSelectedTrackHeaders (false);
             }
             else if (! selectedClips.isEmpty())
             {
@@ -1423,12 +1420,9 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         }
         if (key.getKeyCode() == 's' || key.getKeyCode() == 'S')
         {
-            if (selectedTrackHeader != nullptr)
+            if (trackHeaderSelection.isActive())
             {
-                juce::Array<te::AudioTrack*> targets;
-                for (auto* h : trackHeaders)
-                    if (trackHeaderSelection.contains (h->getTrack().itemID)) targets.add (&h->getTrack());
-                appState.mixerEngine.toggleSoloGroup (targets);
+                toggleSelectedTrackHeaders (true);
             }
             else if (! selectedClips.isEmpty())
             {
@@ -1453,10 +1447,15 @@ bool ArrangementView::keyPressed (const juce::KeyPress& key)
         }
         if (key.getKeyCode() == 'r' || key.getKeyCode() == 'R')
         {
-            if (selectedTrackHeader != nullptr)
+            if (trackHeaderSelection.isActive())
             {
-                selectedTrackHeader->toggleArm();
-                selectedTrackHeader->refresh();
+                // Recording remains explicit per primary track; do not arm additional
+                // microphones merely because headers were selected for mixing.
+                if (selectedTrackHeader != nullptr)
+                {
+                    selectedTrackHeader->toggleArm();
+                    selectedTrackHeader->refresh();
+                }
             }
             else
             {
@@ -1745,6 +1744,7 @@ void ArrangementView::mouseDown (const juce::MouseEvent& e)
 
     if (e.x < timelineLeft || e.y < timelineTop) return;
 
+    setSelectedTrackHeader (nullptr);
     const int xInTimeline = (e.x - timelineLeft) + timelineViewport.getViewPositionX();
     const double clickTimeSecs = juce::jmax (0.0, (double)xInTimeline / pixelsPerSecond);
 
@@ -2245,6 +2245,11 @@ void ArrangementView::rebuildTrackRows()
         header->onSelectionRequest = [this] (TrackHeader* h, bool toggle) {
             setSelectedTrackHeader (h, toggle);
         };
+        header->onMixToggleRequest = [this] (TrackHeader* h, bool solo) {
+            if (! trackHeaderSelection.contains (h->getTrack().itemID))
+                setSelectedTrackHeader (h);
+            toggleSelectedTrackHeaders (solo);
+        };
 
         // Wire colour-change callback — repaint headers + timeline (rows + clips)
         // so the colour strip, row wash and clip bodies all update together.
@@ -2274,6 +2279,7 @@ void ArrangementView::rebuildTrackRows()
             // Cmd+A), preserve the group so the user can start a group drag immediately.
             cc->onSelectRequest = [this] (ClipComponent* clicked)
             {
+                setSelectedTrackHeader (nullptr);
                 if (clicked->isSelected() && selectedClips.size() > 1)
                 {
                     // Keep the group selected for dragging, but make the clicked
@@ -2300,6 +2306,7 @@ void ArrangementView::rebuildTrackRows()
             // clearing other selected clips. Enables selecting exactly 2 clips for crossfade.
             cc->onCmdSelectRequest = [this] (ClipComponent* clicked)
             {
+                setSelectedTrackHeader (nullptr);
                 if (clicked->isSelected())
                 {
                     clicked->setSelected (false);
@@ -2710,10 +2717,26 @@ void ArrangementView::importFilesAsTracks (const juce::Array<juce::File>& audioF
 //==============================================================================
 // Track selection
 
+void ArrangementView::toggleSelectedTrackHeaders (bool solo)
+{
+    juce::Array<te::AudioTrack*> targets;
+    for (auto* h : trackHeaders)
+        if (trackHeaderSelection.contains (h->getTrack().itemID)) targets.add (&h->getTrack());
+    if (solo) mixerEngine.toggleSoloGroup (targets);
+    else mixerEngine.toggleMuteGroup (targets);
+    for (auto* h : trackHeaders) h->refresh();
+}
+
 void ArrangementView::setSelectedTrackHeader (TrackHeader* header, bool toggle)
 {
     if (header == nullptr) trackHeaderSelection.clear();
-    else trackHeaderSelection.select (header->getTrack().itemID, toggle);
+    else
+    {
+        trackHeaderSelection.select (header->getTrack().itemID, toggle);
+        for (auto* cc : selectedClips) cc->setSelected (false);
+        selectedClips.clear();
+        rangeActive = false;
+    }
     selectedTrackHeader = nullptr;
     for (auto* h : trackHeaders)
     {
@@ -2863,6 +2886,7 @@ void ArrangementView::deselectAllClips()
 
 void ArrangementView::startRangeSelectionFromClickZone (const juce::MouseEvent& e)
 {
+    setSelectedTrackHeader (nullptr);
     // Called by ClipComponent when Pointer tool + mouse in lower half of clip.
     // Starts a temporary time-range selection without switching activeTool.
     commandDragMarqueeActive = true;
@@ -3123,16 +3147,19 @@ bool ArrangementView::deleteSelection()
         return true;
     }
 
-    // Finally: a selected track header deletes that track (Studio One parity —
-    // select track, press Delete). Immediate and undoable (Cmd+Z), no confirmation.
-    if (selectedTrackHeader != nullptr)
+    // Header selection deletes the complete group in one transaction. Resolve
+    // IDs again for each removal; never retain component pointers across rebuilds.
+    if (! trackHeaderSelection.values().empty())
     {
-        auto& track = selectedTrackHeader->getTrack();
-        const auto name = track.getName();
-        setSelectedTrackHeader (nullptr);   // detach before the header is rebuilt away
-        auto& um = appState.editManager.getUndoManager();
-        um.beginNewTransaction ("Delete Track: " + name);
-        track.edit.deleteTrack (&track);    // ValueTree listener rebuilds the rows
+        const auto ids = trackHeaderSelection.values();
+        setSelectedTrackHeader (nullptr);
+        if (auto* edit = appState.editManager.getEdit())
+        {
+            edit->getUndoManager().beginNewTransaction ("Spuren entfernen");
+            for (auto id : ids)
+                for (auto* track : te::getAudioTracks (*edit))
+                    if (track->itemID == id) { edit->deleteTrack (track); break; }
+        }
         return true;
     }
 

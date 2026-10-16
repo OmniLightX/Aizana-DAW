@@ -385,3 +385,43 @@ TEST_CASE ("Track meter detaches from its original plugin after insertion undo",
         subscription.detach(); // idempotent even after the plugin returns
     }
 }
+
+TEST_CASE ("Selected tracks mute and solo together in one undo step", "[trackselection][group-toggle]")
+{
+    EditManager em; em.createNewEdit(); MixerEngine mixer (em);
+    auto& edit = *em.getEdit();
+    auto* a = getFirstAudioTrack (edit);
+    auto b = edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+    auto control = edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+    REQUIRE (a != nullptr); REQUIRE (b != nullptr); REQUIRE (control != nullptr);
+    auto& um = em.getUndoManager();
+    SECTION ("mixed mute states unify and undo restores both")
+    {
+        mixer.setMute (*a, true); um.clearUndoHistory();
+        mixer.toggleMuteGroup ({ a, b.get() });
+        REQUIRE (a->isMuted (false)); REQUIRE (b->isMuted (false));
+        CHECK_FALSE (control->isMuted (false));
+        REQUIRE (um.undo()); CHECK (a->isMuted (false)); CHECK_FALSE (b->isMuted (false));
+        CHECK_FALSE (um.canUndo());
+        REQUIRE (um.redo()); CHECK (b->isMuted (false));
+        mixer.toggleMuteGroup ({ a, b.get() });
+        CHECK_FALSE (a->isMuted (false)); CHECK_FALSE (b->isMuted (false));
+    }
+    SECTION ("solo isolation and both states round trip together")
+    {
+        a->setSoloIsolate (true); um.clearUndoHistory();
+        mixer.toggleSoloGroup ({ a, b.get() });
+        REQUIRE (a->isSolo (false)); REQUIRE (b->isSolo (false));
+        CHECK_FALSE (a->isSoloIsolate (false)); CHECK_FALSE (control->isSolo (false));
+        REQUIRE (um.undo()); CHECK_FALSE (a->isSolo (false)); CHECK_FALSE (b->isSolo (false));
+        CHECK (a->isSoloIsolate (false)); CHECK_FALSE (um.canUndo());
+        REQUIRE (um.redo()); CHECK (a->isSolo (false)); CHECK (b->isSolo (false));
+        mixer.toggleSoloGroup ({ a, b.get() });
+        CHECK_FALSE (a->isSolo (false)); CHECK_FALSE (b->isSolo (false));
+    }
+    SECTION ("empty group changes nothing")
+    {
+        um.clearUndoHistory(); mixer.toggleMuteGroup ({}); mixer.toggleSoloGroup ({});
+        CHECK_FALSE (um.canUndo()); CHECK_FALSE (control->isMuted (false));
+    }
+}

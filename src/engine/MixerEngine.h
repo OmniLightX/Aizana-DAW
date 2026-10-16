@@ -98,6 +98,10 @@ public:
     /** Mute/unmute this track. Undoable. */
     void setMute (te::AudioTrack& track, bool mute);
 
+    // Selected-track commands: one transaction for the complete group.
+    void toggleMuteGroup (const juce::Array<te::AudioTrack*>& tracks);
+    void toggleSoloGroup (const juce::Array<te::AudioTrack*>& tracks);
+
     /** Returns true if the track is currently explicitly soloed. */
     bool isSoloed (const te::AudioTrack& track) const;
 

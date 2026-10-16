@@ -93,6 +93,8 @@ public:
 
     // Callback: called by mouseDown (left click) to notify ArrangementView
     std::function<void (TrackHeader*, bool)> onSelectionRequest;
+    // Arrangement can apply M/S to its current header group (bool = solo).
+    std::function<void (TrackHeader*, bool)> onMixToggleRequest;
 
     /** Called after the track colour changes so ArrangementView can repaint the
      *  row wash + clips (which read the same colour via AizanaTrackColours). */

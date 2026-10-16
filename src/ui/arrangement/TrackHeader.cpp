@@ -1191,6 +1191,7 @@ void TrackHeader::handleDeleteTrack()
 
 void TrackHeader::muteClicked()
 {
+    if (onMixToggleRequest) { onMixToggleRequest (this, false); return; }
     // Clicking any button implicitly selects the track (Studio One behaviour),
     // so subsequent S/M keyboard shortcuts know which track to target.
     if (onSelectionRequest) onSelectionRequest (this, false);
@@ -1200,6 +1201,7 @@ void TrackHeader::muteClicked()
 
 void TrackHeader::soloClicked()
 {
+    if (onMixToggleRequest) { onMixToggleRequest (this, true); return; }
     if (onSelectionRequest) onSelectionRequest (this, false);
     mixerEngine.setSolo (track, soloButton.getToggleState());
     updateAccessibleNames();
