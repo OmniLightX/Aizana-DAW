@@ -1,4 +1,5 @@
 #pragma once
+#include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -46,45 +47,11 @@ public:
     // -------------------------------------------------------------------------
     // MasterInsertSlotPanel — insert slots backed by Edit::getMasterPluginList()
     // -------------------------------------------------------------------------
-    class MasterInsertSlotPanel : public juce::Component
+    class MasterInsertSlotPanel : public InsertRack
     {
     public:
-        MasterInsertSlotPanel (te::Edit& edit,
-                               PluginWindowManager& pluginWindowManager,
-                               PluginScanner& pluginScanner);
-
-        void resized() override;
-        void paint   (juce::Graphics& g) override;
-        void refresh();
-
-        static constexpr int kVisibleSlots = 6;
-        static constexpr int kSlotHeight   = 18;
-
-    private:
-        te::Edit&            edit;
-        PluginWindowManager& pluginWindowManager;
-        PluginScanner&       pluginScanner;
-
-        struct SlotButton : public juce::Component
-        {
-            te::Plugin* plugin = nullptr;
-            std::function<void()> onClick;
-            std::function<void()> onDoubleClick;
-            std::function<void()> onRightClick;
-
-            void paint (juce::Graphics& g) override;
-            void mouseDown (const juce::MouseEvent& e) override;
-            void mouseDoubleClick (const juce::MouseEvent& e) override;
-        };
-
-        juce::Viewport              slotsViewport;
-        juce::Component             slotsContent;
-        juce::OwnedArray<SlotButton> slots;
-
-        void showAddPluginMenu (int slotIndex);
-        void showRemovePluginMenu (te::Plugin* plugin);
-
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterInsertSlotPanel)
+        MasterInsertSlotPanel(te::Edit& e, PluginWindowManager& w, PluginScanner& s)
+            : InsertRack(e.getMasterPluginList(),w,s) {}
     };
 
 private:

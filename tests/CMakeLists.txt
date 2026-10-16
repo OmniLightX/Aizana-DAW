@@ -65,6 +65,7 @@ target_sources(engine_tests PRIVATE
     test_vst3_scan.cpp
     test_au_scan.cpp
     test_clap_host.cpp
+    test_fx_chain.cpp
     test_plugin_chain_order.cpp
     test_oop_audio_ring.cpp
     test_oop_plugin_host_bridge.cpp
@@ -161,6 +162,7 @@ target_sources(engine_tests PRIVATE
     ../src/plugins/PluginScanner.cpp
     ../src/plugins/OutOfProcessPluginScanner.cpp
     ../src/plugins/PluginManager.cpp
+    ../src/plugins/FxChainOperations.cpp
     ../src/plugins/oop/SharedAudioRing.cpp
     ../src/plugins/oop/PluginHostBridge.cpp
     ../src/plugins/oop/OobAudioMarshal.cpp

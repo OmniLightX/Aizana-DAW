@@ -50,6 +50,12 @@ void PluginWindowManager::closePluginWindow (te::Plugin& plugin)
     });
 }
 
+void PluginWindowManager::closePluginWindowNow(te::Plugin& plugin)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    closeWindow_msgThread(plugin);
+}
+
 bool PluginWindowManager::isPluginWindowOpen (const te::Plugin& plugin) const
 {
     jassert (juce::MessageManager::getInstance()->isThisTheMessageThread());

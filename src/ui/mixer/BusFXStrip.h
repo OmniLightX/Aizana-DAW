@@ -1,4 +1,5 @@
 #pragma once
+#include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -102,54 +103,11 @@ private:
     MiniMeter meterDisplay;
 
     // ---- Insert slot panel (shared logic, thin wrapper) ----
-    struct InsertSlotPanel : public juce::Component
+    struct InsertSlotPanel : public InsertRack
     {
-        static constexpr int kSlotHeight    = 18;
-        static constexpr int kVisibleSlots  = 6;
-
-        struct SlotButton : public juce::Component
-        {
-            te::Plugin* plugin = nullptr;
-            std::function<void()> onClick, onDoubleClick, onRightClick;
-            std::function<void (const juce::MouseEvent&)> onDragMove, onDragEnd;
-            void paint (juce::Graphics& g) override;
-            void mouseDown (const juce::MouseEvent& e) override;
-            void mouseDrag (const juce::MouseEvent& e) override;
-            void mouseUp   (const juce::MouseEvent& e) override;
-            void mouseDoubleClick (const juce::MouseEvent&) override;
-
-        private:
-            bool dragging = false;
-        };
-
-        InsertSlotPanel (te::AudioTrack& track_,
-                         MixerEngine& me,
-                         PluginManager& pm,
-                         PluginWindowManager& pwm,
-                         PluginScanner& ps);
-
-        void resized() override;
-        void paint (juce::Graphics& g) override;
-        void paintOverChildren (juce::Graphics& g) override;  // drag-reorder insertion line
-        void refresh();
-
-    private:
-        te::AudioTrack&       track;
-        MixerEngine&          mixerEngine;
-        PluginManager&        pluginManager;
-        PluginWindowManager&  pluginWindowManager;
-        PluginScanner&        pluginScanner;
-
-        juce::Viewport          slotsViewport;
-        juce::Component         slotsContent;
-        juce::OwnedArray<SlotButton> slots;
-
-        int dragTargetSlot = -1;   // visible slot the drag currently hovers (-1 = no drag)
-
-        void showAddPluginMenu (int slotIndex);
-        void showSlotContextMenu (te::Plugin* plugin);   // Remove + Sidechain source
-        int  slotIndexForEvent (const juce::MouseEvent& e);
-        void commitSlotDrag (int fromSlot, int toSlot);
+        InsertSlotPanel(te::AudioTrack& t, MixerEngine& m, PluginManager&,
+                        PluginWindowManager& w, PluginScanner& s)
+            : InsertRack(t.pluginList,w,s,&m) {}
     };
 
     InsertSlotPanel insertSlotPanel;

@@ -74,6 +74,9 @@ public:
      */
     void closePluginWindow (te::Plugin& plugin);
 
+    // Before list mutations destroy a plugin: close editors on the message thread.
+    void closePluginWindowNow(te::Plugin& plugin);
+
     /**
      * Returns true if any window (floating or docked) exists for this plugin.
      * Call from message thread only.

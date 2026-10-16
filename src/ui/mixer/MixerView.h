@@ -36,7 +36,7 @@ namespace te = tracktion::engine;
  *
  * Meter updates: 24fps timer pushes values to all strips via setMeterValues().
  */
-class MixerView : public juce::Component,
+class MixerView : public juce::Component, public juce::DragAndDropContainer,
                   private juce::ValueTree::Listener,
                   private juce::Timer
 {

@@ -240,6 +240,7 @@ target_sources(Aizana PRIVATE
     src/plugins/PluginScanner.cpp
     src/plugins/OutOfProcessPluginScanner.cpp
     src/plugins/PluginManager.cpp
+    src/plugins/FxChainOperations.cpp
     # Out-of-process plugin hosting transport (E5 — plugin-hang hardening)
     src/plugins/oop/SharedAudioRing.cpp
     src/plugins/oop/PluginHostBridge.cpp
@@ -269,6 +270,7 @@ target_sources(Aizana PRIVATE
     src/ui/arrangement/TrackHeader.cpp
     src/ui/arrangement/ClipComponent.cpp
     src/ui/mixer/MixerView.cpp
+    src/ui/mixer/InsertRack.cpp
     src/ui/mixer/ChannelStrip.cpp
     src/ui/mixer/MasterStrip.cpp
     src/ui/mixer/BusFXStrip.cpp

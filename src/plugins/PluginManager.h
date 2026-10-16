@@ -28,6 +28,8 @@ public:
     PluginManager (PluginScanner& scanner, EditManager& editManager);
     ~PluginManager() = default;
 
+    static juce::PluginDescription hostingDescription(const juce::PluginDescription&);
+
     // ---------------------------------------------------------------------------
     // PLUG-04: Insert chain management
     // ---------------------------------------------------------------------------

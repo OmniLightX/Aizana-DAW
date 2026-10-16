@@ -1,4 +1,5 @@
 #pragma once
+#include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "ui/common/PanKnobLookAndFeel.h"
@@ -163,67 +164,12 @@ public:
      *
      * Auto-refreshes via ChannelStrip::valueTreeChildAdded/Removed when plugins are changed.
      */
-    class InsertSlotPanel : public juce::Component
+    class InsertSlotPanel : public InsertRack
     {
     public:
-        InsertSlotPanel (te::Track& track,
-                         MixerEngine& mixerEngine,
-                         PluginManager& pluginManager,
-                         PluginWindowManager& pluginWindowManager,
-                         PluginScanner& pluginScanner);
-
-        void resized() override;
-        void paint (juce::Graphics& g) override;
-        void paintOverChildren (juce::Graphics& g) override;  // drag-reorder insertion line
-
-        /** Rebuild slot display from track's current plugin chain. */
-        void refresh();
-
-        /** Number of slots visible without scrolling (used for fixed height in strip layout). */
-        static constexpr int kVisibleSlots = 6;
-        static constexpr int kSlotHeight   = 18;
-
-    private:
-        te::Track&           track;
-        MixerEngine&         mixerEngine;
-        PluginManager&       pluginManager;
-        PluginWindowManager& pluginWindowManager;
-        PluginScanner&       pluginScanner;
-
-        struct SlotButton : public juce::Component
-        {
-            te::Plugin* plugin = nullptr;  // nullptr = empty slot
-            std::function<void()> onClick;
-            std::function<void()> onDoubleClick;
-            std::function<void()> onRightClick;
-            std::function<void (const juce::MouseEvent&)> onDragMove;  // reorder drag in progress
-            std::function<void (const juce::MouseEvent&)> onDragEnd;   // reorder drag released
-
-            void paint (juce::Graphics& g) override;
-            void mouseDown (const juce::MouseEvent& e) override;
-            void mouseDrag (const juce::MouseEvent& e) override;
-            void mouseUp   (const juce::MouseEvent& e) override;
-            void mouseDoubleClick (const juce::MouseEvent& e) override;
-
-        private:
-            bool dragging = false;
-        };
-
-        // Scrollable container for unlimited slots
-        juce::Viewport   slotsViewport;
-        juce::Component  slotsContent;
-
-        juce::OwnedArray<SlotButton> slots;
-
-        // Drag-reorder state: visible slot the drag currently hovers (-1 = no drag)
-        int dragTargetSlot = -1;
-
-        void showAddPluginMenu (int slotIndex);
-        void showSlotContextMenu (te::Plugin* plugin);   // Remove + Sidechain source
-        int  slotIndexForEvent (const juce::MouseEvent& e);
-        void commitSlotDrag (int fromSlot, int toSlot);
-
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InsertSlotPanel)
+        InsertSlotPanel(te::Track& t, MixerEngine& m, PluginManager&,
+                        PluginWindowManager& w, PluginScanner& s)
+            : InsertRack(t.pluginList,w,s,&m) {}
     };
 
 private:

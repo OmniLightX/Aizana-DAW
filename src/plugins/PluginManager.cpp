@@ -30,6 +30,9 @@ namespace
     }
 }
 
+juce::PluginDescription PluginManager::hostingDescription(const juce::PluginDescription& d)
+{ return maybeRouteOutOfProcess(d); }
+
 PluginManager::PluginManager (PluginScanner& scanner, EditManager& editManager)
     : scanner     (scanner)
     , editManager (editManager)
