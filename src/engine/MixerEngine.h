@@ -69,6 +69,9 @@ public:
     /** Set track volume in dB (-144 = -inf, +6 = max). Undoable. */
     void setVolume (te::AudioTrack& track, float dB);
 
+    /** Gesture/batch update: caller owns transaction start and end. */
+    void setVolumeInCurrentTransaction (te::AudioTrack& track, float dB);
+
     /** Return track volume in dB from VolumeAndPanPlugin. */
     float getVolume (const te::AudioTrack& track) const;
 

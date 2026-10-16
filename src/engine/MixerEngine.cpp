@@ -14,16 +14,18 @@ MixerEngine::MixerEngine (EditManager& em)
 
 void MixerEngine::setVolume (te::AudioTrack& track, float dB)
 {
-    auto* edit = editManager.getEdit();
-    jassert (edit != nullptr);
+    track.edit.getUndoManager().beginNewTransaction ("Set volume");
+    setVolumeInCurrentTransaction (track, dB);
+}
 
+void MixerEngine::setVolumeInCurrentTransaction (te::AudioTrack& track, float dB)
+{
     auto* vp = track.getVolumePlugin();
     if (vp == nullptr)
         return;
 
     const float faderPos = te::decibelsToVolumeFaderPosition (dB);
-    edit->getUndoManager().beginNewTransaction ("Set volume");
-    vp->volume.setValue (faderPos, &edit->getUndoManager());
+    vp->volume.setValue (faderPos, &track.edit.getUndoManager());
     vp->setSliderPos (faderPos);
 }
 

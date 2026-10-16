@@ -235,6 +235,7 @@ private:
 
     bool             isSelected = false;
     MeterBar         meterBar;
+    bool volumeGestureActive = false;
     juce::Slider     volumeFader;
     PanKnobLookAndFeel panLnf;   // UX4: S1-Arc-Knob — VOR panKnob deklariert
                                  // (Member-Dtor-Reihenfolge: Knob löst LnF im Strip-Dtor)

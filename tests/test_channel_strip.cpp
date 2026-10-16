@@ -425,3 +425,38 @@ TEST_CASE ("Selected tracks mute and solo together in one undo step", "[tracksel
         CHECK_FALSE (um.canUndo()); CHECK_FALSE (control->isMuted (false));
     }
 }
+
+TEST_CASE ("Mixer: a continuous grouped fader move is one undo step", "[mixer][fader-gesture]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto& edit = *em.getEdit();
+    MixerEngine mixer (em);
+    auto* a = getFirstAudioTrack (edit);
+    auto b = edit.insertNewAudioTrack (te::TrackInsertPoint::getEndOfTracks (edit), nullptr);
+    REQUIRE (a != nullptr);
+    REQUIRE (b != nullptr);
+    mixer.setVolume (*a, -3.4f);
+    mixer.setVolume (*b, -7.0f);
+    auto& undo = edit.getUndoManager();
+    undo.clearUndoHistory();
+    undo.beginNewTransaction ("Volume fader");
+    for (float delta : { 0.2f, 0.8f, 1.5f, 2.9f })
+    {
+        mixer.setVolumeInCurrentTransaction (*a, -3.4f + delta);
+        mixer.setVolumeInCurrentTransaction (*b, -7.0f + delta);
+    }
+    undo.beginNewTransaction(); // mouse-up isolates the next user action
+    REQUIRE (undo.undo());
+    CHECK_THAT (mixer.getVolume (*a), Catch::Matchers::WithinAbs (-3.4f, 0.01f));
+    CHECK_THAT (mixer.getVolume (*b), Catch::Matchers::WithinAbs (-7.0f, 0.01f));
+    CHECK_FALSE (undo.canUndo());
+    REQUIRE (undo.redo());
+    CHECK_THAT (mixer.getVolume (*a), Catch::Matchers::WithinAbs (-0.5f, 0.01f));
+    CHECK_THAT (mixer.getVolume (*b), Catch::Matchers::WithinAbs (-4.1f, 0.01f));
+    mixer.setVolume (*a, -12.0f); // numeric entry remains a separate action
+    REQUIRE (undo.undo());
+    CHECK_THAT (mixer.getVolume (*a), Catch::Matchers::WithinAbs (-0.5f, 0.01f));
+    REQUIRE (undo.undo());
+    CHECK_THAT (mixer.getVolume (*a), Catch::Matchers::WithinAbs (-3.4f, 0.01f));
+}

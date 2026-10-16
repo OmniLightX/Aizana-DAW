@@ -637,15 +637,25 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
         volumeChanged();                                   // always moves this strip's own track
         if (onVolumeChanged) onVolumeChanged (volumeFader.getValue());  // group sync (MixerView)
     };
-    volumeFader.onDragStart = [this] { if (onVolumeDragStart) onVolumeDragStart(); };
-    volumeFader.onDragEnd   = [this] { if (onVolumeDragEnd)   onVolumeDragEnd();   };
+    volumeFader.onDragStart = [this]
+    {
+        track.edit.getUndoManager().beginNewTransaction ("Volume fader");
+        volumeGestureActive = true;
+        if (onVolumeDragStart) onVolumeDragStart();
+    };
+    volumeFader.onDragEnd = [this]
+    {
+        if (onVolumeDragEnd) onVolumeDragEnd();
+        volumeGestureActive = false;
+        track.edit.getUndoManager().beginNewTransaction();
+    };
 
     // ---- Pan knob ----
     panKnob.setSliderStyle     (juce::Slider::RotaryHorizontalVerticalDrag);
     panKnob.setTextBoxStyle    (juce::Slider::NoTextBox, false, 0, 0);
     panKnob.setRange           (-1.0, 1.0, 0.01);
     panKnob.setDoubleClickReturnValue (true, 0.0);  // double-click resets centre
-    panKnob.setValue           (0.0, juce::dontSendNotification);  // default centre
+    panKnob.setValue           (mixerEngine.getPan (track), juce::dontSendNotification);
     panKnob.setLookAndFeel     (&panLnf);           // UX4: S1-Arc statt Default-Rotary
     panKnob.setMouseDragSensitivity (380);          // UX4: feinere Kontrolle (Default 250)
     panKnob.onValueChange = [this] { panChanged(); };
@@ -679,7 +689,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     // ---- Pan value label (numeric readout: L33 / C / R48) ----
     // UX4: Doppelklick = Wert eintippen ("L45", "R30", "C", "-20"); ungültige
     // Eingabe stellt den alten Wert wieder her.
-    panValueLabel.setText ("C", juce::dontSendNotification);
+    panValueLabel.setText (aizana::panvalue::format (panKnob.getValue()), juce::dontSendNotification);
     panValueLabel.setJustificationType (juce::Justification::centred);
     panValueLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     panValueLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
@@ -884,12 +894,10 @@ void ChannelStrip::rebuildSends (const juce::Array<te::AudioTrack*>& fxChannels)
 
 void ChannelStrip::volumeChanged()
 {
-    // Each fader drag gesture should create one undo transaction.
-    // beginNewTransaction is called once; subsequent value changes during the
-    // same drag gesture merge into the open transaction automatically.
-    auto& um = track.edit.getUndoManager();
-    um.beginNewTransaction ("Volume fader");
-    mixerEngine.setVolume (track, (float)volumeFader.getValue());
+    if (volumeGestureActive)
+        mixerEngine.setVolumeInCurrentTransaction (track, (float) volumeFader.getValue());
+    else
+        mixerEngine.setVolume (track, (float) volumeFader.getValue());
 }
 
 void ChannelStrip::followAutomation()

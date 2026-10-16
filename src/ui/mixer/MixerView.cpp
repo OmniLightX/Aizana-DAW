@@ -737,7 +737,7 @@ void MixerView::applyFaderGroup (ChannelStrip* anchor, double newDb)
             continue;
 
         const double target = juce::jlimit (-60.0, 6.0, it->second + delta);
-        mixerEngine.setVolume (s->getTrack(), (float) target);  // merges into anchor's undo txn
+        mixerEngine.setVolumeInCurrentTransaction (s->getTrack(), (float) target);
         s->refresh();                                            // sync the sibling's fader
     }
 }
