@@ -68,6 +68,7 @@ target_sources(engine_tests PRIVATE
     test_clap_host.cpp
     test_fx_chain.cpp
     test_plugin_chain_order.cpp
+    ../src/ui/pluginwin/DockedPluginPanel.cpp
     test_oop_audio_ring.cpp
     test_oop_plugin_host_bridge.cpp
     test_oop_host_marshal.cpp

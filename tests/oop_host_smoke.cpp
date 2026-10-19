@@ -43,7 +43,14 @@ namespace
         bool acceptsMidi() const override { return true; }
         bool producesMidi() const override { return true; }
         juce::AudioProcessorEditor* createEditor() override { return nullptr; }
-        bool hasEditor() const override { return false; }
+        bool hasEditor() const override
+        {
+            // Metadata queries may execute UI/plugin code. Abort the worker if
+            // the coordinator dispatch regresses to the IPC receiver thread.
+            if (! juce::MessageManager::getInstance()->isThisTheMessageThread())
+                std::_Exit (31);
+            return false;
+        }
         int getNumPrograms() override { return 1; }
         int getCurrentProgram() override { return 0; }
         void setCurrentProgram (int) override {}

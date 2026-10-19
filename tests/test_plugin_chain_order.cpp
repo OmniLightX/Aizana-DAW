@@ -11,6 +11,8 @@
 #include "../src/engine/EditManager.h"
 #include "../src/plugins/PluginManager.h"
 #include "../src/plugins/PluginScanner.h"
+#include "ui/pluginwin/PluginEditorWrapper.h"
+#include "ui/pluginwin/DockedPluginPanel.h"
 
 // ---------------------------------------------------------------------------
 // Helper: Insert a VolumeAndPanPlugin (built-in TE plugin) using the low-level
@@ -415,4 +417,73 @@ TEST_CASE ("PluginManager: insertPlugin registers the description with the engin
     pluginManager.insertPlugin (*track, desc);
 
     CHECK (engineList.getTypeForIdentifierString (idString) != nullptr);
+}
+
+TEST_CASE ("Plugin window wrapper destroys its owned editor on close", "[plugins][editor-lifetime]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    EditManager manager;
+    manager.createNewEdit();
+    auto tracks = te::getAudioTracks (*manager.getEdit());
+    REQUIRE (! tracks.isEmpty());
+    auto* plugin = tracks[0]->getVolumePlugin();
+    REQUIRE (plugin != nullptr);
+    int destroyed = 0;
+    struct EditorProbe : juce::Component
+    {
+        int& count;
+        explicit EditorProbe (int& n) : count (n) { setSize (200, 100); }
+        ~EditorProbe() override { ++count; }
+    };
+    auto* editor = new EditorProbe (destroyed);
+    juce::Component::SafePointer<juce::Component> weak (editor);
+    {
+        BypassWrapper wrapper (*plugin, editor);
+        CHECK (destroyed == 0);
+    }
+    CHECK (weak == nullptr);
+    CHECK (destroyed == 1);
+    if (weak != nullptr) // clean up the old broken implementation after RED
+        delete editor;
+}
+
+TEST_CASE ("Docked plugin panel releases editors on removal and destruction", "[plugins][editor-lifetime]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    EditManager manager;
+    manager.createNewEdit();
+    int destroyed = 0;
+    struct ProbeEditor : te::Plugin::EditorComponent
+    {
+        int& count;
+        explicit ProbeEditor (int& n) : count (n) { setSize (200, 100); }
+        ~ProbeEditor() override { ++count; }
+        bool allowWindowResizing() override { return false; }
+        juce::ComponentBoundsConstrainer* getBoundsConstrainer() override { return nullptr; }
+    };
+    struct ProbePlugin : te::Plugin
+    {
+        int& count;
+        ProbePlugin (te::Edit& edit, int& n)
+            : te::Plugin (te::PluginCreationInfo (edit, juce::ValueTree (te::IDs::PLUGIN), true)), count (n) {}
+        juce::String getName() const override { return "Editor lifetime probe"; }
+        juce::String getPluginType() override { return "editorProbe"; }
+        juce::String getSelectableDescription() override { return getName(); }
+        void initialise (const te::PluginInitialisationInfo&) override {}
+        void deinitialise() override {}
+        void applyToBuffer (const te::PluginRenderContext&) override {}
+        std::unique_ptr<EditorComponent> createEditor() override
+        { return std::make_unique<ProbeEditor> (count); }
+    };
+    te::Plugin::Ptr plugin = new ProbePlugin (*manager.getEdit(), destroyed);
+    {
+        DockedPluginPanel panel;
+        panel.addPlugin (*plugin);
+        CHECK (destroyed == 0);
+        panel.removePlugin (*plugin);
+        CHECK (destroyed == 1);
+        panel.addPlugin (*plugin);
+        CHECK (destroyed == 1);
+    }
+    CHECK (destroyed == 2);
 }

@@ -49,7 +49,7 @@ private:
     struct DockedEntry : public juce::Component
     {
         te::Plugin& plugin;
-        juce::Component* editor = nullptr;
+        std::unique_ptr<juce::Component> editor;
 
         juce::TextButton unpinButton { "x" };
         juce::Label      pluginLabel;

@@ -24,7 +24,7 @@ DockedPluginPanel::DockedEntry::DockedEntry (te::Plugin& p,
     addAndMakeVisible (unpinButton);
 
     if (editor != nullptr)
-        addAndMakeVisible (editor);
+        addAndMakeVisible (*editor);
 }
 
 void DockedPluginPanel::DockedEntry::resized()

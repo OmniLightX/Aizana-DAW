@@ -108,6 +108,18 @@ namespace aizana
                 plugin = loader ? loader (desc, 44100.0, 512, err) : nullptr;
                 if (plugin == nullptr) { replyError(); return; }
 
+                // VST3 hasEditor() can create/query an IPlugView and execute UI
+                // code. The IPC receiver is not the worker's message thread.
+                juce::MessageManager::callAsync ([this, alive = aliveGuard]
+                {
+                    if (alive->load())
+                        replyPluginInfo();
+                });
+            }
+
+            void replyPluginInfo()
+            {
+                jassert (juce::MessageManager::getInstance()->isThisTheMessageThread());
                 juce::MemoryBlock out;
                 juce::MemoryOutputStream os (out, false);
                 os.writeString ("info");
