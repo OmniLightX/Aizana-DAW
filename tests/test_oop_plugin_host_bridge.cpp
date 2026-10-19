@@ -10,6 +10,8 @@
 
 #include "plugins/oop/SharedAudioRing.h"
 #include "plugins/oop/PluginHostBridge.h"
+#include "plugins/oop/OutOfProcessPluginInstance.h"
+#include "plugins/oop/ConnectionLostCallback.h"
 
 #include <atomic>
 #include <thread>
@@ -120,4 +122,69 @@ TEST_CASE ("PluginHostBridge handles a partial block (n < maxBlockSamples)", "[o
 
     stop.store (true);
     child.join();
+}
+
+// JUCE checks fileMightContainThisPluginType even for an explicitly supplied
+// hosting-only description. canScanForPlugins=false alone disables scanning.
+TEST_CASE ("OOP descriptions reach the format factory through JUCE", "[oop][format-routing]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    struct ProbeFormat : aizana::OutOfProcessPluginFormat
+    {
+        bool called = false;
+        void createPluginInstance (const juce::PluginDescription&, double, int,
+                                   PluginCreationCallback callback) override
+        {
+            called = true;
+            callback (nullptr, "probe factory reached");
+        }
+    };
+    juce::AudioPluginFormatManager formats;
+    auto* probe = new ProbeFormat();
+    formats.addFormat (probe);
+    CHECK_FALSE (probe->canScanForPlugins());
+    CHECK_FALSE (probe->fileMightContainThisPluginType ({}));
+    for (const auto& identifier : { juce::String ("/compat/Effect.vst3"),
+                                    juce::String ("/compat/Effect.clap"),
+                                    juce::String ("AudioUnit:Effects/Example") })
+    {
+        CAPTURE (identifier.toStdString());
+        juce::PluginDescription desc;
+        desc.name = "Compatibility probe";
+        desc.fileOrIdentifier = identifier;
+        desc.pluginFormatName = probe->getName();
+        probe->called = false;
+        juce::String error;
+        auto instance = formats.createPluginInstance (desc, 48000.0, 512, error);
+        CHECK (instance == nullptr);
+        CHECK (probe->called);
+        CHECK (error == "probe factory reached");
+    }
+}
+
+TEST_CASE ("Connection loss callback survives concurrent clearing", "[oop][connection-lifetime]")
+{
+    aizana::ConnectionLostCallback callback;
+    juce::WaitableEvent entered, resume;
+    auto payload = std::make_shared<int> (37);
+    std::weak_ptr<int> weak = payload;
+    std::atomic<int> result { 0 };
+    callback.set ([owned = payload, &entered, &resume, &result]
+    {
+        entered.signal();
+        if (resume.wait (2000))
+            result.store (*owned);
+    });
+    payload.reset();
+    std::thread ipc ([&] { callback.notify(); });
+    const bool started = entered.wait (2000);
+    callback.set ({});
+    const bool retained = ! weak.expired();
+    resume.signal();
+    ipc.join();
+    REQUIRE (started);
+    CHECK (retained);
+    CHECK (result.load() == 37);
+    CHECK (weak.expired());
+    callback.notify(); // disconnected: no-op
 }

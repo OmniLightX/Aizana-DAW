@@ -92,6 +92,9 @@ namespace aizana
         void getStateInformation (juce::MemoryBlock&) override;            // E5.4
         void setStateInformation (const void*, int) override;              // E5.4
 
+        /** Message-thread load result, distinct from subsequent audio preparation. */
+        bool isChildLoaded() const noexcept { return childLoaded; }
+
         /** True once the child process has loaded the plugin and is pumping audio. */
         bool isChildConnected() const noexcept { return childReady.load(); }
 
@@ -122,6 +125,7 @@ namespace aizana
         bool                             childProducesMidi { false };
         bool                             childHasEditor    { false };   // E5.5
         bool                             paramsBuilt { false };
+        bool                             childLoaded { false };
 
         // E5.6: Crash-Restart-Policy — Respawn nach Worker-Tod, budgetiert.
         std::shared_ptr<std::atomic<bool>> aliveGuard { std::make_shared<std::atomic<bool>> (true) };
@@ -155,7 +159,13 @@ namespace aizana
         bool canScanForPlugins() const override { return false; }
         bool isTrivialToScan() const override { return true; }
         juce::FileSearchPath getDefaultLocationsToSearch() override { return {}; }
-        bool fileMightContainThisPluginType (const juce::String&) override { return false; }
+        bool fileMightContainThisPluginType (const juce::String& identifier) override
+        {
+            // JUCE also calls this when resolving an explicit hosting description.
+            // Scanning remains disabled by canScanForPlugins()/findAllTypesForFile().
+            // The format name gates dispatch; AU identifiers need not be file paths.
+            return identifier.isNotEmpty();
+        }
         juce::String getNameOfPluginFromIdentifier (const juce::String& id) override { return id; }
         bool pluginNeedsRescanning (const juce::PluginDescription&) override { return false; }
         bool doesPluginStillExist (const juce::PluginDescription& d) override

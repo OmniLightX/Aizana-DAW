@@ -252,7 +252,11 @@ FloatingPluginWindow::FloatingPluginWindow (te::Plugin& plugin_,
         else
         {
             // Stage 3: No UI — show placeholder with bypass + zoom controls
-            auto* placeholder = new juce::Label ("", "No editor available");
+            juce::String message = "No editor available";
+            if (auto* external = dynamic_cast<te::ExternalPlugin*> (&plugin))
+                if (const auto error = external->getLoadError(); error.isNotEmpty())
+                    message = error;
+            auto* placeholder = new juce::Label ("", message);
             placeholder->setSize (400, 200);
             placeholder->setJustificationType (juce::Justification::centred);
             placeholder->setColour (juce::Label::textColourId, juce::Colours::grey);

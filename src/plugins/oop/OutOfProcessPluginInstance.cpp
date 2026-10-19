@@ -1,4 +1,5 @@
 #include "OutOfProcessPluginInstance.h"
+#include "ConnectionLostCallback.h"
 #include "PluginHostBridge.h"
 #include "app/LegacyMigration.h"
 
@@ -279,8 +280,16 @@ namespace aizana
                     kPluginHostProcessUID, 5000, 5000);
             }
 
+            ~PluginHostCoordinator() override
+            {
+                // Stop/join the IPC connection while the derived events, mutex
+                // and callback still exist. The base destructor runs too late.
+                onLost.set ({});
+                killWorkerProcess();
+            }
+
             /** E5.6: vom IPC-Thread gefeuert, wenn der Worker stirbt (Crash). */
-            std::function<void()> onLost;
+            ConnectionLostCallback onLost;
 
             bool isUsable() const noexcept { return launchedOk && ! lost.load(); }
 
@@ -428,8 +437,7 @@ namespace aizana
                 stateEvent.signal();
                 stateSetEvent.signal();
 
-                if (onLost)
-                    onLost();   // E5.6: Crash-Restart anstoßen (Callee hüpft auf den Message-Thread)
+                onLost.notify();
             }
 
             bool                    launchedOk { false };
@@ -528,11 +536,12 @@ namespace aizana
 
     void OutOfProcessPluginInstance::dropCoordinator()
     {
+        childLoaded = false;
         // Intentionaler Reset: onLost VORHER lösen, sonst würde die Verbindungs-
         // trennung beim Zerstören einen Crash-Respawn gegen uns selbst anstoßen.
         if (impl != nullptr && impl->coordinator != nullptr)
         {
-            impl->coordinator->onLost = nullptr;
+            impl->coordinator->onLost.set ({});
             impl->coordinator.reset();
         }
     }
@@ -552,17 +561,17 @@ namespace aizana
 
         // E5.6: Worker-Tod (Crash) → sofort stumm schalten (kein Timeout-Streak auf
         // dem Audio-Thread) und budgetierten Respawn auf dem Message-Thread anstoßen.
-        impl->coordinator->onLost = [this, alive = aliveGuard]
+        impl->coordinator->onLost.set ([this, alive = aliveGuard]
         {
-            if (! alive->load())
-                return;
-            childReady.store (false);
+            // The IPC thread never touches the processor. Destruction and this
+            // queued callback are serialized by the message thread; the shared
+            // lifetime flag remains valid even after the processor is gone.
             juce::MessageManager::callAsync ([this, alive]
             {
                 if (alive->load())
                     handleWorkerDied();
             });
-        };
+        });
 
         OopPluginInfo info;
         if (! impl->coordinator->describe (descToXml (desc), info))
@@ -585,6 +594,7 @@ namespace aizana
             paramsBuilt = true;
         }
 
+        childLoaded = true;
         return true;
     }
 
@@ -849,7 +859,14 @@ namespace aizana
     void OutOfProcessPluginFormat::createPluginInstance (const juce::PluginDescription& desc,
                                                          double, int, PluginCreationCallback callback)
     {
-        if (callback)
-            callback (std::make_unique<OutOfProcessPluginInstance> (desc, 2), {});
+        if (! callback)
+            return;
+        auto instance = std::make_unique<OutOfProcessPluginInstance> (desc, 2);
+        if (! instance->isChildLoaded())
+        {
+            callback (nullptr, "Plugin could not be loaded in its isolated process: " + desc.name);
+            return;
+        }
+        callback (std::move (instance), {});
     }
 }
