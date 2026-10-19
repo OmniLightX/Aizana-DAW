@@ -2,28 +2,16 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
-/**
- * StemSeparationEngine — Phase 3: full song → stems (demucs.cpp, Spike S1 GO).
+/** Local Mega 53 stem separation (original weights explicitly MIT-licensed).
+ * Five trained instrument estimates plus a residual Other produce six categories.
+ * The four-category mode folds Guitar and Piano into Other; it is not a separately
+ * fine-tuned model. Legacy enum names are retained for source compatibility.
+ * Downloaded model weights are not part of the source repository.
  *
- * Wraps the vendored demucs.cpp inference library (extern/demucs_cpp, MIT) for
- * Aizana: loads any audio file via JUCE, resamples to the model's mandatory
- * 44.1 kHz stereo, runs the hybrid-transformer separation on a background
- * thread, writes per-instrument WAVs (24-bit/44.1k — TE resamples on playback),
- * and skips near-silent stems (e.g. "Guitar" in a song without guitar).
- *
- * Models (ggml weights, downloaded at runtime — never bundled):
- *   fast6Stem     htdemucs-6s    1 file,  53 MB — Drums/Bass/Other/Vocals/
- *                 Guitar/Piano. Measured ~1.7x audio duration on M3 (4 threads).
- *   fineTuned4Stem htdemucs_ft   4 files, 324 MB — Drums/Bass/Other/Vocals,
- *                 noticeably less bleed. ~7.5x audio duration (runs 4 models).
- *
- * THREADING: startSeparation() runs on a dedicated background thread; the
- * std::function callbacks fire on the MESSAGE thread (marshalled internally).
- * separateNow() is the synchronous core for tests/workers — its callbacks fire
- * on the CALLING thread. Never call either from the audio thread.
- *
- * Cancellation: takes effect between pipeline stages (load → infer → write;
- * between the 4 ft models). A running inference segment cannot be aborted.
+ * All inference and file I/O run on the dedicated worker. Async callbacks are
+ * marshalled to the message thread. separateNow() is synchronous for workers and
+ * tests only. Cancellation is honoured between bounded four-second chunks; worker
+ * shutdown joins safely rather than terminating a running inference thread.
  */
 class StemSeparationEngine : private juce::Thread
 {
@@ -43,10 +31,14 @@ public:
     ~StemSeparationEngine() override;
 
     // ---- model management -------------------------------------------------
-    static juce::File modelsDirectory();                       // App Support/Aizana/Models
+    static juce::File modelsDirectory();                       // JUCE userApplicationDataDirectory/Aizana/Models
     static juce::Array<juce::File> requiredModelFiles (Model); // expected local files
     static juce::Array<juce::URL>  requiredModelURLs  (Model); // download sources
-    static bool isModelInstalled (Model);
+    static bool isModelInstalled (Model); // fast size/path check, no UI-thread hashing
+    static bool validateModelFile (const juce::File&); // full SHA-256 check; worker only
+    static constexpr juce::int64 kModelBytes = 355012879;
+    static constexpr const char* kModelSha256 =
+        "d546b9780159ee8e54c3cf7c0446a4204b8793e363941122b4c115089d369cc2";
 
     // ---- async API (message-thread callbacks) ------------------------------
     std::function<void (float progress01, juce::String stage)> onProgress;

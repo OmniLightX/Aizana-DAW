@@ -145,7 +145,7 @@ private:
     aizana::AiStudioLiveServer aiLiveServer { appState.editManager, mixApplyEngine, appState.aiCommandBridge };
 
     // Stem-Separation (Phase 3, Spike S1 GO): full song → stems on a background
-    // thread (vendored demucs.cpp). Feeds the same KI-Setup pipeline afterwards.
+    // thread (native ONNX/Mega 53). Feeds the same KI-Setup pipeline afterwards.
     StemSeparationEngine stemSeparationEngine;
 
     // Plugin scanning + management (plan 01-15)
@@ -452,7 +452,8 @@ private:
     void handleSongSeparateStems();
     void startStemSeparationFlow (const juce::File& song);
     void downloadSeparationModel (const juce::File& songToContinueWith);
-    void pollSeparationModelDownload (const juce::File& songToContinueWith);
+    void pollSeparationModelDownload (const juce::File& songToContinueWith, uint64_t generation);
+    void cancelStemSeparationWork();
     void runStemSeparation (const juce::File& song, StemSeparationEngine::Model);
     void onStemsSeparated (const juce::Array<StemSeparationEngine::Stem>& stems);
     void showSeparationProgress();
@@ -460,6 +461,9 @@ private:
 
     std::unique_ptr<SeparationProgressPanel>    separationPanel;
     std::unique_ptr<juce::URL::DownloadTask>    modelDownloadTask;
+    juce::File separationModelTemporary;
+    bool separationModelPreparing = false;
+    uint64_t separationGeneration = 0;
 
     // -------------------------------------------------------------------------
     // View menu handlers

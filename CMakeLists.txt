@@ -63,8 +63,8 @@ FetchContent_Populate(eigen)   # headers only — do NOT add Eigen's CMake proje
 
 # ---------------------------------------------------------------------------
 # demucs.cpp inference library (vendored, MIT — see extern/demucs_cpp/README.md)
-# Phase 3: stem separation (htdemucs 6-source / fine-tuned 4-source, ggml weights).
-# CPU-only by design; runs on a background thread via StemSeparationEngine.
+# Legacy MIT code retained for reproducibility. The active StemSeparationEngine
+# uses RoFormer/ONNX and does not load or download Demucs weights.
 # ---------------------------------------------------------------------------
 file(GLOB DEMUCS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/extern/demucs_cpp/src/*.cpp)
 add_library(demucs_inference STATIC ${DEMUCS_SOURCES})
@@ -196,6 +196,7 @@ target_sources(Aizana PRIVATE
     src/ai/SessionPlanner.cpp
     src/ai/StemImportEngine.cpp
     src/ai/StemSeparationEngine.cpp
+    src/ai/RoFormerStemBackend.cpp
     src/ai/ReferenceAnalyzer.cpp
     src/ai/IntentEngine.cpp
     src/ai/HeuristicFeedbackEngine.cpp
@@ -385,6 +386,7 @@ target_link_libraries(Aizana PRIVATE
     juce::juce_audio_formats
     juce::juce_audio_utils
     juce::juce_dsp
+    juce::juce_cryptography
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128

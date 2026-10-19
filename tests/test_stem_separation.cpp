@@ -1,8 +1,6 @@
-// test_stem_separation.cpp — Phase 3: StemSeparationEngine (demucs.cpp wrapper)
-//
-// Real inference needs the ggml weights (53-324 MB, downloaded at runtime) and
-// minutes of CPU — NOT part of the suite. These tests cover the headless-safe
-// pieces: audio loading/resampling, model management, error paths.
+// StemSeparationEngine: loading/resampling, exact model management and errors.
+// Real-model waveform and output-file regressions are opt-in in
+// test_roformer_stems.cpp; ordinary tests do not download model weights.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -75,11 +73,15 @@ TEST_CASE ("StemSeparationEngine: model management is consistent", "[separation]
 {
     using Model = StemSeparationEngine::Model;
 
-    // File and URL lists pair up 1:1, and ft needs 4 files vs 1 for fast
+    // Both output modes use the same explicitly MIT-licensed Mega 53 artifact.
     CHECK (StemSeparationEngine::requiredModelFiles (Model::fast6Stem).size() == 1);
-    CHECK (StemSeparationEngine::requiredModelFiles (Model::fineTuned4Stem).size() == 4);
+    CHECK (StemSeparationEngine::requiredModelFiles (Model::fineTuned4Stem).size() == 1);
     CHECK (StemSeparationEngine::requiredModelURLs (Model::fast6Stem).size() == 1);
-    CHECK (StemSeparationEngine::requiredModelURLs (Model::fineTuned4Stem).size() == 4);
+    CHECK (StemSeparationEngine::requiredModelURLs (Model::fineTuned4Stem).size() == 1);
+
+    CHECK (StemSeparationEngine::requiredModelFiles (Model::fast6Stem)[0].getFileName()
+           == "mega53-five-masks-v1.onnx");
+    CHECK (StemSeparationEngine::requiredModelURLs (Model::fast6Stem)[0].getDomain() == "github.com");
 
     for (const auto& f : StemSeparationEngine::requiredModelFiles (Model::fineTuned4Stem))
         CHECK (f.getFullPathName().contains ("Models"));

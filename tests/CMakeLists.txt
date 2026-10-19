@@ -40,6 +40,7 @@ target_sources(engine_tests PRIVATE
     test_session_planner.cpp
     test_stem_import.cpp
     test_stem_separation.cpp
+    test_roformer_stems.cpp
     test_reference_profile.cpp
     test_midi_recording.cpp
     test_multitrack_render.cpp
@@ -130,6 +131,7 @@ target_sources(engine_tests PRIVATE
     ../src/generator/LocalComposer.cpp
     ../src/ai/StemImportEngine.cpp
     ../src/ai/StemSeparationEngine.cpp
+    ../src/ai/RoFormerStemBackend.cpp
     ../src/ai/ReferenceAnalyzer.cpp
     ../src/ai/IntentEngine.cpp
     ../src/ai/HeuristicFeedbackEngine.cpp
@@ -223,6 +225,7 @@ target_link_libraries(engine_tests PRIVATE
     juce::juce_audio_processors
     juce::juce_audio_formats
     juce::juce_dsp
+    juce::juce_cryptography
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128

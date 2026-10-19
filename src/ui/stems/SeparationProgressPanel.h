@@ -15,7 +15,16 @@ class SeparationProgressPanel : public juce::Component
 public:
     SeparationProgressPanel()
     {
-        setInterceptsMouseClicks (false, false);   // overlay must not steal clicks
+        setInterceptsMouseClicks (false, true);
+        cancelButton.setComponentID ("cancel-stems");
+        addAndMakeVisible (cancelButton);
+        cancelButton.onClick = [this] { auto callback = onCancel; if (callback) callback(); };
+    }
+
+    std::function<void()> onCancel;
+    void resized() override
+    {
+        cancelButton.setBounds (getWidth() - 103, 9, 90, 23);
     }
 
     /** Apply progress (0..1) + a human-readable stage line. Message thread only. */
@@ -41,7 +50,7 @@ public:
         g.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
         g.drawText (juce::String::fromUTF8 ("KI-Stem-Trennung — ")
                         + juce::String ((int) std::round (fraction * 100.0f)) + "%",
-                    body.removeFromTop (18.0f), juce::Justification::centredLeft);
+                    body.removeFromTop (18.0f).withTrimmedRight (94.0f), juce::Justification::centredLeft);
 
         g.setColour (juce::Colour (0xffb6bcc4));
         g.setFont (juce::Font (juce::FontOptions (12.0f)));
@@ -56,6 +65,7 @@ public:
     }
 
 private:
+    juce::TextButton cancelButton { "Abbrechen" };
     float        fraction = 0.0f;
     juce::String stage;
 

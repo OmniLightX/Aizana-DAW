@@ -29,6 +29,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     // (live-test finding 2026-07-02: app crashed when reopening a session).
     appState.editManager.onEditWillChange = [this]
     {
+        cancelStemSeparationWork();
         undoMenuObserver.detach();
         pluginWindowManager.closeAllWindows();   // windows hold te::Plugin& into the old Edit
         dockedEditorPanel.clear();               // editor holds clip refs into the old Edit
@@ -374,6 +375,7 @@ void MainComponent::handleReopenOnboarding()
 
 MainComponent::~MainComponent()
 {
+    cancelStemSeparationWork();
     undoMenuObserver.detach();
     // Stop the live bridge first: closes the loopback socket, joins its thread, and
     // removes the discovery file so no stale port is advertised after shutdown.
@@ -918,7 +920,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String& /
             menu.addItem (SongSetupAudioIO, juce::String::fromUTF8 ("Audiogerät einrichten…"), true);
             menu.addItem (SongSeparateStems,
                           juce::String::fromUTF8 ("Song in Stems trennen (KI)…"),
-                          hasEdit && ! stemSeparationEngine.isBusy());
+                          hasEdit && ! stemSeparationEngine.isBusy() && ! separationModelPreparing);
             menu.addItem (SongAddMarker,
                           juce::String::fromUTF8 ("Marker am Playhead setzen"), hasEdit);
             menu.addSeparator();
@@ -1963,110 +1965,143 @@ void MainComponent::handleSongSeparateStems()
 void MainComponent::startStemSeparationFlow (const juce::File& song)
 {
     using Model = StemSeparationEngine::Model;
-
+    if (stemSeparationEngine.isBusy() || separationModelPreparing) return;
+#if ! AIZANA_HAVE_ONNXRUNTIME
+    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+        "KI-Stem-Trennung", "Diese Fassung wurde ohne ONNX Runtime gebaut.");
+    return;
+#endif
     if (! StemSeparationEngine::isModelInstalled (Model::fast6Stem))
     {
-        juce::AlertWindow::showOkCancelBox (
-            juce::MessageBoxIconType::QuestionIcon,
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon,
             "KI-Stem-Trennung",
-            juce::String::fromUTF8 ("Für die Stem-Trennung wird einmalig das "
-                                    "KI-Modell heruntergeladen (53 MB).\n\n"
-                                    "Jetzt herunterladen?"),
+            juce::String::fromUTF8 (
+                "Einmaliger Modell-Download: 355 MB von GitHub.\n\n"
+                "MVSep Mega 53 von ZFTurbo (Roman Solovyev), MIT-lizenziert. "
+                "Die Trennung läuft danach lokal; dein Audio wird nicht hochgeladen.\n\n"
+                "Jetzt herunterladen?"),
             "Herunterladen", "Abbrechen", nullptr,
             juce::ModalCallbackFunction::create (
-                [safe = juce::Component::SafePointer<MainComponent> (this), song] (int result)
-                {
-                    if (safe != nullptr && result != 0)
-                        safe->downloadSeparationModel (song);
-                }));
+                [safe = juce::Component::SafePointer<MainComponent> (this), song, generation = separationGeneration] (int result)
+                { if (safe != nullptr && result != 0 && generation == safe->separationGeneration) safe->downloadSeparationModel (song); }));
         return;
     }
-
-    // Both models present → let the user pick the trade-off (Spike S1 numbers).
-    if (StemSeparationEngine::isModelInstalled (Model::fineTuned4Stem))
-    {
-        juce::PopupMenu m;
-        m.addItem (1, juce::String::fromUTF8 ("Schnell — 6 Spuren (≈1,7× Songlänge)"));
-        m.addItem (2, juce::String::fromUTF8 ("Beste Qualität — 4 Spuren (≈7× Songlänge)"));
-        m.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
-            [safe = juce::Component::SafePointer<MainComponent> (this), song] (int result)
-            {
-                if (safe == nullptr || result == 0)
-                    return;
-                safe->runStemSeparation (song, result == 2 ? Model::fineTuned4Stem
-                                                           : Model::fast6Stem);
-            });
-        return;
-    }
-
-    runStemSeparation (song, Model::fast6Stem);
+    juce::PopupMenu choices;
+    choices.addItem (1, juce::String::fromUTF8 ("6 Spuren — mit Gitarre und Piano"));
+    choices.addItem (2, juce::String::fromUTF8 ("4 Spuren — Gitarre und Piano in Übriges"));
+    choices.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+        [safe = juce::Component::SafePointer<MainComponent> (this), song, generation = separationGeneration] (int result)
+        {
+            if (safe == nullptr || result == 0 || generation != safe->separationGeneration) return;
+            safe->runStemSeparation (song, result == 2 ? Model::fineTuned4Stem : Model::fast6Stem);
+        });
 }
 
-void MainComponent::downloadSeparationModel (const juce::File& songToContinueWith)
+void MainComponent::downloadSeparationModel (const juce::File& song)
 {
     using Model = StemSeparationEngine::Model;
-
-    // Im GUI-Testlauf gesperrt: 53 MB aus dem Netz sind ein Ausgang aus dem Prozess.
+    if (separationModelPreparing || stemSeparationEngine.isBusy()) return;
     if (aizana::uitest::isArmed())
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
             "KI-Stem-Trennung", "Im GUI-Testlauf ist der Modell-Download gesperrt.");
         return;
     }
-
-    StemSeparationEngine::modelsDirectory().createDirectory();
-    auto       url    = StemSeparationEngine::requiredModelURLs  (Model::fast6Stem)[0];
-    const auto target = StemSeparationEngine::requiredModelFiles (Model::fast6Stem)[0];
-
-    modelDownloadTask = url.downloadToFile (target, juce::URL::DownloadTaskOptions());
-    if (modelDownloadTask == nullptr)
+    if (! StemSeparationEngine::modelsDirectory().createDirectory())
     {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung", "Modellordner konnte nicht erstellt werden.");
+        return;
+    }
+    const auto target = StemSeparationEngine::requiredModelFiles (Model::fast6Stem)[0];
+    separationModelTemporary = target.getSiblingFile (target.getFileName() + ".download-" + juce::Uuid().toString());
+    modelDownloadTask = StemSeparationEngine::requiredModelURLs (Model::fast6Stem)[0].downloadToFile (
+        separationModelTemporary, juce::URL::DownloadTaskOptions());
+    if (! modelDownloadTask)
+    {
+        separationModelTemporary.deleteFile();
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
             "KI-Stem-Trennung", "Download konnte nicht gestartet werden.");
         return;
     }
-
+    separationModelPreparing = true;
+    const auto generation = ++separationGeneration;
     showSeparationProgress();
-    separationPanel->update (0.0f, juce::String::fromUTF8 ("KI-Modell wird geladen (53 MB)…"));
-    pollSeparationModelDownload (songToContinueWith);
+    separationPanel->update (0.0f, juce::String::fromUTF8 ("Modell wird geladen (355 MB)…"));
+    menuItemsChanged();
+    pollSeparationModelDownload (song, generation);
 }
 
-void MainComponent::pollSeparationModelDownload (const juce::File& songToContinueWith)
+void MainComponent::pollSeparationModelDownload (const juce::File& song, uint64_t generation)
 {
-    if (modelDownloadTask == nullptr)
-        return;
-
+    if (generation != separationGeneration || ! modelDownloadTask) return;
     if (! modelDownloadTask->isFinished())
     {
         const auto total = modelDownloadTask->getTotalLength();
-        const float p = total > 0
-            ? (float) modelDownloadTask->getLengthDownloaded() / (float) total : 0.0f;
-        if (separationPanel != nullptr)
-            separationPanel->update (p, juce::String::fromUTF8 ("KI-Modell wird geladen (53 MB)…"));
-
+        const float p = total > 0 ? (float) modelDownloadTask->getLengthDownloaded() / (float) total : 0.0f;
+        if (separationPanel) separationPanel->update (p, juce::String::fromUTF8 ("Modell wird geladen (355 MB)…"));
         juce::Timer::callAfterDelay (250,
-            [safe = juce::Component::SafePointer<MainComponent> (this), songToContinueWith]()
-            {
-                if (safe != nullptr)
-                    safe->pollSeparationModelDownload (songToContinueWith);
-            });
+            [safe = juce::Component::SafePointer<MainComponent> (this), song, generation]
+            { if (safe != nullptr) safe->pollSeparationModelDownload (song, generation); });
         return;
     }
-
     const bool failed = modelDownloadTask->hadError();
     modelDownloadTask.reset();
-
     if (failed)
     {
+        separationModelPreparing = false;
+        separationModelTemporary.deleteFile();
         hideSeparationProgress();
+        menuItemsChanged();
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-            "KI-Stem-Trennung",
-            juce::String::fromUTF8 ("Modell-Download fehlgeschlagen — bitte "
-                                    "Internetverbindung prüfen und erneut versuchen."));
+            "KI-Stem-Trennung", juce::String::fromUTF8 (
+                "Modell-Download fehlgeschlagen. Internetverbindung und Modellverfügbarkeit prüfen."));
         return;
     }
+    if (separationPanel) separationPanel->update (1.0f, juce::String::fromUTF8 ("Prüfsumme wird überprüft…"));
+    const auto partial = separationModelTemporary;
+    const auto target = StemSeparationEngine::requiredModelFiles (StemSeparationEngine::Model::fast6Stem)[0];
+    const bool launched = juce::Thread::launch ([safe = juce::Component::SafePointer<MainComponent> (this), partial, target, song, generation]
+    {
+        const bool valid = StemSeparationEngine::validateModelFile (partial);
+        juce::MessageManager::callAsync ([safe, partial, target, song, generation, valid]
+        {
+            if (safe == nullptr || generation != safe->separationGeneration)
+            { partial.deleteFile(); return; }
+            safe->separationModelPreparing = false;
+            safe->separationModelTemporary = juce::File {};
+            const bool installed = valid && partial.replaceFileIn (target);
+            if (! installed) partial.deleteFile();
+            safe->hideSeparationProgress();
+            safe->menuItemsChanged();
+            if (installed) safe->startStemSeparationFlow (song);
+            else juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                "KI-Stem-Trennung", juce::String::fromUTF8 (
+                    "Modell konnte nicht verifiziert oder gespeichert werden. Bitte erneut versuchen."));
+        });
+    });
+    if (! launched)
+    {
+        separationModelPreparing = false;
+        partial.deleteFile();
+        separationModelTemporary = juce::File {};
+        hideSeparationProgress();
+        menuItemsChanged();
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Stem-Trennung", "Modellpruefung konnte nicht gestartet werden.");
+    }
+}
 
-    startStemSeparationFlow (songToContinueWith);   // model now installed → proceed
+void MainComponent::cancelStemSeparationWork()
+{
+    ++separationGeneration;
+    modelDownloadTask.reset();
+    separationModelPreparing = false;
+    separationModelTemporary.deleteFile();
+    separationModelTemporary = juce::File {};
+    stemSeparationEngine.cancelSeparation();
+    hideSeparationProgress();
+    menuItemsChanged();
 }
 
 void MainComponent::runStemSeparation (const juce::File& song, StemSeparationEngine::Model model)
@@ -2074,29 +2109,35 @@ void MainComponent::runStemSeparation (const juce::File& song, StemSeparationEng
     const auto outDir = song.getParentDirectory()
                             .getChildFile (song.getFileNameWithoutExtension() + " Stems");
 
+    if (stemSeparationEngine.isBusy() || separationModelPreparing) return;
+    const auto generation = ++separationGeneration;
     showSeparationProgress();
 
     stemSeparationEngine.onProgress =
-        [safe = juce::Component::SafePointer<MainComponent> (this)] (float p, juce::String stage)
+        [safe = juce::Component::SafePointer<MainComponent> (this), generation] (float p, juce::String stage)
         {
-            if (safe != nullptr && safe->separationPanel != nullptr)
+            if (safe != nullptr && generation == safe->separationGeneration && safe->separationPanel != nullptr)
                 safe->separationPanel->update (p, stage);
         };
 
     stemSeparationEngine.onError =
-        [safe = juce::Component::SafePointer<MainComponent> (this)] (juce::String error)
+        [safe = juce::Component::SafePointer<MainComponent> (this), generation] (juce::String error)
         {
             if (safe == nullptr) return;
+            safe->menuItemsChanged();
+            if (generation != safe->separationGeneration) return;
             safe->hideSeparationProgress();
             juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
                                                     "KI-Stem-Trennung", error);
         };
 
     stemSeparationEngine.onFinished =
-        [safe = juce::Component::SafePointer<MainComponent> (this)]
+        [safe = juce::Component::SafePointer<MainComponent> (this), generation]
         (juce::Array<StemSeparationEngine::Stem> stems)
         {
             if (safe == nullptr) return;
+            safe->menuItemsChanged();
+            if (generation != safe->separationGeneration) return;
             safe->hideSeparationProgress();
             safe->onStemsSeparated (stems);
         };
@@ -2114,7 +2155,7 @@ void MainComponent::onStemsSeparated (const juce::Array<StemSeparationEngine::St
 {
     menuItemsChanged();
 
-    // The model KNOWS each stem's instrument — build StemInfos directly, no
+    // The model estimates each named category; build StemInfos directly, no
     // filename guessing. Silent targets (instrument absent in the song) are
     // skipped and reported instead of polluting the session with dead tracks.
     juce::Array<StemInfo> infos;
@@ -2142,7 +2183,7 @@ void MainComponent::onStemsSeparated (const juce::Array<StemSeparationEngine::St
     if (! skipped.isEmpty())
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
             "KI-Stem-Trennung",
-            juce::String::fromUTF8 ("Nicht im Song gefunden (übersprungen): ")
+            juce::String::fromUTF8 ("Ausgabe unter der Lautstärkegrenze (übersprungen): ")
                 + skipped.joinIntoString (", "));
 
     if (infos.isEmpty())
@@ -2159,6 +2200,8 @@ void MainComponent::showSeparationProgress()
     {
         separationPanel = std::make_unique<SeparationProgressPanel>();
         addAndMakeVisible (*separationPanel);
+        separationPanel->onCancel = [safe = juce::Component::SafePointer<MainComponent> (this)]
+        { if (safe != nullptr) safe->cancelStemSeparationWork(); };
     }
     separationPanel->toFront (false);
     resized();
