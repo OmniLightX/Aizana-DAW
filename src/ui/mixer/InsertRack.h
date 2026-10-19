@@ -21,6 +21,9 @@ class InsertRack : public juce::Component,
     void paint(juce::Graphics &) override;
     void paintOverChildren(juce::Graphics &) override;
     void mouseDrag(const juce::MouseEvent &) override;
+    void focusGained(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override { repaint(); }
+    void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
     bool isInterestedInDragSource(const SourceDetails &) override;
     void itemDragMove(const SourceDetails &) override;
     void itemDragExit(const SourceDetails &) override;
@@ -46,6 +49,7 @@ class InsertRack : public juce::Component,
     juce::OwnedArray<Row> rows;
     std::unique_ptr<juce::FileChooser> chooser;
     int dropSlot = -1;
+    te::EditItemID selectedPlugin;
     static juce::ValueTree clipboard;
     void rebuild();
     void handleAsyncUpdate() override;

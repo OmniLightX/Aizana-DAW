@@ -23,8 +23,9 @@ struct InsertRack::Row : juce::Component
     }
     void paint(juce::Graphics &g) override
     {
-        g.fillAll(juce::Colour(enabled ? 0xff292d31 : 0xff1b1e21));
-        g.setColour(juce::Colour(0xff50565b));
+        const bool selected = id.isValid() && rack.selectedPlugin == id && rack.hasKeyboardFocus(true);
+        g.fillAll(juce::Colour(selected ? 0xff244c68 : enabled ? 0xff292d31 : 0xff1b1e21));
+        g.setColour(juce::Colour(selected ? 0xff64b5ef : 0xff50565b));
         g.drawRect(getLocalBounds());
         g.setColour(juce::Colour(enabled ? 0xffeeeeee : 0xff888888));
         g.setFont(juce::FontOptions(11.f));
@@ -39,6 +40,12 @@ struct InsertRack::Row : juce::Component
     void mouseDown(const juce::MouseEvent &e) override
     {
         bypassGesture = false;
+        if (id.isValid())
+        {
+            rack.selectedPlugin = id;
+            rack.grabKeyboardFocus();
+            rack.repaint();
+        }
         if (e.mods.isPopupMenu())
         {
             rack.showPluginMenu(id);
@@ -105,6 +112,7 @@ void InsertRack::HeaderButton::paintButton(juce::Graphics &g, bool over, bool do
 InsertRack::InsertRack(te::PluginList &l, PluginWindowManager &w, PluginScanner &s, MixerEngine *m)
     : list(l), windows(w), scanner(s), mixer(m)
 {
+    setWantsKeyboardFocus(true);
     power.setButtonText("Inserts ein/aus");
     menu.setButtonText("FX-Kettenmenue");
     plus.setButtonText("Plugin hinzufuegen");
@@ -147,6 +155,8 @@ void InsertRack::handleAsyncUpdate()
 }
 void InsertRack::rebuild()
 {
+    if (selectedPlugin.isValid() && find(selectedPlugin) == nullptr)
+        selectedPlugin = {};
     rows.clear();
     bool any = false;
     for (auto *p : list)
@@ -226,7 +236,19 @@ void InsertRack::startDrag(te::Plugin *p)
         data->setProperty("kind", "AizanaFX");
         data->setProperty("xml", snap.toXmlString());
         data->setProperty("id", p ? p->itemID.toString() : juce::String());
-        d->startDragging(juce::var(data), this);
+        // Keep the rack as the stable source used by drop handling, but show
+        // only the row being dragged. JUCE's default snapshot of this rack
+        // misleadingly showed the entire chain even for a single-plugin drag.
+        juce::ScaledImage preview;
+        if (p)
+            for (auto* row : rows)
+                if (row->id == p->itemID)
+                {
+                    constexpr float scale = 2.0f;
+                    preview = juce::ScaledImage(row->createComponentSnapshot(row->getLocalBounds(), true, scale), scale);
+                    break;
+                }
+        d->startDragging(juce::var(data), this, preview);
     }
 }
 bool InsertRack::isInterestedInDragSource(const SourceDetails &d)
