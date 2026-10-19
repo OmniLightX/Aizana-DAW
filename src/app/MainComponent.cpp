@@ -1097,32 +1097,41 @@ void MainComponent::menuItemSelected (int itemID, int /*topLevelIndex*/)
 void MainComponent::handleFileNew()
 {
     auto* currentEdit = appState.editManager.getEdit();
-    // hasChangedSinceSaved() is the correct TE v3.2.0 method name
-    if (currentEdit != nullptr && currentEdit->hasChangedSinceSaved())
-    {
-        // JUCE 8: showYesNoCancelBox async variant
-        juce::AlertWindow::showYesNoCancelBox (
-            juce::MessageBoxIconType::QuestionIcon,
-            "Neue Session",
-            juce::String::fromUTF8 ("Aktuelle Session vor dem Anlegen einer neuen speichern?"),
-            "Speichern", "Nicht speichern", "Abbrechen",
-            nullptr,
-            juce::ModalCallbackFunction::create ([this] (int choice)
-            {
-                if (choice == 1)       // "Speichern"
-                    handleFileSave();
-                else if (choice == 0)  // "Abbrechen"
-                    return;
-                // choice == 2 ("Nicht speichern") — verwerfen und weiter
-                appState.editManager.createNewEdit();
-                menuItemsChanged();
-            }));
-    }
-    else
+    if (currentEdit == nullptr || ! currentEdit->hasChangedSinceSaved())
     {
         appState.editManager.createNewEdit();
         menuItemsChanged();
+        return;
     }
+
+    // Keep the original edit until saving has really completed. A first save
+    // opens an asynchronous chooser, so merely requesting Save is not success.
+    const auto expectedState = currentEdit->state;
+    auto makeNew = [safe = juce::Component::SafePointer<MainComponent> (this), expectedState]
+    {
+        if (safe == nullptr) return;
+        auto* edit = safe->appState.editManager.getEdit();
+        if (edit == nullptr || edit->state != expectedState) return;
+        safe->appState.editManager.createNewEdit();
+        safe->menuItemsChanged();
+    };
+    juce::AlertWindow::showYesNoCancelBox (
+        juce::MessageBoxIconType::QuestionIcon,
+        "Neue Session",
+        juce::String::fromUTF8 ("Aktuelle Session vor dem Anlegen einer neuen speichern?"),
+        "Speichern", "Nicht speichern", "Abbrechen", nullptr,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<MainComponent> (this), expectedState, makeNew] (int choice)
+            {
+                if (safe == nullptr) return;
+                auto* edit = safe->appState.editManager.getEdit();
+                if (edit == nullptr || edit->state != expectedState) return;
+                if (choice == 1)
+                    safe->handleFileSave ([makeNew] (bool saved) { if (saved) makeNew(); });
+                else if (choice == 2)
+                    makeNew();
+                // Cancel, save failure and cancelled Save As preserve the edit.
+            }));
 }
 
 void MainComponent::handleFileOpen()
@@ -1273,11 +1282,14 @@ bool MainComponent::openSessionFile (const juce::File& file)
     return false;
 }
 
-void MainComponent::handleFileSave()
+void MainComponent::handleFileSave (std::function<void (bool)> onSaved)
 {
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
+    {
+        if (onSaved) onSaved (false);
         return;
+    }
 
     // If no current session file is set, fall through to Save As
     const auto file = appState.editManager.getCurrentFile();
@@ -1288,19 +1300,23 @@ void MainComponent::handleFileSave()
             juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
                 "Session speichern", juce::String::fromUTF8 ("Die Session wurde nicht gespeichert:\n")
                     + saved.getErrorMessage());
+        if (onSaved) onSaved (saved.wasOk());
     }
     else
     {
-        handleFileSaveAs();
+        handleFileSaveAs (std::move (onSaved));
     }
 }
 
-void MainComponent::handleFileSaveAs()
+void MainComponent::handleFileSaveAs (std::function<void (bool)> onSaved)
 {
     auto* edit = appState.editManager.getEdit();
     if (edit == nullptr)
+    {
+        if (onSaved) onSaved (false);
         return;
-
+    }
+    const auto expectedState = edit->state;
     // Guide first save explicitly; subsequent Save As starts at the current song.
     const bool firstSave = appState.editManager.needsSaveAs();
     const auto initialFile = firstSave
@@ -1315,38 +1331,44 @@ void MainComponent::handleFileSaveAs()
 
     fileChooser->launchAsync (
         juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
-        [this] (const juce::FileChooser& fc)
+        [safe = juce::Component::SafePointer<MainComponent> (this), expectedState,
+         onSaved = std::move (onSaved)] (const juce::FileChooser& fc)
         {
+            if (safe == nullptr) return;
             const auto result = fc.getResult();
-            if (result != juce::File{})
+            safe->fileChooser.reset();
+            auto* currentEdit = safe->appState.editManager.getEdit();
+            if (result == juce::File{} || currentEdit == nullptr || currentEdit->state != expectedState)
             {
-                // Am Dialog aendert sich NICHTS: der Anwender gibt weiterhin
-                // einen Namen und einen Ort an. Nur was daraus wird, ist jetzt
-                // ein ORDNER mit diesem Namen — so wie Studio One einen
-                // Song-Ordner anlegt und Logic ein Paket:
-                //
-                //   Mein Song/
-                //       Mein Song.tracktion
-                //       Mein Song Audio/      (Aufnahmen, Comps/, Bounces/)
-                //       Backups/
-                //
-                // Vorher lag alles davon lose im gewaehlten Verzeichnis — bei
-                // einem Anwender also im Wurzelverzeichnis seiner SSD, und er
-                // hat es aufgeraeumt und dabei Takes verloren.
-                const auto file = aizana::sessionpaths::sessionFileForChosenPath (
-                                      result.withFileExtension (".tracktion"));
-
-                file.getParentDirectory().createDirectory();
-                aizana::sessionpaths::mediaFolder (file).createDirectory();
-                aizana::sessionpaths::backupFolder (file).createDirectory();
-
-                const auto saved = appState.editManager.saveEdit (file);
-                if (saved.failed())
-                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                        "Session speichern", juce::String::fromUTF8 ("Die Session wurde nicht gespeichert:\n")
-                            + saved.getErrorMessage());
+                if (onSaved) onSaved (false);
+                return;
             }
-            fileChooser.reset();
+            // Am Dialog aendert sich NICHTS: der Anwender gibt weiterhin
+            // einen Namen und einen Ort an. Nur was daraus wird, ist jetzt
+            // ein ORDNER mit diesem Namen — so wie Studio One einen
+            // Song-Ordner anlegt und Logic ein Paket:
+            //
+            //   Mein Song/
+            //       Mein Song.tracktion
+            //       Mein Song Audio/      (Aufnahmen, Comps/, Bounces/)
+            //       Backups/
+            //
+            // Vorher lag alles davon lose im gewaehlten Verzeichnis — bei
+            // einem Anwender also im Wurzelverzeichnis seiner SSD, und er
+            // hat es aufgeraeumt und dabei Takes verloren.
+            const auto file = aizana::sessionpaths::sessionFileForChosenPath (
+                                  result.withFileExtension (".tracktion"));
+
+            file.getParentDirectory().createDirectory();
+            aizana::sessionpaths::mediaFolder (file).createDirectory();
+            aizana::sessionpaths::backupFolder (file).createDirectory();
+
+            const auto saved = safe->appState.editManager.saveEdit (file);
+            if (saved.failed())
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                    "Session speichern", juce::String::fromUTF8 ("Die Session wurde nicht gespeichert:\n")
+                        + saved.getErrorMessage());
+            if (onSaved) onSaved (saved.wasOk());
         });
 }
 

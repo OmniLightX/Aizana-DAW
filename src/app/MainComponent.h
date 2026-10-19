@@ -407,8 +407,8 @@ private:
     // -------------------------------------------------------------------------
     void handleFileNew();
     void handleFileOpen();
-    void handleFileSave();
-    void handleFileSaveAs();
+    void handleFileSave (std::function<void (bool)> onSaved = {});
+    void handleFileSaveAs (std::function<void (bool)> onSaved = {});
     void handleFileImportAudio();
 
     // KI-Setup (Phase 3, Slice 4): analyse stems on a worker thread, then apply

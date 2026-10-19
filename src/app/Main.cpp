@@ -21,7 +21,7 @@ public:
     AizanaApplication() = default;
 
     const juce::String getApplicationName() override       { return "Aizana"; }
-    const juce::String getApplicationVersion() override    { return "0.1.0"; }
+    const juce::String getApplicationVersion() override    { return JUCE_APPLICATION_VERSION_STRING; }
 
     // Normally single-instance — but the out-of-process plugin scanner relaunches this
     // same binary as a worker (its command line carries the scanner id). That second
