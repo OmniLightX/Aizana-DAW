@@ -268,7 +268,7 @@ namespace aizana
         {
             const bool isError = (bool) v.getProperty ("is_error", false);
             if (isError)
-                return "\n\xe2\x9a\xa0\xef\xb8\x8f " + v.getProperty ("result", {}).toString() + "\n";
+                return juce::String::fromUTF8 ("\n\xe2\x9a\xa0\xef\xb8\x8f ") + v.getProperty ("result", {}).toString() + "\n";
             return {};
         }
 

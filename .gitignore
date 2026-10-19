@@ -80,3 +80,8 @@ xtra mds/
 /Stems_*/
 /*.mp3
 /*.wav
+
+# Reviewed configure/test scripts are source, not generated CMake files.
+!/cmake/
+!/cmake/ApplyTracktionStatePatch.cmake
+!/tests/RunEngineTests.cmake

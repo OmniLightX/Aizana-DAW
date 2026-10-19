@@ -1,0 +1,76 @@
+--- a/modules/tracktion_engine/plugins/external/tracktion_ExternalPlugin.cpp
++++ b/modules/tracktion_engine/plugins/external/tracktion_ExternalPlugin.cpp
+@@ -429,14 +429,43 @@
+ 
+     juce::AudioProcessor::BusesLayout readBusesLayout (const juce::var& layout, juce::AudioProcessor& plugin)
+     {
+-        juce::AudioProcessor::BusesLayout busesLayout;
++        // Aizana: Undo may remove the derived layout property. No saved layout
++        // means retain the processor's topology, not request zero input/output buses.
++        auto busesLayout = plugin.getBusesLayout();
+ 
+         if (auto* mb = layout.getBinaryData())
+         {
+             auto v = juce::ValueTree::readFromData (mb->getData(), mb->getSize());
++            // Validate before readBusLayout: that routine can add/remove real
++            // processor buses. An empty/corrupt preset must not mutate topology.
++            if (! v.hasType (IDs::LAYOUT) || v.getNumChildren() == 0)
++                return busesLayout;
++
++            bool sawInputs = false, sawOutputs = false;
++            for (auto direction : v)
++            {
++                const bool input = direction.hasType (IDs::INPUTS);
++                if ((! input && ! direction.hasType (IDs::OUTPUTS))
++                    || (input ? sawInputs : sawOutputs)
++                    || direction.getNumChildren() == 0)
++                    return busesLayout;
++                (input ? sawInputs : sawOutputs) = true;
++                int index = 0;
++                for (auto bus : direction)
++                    if (! bus.hasType (IDs::BUS) || ! bus.hasProperty (IDs::index)
++                        || (int) bus[IDs::index] != index++
++                        || bus[IDs::layout].toString().isEmpty())
++                        return busesLayout;
++            }
+             readBusLayout (busesLayout, v, plugin, true);
+             readBusLayout (busesLayout, v, plugin, false);
+         }
++
++        // Some processors cannot add/remove buses, or change both directions
++        // together. Never forward an incompatible bus count to AudioProcessor.
++        if (busesLayout.inputBuses.size() != plugin.getBusCount (true)
++            || busesLayout.outputBuses.size() != plugin.getBusCount (false))
++            return plugin.getBusesLayout();
+ 
+         return busesLayout;
+     }
+--- a/modules/tracktion_engine/model/edit/tracktion_Edit.cpp
++++ b/modules/tracktion_engine/model/edit/tracktion_Edit.cpp
+@@ -984,6 +984,11 @@
+ {
+     trackCompManager->initialise (state.getOrCreateChildWithName (IDs::TRACKCOMPS, nullptr));
+ 
++    // Aizana: infrastructure must exist before an undoable track insertion.
++    // Lazy creation from AudioTrack::initialise nested an EDIT child insertion
++    // inside another insertion, leaving stale Undo child indices on first Undo.
++    state.getOrCreateChildWithName (IDs::SCENES, nullptr);
++
+     // Make sure tempo + marker tracks are first (their order in the XML may be wrong so sort them now)
+     TrackList::sortTracksByType (state, nullptr);
+ 
+--- a/modules/tracktion_engine/model/clips/tracktion_ClipOwner.cpp
++++ b/modules/tracktion_engine/model/clips/tracktion_ClipOwner.cpp
+@@ -28,7 +28,11 @@
+     {
+         for (auto c : objects)
+         {
+-            c->flushStateToValueTree();
++            // Aizana: Edit destruction has already notified deletion and torn
++            // down plugin services. Flush only when removing clips from a live
++            // Edit, never write plugin state back into an Edit being destroyed.
++            if (Selectable::isSelectableValid (&edit))
++                c->flushStateToValueTree();
+             c->setParent (nullptr);
+         }
+ 

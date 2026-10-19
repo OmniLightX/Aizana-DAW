@@ -78,7 +78,7 @@ int TempoEngine::addTempoChange (double timeSec, double bpm)
     const double effectiveBpm = bpm > 0.0 ? juce::jlimit (te::TempoSetting::minBPM, te::TempoSetting::maxBPM, bpm)
                                           : seq.getTempoAt (beat).getBpm();
 
-    edit->getUndoManager().beginNewTransaction ("Tempowechsel einf\xc3\xbcgen");
+    edit->getUndoManager().beginNewTransaction (juce::String::fromUTF8 ("Tempowechsel einf\xc3\xbcgen"));
     auto setting = seq.insertTempo (beat, effectiveBpm, 0.0f);
     if (setting == nullptr)
         return -1;
@@ -97,7 +97,7 @@ void TempoEngine::setTempoBpm (int index, double bpm, bool beginTransaction)
         return;
 
     if (beginTransaction)
-        edit->getUndoManager().beginNewTransaction ("Tempo \xc3\xa4ndern");
+        edit->getUndoManager().beginNewTransaction (juce::String::fromUTF8 ("Tempo \xc3\xa4ndern"));
 
     t->setBpm (juce::jlimit (te::TempoSetting::minBPM, te::TempoSetting::maxBPM, bpm));
 }
@@ -123,7 +123,7 @@ int TempoEngine::addTimeSigChange (double timeSec, int numerator, int denominato
 
     auto& seq = edit->tempoSequence;
 
-    edit->getUndoManager().beginNewTransaction ("Taktartwechsel einf\xc3\xbcgen");
+    edit->getUndoManager().beginNewTransaction (juce::String::fromUTF8 ("Taktartwechsel einf\xc3\xbcgen"));
     auto setting = seq.insertTimeSig (TimePos::fromSeconds (juce::jmax (0.0, timeSec)));
     if (setting == nullptr)
         return -1;
@@ -147,7 +147,7 @@ void TempoEngine::setTimeSig (int index, int numerator, int denominator)
     if (ts == nullptr)
         return;
 
-    edit->getUndoManager().beginNewTransaction ("Taktart \xc3\xa4ndern");
+    edit->getUndoManager().beginNewTransaction (juce::String::fromUTF8 ("Taktart \xc3\xa4ndern"));
     ts->numerator   = juce::jlimit (1, 32, numerator);
     ts->denominator = juce::jlimit (1, 32, denominator);
 }

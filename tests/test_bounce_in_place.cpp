@@ -1,3 +1,4 @@
+#include "ScopedTestLogger.h"
 // test_bounce_in_place.cpp — P3 (S1-Parität "Bounce/Transform"):
 // Clip → gerendertes Audio in place, 1 Undo-Schritt, Master bleibt live.
 #include <catch2/catch_test_macros.hpp>
@@ -248,19 +249,10 @@ TEST_CASE ("BounceInPlace: two bounces of the same clip are identical (live grap
     // device" (tracktion_NodeRenderContext.cpp, direkt neben einem jassertfalse).
     // Genau diese Meldung wird mitgeschnitten — sie ist der eindeutige, von TE
     // selbst definierte Nachweis, dass waehrend des Renders der Live-Graph lief.
-    struct CapturingLogger : juce::Logger
-    {
-        juce::StringArray lines;
-        void logMessage (const juce::String& m) override { lines.add (m); }
-    };
-
-    CapturingLogger logger;
-    auto* previousLogger = juce::Logger::getCurrentLogger();
-    juce::Logger::setCurrentLogger (&logger);
+    ScopedTestLogger logger;
 
     auto* b1 = clipEditor.bounceClipInPlace (*clip1, true);
 
-    juce::Logger::setCurrentLogger (previousLogger);
     REQUIRE (b1 != nullptr);
 
     bool renderedWhileAttached = false;

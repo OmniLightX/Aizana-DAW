@@ -82,7 +82,9 @@ juce::Result FxChainOperations::apply(te::PluginList &list, const juce::ValueTre
     te::Plugin::Array prepared;
     for (auto child : copy)
     {
-        auto p = edit.getPluginCache().createNewPlugin(child);
+        // A remapped preset is restored state, not a request for factory defaults.
+        // This API also returns null normally for unavailable plugin types.
+        auto p = edit.getPluginCache().getOrCreatePluginFor(child);
         if (p == nullptr || !isEffect(*p) || p->isMissing() ||
             (list.getOwnerTrack() == nullptr && !p->canBeAddedToMaster()) ||
             (list.getOwnerTrack() != nullptr && !list.getOwnerTrack()->canContainPlugin(p.get())))

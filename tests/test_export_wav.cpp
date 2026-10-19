@@ -1,3 +1,4 @@
+#include "ScopedTestLogger.h"
 // test_export_wav.cpp — EXP-01: Stereo-Mixdown-Export; EXP-04: Format/Samplerate
 //
 // Die ersten drei Faelle sind seit Phase 1 Stubs geblieben (die Renderer-Pfade
@@ -73,15 +74,7 @@ TEST_CASE ("Export: mixdown does not render while attached to the audio device",
     edit->getTransport().ensureContextAllocated();
     REQUIRE (edit->getTransport().isPlayContextActive());
 
-    struct CapturingLogger : juce::Logger
-    {
-        juce::StringArray lines;
-        void logMessage (const juce::String& m) override { lines.add (m); }
-    };
-
-    CapturingLogger logger;
-    auto* previousLogger = juce::Logger::getCurrentLogger();
-    juce::Logger::setCurrentLogger (&logger);
+    ScopedTestLogger logger;
 
     ExportOptions options;
     options.outputFile = tempDir.getChildFile ("mixdown.wav");
@@ -92,7 +85,6 @@ TEST_CASE ("Export: mixdown does not render while attached to the audio device",
     ExportPipeline pipeline;
     const auto err = pipeline.exportMixdown (*edit, options);
 
-    juce::Logger::setCurrentLogger (previousLogger);
 
     INFO ("Export-Fehler: " << err);
     INFO ("TE-Meldungen: " << logger.lines.joinIntoString (" | "));

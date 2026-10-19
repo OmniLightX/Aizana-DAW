@@ -197,18 +197,18 @@ TEST_CASE ("WarpEngine: interior marker removes, endpoint resets", "[warp][p7b]"
     WarpEngine::moveMarker (*f.clip, idx, 0.5);
 
     // Innerer Marker: wird entfernt, Mapping wieder Identität
-    um.beginNewTransaction ("Marker löschen");
+    um.beginNewTransaction (juce::String::fromUTF8 ("Marker löschen"));
     WarpEngine::removeMarker (*f.clip, idx);
     REQUIRE (WarpEngine::getMarkers (*f.clip).size() == 2);
     CHECK (WarpEngine::sourceToWarp (*f.clip, 0.75) == Approx (0.75));
 
     // Endpunkt: TE setzt zurück statt zu entfernen (Anker bleiben)
-    um.beginNewTransaction ("Endpunkt löschen");
+    um.beginNewTransaction (juce::String::fromUTF8 ("Endpunkt löschen"));
     WarpEngine::removeMarker (*f.clip, 0);
     CHECK (WarpEngine::getMarkers (*f.clip).size() == 2);
 
     // resetMarkers = Bend neutral
-    um.beginNewTransaction ("Bend zurücksetzen");
+    um.beginNewTransaction (juce::String::fromUTF8 ("Bend zurücksetzen"));
     WarpEngine::addMarkerAtSourceTime (*f.clip, 0.6);
     WarpEngine::resetMarkers (*f.clip);
     REQUIRE (WarpEngine::getMarkers (*f.clip).size() == 2);

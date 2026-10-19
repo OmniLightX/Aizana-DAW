@@ -18,6 +18,8 @@ juce_add_console_app(engine_tests
 )
 
 target_sources(engine_tests PRIVATE
+    test_main.cpp
+    test_plugin_bus_state.cpp
     test_undo.cpp
     test_clip_editing.cpp
     test_comping.cpp
@@ -196,6 +198,9 @@ target_include_directories(engine_tests PRIVATE
 )
 
 target_compile_definitions(engine_tests PRIVATE
+    # Tracktion debug assertions reference members compiled only in Debug.
+    # Preserve Release semantics; Debug is the mandatory diagnostic gate.
+    JUCE_LOG_ASSERTIONS=$<IF:$<CONFIG:Debug>,1,0>
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_APPLICATION_NAME_STRING="AizanaEngineTests"
@@ -221,7 +226,7 @@ target_compile_definitions(engine_tests PRIVATE
 )
 
 target_link_libraries(engine_tests PRIVATE
-    Catch2::Catch2WithMain
+    Catch2::Catch2
     juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_audio_formats
@@ -256,8 +261,11 @@ if(AIZANA_ENABLE_ONNX)
 endif()
 
 include(CTest)
-include(Catch)
-catch_discover_tests(engine_tests)
+# A parent process must inspect diagnostics emitted during static destruction.
+# Catch's ordinary executable discovery cannot enforce this after-main gate.
+add_test(NAME engine_tests
+    COMMAND ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:engine_tests>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/RunEngineTests.cmake)
 
 # ---------------------------------------------------------------------------
 # oop_host_smoke — Phase 5 E5.3b end-to-end cross-process test (real spawn).

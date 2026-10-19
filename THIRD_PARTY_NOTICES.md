@@ -39,6 +39,15 @@ list is in `extern/JUCE/LICENSE.md`.
 - Upstream: https://github.com/Tracktion/tracktion_engine
 - License page: https://github.com/Tracktion/tracktion_engine/blob/develop/LICENSE.md
 
+Aizana modifications by Aizanagi and the Aizana contributors, 20 October 2026:
+`patches/tracktion-state-lifecycle.patch` preserves plugin bus layouts when
+derived metadata is absent, validates layouts before changing processor buses,
+initializes scene infrastructure before track Undo transactions, and avoids
+plugin-state writes after Edit deletion. The patch is applied reproducibly by
+`cmake/ApplyTracktionStatePatch.cmake`; these modifications use the same
+GPL-3.0-or-later terms as the upstream files. Upstream copyright and license
+notices remain intact.
+
 ### SoundTouch
 
 - Location: bundled inside Tracktion Engine at

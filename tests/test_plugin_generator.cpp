@@ -40,5 +40,5 @@ TEST_CASE ("PluginGenerator: text→template matcher (DE/EN)", "[generator]")
     REQUIRE (idOf ("add some distortion")         == "drive");
 
     REQUIRE (idOf ("")                            == "none");   // empty → no match
-    REQUIRE (idOf ("völliger unsinn ohne bezug")  == "none");   // nothing matches → nullptr
+    REQUIRE (idOf (juce::String::fromUTF8 ("völliger unsinn ohne bezug"))  == "none");   // nothing matches → nullptr
 }

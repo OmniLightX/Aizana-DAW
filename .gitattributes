@@ -1,0 +1,3 @@
+
+# Unified diff context lines contain a required single-space prefix.
+patches/tracktion-state-lifecycle.patch -whitespace
