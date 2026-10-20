@@ -24,6 +24,7 @@ The full license and copyright notices are in
 | Aizana code | GPL-3.0-or-later | Retain LICENSE.md, COPYING, copyright and modification notices |
 | JUCE 8 | AGPLv3 instead of a commercial JUCE license | Retain COPYING.AGPL and JUCE/subcomponent notices; comply with AGPL conditions |
 | Tracktion Engine | GPLv3-or-later instead of a commercial license | Provide the exact submodule revision, notices and the project's recording patch |
+| LAME 3.100 MP3 encoder | LGPL-2.0-or-later | Retain original license/copyright notices and bundled source; preserve relinking materials for static binary distribution |
 | SoundTouch in Tracktion | LGPL-2.1-or-later | Retain license notices and source access |
 | demucs.cpp, libebur128, CLAP, clap-helpers | MIT | Retain copyright and license texts |
 | ONNX Runtime | MIT, additional upstream notices | Document version and source; observe ThirdPartyNotices when redistributing |
@@ -35,6 +36,24 @@ The full license and copyright notices are in
 
 Optional third-party services, plugins and additionally downloaded models
 are subject to their respective terms of use and licenses.
+
+## MP3 encoder attribution
+
+Aizana uses [LAME](https://lame.sourceforge.io/) 3.100 (`libmp3lame`) for MP3
+export. LAME is open-source software under the GNU Library General Public License,
+version 2 or later (LGPL-2.0-or-later), as stated in the bundled library sources.
+This is the encoder's software license, not a separate license for a user's songs.
+
+The unmodified upstream source archive and its checksum are included under
+[extern/lame](../extern/lame/README.md). The original
+[COPYING](../licenses/LAME/COPYING) and [LICENSE](../licenses/LAME/LICENSE)
+texts are retained and packaged with the app. Attribution is also included in
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+Aizana links the encoder statically. Binary redistribution therefore needs the
+applicable corresponding-source and relinking materials, not merely a link to
+LAME's website. See [Distribution](DISTRIBUTION.md) for the project's packaging
+requirements. Including these notices does not change repository visibility.
 
 ## Source code and dependencies
 

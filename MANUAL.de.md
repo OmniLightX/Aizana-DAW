@@ -556,6 +556,12 @@ Buchstaben den Text bearbeiten, nicht Mute/Solo oder die Aufnahme auslösen.
 
 ## 18. Lizenzen und weitere Dokumentation
 
+Der MP3-Export verwendet **LAME 3.100**, einen Open-Source-Encoder unter
+**LGPL-2.0-or-later**. Originalquellcode, Lizenztexte und Hinweise zur Weitergabe
+sind in der [Lizenzübersicht](docs/OPEN_SOURCE_LICENSING.md#mp3-encoder-attribution)
+dokumentiert.
+
+
 Die Nutzung von Aizana stellt deine damit erstellte Musik nicht automatisch
 unter die Softwarelizenz. Rechte an verwendeten Samples, Aufnahmen und
 Drittanbieter-Plugins musst du unabhängig davon beachten.

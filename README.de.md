@@ -382,6 +382,7 @@ beschriebenen Alternativen.
 | Tracktion Engine | GPL-3.0-or-later |
 | MVSep-Mega-Modellgewichte und relevante Modellimplementierung | MIT, konkrete Herkunft und Änderungen siehe Modellbericht |
 | ONNX Runtime, libebur128, CLAP und weitere Komponenten | MIT sowie enthaltene Fremdhinweise |
+| LAME 3.100 (MP3-Encoder) | LGPL-2.0-or-later; Originalquellcode und Lizenztexte enthalten |
 | SoundTouch | LGPL-2.1-or-later |
 | Eigen | MPL-2.0 sowie enthaltene Fremdhinweise |
 | Catch2 (Tests) | BSL-1.0 |

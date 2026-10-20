@@ -369,6 +369,7 @@ describe.
 | Tracktion Engine | GPL-3.0-or-later |
 | MVSep-Mega model weights and relevant model implementation | MIT; specific provenance and modifications are documented in the model report |
 | ONNX Runtime, libebur128, CLAP and other components | MIT and included third-party notices |
+| LAME 3.100 (MP3 encoder) | LGPL-2.0-or-later; original source and license texts included |
 | SoundTouch | LGPL-2.1-or-later |
 | Eigen | MPL-2.0 and included third-party notices |
 | Catch2 (tests) | BSL-1.0 |
