@@ -288,7 +288,9 @@ the result rather than relying solely on automatic decisions.
 
 **Stem separation** is a separate tool for splitting a finished audio file.
 It runs locally using Roman Solovyev's (ZFTurbo) MIT-licensed MVSep-Mega model.
-The optional one-time model download is approximately 355 MB and is checked for
+The model release is currently a private draft; public first-use download is not
+yet available. A local model must be supplied until delivery is released and verified.
+The optional model is approximately 355 MB and is checked for
 size and SHA-256 before use. Six outputs are available: drums, bass, vocals,
 guitar, piano and other as a residual signal; a four-category mode is also
 available. Python is not required. Model weights are not part of the source

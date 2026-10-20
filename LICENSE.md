@@ -49,6 +49,9 @@ For the detailed dependency and model-weight notices, see
 
 - **JUCE 8** — AGPLv3 (selected open-source route)
 - **Tracktion Engine** — GPL3-or-later (selected open-source route)
+- **LAME 3.100** — LGPL-2.0-or-later; original source and provenance in
+  [`extern/lame/README.md`](extern/lame/README.md), notices in `licenses/LAME/`,
+  static-link redistribution requirements in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md#lame-3100)
 - **SoundTouch** — LGPL-2.1-or-later, bundled inside Tracktion Engine
 - **demucs.cpp** — MIT License
 - **ONNX Runtime** — MIT License

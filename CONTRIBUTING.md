@@ -57,16 +57,13 @@ edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr);
 sourceTrack.getOutput().setOutputToTrack(&busChannel);   // source → bus
 busChannel.getOutput().setOutputToDefaultDevice(false);  // bus → master
 
-// Recording — arm (Studio One style: auto-assign first wave input)
+// Recording — use the complete TrackHeader::assignInput / armClicked paths.
 // PREREQUISITE: AudioEngine::initialise() with numInputChannels = 32 (default).
-// numInputChannels = 0 → CoreAudio opens with 0 inputs → getNumWaveInDevices() = 0 → nothing to select.
-for (auto* instance : edit.getAllInputDevices())
-    if (&instance->getInputDevice() == waveIn)
-    {
-        auto result = instance->setTarget(track.itemID, true, nullptr);  // [[nodiscard]]
-        if (result.has_value())
-            instance->setRecordingEnabled(track.itemID, true);
-    }
+// setTarget() schedules an asynchronous update that can recreate the destination.
+// Check its result, then re-apply recording/monitoring after that update using
+// callAsync with a SafePointer guard. Re-resolve input instances through the live
+// edit and respect the current armed/monitor state; do not retain raw instances.
+// See src/ui/arrangement/TrackHeader.cpp for the lifecycle-safe implementation.
 // Disarm
 for (auto* instance : edit.getAllInputDevices())
     if (te::isOnTargetTrack(*instance, track, 0))
@@ -116,6 +113,6 @@ if (t != "volume" && t != "level" && t != "auxreturn" && t != "auxsend")
 - **Undo**: All user-facing mutations through `edit->getUndoManager()`; AI batch actions = one undo step
 - **Track ordering**: Bus/FX tracks always appended at END — track numbers must not shift
 - **Master Strip**: Always rightmost in Mixer; created unconditionally; no delete button
-- **Automation mode UI**: Lives ONLY in AutomationLane header ComboBox — NOT in TrackHeader
+- **Automation mode UI**: AutomationLane header and TrackHeader Automation context menu share the track mode; synchronize both through the TE state and preserve undo/redo
 - **Tool switching**: Marquee = cmd+drag only (temporary); Scissors = C key; right-click tool dropdown REMOVED
 - **paintOverChildren**: Playhead, rubber-band, range highlight, fade overlays — all must be in `paintOverChildren`, not `paint()`, to render above child components
