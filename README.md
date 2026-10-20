@@ -206,8 +206,8 @@ aufrufbar sein. Der erste Build benötigt Internetzugriff und deutlich mehr Zeit
 als spätere inkrementelle Builds.
 
 ```sh
-git clone https://github.com/OmniLightX/Aizana.git
-cd Aizana
+git clone https://github.com/OmniLightX/Aizana-DAW.git
+cd Aizana-DAW
 git submodule update --init extern/JUCE extern/tracktion_engine
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAIZANA_UITEST_HOOK=OFF
 cmake --build build --target Aizana engine_tests oop_host_smoke -j4
@@ -279,3 +279,10 @@ separat bezogen und nicht durch Aizanas Projektlizenz mitlizenziert.
 Externe Pull Requests werden derzeit nicht angenommen. Bugreports mit
 Versionsnummer und reproduzierbaren Schritten sind willkommen. Eigene Forks und
 Änderungen sind im Rahmen der Lizenz erlaubt.
+
+## Entwicklungshistorie
+
+Dieses Repository übernimmt die bereinigte Entwicklungshistorie des bisherigen
+Aizana-Projekts. Das neue GitHub-Erstellungsdatum bezeichnet den Umzug, nicht den
+Beginn der Entwicklung. Persönliche Angaben wurden entfernt; Entwicklungsschritte
+und ursprüngliche Commit-Zeitstempel bleiben nachvollziehbar.

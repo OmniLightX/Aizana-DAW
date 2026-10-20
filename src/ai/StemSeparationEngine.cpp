@@ -11,7 +11,7 @@ namespace
         { "Other", "Synths" }, { "Vocals", "Vocals" }, { "Guitar", "Guitars" }, { "Piano", "Keys" } };
     constexpr const char* modelName = "mega53-five-masks-v1.onnx";
     constexpr const char* modelURL =
-        "https://github.com/OmniLightX/Aizana/releases/download/stem-model-mega53-v1/mega53-five-masks-v1.onnx";
+        "https://github.com/OmniLightX/Aizana-DAW/releases/download/stem-model-mega53-v1/mega53-five-masks-v1.onnx";
 
     bool writeStemWav (const juce::File& file, const juce::AudioBuffer<float>& audio)
     {
