@@ -13,21 +13,10 @@ Fades aufziehen, Clip-Gain-Kurven zeichnen, Warp-Marker verschieben, Fader ziehe
 Über die Bedienungshilfen (`scripts/gui-test.sh`) sind Klicks und Namen erreichbar,
 Ziehbewegungen nicht.
 
-## Warum nicht systemweit
+## Prozessgrenze
 
-Der naheliegende Weg wäre ein CGEvent-Hilfsprogramm, das dem System eine Maus
-vorspielt. Das trifft aber **alles Sichtbare** — auch ein Benachrichtigungsbanner,
-ein Finder-Fenster oder einen „Erlauben?"-Dialog, der im falschen Moment aufgeht.
-Die dagegen vorgeschlagenen Absicherungen hielten der Nachprüfung nicht stand:
-
-| Vorgeschlagener Riegel | Befund |
-|---|---|
-| Koordinaten aufs Fensterrechteck begrenzen | prüft die falsche Frage — ein Rechteck sagt nichts darüber, was dort *obenauf* liegt |
-| Screenshot vor/nach | Beweissicherung, kein Riegel |
-| nur wenn Aizana im Vordergrund ist | gemessenes Zeitfenster ~100 ms zwischen Prüfung und Wirkung, dazu Fokusklau |
-| nicht bei offener User-Session | heuristisch |
-
-Deshalb: **in der App, nicht im System.**
+Die Steuerung adressiert ausschließlich JUCE-Komponenten im Testprozess. Sie
+sendet keine systemweiten Mausereignisse an andere Anwendungen.
 
 ## Wie es funktioniert
 
@@ -68,62 +57,21 @@ Belegt durch **fehlgeschlagene Angriffe**, nicht durch Zusagen:
 ./scripts/uitest-guard-check.sh
 ```
 
-Jede Prüfung trägt eine Gegenkontrolle, die beweist, dass sie durchfallen kann.
-(Die erste Fassung hatte hier selbst einen Fehler: `set -o pipefail` + `grep -q`
-lässt `strings` mit SIGPIPE enden, die Pipeline meldet Misserfolg — der Nachweis am
-Auslieferungs-Binary hätte „sauber" gemeldet, auch wenn der Hook drin gewesen wäre.
-Gefangen hat es nur die Gegenkontrolle.)
+Die Prüfungen enthalten Gegenkontrollen, die den jeweiligen Fehlerfall auslösen.
 
-## Fallen, die im ersten Durchlauf zugeschlagen haben
+## Voraussetzungen und Befehlsverhalten
 
-**Gesperrter Bildschirm sieht aus wie ein kaputtes Feature.** Bei aktiver
-Bildschirmsperre kommt das Fenster nicht in den Vordergrund und Klicks bleiben
-wirkungslos — die Befehle melden aber weiter `OK`, weil sie nur bestätigen, dass
-das Ereignis abgeschickt wurde. Ein ganzer Lauf liefert dann Fehlbefunde, die wie
-Messwerte aussehen. Genau so entstand am 12.08. das vermeintliche „Quantize greift
-nicht"; derselbe Code lief entsperrt einwandfrei, nachgewiesen durch Gegenprobe mit
-dem vorherigen Commit-Stand. `uitest.py` bricht deshalb vorher ab (`ioreg` →
-`CGSSessionScreenIsLocked`). **Merkmal im Log, falls der Riegel je umgangen wird:**
-`vorn` meldet „Fenster meldet keinen Fokus" und `peers` zeigt dauerhaft `focused=0`.
-
-**Modifier kommen NICHT über den Parameter an.** `handleMouseEvent` reicht seinen
-`mods` nur an `setButtons` weiter; die Tastatur-Bits eines `MouseEvent` stammen aus
-dem globalen `ModifierKeys::currentModifiers`, und `withoutMouseButtons()` wirft die
-des Parameters vorher weg (`juce_MouseInputSourceImpl.h:59`). Der Hook setzt den
-Static deshalb um jeden Dispatch herum und stellt ihn wieder her. Vorher erreichte
-kein Cmd die App — was fälschlich als „Cmd+Klick greift nicht" protokolliert wurde.
-
-**`find` muss gegen JEDEN Vorfahren schneiden, nicht nur gegen das Fenster.** Ein
-Clip unter dem unteren Dock liegt im Fensterrechteck und ist trotzdem nicht
-anklickbar; JUCE stellt einen Klick nur zu, wenn der Punkt auf jeder Ebene der
-Kette enthalten ist. Vorher meldete `find` die Mitte der *vollen* Bounds, der
-Doppelklick landete unter dem Dock und meldete `OK`. Jetzt kommt der sichtbare
-Streifen zurück — oder ein ehrliches „verdeckt oder weggescrollt".
-
-**Nie auf Stille prüfen.** Der erste GUI-Lauf sah aus wie ein Fehler: der importierte
-Clip blieb im Arrangement einfarbig, während der Dock-Editor dieselbe Datei sauber
-zeichnete. Nach langer Suche war die Ursache das Testmaterial — die ersten sieben
-Sekunden des Stems liegen bei **−90 dB**, also digitaler Stille, und im Fenster war
-genau dieser Anfang sichtbar. Der Dock zeigte den ganzen Song und damit auch die
-lauten Stellen. Mit einem Ausschnitt ab Sekunde 60 (−17,8 dB) zeichnet das
-Arrangement korrekt. **Testmaterial vorher nach Pegel auswählen** (`ffmpeg -af
-volumedetect`) — dieselbe Lehre wie bei den Render-Testreihen.
-
-**Zustand herstellen, nicht voraussetzen.** Ansichtsmodus (Pro/Einsteiger) und das
-untere Dock sind persistiert, und ein hart beendeter Lauf schreibt sie nicht zurück.
-Blind auf einen Umschalter zu klicken öffnet mal und schließt mal. Dafür gibt es
-`wennfehlt <Prüfname> @ <Knopf>`.
-
-**Cmd-Kürzel erreichen die App nicht** — sie gehören der nativen Menüleiste. Weg
-dafür: `menu <top> <itemId>` (Undo = `menu 2 101`).
-
-**`taste delete` ist NICHT die Taste, die auf einem MacBook „Delete" heißt.** Sie
-schickt `KeyPress::deleteKey` (vorwärts löschen); die MacBook-Taste sendet
-**Backspace**. Im Arrangement fällt das nicht auf, weil dort beide Codes behandelt
-werden — in einem Textfeld schon: steht der Cursor am Ende, tut Vorwärts-Löschen
-**nichts**, und der Befehl meldet trotzdem `OK` (das Textfeld hat die Taste ja
-angenommen). Genau so sah D4 zuerst nach „greift nicht" aus. Für alles, was die
-MacBook-Delete-Taste nachstellen soll: **`taste backspace`**.
+- Der Bildschirm muss entsperrt sein; `uitest.py` prüft dies vor dem Start.
+  Eine `OK`-Antwort bestätigt nur den Dispatch, nicht die sichtbare Wirkung.
+- Tastatur-Modifier werden während des Dispatch gesetzt und danach restauriert.
+- Die Zielsuche berücksichtigt die sichtbaren Grenzen sämtlicher Vorfahren.
+  Verdeckte oder weggescrollte Elemente liefern einen Fehler.
+- Für Wellenformprüfungen einen hörbaren Abschnitt des Testmaterials verwenden.
+- Ansichtsmodus und Dockzustand vor jedem Lauf herstellen. `wennfehlt` erlaubt
+  zustandsabhängige Schritte.
+- Native Menübefehle werden mit `menu <top> <itemId>` ausgelöst.
+- `taste backspace` entspricht der rückwärts löschenden MacBook-Taste;
+  `taste delete` löscht vorwärts.
 
 ## Grenzen (bleiben beim Menschen)
 

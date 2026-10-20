@@ -3,8 +3,7 @@
 This file summarizes third-party components used by Aizana and the release
 obligations that matter for public source or binary distribution.
 
-This is a technical release checklist, not legal advice. When shipping a public
-binary, include this notice, the project license, the exact source for the
+When distributing a binary, include this notice, the project license, the exact source for the
 released commit, and the applicable license texts and notices for each bundled
 dependency. License texts do not replace corresponding source where a component's
 license requires it; follow `docs/DISTRIBUTION.md` for source delivery.
@@ -207,32 +206,6 @@ Do not apply a blanket claim that all generated plugins have no license obligati
 - clap-helpers: 629ae7526740e3d0ee4d64c230df183ecdb2ff5a (MIT).
 - Host CLAP API remains pinned to 1.2.0 (MIT).
 - Faust: https://faustdoc.grame.fr/manual/faq/
-
-## Local Test Assets
-
-Local songs and generated stems are excluded by `.gitignore`:
-
-- `/*.mp3`
-- `/*.wav`
-- `/Stems_*/`
-
-Do not include private songs, stems, third-party loops, screenshots, commercial
-logos, or generated model weights in public source archives or release zips
-unless their rights are documented.
-
-## Release Checklist
-
-Before a public source or binary release:
-
-1. Include `LICENSE.md`, this file, and exact submodule commits.
-2. Include source access for the exact binary release.
-3. Include notices for JUCE, Tracktion Engine, SoundTouch, ONNX Runtime, Eigen,
-   libebur128, CLAP, Catch2 if tests are shipped, and VST3 SDK where applicable.
-4. Preserve the optional Mega model's MIT notices, exact provenance and conversion
-   record; do not reintroduce unqualified Demucs/htdemucs weight downloads.
-5. Do not ship ignored local audio material.
-6. Avoid implying endorsement by Apple, Fender, PreSonus, Steinberg, Avid,
-   Ableton, FabFilter, Meta, Microsoft, or other third parties.
 
 ## Source and binary delivery
 

@@ -3,13 +3,8 @@
 Aizana wird deutsch ausgeliefert, so wie Logic und Studio One auf einem deutschen
 System deutsch laufen. Eine Umschaltung ist vorerst nicht vorgesehen.
 
-Die Regel unten ist beim Uebersetzen der Menueleiste (2026-08-22) entstanden. Sie
-steht hier, damit nicht an einer Stelle „Stummschalten" steht und drei Klicks
-weiter „Mute" — genau die Mischung pro Flaeche, die den Anlass gab: im Menue stand
-„Save As…", der Dialog danach hiess „Session speichern unter …".
-
-Die Linie ist nicht erfunden, sondern an der deutschen Sprachdatei von Studio
-One 7 nachgemessen (`Studio One German.langpack`, gettext-Tabellen).
+Die folgenden Konventionen halten Menüs, Dialoge und technische Begriffe
+konsistent.
 
 ## 1. Uebersetzt wird, was normale Sprache ist
 

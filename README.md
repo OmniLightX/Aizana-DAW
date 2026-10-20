@@ -342,7 +342,8 @@ separat bezogen und nicht durch Aizanas Projektlizenz mitlizenziert.
 
 Externe Pull Requests werden derzeit nicht angenommen. Bugreports mit
 Versionsnummer und reproduzierbaren Schritten sind willkommen. Eigene Forks und
-Änderungen sind im Rahmen der Lizenz erlaubt.
+Änderungen sind im Rahmen der Lizenz erlaubt. Technische Hinweise stehen in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Fehler melden und die Alpha ausprobieren
 
