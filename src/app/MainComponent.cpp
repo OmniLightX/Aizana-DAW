@@ -270,7 +270,7 @@ MainComponent::MainComponent (ApplicationState& appState_)
     addChildComponent (inspectorPanel);   // hidden by default
 
     // Bottom bar — Edit/Mix/Browse buttons (Studio One), click empty area to
-    // toggle the current dock, drag to resize; height persists across launches.
+    // toggle the current dock. Resizing is handled at the dock's top edge.
     mixerDivider.onEditClick   = [this] { setBottomDock (BottomDock::Edit); };
     mixerDivider.onMixClick    = [this] { setBottomDock (BottomDock::Mix); };
     mixerDivider.onBrowseClick = [this] { showBrowsePopup(); };
@@ -281,13 +281,15 @@ MainComponent::MainComponent (ApplicationState& appState_)
                                                             : activeBottomDock);
         menuItemsChanged();
     };
-    mixerDivider.onDragDelta   = [this] (int dy)
+    bottomDockSplitter.getDockHeight = [this] { return mixerHeightPx; };
+    bottomDockSplitter.onHeightChange = [this] (int height)
     {
-        // dy > 0 = dragged down → dock shrinks; dy < 0 = dragged up → dock grows
-        mixerHeightPx -= dy;
+        // Zero is the persisted "unset" sentinel, not a resize request.
+        mixerHeightPx = juce::jmax (1, height);
         resized();
     };
-    mixerDivider.onDragEnd = [this] { persistBottomDockState(); };
+    bottomDockSplitter.onDragEnd = [this] { persistBottomDockState(); };
+    addChildComponent (bottomDockSplitter);
     updateMixerDivider();
     addAndMakeVisible (mixerDivider);
 
@@ -422,6 +424,9 @@ void MainComponent::resized()
         separationPanel->toFront (false);
     }
 
+    bottomDockSplitter.setVisible (activeBottomDock != BottomDock::None
+        && appState.uiState.getMode() != UIStateManager::UIMode::Beginner);
+
     // Beginner world owns the whole window when the Dial is in Beginner mode.
     if (appState.uiState.getMode() == UIStateManager::UIMode::Beginner)
     {
@@ -462,14 +467,16 @@ void MainComponent::resized()
     // (Mix); height is user-draggable and persisted.
     if (activeBottomDock != BottomDock::None)
     {
-        const int totalAvail = area.getHeight();
+        const int totalAvail = juce::jmax (0, area.getHeight() - BottomDockSplitter::height);
         if (mixerHeightPx == 0)
             mixerHeightPx = (int)(totalAvail * 0.50f);
 
-        const int minDockHeight = activeBottomDock == BottomDock::Edit ? 320 : kMixerMinHeight;
-        const int maxDockHeight = juce::jmax (minDockHeight, totalAvail - kArrangementMinHeight);
+        const int maxDockHeight = juce::jmax (0, totalAvail - kArrangementMinHeight);
+        const int minDockHeight = juce::jmin (maxDockHeight,
+            activeBottomDock == BottomDock::Edit ? 320 : kMixerMinHeight);
         mixerHeightPx = juce::jlimit (minDockHeight, maxDockHeight, mixerHeightPx);
         auto dockArea = area.removeFromBottom (mixerHeightPx);
+        bottomDockSplitter.setBounds (area.removeFromBottom (BottomDockSplitter::height));
 
         if (activeBottomDock == BottomDock::Mix)
             mixerView.setBounds (dockArea);

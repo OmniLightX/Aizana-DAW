@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/common/MixerControls.h"
 #include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -89,7 +90,7 @@ private:
  * ValueTree listener: keeps fader/knob positions in sync with engine state
  * when changes come from outside (e.g., undo, AI automation, parameter change).
  */
-class ChannelStrip : public juce::Component,
+class ChannelStrip : public juce::Component, public juce::DragAndDropTarget,
                      private juce::ValueTree::Listener
 {
 public:
@@ -103,6 +104,13 @@ public:
     void resized() override;
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void paintOverChildren (juce::Graphics&) override;
+    bool isInterestedInDragSource (const SourceDetails&) override;
+    void itemDragEnter (const SourceDetails&) override;
+    void itemDragMove (const SourceDetails&) override;
+    void itemDragExit (const SourceDetails&) override;
+    void itemDropped (const SourceDetails&) override;
 
     te::AudioTrack& getTrack() const noexcept { return track; }
 
@@ -121,6 +129,9 @@ public:
 
     /** Callback invoked on mouseDown — MixerView wires this to its selection handler. */
     std::function<void (te::AudioTrack*)> onTrackSelected;
+    std::function<void (te::AudioTrack*)> onTrackControlTouched;
+    std::function<void (te::AudioTrack&)> onDuplicateRequested;
+    std::function<void (te::AudioTrack&, te::AudioTrack&, bool)> onMoveRequested;
 
     /** Callbacks fired after solo/mute button clicks — MixerView wires for bus-group propagation. */
     std::function<void()> onSoloClicked;
@@ -180,12 +191,14 @@ private:
     PluginScanner& pluginScanner;
 
     bool             isSelected = false;
+    int insertionSide = 0;
+    void showTrackMenu();
     MeterBar         meterBar;
     bool volumeGestureActive = false;
-    juce::Slider     volumeFader;
+    aizana::MixerFader     volumeFader;
     PanKnobLookAndFeel panLnf;   // UX4: S1-Arc-Knob — VOR panKnob deklariert
                                  // (Member-Dtor-Reihenfolge: Knob löst LnF im Strip-Dtor)
-    juce::Slider     panKnob;
+    aizana::MixerPanKnob     panKnob;
     juce::Label      panValueLabel; // numeric pan readout: "L33", "C", "R48"
     juce::Label      panLabel;      // "PAN" label below the pan knob
     juce::TextButton soloButton { "S" };

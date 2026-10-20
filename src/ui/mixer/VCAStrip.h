@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/common/MixerControls.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -34,6 +35,7 @@ public:
     void refresh();
 
     std::function<void (te::AudioTrack*)> onTrackSelected;
+    std::function<void (te::AudioTrack*)> onTrackControlTouched;
     /** Fired after a member's fader moved through the VCA — MixerView refreshes strips. */
     std::function<void()> onMembersChanged;
 
@@ -46,7 +48,7 @@ private:
     juce::TextButton membersButton { juce::String::fromUTF8 ("Zuweisen ▾") };
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
-    juce::Slider     fader;
+    aizana::MixerFader     fader;
 
     // Relative drive: snapshots at drag start
     double dragStartDb = 0.0;

@@ -10,6 +10,7 @@ ExportDialog::ExportDialog (Mode mode_, EditManager& editManager_,
     formatCombo.addItem ("MP3",   3);
     formatCombo.setSelectedId (1);  // WAV default
     addAndMakeVisible (formatCombo);
+    formatCombo.onChange = [this] { updateFormat(); };
 
     // Sample rate combo (EXP-04)
     sampleRateCombo.addItem ("44.1 kHz",  1);
@@ -40,16 +41,20 @@ ExportDialog::ExportDialog (Mode mode_, EditManager& editManager_,
     addAndMakeVisible (exportButton);
     exportButton.onClick = [this] { startExport(); };
 
+    addAndMakeVisible(formatLabel); formatLabel.setText("Format", juce::dontSendNotification);
+    addAndMakeVisible(rateLabel); rateLabel.setText("Samplerate", juce::dontSendNotification);
+    addAndMakeVisible(qualityLabel); qualityLabel.setText("Bittiefe", juce::dontSendNotification);
     addAndMakeVisible (cancelButton);
     cancelButton.onClick = [this]
     {
+        if (isExporting) { cancelRequested = true; return; }
         if (auto* w = findParentComponentOfClass<juce::DialogWindow>())
             w->exitModalState (0);
     };
 
     addAndMakeVisible (statusLabel);
 
-    setSize (420, 260);
+    setSize (440, 290);
 }
 
 void ExportDialog::showMixdownDialog (EditManager& em, ExportPipeline& ep)
@@ -57,7 +62,7 @@ void ExportDialog::showMixdownDialog (EditManager& em, ExportPipeline& ep)
     auto* dialog = new ExportDialog (Mode::Mixdown, em, ep);
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned (dialog);
-    opts.dialogTitle = "Export Mixdown";
+    opts.dialogTitle = "Mix exportieren";
     opts.dialogBackgroundColour = juce::Colours::darkgrey;
     opts.escapeKeyTriggersCloseButton = true;
     opts.useNativeTitleBar = true;
@@ -70,7 +75,7 @@ void ExportDialog::showStemsDialog (EditManager& em, ExportPipeline& ep)
     auto* dialog = new ExportDialog (Mode::Stems, em, ep);
     juce::DialogWindow::LaunchOptions opts;
     opts.content.setOwned (dialog);
-    opts.dialogTitle = "Export Stems";
+    opts.dialogTitle = "Stems exportieren";
     opts.dialogBackgroundColour = juce::Colours::darkgrey;
     opts.escapeKeyTriggersCloseButton = true;
     opts.useNativeTitleBar = true;
@@ -109,7 +114,15 @@ ExportOptions ExportDialog::buildOptions() const
         default: opts.bitDepth = 24;
     }
 
+    if (opts.format == ExportFormat::MP3)
+    {
+        const int rates[] = {128, 192, 256, 320};
+        opts.mp3BitrateKbps = rates[juce::jlimit(0, 3, bitDepthCombo.getSelectedId() - 1)];
+    }
     opts.outputFile = juce::File (outputPathEditor.getText());
+    if (mode == Mode::Mixdown)
+        opts.outputFile = opts.outputFile.withFileExtension(opts.format == ExportFormat::MP3 ? ".mp3"
+            : opts.format == ExportFormat::AIFF ? ".aif" : ".wav");
     return opts;
 }
 
@@ -120,7 +133,7 @@ void ExportDialog::browse()
     if (mode == Mode::Mixdown)
     {
         fileChooser = std::make_unique<juce::FileChooser> (
-            "Choose export location",
+            "Exportziel waehlen",
             juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
             "*.wav;*.aiff;*.mp3");
 
@@ -130,14 +143,18 @@ void ExportDialog::browse()
             {
                 const auto result = fc.getResult();
                 if (result != juce::File{})
+                {
                     outputPathEditor.setText (result.getFullPathName());
+                    if (mode == Mode::Mixdown)
+                        outputPathEditor.setText(buildOptions().outputFile.getFullPathName());
+                }
                 fileChooser.reset();
             });
     }
     else  // Stems: choose output directory
     {
         fileChooser = std::make_unique<juce::FileChooser> (
-            "Choose stems output folder",
+            "Stem-Ordner waehlen",
             juce::File::getSpecialLocation (juce::File::userDesktopDirectory));
 
         fileChooser->launchAsync (
@@ -146,30 +163,49 @@ void ExportDialog::browse()
             {
                 const auto result = fc.getResult();
                 if (result != juce::File{})
+                {
                     outputPathEditor.setText (result.getFullPathName());
+                    if (mode == Mode::Mixdown)
+                        outputPathEditor.setText(buildOptions().outputFile.getFullPathName());
+                }
                 fileChooser.reset();
             });
     }
 }
 
-void ExportDialog::startExport()
+void ExportDialog::startExport(bool overwriteConfirmed)
 {
     if (isExporting) return;
 
     auto* edit = editManager.getEdit();
     if (edit == nullptr)
     {
-        statusLabel.setText ("No session open.", juce::dontSendNotification);
+        statusLabel.setText ("Keine Session geoeffnet.", juce::dontSendNotification);
         return;
     }
 
+    auto options = buildOptions();
+    if (!overwriteConfirmed && options.outputFile.exists())
+    {
+        juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon,
+            "Exportziel vorhanden", mode == Mode::Mixdown ? "Vorhandene Datei ersetzen?"
+                : "Vorhandene Stem-Dateien mit gleichem Namen ersetzen?",
+            "Ersetzen", "Abbrechen", nullptr,
+            juce::ModalCallbackFunction::create([safe = juce::Component::SafePointer<ExportDialog>(this)](int result)
+            { if (safe != nullptr && result != 0) safe->startExport(true); }));
+        return;
+    }
+    cancelRequested = false;
     isExporting = true;
+    formatCombo.setEnabled(false); sampleRateCombo.setEnabled(false);
+    bitDepthCombo.setEnabled(false); browseButton.setEnabled(false);
     exportButton.setEnabled (false);
     exportProgress = -1.0;   // indeterminate spinner while TE renders
     progressBar.repaint();
-    statusLabel.setText ("Exporting...", juce::dontSendNotification);
+    statusLabel.setText ("Export laeuft...", juce::dontSendNotification);
 
-    auto options = buildOptions();
+    auto safe = juce::Component::SafePointer<ExportDialog>(this);
+    options.shouldCancel = [safe] { return safe == nullptr || safe->cancelRequested; };
 
     // te::Renderer::renderToFile() MUST be called from the message thread.
     // It delegates rendering to AizanaUIBehaviour::runTaskWithProgressBar(),
@@ -182,24 +218,27 @@ void ExportDialog::startExport()
     else
         errorMsg = exportPipeline.exportStems (*edit, options);
 
+    if (safe == nullptr) return; // Closing the dialog during the nested message loop cancels safely.
     isExporting = false;
+    formatCombo.setEnabled(true); sampleRateCombo.setEnabled(true);
+    bitDepthCombo.setEnabled(true); browseButton.setEnabled(true);
     exportButton.setEnabled (true);
-    exportProgress = 1.0;
+    exportProgress = errorMsg.isEmpty() ? 1.0 : 0.0;
 
     if (errorMsg.isEmpty())
     {
-        statusLabel.setText ("Export complete!", juce::dontSendNotification);
+        statusLabel.setText ("Export abgeschlossen.", juce::dontSendNotification);
         juce::AlertWindow::showMessageBoxAsync (
             juce::MessageBoxIconType::InfoIcon,
-            "Export Complete",
-            "File exported successfully.");
+            "Export abgeschlossen",
+            "Audiodateien erfolgreich exportiert.");
     }
     else
     {
-        statusLabel.setText ("Error: " + errorMsg, juce::dontSendNotification);
+        statusLabel.setText ("Fehler: " + errorMsg, juce::dontSendNotification);
         juce::AlertWindow::showMessageBoxAsync (
             juce::MessageBoxIconType::WarningIcon,
-            "Export Failed",
+            "Export fehlgeschlagen",
             errorMsg);
     }
 }
@@ -215,19 +254,19 @@ void ExportDialog::resized()
 
     // Row 1: Format
     auto row = area.removeFromTop (30);
-    row.removeFromLeft (80);  // label space
+    formatLabel.setBounds(row.removeFromLeft(80));
     formatCombo.setBounds (row);
     area.removeFromTop (6);
 
     // Row 2: Sample rate
     row = area.removeFromTop (30);
-    row.removeFromLeft (80);
+    rateLabel.setBounds(row.removeFromLeft(80));
     sampleRateCombo.setBounds (row);
     area.removeFromTop (6);
 
     // Row 3: Bit depth
     row = area.removeFromTop (30);
-    row.removeFromLeft (80);
+    qualityLabel.setBounds(row.removeFromLeft(80));
     bitDepthCombo.setBounds (row);
     area.removeFromTop (6);
 
@@ -251,4 +290,26 @@ void ExportDialog::resized()
     cancelButton.setBounds (row.removeFromRight (80));
     row.removeFromRight (8);
     exportButton.setBounds (row.removeFromRight (80));
+}
+
+void ExportDialog::updateFormat()
+{
+    const bool mp3 = formatCombo.getSelectedId() == 3;
+    sampleRateCombo.setItemEnabled(3, !mp3);
+    if (mp3 && sampleRateCombo.getSelectedId() == 3)
+        sampleRateCombo.setSelectedId(2, juce::dontSendNotification);
+    bitDepthCombo.clear(juce::dontSendNotification);
+    if (mp3)
+    {
+        bitDepthCombo.addItemList({"128 kbit/s", "192 kbit/s", "256 kbit/s", "320 kbit/s"}, 1);
+        bitDepthCombo.setSelectedId(4, juce::dontSendNotification);
+    }
+    else
+    {
+        bitDepthCombo.addItemList({"16-bit", "24-bit", "32-bit"}, 1);
+        bitDepthCombo.setSelectedId(2, juce::dontSendNotification);
+    }
+    qualityLabel.setText(mp3 ? "Bitrate" : "Bittiefe", juce::dontSendNotification);
+    if (mode == Mode::Mixdown)
+        outputPathEditor.setText(buildOptions().outputFile.getFullPathName());
 }

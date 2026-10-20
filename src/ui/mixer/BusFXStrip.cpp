@@ -143,6 +143,7 @@ BusFXStrip::BusFXStrip (te::AudioTrack& track_,
     // Namen fuer Bedienungshilfen/Automatisierung sofort setzen (refresh()
     // erledigt das mit; beim Aufbau laeuft es sonst nicht).
     refresh();
+    for (auto* child : getChildren()) child->addMouseListener(this, true);
 }
 
 BusFXStrip::~BusFXStrip()
@@ -203,9 +204,13 @@ void BusFXStrip::paint (juce::Graphics& g)
 
 void BusFXStrip::mouseDown (const juce::MouseEvent& e)
 {
-    if (! e.mods.isPopupMenu())
-        if (onTrackSelected)
-            onTrackSelected (&track);
+    if (e.mods.isPopupMenu()) return;
+    if (e.eventComponent == this || e.eventComponent == &trackNameLabel)
+    {
+        if (onTrackSelected) onTrackSelected(&track);
+    }
+    else if (onTrackControlTouched)
+        onTrackControlTouched(&track);
 }
 
 void BusFXStrip::setSelected (bool s)

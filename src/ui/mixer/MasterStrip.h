@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/common/MixerControls.h"
 #include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -83,7 +84,7 @@ private:
         static float dbToNorm (float db);
     };
 
-    juce::Slider      volumeFader;
+    aizana::MixerFader      volumeFader;
     MeterDisplay      meterDisplay;
     MasterInsertSlotPanel insertPanel;
     juce::Label       nameLabel;

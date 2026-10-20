@@ -38,6 +38,7 @@ namespace te = tracktion::engine;
  */
 class MixerView : public juce::Component, public juce::DragAndDropContainer,
                   private juce::ValueTree::Listener,
+                  private juce::AsyncUpdater,
                   private juce::Timer
 {
 public:
@@ -150,7 +151,12 @@ private:
     void clearStrips();   // selection + level clients + all strips (tracks must still be alive)
 
     // Select a track strip; Cmd held = add/remove from multi-selection.
-    void setMixerSelectedTrack (te::AudioTrack* t);
+    void setMixerSelectedTrack (te::AudioTrack* t, bool takeFocus = true);
+    void selectForControl (te::AudioTrack* t);
+    void duplicateTrack (te::AudioTrack&);
+    void moveTrack (te::AudioTrack&, te::AudioTrack&, bool);
+    void handleAsyncUpdate() override { rebuildStrips(); }
+    te::EditItemID pendingSelection;
 
     // ---- Multi-selection group fader (Studio One-style relative move) ----
     // When the anchor strip is part of a multi-selection, dragging its fader moves

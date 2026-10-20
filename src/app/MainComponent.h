@@ -26,6 +26,7 @@
 #include "ui/arrangement/TransportBar.h"
 #include "ui/arrangement/ArrangementView.h"
 #include "ui/mixer/MixerView.h"
+#include "ui/common/BottomDockSplitter.h"
 #include "ui/pluginwin/PluginWindowManager.h"
 #include "ui/preferences/PreferencesDialog.h"
 #include "ui/prefs/AudioPreferencesDialog.h"
@@ -201,7 +202,7 @@ private:
     void loadBottomDockState();
     void showBrowsePopup();
 
-    // ---- Bottom bar — drag to resize, hosts the Edit/Mix/Browse buttons ----
+    // ---- Bottom bar — dock controls; resizing lives above the dock ----
     class MixerDivider : public juce::Component
     {
     public:
@@ -230,8 +231,6 @@ private:
         }
 
         std::function<void()>    onEditClick, onMixClick, onBrowseClick;
-        std::function<void(int)> onDragDelta;     // fired during drag: delta Y in screen pixels
-        std::function<void()>    onDragEnd;       // persist height after a resize drag
         std::function<void()>    onToggleClick;   // short click on empty bar area
         bool mixerExpanded = true;                // any dock open? (arrow direction)
 
@@ -266,50 +265,22 @@ private:
                         juce::Justification::centredLeft, false);
         }
 
-        void mouseDown (const juce::MouseEvent& e) override
-        {
-            dragStartScreenY = e.getScreenY();
-            dragDeltaAccum   = 0;
-        }
-
-        void mouseDrag (const juce::MouseEvent& e) override
-        {
-            if (onDragDelta == nullptr) return;
-            const int total = e.getScreenY() - dragStartScreenY;
-            const int step  = total - dragDeltaAccum;
-            if (step != 0)
-            {
-                onDragDelta (step);
-                dragDeltaAccum = total;
-            }
-        }
-
         void mouseUp (const juce::MouseEvent& e) override
         {
-            if (e.getDistanceFromDragStart() < 5)
-            {
-                if (onToggleClick)
-                    onToggleClick();
-            }
-            else if (onDragEnd)
-                onDragEnd();
-        }
-
-        juce::MouseCursor getMouseCursor() override
-        {
-            return juce::MouseCursor::UpDownResizeCursor;
+            if (e.mods.isLeftButtonDown() && ! e.mouseWasDraggedSinceMouseDown()
+                && e.getDistanceFromDragStart() < 5 && onToggleClick)
+                onToggleClick();
         }
 
     private:
         juce::TextButton editButton   { "Edit" };
         juce::TextButton mixButton    { "Mix" };
         juce::TextButton browseButton { "Browse" };
-        int dragStartScreenY = 0;
-        int dragDeltaAccum   = 0;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerDivider)
     };
 
     MixerDivider      mixerDivider;
+    BottomDockSplitter bottomDockSplitter;
     int               mixerHeightPx       = 0;   // bottom dock height; 0 = unset (default on first resized())
     static constexpr int kMixerToggleBarHeight  = 24;
     static constexpr int kMixerMinHeight        = 120; // minimum bottom dock height (px)

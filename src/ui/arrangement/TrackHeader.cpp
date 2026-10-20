@@ -6,6 +6,7 @@
 #include "ui/common/TrackColours.h"
 #include "plugins/BuiltInPluginFormat.h"
 #include "engine/TrackFreeze.h"
+#include "engine/TrackOperations.h"
 
 // Track channel-format flag (mono/stereo). Persisted on the track ValueTree and
 // fully decoupled from hardware input pairing — see TrackHeader::toggleTrackStereo().
@@ -843,7 +844,27 @@ void TrackHeader::showContextMenu()
     juce::PopupMenu colourMenu;
     populateColourMenu (colourMenu);
 
+    const auto parameters = automationEngine.getAutomatableParams (track);
+    const auto selectedParameter = currentAutomationParameter ? currentAutomationParameter() : juce::String();
+    juce::PopupMenu parameterMenu;
+    for (int i = 0; i < parameters.size(); ++i)
+        parameterMenu.addItem (1000 + i, parameters[i].displayName, true,
+                               parameters[i].id == selectedParameter);
+    juce::PopupMenu automationMenu;
+    const bool visible = isAutomationVisible && isAutomationVisible();
+    automationMenu.addItem (300, visible ? "Ausblenden" : "Einblenden", onAutomationVisibility != nullptr);
+    automationMenu.addSubMenu (juce::String::fromUTF8 ("Parameter wählen"), parameterMenu,
+                               onAutomationParameter != nullptr && ! parameters.isEmpty());
+    automationMenu.addSeparator();
+    const auto mode = automationEngine.getMode (track);
+    automationMenu.addItem (301, "Read", true, mode == AutomationMode::read);
+    automationMenu.addItem (302, "Touch", true, mode == AutomationMode::touch);
+    automationMenu.addItem (303, "Latch", true, mode == AutomationMode::latch);
+    automationMenu.addItem (304, "Write", true, mode == AutomationMode::write);
+
     juce::PopupMenu menu;
+    menu.addSubMenu ("Automation", automationMenu);
+    menu.addSeparator();
     menu.addSubMenu ("Instrument", instrumentMenu);
     menu.addSubMenu ("Built-in FX", builtInMenu);
     menu.addSeparator();
@@ -878,46 +899,72 @@ void TrackHeader::showContextMenu()
 
     menu.addSeparator();
     menu.addSubMenu ("Track-Farbe", colourMenu);
+    menu.addItem (8, "Spur duplizieren", aizana::TrackOperations::canDuplicateTrack (track));
     menu.addItem (4, "Rename Track");
     menu.addItem (5, "Delete Track");
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-        [this] (int result)
+        [safe = juce::Component::SafePointer<TrackHeader> (this), parameters, visible] (int result)
         {
+            if (safe == nullptr) return;
+            auto& track = safe->track;
+            if (result == 300)
+            {
+                if (safe->onAutomationVisibility) safe->onAutomationVisibility (! visible);
+                return;
+            }
+            if (result >= 301 && result <= 304)
+            {
+                const AutomationMode modes[] { AutomationMode::read, AutomationMode::touch,
+                                                AutomationMode::latch, AutomationMode::write };
+                auto& undo = track.edit.getUndoManager();
+                undo.beginNewTransaction ("Automationsmodus");
+                safe->automationEngine.setMode (track, modes[result - 301]);
+                undo.beginNewTransaction();
+                return;
+            }
+            if (result >= 1000 && result < 1000 + parameters.size())
+            {
+                const auto id = parameters[result - 1000].id;
+                if (AutomationEngine::resolveParameter (track, id) != nullptr && safe->onAutomationParameter)
+                    safe->onAutomationParameter (id);
+                return;
+            }
             if (result >= 100 && result < 100 + AizanaTrackColours::paletteSize())
             {
-                handleSetTrackColour (AizanaTrackColours::palette (result - 100));
+                safe->handleSetTrackColour (AizanaTrackColours::palette (result - 100));
                 return;
             }
 
             if (result >= 200 && result <= 200 + ClipEditor::kMaxEditGroups)
             {
                 ClipEditor::setEditGroup (track, result - 200);
-                repaint();   // Badge aktualisieren
+                safe->repaint();   // Badge aktualisieren
                 return;
             }
 
             switch (result)
             {
-                case 1:  handleAddPlugin();                             break;
-                case 2:  handleCreateBus();                            break;
-                case 6:  handleCreateFXChannel();                      break;
-                case 3:  handleSetSidechainSource();                   break;
-                case 7:  handleToggleFreeze();                         break;
-                case 4:  handleRenameTrack();                          break;
-                case 5:  handleDeleteTrack();                          break;
-                case 10: handleInsertBuiltInFX ("Aizana EQ");         break;
-                case 11: handleInsertBuiltInFX ("Aizana Compressor"); break;
-                case 12: handleInsertBuiltInFX ("Aizana Reverb");     break;
-                case 13: handleInsertBuiltInFX ("Aizana Limiter");    break;
-                case 14: handleInsertBuiltInFX ("Aizana Delay");      break;
-                case 15: handleInsertBuiltInFX ("Aizana Gate");       break;
-                case 16: handleInsertBuiltInFX ("Aizana Saturator");  break;
-                case 17: handleInsertBuiltInFX ("Aizana De-Esser");   break;
-                case 30: handleInsertBuiltInFX ("Aizana Drums");      break;
-                case 31: handleInsertBuiltInFX ("Aizana Synth");      break;
-                case 98: handleCustomColourPicker();                   break;
-                case 99: handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
+                case 1:  safe->handleAddPlugin();                             break;
+                case 2:  safe->handleCreateBus();                            break;
+                case 6:  safe->handleCreateFXChannel();                      break;
+                case 3:  safe->handleSetSidechainSource();                   break;
+                case 7:  safe->handleToggleFreeze();                         break;
+                case 8:  aizana::TrackOperations::duplicateTrack (track); break;
+                case 4:  safe->handleRenameTrack();                          break;
+                case 5:  safe->handleDeleteTrack();                          break;
+                case 10: safe->handleInsertBuiltInFX ("Aizana EQ");         break;
+                case 11: safe->handleInsertBuiltInFX ("Aizana Compressor"); break;
+                case 12: safe->handleInsertBuiltInFX ("Aizana Reverb");     break;
+                case 13: safe->handleInsertBuiltInFX ("Aizana Limiter");    break;
+                case 14: safe->handleInsertBuiltInFX ("Aizana Delay");      break;
+                case 15: safe->handleInsertBuiltInFX ("Aizana Gate");       break;
+                case 16: safe->handleInsertBuiltInFX ("Aizana Saturator");  break;
+                case 17: safe->handleInsertBuiltInFX ("Aizana De-Esser");   break;
+                case 30: safe->handleInsertBuiltInFX ("Aizana Drums");      break;
+                case 31: safe->handleInsertBuiltInFX ("Aizana Synth");      break;
+                case 98: safe->handleCustomColourPicker();                   break;
+                case 99: safe->handleSetTrackColour (juce::Colour());        break;  // reset → auto palette
                 default: break;
             }
         });

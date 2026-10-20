@@ -48,6 +48,11 @@ target_sources(engine_tests PRIVATE
     test_midi_recording.cpp
     test_multitrack_render.cpp
     test_channel_strip.cpp
+    test_automation_lane_sync.cpp
+    ../src/ui/automation/AutomationLane.cpp
+    test_mixer_controls.cpp
+    test_track_operations.cpp
+    test_bottom_dock_splitter.cpp
     test_input_buses.cpp
     test_ai_command_bridge.cpp
     test_ui_state_manager.cpp
@@ -155,6 +160,7 @@ target_sources(engine_tests PRIVATE
     ../src/engine/MidiRecorder.cpp
     ../src/engine/InstrumentTracks.cpp
     ../src/engine/MixerEngine.cpp
+    ../src/engine/TrackOperations.cpp
     ../src/engine/WarpEngine.cpp
     ../src/engine/PitchDetector.cpp
     ../src/engine/VocalTuner.cpp
@@ -192,6 +198,7 @@ target_sources(engine_tests PRIVATE
     # Metering + Export implementations (plan 01-07)
     ../src/metering/MeterProcessor.cpp
     ../src/engine/ExportPipeline.cpp
+    ../src/engine/Mp3Encoder.cpp
 )
 
 target_include_directories(engine_tests PRIVATE
@@ -238,6 +245,7 @@ target_link_libraries(engine_tests PRIVATE
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128
+    aizana_lame
     demucs_inference
 )
 

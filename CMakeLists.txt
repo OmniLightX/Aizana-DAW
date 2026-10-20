@@ -42,6 +42,7 @@ add_subdirectory(extern/tracktion_engine/modules)
 # ---------------------------------------------------------------------------
 
 include(FetchContent)
+include(cmake/Lame.cmake)
 
 # libebur128 v1.2.6 — EBU R128 LUFS/loudness measurement (MIT license)
 # OVERRIDE_FIND_PACKAGE not needed; CMAKE_POLICY_VERSION_MINIMUM required because
@@ -238,6 +239,7 @@ target_sources(Aizana PRIVATE
     src/engine/MidiRecorder.cpp
     src/engine/InstrumentTracks.cpp
     src/engine/MixerEngine.cpp
+    src/engine/TrackOperations.cpp
     src/engine/WarpEngine.cpp
     src/engine/PitchDetector.cpp
     src/engine/VocalTuner.cpp
@@ -275,6 +277,7 @@ target_sources(Aizana PRIVATE
     src/metering/MeterProcessor.cpp
     src/metering/MasterMeterAudioProcessor.cpp
     src/engine/ExportPipeline.cpp
+    src/engine/Mp3Encoder.cpp
     # UI Shell (plan 01-08)
     src/ui/arrangement/TransportBar.cpp
     src/ui/arrangement/ArrangementView.cpp
@@ -402,6 +405,7 @@ target_link_libraries(Aizana PRIVATE
     juce::juce_gui_extra
     tracktion::tracktion_engine
     ebur128
+    aizana_lame
     demucs_inference
     AizanaBrand
     "$<$<PLATFORM_ID:Darwin>:-framework AVFoundation>"

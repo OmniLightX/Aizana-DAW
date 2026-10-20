@@ -614,6 +614,12 @@ void AutomationLane::setViewportTimeMapping (bool useViewportMapping)
 void AutomationLane::setParameterID (const juce::String& newParamID)
 {
     parameterID = newParamID;
+    for (int i = 0; i < paramChoices.size(); ++i)
+        if (paramChoices[i].id == parameterID)
+        {
+            paramSelector.setSelectedId (i + 1, juce::dontSendNotification);
+            break;
+        }
     repaint();
 }
 
@@ -635,8 +641,17 @@ void AutomationLane::setDrawMode (bool drawModeActive)
 // ValueTree::Listener — repaint when automation data changes
 //==============================================================================
 
-void AutomationLane::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&)
+void AutomationLane::valueTreePropertyChanged (juce::ValueTree& changed, const juce::Identifier& property)
 {
+    if (changed == track.state && property == te::IDs::automationMode)
+    {
+        // TE serialises this enum as text ("read", "touch", ...), not an integer.
+        // Read the committed property to avoid CachedValue listener-order races.
+        const auto mode = juce::VariantConverter<AutomationMode>::fromVar (track.state.getProperty (property));
+        const int id = mode == AutomationMode::touch ? 2 : mode == AutomationMode::latch ? 3
+                     : mode == AutomationMode::write ? 4 : 1;
+        modeSelector.setSelectedId (id, juce::dontSendNotification);
+    }
     repaint();
 }
 

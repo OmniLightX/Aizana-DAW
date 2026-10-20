@@ -213,6 +213,29 @@ Lautstärkeverhältnis, bevor du viele Effekte einsetzt.
 Beende Solo zum Prüfen der gesamten Mischung. Mehrere ausgewählte Spuren können
 gemeinsam geschaltet werden. Prüfe die Auswahl, bevor du **M** oder **S** drückst.
 
+### Kanäle auswählen, verschieben und kopieren
+
+Ein Klick in den Kanalzug wählt die Spur aus. Freie Flächen neben Fader und
+Pan verändern keinen Wert. Bediene den Pegel direkt am Fader oder seiner Skala;
+den Pan-Knopf ziehst du horizontal. Ein Klick auf einen Regler innerhalb einer
+bestehenden Mehrfachauswahl erhält diese Auswahl für die gemeinsame Bedienung.
+
+Ziehe den Kanalnamen oder eine freie Fläche im Kanalzug auf einen anderen
+Audiokanal. Die Einfügemarkierung zeigt, ob die Spur davor oder dahinter landet.
+Die Reihenfolge im Arrangement folgt mit. Spuren bleiben dabei in ihrem
+bestehenden Ordner; Bus-, FX-, VCA- und Cue-Kanäle werden nicht mitverschoben.
+
+Über **Spur duplizieren** im Kontextmenü des Spurkopfs oder Mixerkanals entsteht
+direkt neben dem Original eine Kopie mit Clips, Effekten, Einstellungen und
+Automation. Audiodateien werden gemeinsam referenziert; Clips, Effekte und
+Automationsdaten lassen sich unabhängig bearbeiten. Die Kopie ist nicht
+aufnahmebereit und verwendet keinen Freeze-Cache des Originals. Duplizieren
+und Verschieben lassen sich rückgängig machen. **Command-D** dupliziert weiterhin
+Clips.
+
+Ziehe die Trennkante zwischen Arrangement und Mixer nach oben oder unten, um
+dessen Höhe zu ändern. Die Ansichtsschalter bleiben in der unteren Leiste.
+
 ### Bus und gemeinsamer Hall
 
 Für eine gemeinsame Bearbeitung mehrerer Spuren:
@@ -235,10 +258,15 @@ lassen; diese Steuerung ist nicht dasselbe wie ein hörbarer Send.
 
 ### Automation
 
-Öffne die Automationsansicht der Spur über **A** und wähle den zu bearbeitenden
-Parameter. Punkte bzw. Linien beschreiben dessen zeitlichen Verlauf.
-Die Modi **Read**, **Touch**, **Latch** und **Write** stehen in der
-Automationsspur:
+Öffne die Automationsansicht über den **A**-Schalter oder per Rechtsklick auf
+den Spurkopf → **Automation → Einblenden**. Dort kannst du sie auch ausblenden.
+Unter **Parameter wählen** stehen Lautstärke, Panorama und die verfügbaren
+Effektparameter; die Auswahl öffnet die entsprechende Kurve. Ein-/Ausblenden
+und Parameterwahl ändern weder Kurvendaten noch den Schreibmodus.
+Punkte bzw. Linien beschreiben den zeitlichen Verlauf des Parameters.
+Die Modi **Read**, **Touch**, **Latch** und **Write** stehen sowohl im
+Automation-Untermenü als auch in der Automationsspur zur Verfügung:
+
 
 - **Read:** vorhandene Automation wiedergeben.
 - **Touch:** während der Bedienung Automation schreiben.
@@ -427,15 +455,23 @@ Mischen musst du KI-Studio nicht einrichten.
 1. Speichere die Session und kontrolliere Mute/Solo sowie den Ausgang zum Master.
 2. Wähle **Export → Mix exportieren…** für die Gesamtmischung oder
    **Export → Stems exportieren…** für einzelne Spuren.
-3. Wähle **WAV** oder **AIFF**, Sample-Rate und Bittiefe.
+3. Wähle **WAV**, **AIFF** oder **MP3**, Sample-Rate und Bittiefe bzw. MP3-Bitrate.
 4. Wähle eine Zieldatei bzw. einen Zielordner.
 5. Starte den Export und warte auf die Abschlussmeldung.
 6. Öffne die erzeugte Datei in einem Audioplayer und kontrolliere Anfang, Ende,
    Pegel und Vollständigkeit.
 
-Unterstützt sind 44,1 / 48 / 96 kHz und 16 / 24 / 32 Bit.
-**MP3 ist derzeit nicht implementiert**, auch wenn der Dialog einen
-entsprechenden Eintrag anbietet. Verwende WAV oder AIFF.
+WAV/AIFF unterstützen 44,1 / 48 / 96 kHz und 16 / 24 / 32 Bit.
+MP3 unterstützt 44,1 / 48 kHz und konstante 128 / 192 / 256 / 320 kbit/s
+(Standard: 320). LAME ist integriert; eine zusätzliche Installation ist nicht nötig.
+Beim Wechsel zu MP3 wird eine gewählte Sample-Rate von 96 kHz auf 48 kHz gesetzt.
+Die Dateiendung folgt dem Format.
+
+**Abbrechen** beendet den laufenden Export. Auch das Schließen des Exportfensters
+bricht ihn ab. Eine fehlgeschlagene oder abgebrochene Datei ersetzt kein vorhandenes
+Ziel. Beim Stem-Export bleiben bereits fertiggestellte Dateien im Zielordner;
+ein Fehler stoppt die restlichen Stems. Doppelte Spurnamen erhalten nummerierte
+Zusätze.
 
 Mixdown berücksichtigt die Master-Effekte. Prüfe deshalb vor dem Rendern,
 ob Limiter oder andere Master-Inserts wie gewünscht eingestellt sind.
@@ -484,7 +520,7 @@ letzte Änderung bereits gesichert wurde.
 | Falsche KI-Setup-Gruppe | Vorschlag vor Anwenden im Gruppenauswahlfeld korrigieren |
 | Stem-Download scheitert | Internet und öffentliche Verfügbarkeit des Modell-Releases prüfen; Kapitel 12 beachten |
 | Stem-Ergebnis klingt unsauber | Original behalten; Übersprechen und Modellgrenzen gegenhören |
-| MP3-Export schlägt fehl | WAV oder AIFF verwenden |
+| MP3-Export schlägt fehl | 44,1 oder 48 kHz wählen; Ziel und freien Speicherplatz prüfen und die Exportfehlermeldung beachten |
 | Session meldet fehlende Medien | Vollständigen Projektordner bzw. Sicherung und eingebundene Laufwerke prüfen |
 | App oder Plugin stürzt ab | Ausgangssession sichern; Fehler mit kleiner Testsession und konkretem Plugin eingrenzen |
 

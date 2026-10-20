@@ -71,6 +71,7 @@ VCAStrip::VCAStrip (te::AudioTrack& vcaTrack, MixerEngine& me)
     fader.onValueChange = [this] { applyVcaDrag (fader.getValue()); };
     fader.onDragEnd     = [this] { memberStartDb.clear(); };
     addAndMakeVisible (fader);
+    for (auto* child : getChildren()) child->addMouseListener(this, true);
 }
 
 //==============================================================================
@@ -148,10 +149,15 @@ void VCAStrip::setSelected (bool s)
     repaint();
 }
 
-void VCAStrip::mouseDown (const juce::MouseEvent&)
+void VCAStrip::mouseDown (const juce::MouseEvent& e)
 {
-    if (onTrackSelected)
-        onTrackSelected (&track);
+    if (e.mods.isPopupMenu()) return;
+    if (e.eventComponent == this || e.eventComponent == &nameLabel)
+    {
+        if (onTrackSelected) onTrackSelected(&track);
+    }
+    else if (onTrackControlTouched)
+        onTrackControlTouched(&track);
 }
 
 void VCAStrip::paint (juce::Graphics& g)

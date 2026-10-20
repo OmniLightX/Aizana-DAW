@@ -138,6 +138,20 @@ Diese drei Aufgaben sind voneinander unabhängig.
 | Einen Fehler eingrenzen | [Fehlerhilfe](MANUAL.de.md#16-wenn-etwas-nicht-funktioniert) |
 | Code oder Modell weitergeben | [Lizenzübersicht](docs/OPEN_SOURCE_LICENSING.md) und [Distribution](docs/DISTRIBUTION.md) |
 
+## Aktuelle Verbesserungen
+
+- Mixerkanäle über freie Flächen auswählen, ohne Pegel oder Panorama zu verändern.
+  Pan horizontal am Knopf bedienen; Mehrfachauswahl bleibt beim Reglerzugriff erhalten.
+- Audio- und Instrumentenspuren im Mixer umsortieren und über das Kontextmenü
+  vollständig duplizieren, einschließlich Clips, Effekten, Automation und Routing.
+- Mixerhöhe an der oberen Trennkante ändern.
+- Automation per Rechtsklick auf den Spurkopf einblenden, Parameter wählen und
+  Read/Touch/Latch/Write umschalten; der A-Schalter bleibt verfügbar.
+- MP3-Mixdown und Einzelspurexport mit integriertem Encoder.
+
+Bedienwege: [Handbuch](MANUAL.de.md). Änderungen und Prüfstand:
+[Änderungsübersicht](CHANGELOG.md) und [Teststatus](STATUS.md).
+
 ## Funktionsübersicht
 
 | Bereich | Enthaltene Funktionen |
@@ -150,11 +164,11 @@ Diese drei Aufgaben sind voneinander unabhängig.
 | Mixer | Audio-, Bus-, FX- und Masterkanäle, Sends, Bus-Routing, VCA-Gruppen, Sidechain, Mute/Solo, Panorama und Pegel |
 | Anzeigen | Peak/RMS/LUFS, EQ-Spektrum, Wellenformen und Abspielkopf |
 | Inserts | Einzelplugin- und Kettenkopien, Verschieben, Reihenfolge, Bypass, Bulk-Entfernen, Presets und gezielt ladbares Default-Preset |
-| Automation | Pluginparameter und Mischparameter mit Read/Touch/Latch/Write |
+| Automation | Pluginparameter und Mischparameter mit Read/Touch/Latch/Write; Spurkopf-Menü für Sichtbarkeit, Parameter und Modus |
 | Instrumente | Aizana Synth mit zwei Oszillatoren und Presets; Aizana Drums mit 8×16-Sequencer und eigenen WAV-Samples |
 | Effekte | EQ mit Banddynamik, Kompressor, Reverb, Limiter, De-Esser, Delay, Gate und Saturator |
 | Plugin-Hosting | VST3, Audio Units auf macOS und CLAP; externe Plugins separat installieren |
-| Export | Stereo-Mixdown und Einzelspuren als WAV/AIFF, 44,1/48/96 kHz und 16/24/32 Bit; MP3-Export ist derzeit nicht implementiert |
+| Export | Stereo-Mixdown und Einzelspuren als WAV/AIFF, 44,1/48/96 kHz und 16/24/32 Bit, oder MP3 mit 44,1/48 kHz und 128/192/256/320 kbit/s (integrierter LAME-Encoder) |
 | Sessionverwaltung | Speichern, Medienordner, Autosave, Sicherungen und Wiederherstellung |
 | Assistenz | KI-Setup für vorhandene Stems, regelbasierter KI-Mix, Referenzanalyse, optionale lokale Stem-Separation und KI-Studio |
 

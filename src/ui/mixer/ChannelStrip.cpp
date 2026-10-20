@@ -270,7 +270,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     };
 
     // ---- Pan knob ----
-    panKnob.setSliderStyle     (juce::Slider::RotaryHorizontalVerticalDrag);
+    panKnob.setSliderStyle     (juce::Slider::RotaryHorizontalDrag);
     panKnob.setTextBoxStyle    (juce::Slider::NoTextBox, false, 0, 0);
     panKnob.setRange           (-1.0, 1.0, 0.01);
     panKnob.setDoubleClickReturnValue (true, 0.0);  // double-click resets centre
@@ -361,7 +361,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     };
     // Route trackNameLabel clicks to ChannelStrip::mouseDown() so clicking the name
     // selects this strip even though child components cover all other strip surfaces.
-    trackNameLabel.addMouseListener (this, false);
+
 
     // Set initial pan value label from current knob state
     panValueLabel.setText (formatPanValue (panKnob.getValue()), juce::dontSendNotification);
@@ -391,6 +391,9 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     // Namen fuer Bedienungshilfen/Automatisierung sofort setzen — refresh()
     // laeuft beim Aufbau nicht zwingend.
     updateAccessibleNames();
+    for (auto* child : getChildren()) child->addMouseListener(this, true);
+    setViewportIgnoreDragFlag(true);
+
 }
 
 ChannelStrip::~ChannelStrip()
@@ -486,9 +489,18 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 void ChannelStrip::mouseDown (const juce::MouseEvent& e)
 {
-    if (! e.mods.isPopupMenu())
-        if (onTrackSelected)
-            onTrackSelected (&track);
+    const bool background = e.eventComponent == this || e.eventComponent == &trackNameLabel;
+    if (e.mods.isPopupMenu())
+    {
+        if (background) showTrackMenu();
+        return;
+    }
+    if (background)
+    {
+        if (onTrackSelected) onTrackSelected(&track);
+    }
+    else if (onTrackControlTouched)
+        onTrackControlTouched(&track);
 }
 
 void ChannelStrip::setSelected (bool s)
@@ -731,4 +743,68 @@ void ChannelStrip::valueTreeChildOrderChanged (juce::ValueTree& parent, int, int
             return;
         }
     }
+}
+
+
+void ChannelStrip::showTrackMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem(1, "Spur duplizieren", onDuplicateRequested != nullptr);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+        [safe = juce::Component::SafePointer<ChannelStrip>(this)](int choice)
+        {
+            if (safe == nullptr) return;
+            if (choice == 1 && safe->onDuplicateRequested)
+                safe->onDuplicateRequested(safe->track);
+        });
+}
+
+void ChannelStrip::mouseDrag(const juce::MouseEvent& e)
+{
+    if (!e.mods.isLeftButtonDown() || e.getDistanceFromDragStart() < 6
+        || (e.eventComponent != this && e.eventComponent != &trackNameLabel)) return;
+    if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+    {
+        if (container->isDragAndDropActive()) return;
+        juce::Image image(juce::Image::ARGB, getWidth(), 24, true);
+        juce::Graphics g(image);
+        g.fillAll(juce::Colour(0xdd303840));
+        g.setColour(juce::Colours::white);
+        g.drawText(track.getName(), image.getBounds().reduced(4), juce::Justification::centredLeft);
+        container->startDragging("aizana-track", this, juce::ScaledImage(image));
+    }
+}
+
+bool ChannelStrip::isInterestedInDragSource(const SourceDetails& details)
+{
+    auto* source = dynamic_cast<ChannelStrip*>(details.sourceComponent.get());
+    return details.description.toString() == "aizana-track" && source != nullptr && source != this
+        && &source->track.edit == &track.edit && source->track.state.getParent() == track.state.getParent();
+}
+
+void ChannelStrip::itemDragEnter(const SourceDetails& details) { itemDragMove(details); }
+void ChannelStrip::itemDragMove(const SourceDetails& details)
+{
+    insertionSide = details.localPosition.x < getWidth() / 2 ? -1 : 1;
+    if (auto* viewport = findParentComponentOfClass<juce::Viewport>())
+    {
+        auto point = viewport->getLocalPoint(this, details.localPosition);
+        viewport->autoScroll(point.x, point.y, 16, 12);
+    }
+    repaint();
+}
+void ChannelStrip::itemDragExit(const SourceDetails&) { insertionSide = 0; repaint(); }
+void ChannelStrip::itemDropped(const SourceDetails& details)
+{
+    insertionSide = 0; repaint();
+    if (!isInterestedInDragSource(details)) return;
+    auto* source = dynamic_cast<ChannelStrip*>(details.sourceComponent.get());
+    if (source != nullptr && onMoveRequested)
+        onMoveRequested(source->track, track, details.localPosition.x >= getWidth() / 2);
+}
+void ChannelStrip::paintOverChildren(juce::Graphics& g)
+{
+    if (insertionSide == 0) return;
+    g.setColour(juce::Colour(0xff44aaff));
+    g.fillRect(insertionSide < 0 ? 0 : getWidth() - 3, 0, 3, getHeight());
 }

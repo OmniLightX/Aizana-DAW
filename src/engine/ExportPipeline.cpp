@@ -1,232 +1,172 @@
 #include "ExportPipeline.h"
+#include "AizanaUIBehaviour.h"
+#include "Mp3Encoder.h"
+#include <atomic>
 
-// ---------------------------------------------------------------------------
-// ExportPipeline implementation — plan 01-07
-//
-// Design notes:
-//   - te::Renderer::renderToFile() is a static blocking function. Safe to call
-//     from any thread except the audio thread.
-//   - Stem export uses te::Renderer::Parameters::tracksToDo (BigInteger) to
-//     isolate individual tracks — avoids mutating track mute state directly.
-//   - MP3 export relies on juce::LAMEEncoderAudioFormat which wraps the system
-//     LAME encoder binary. Returns a clean error if LAME is unavailable.
-// ---------------------------------------------------------------------------
-
-using TimePos = tracktion::core::TimePosition;
-using TimeRng = tracktion::core::TimeRange;
-
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
-
-ExportPipeline::ExportPipeline()
+namespace
 {
-    // Register built-in formats (WAV + AIFF).
-    formatManager.registerBasicFormats();
+// Rendering pumps messages: reject nested exports even from another dialog.
+bool exportInProgress = false;
+juce::String validate(const ExportOptions& o)
+{
+    if (!juce::MessageManager::getInstance()->isThisTheMessageThread())
+        return "Export muss auf dem Hauptthread gestartet werden.";
+    if (o.sampleRate != 44100 && o.sampleRate != 48000 && o.sampleRate != 96000)
+        return "Ungueltige Samplerate.";
+    if (o.format == ExportFormat::MP3)
+    {
+        if (o.sampleRate == 96000) return "MP3 unterstuetzt nur 44,1 oder 48 kHz.";
+        if (o.mp3BitrateKbps != 128 && o.mp3BitrateKbps != 192
+            && o.mp3BitrateKbps != 256 && o.mp3BitrateKbps != 320)
+            return "Ungueltige MP3-Bitrate.";
+    }
+    else if (o.bitDepth != 16 && o.bitDepth != 24 && o.bitDepth != 32)
+        return "Ungueltige Bittiefe.";
+    if (o.shouldCancel && o.shouldCancel()) return "Export abgebrochen.";
+    return {};
+}
 }
 
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
+ExportPipeline::ExportPipeline() { formatManager.registerBasicFormats(); }
 
 juce::String ExportPipeline::extensionFor(ExportFormat fmt)
 {
     switch (fmt)
     {
-        case ExportFormat::WAV:  return "wav";
+        case ExportFormat::WAV: return "wav";
         case ExportFormat::AIFF: return "aif";
-        case ExportFormat::MP3:  return "mp3";
-        default:                 return "wav";
+        case ExportFormat::MP3: return "mp3";
     }
+    return {};
 }
 
 juce::AudioFormat* ExportPipeline::formatFor(ExportFormat fmt)
 {
-    switch (fmt)
-    {
-        case ExportFormat::WAV:
-            return formatManager.findFormatForFileExtension("wav");
-
-        case ExportFormat::AIFF:
-            return formatManager.findFormatForFileExtension("aif");
-
-        case ExportFormat::MP3:
-            // juce::LAMEEncoderAudioFormat is not available in JUCE 8 without
-            // an explicit LAME integration build. MP3 export deferred to v2.
-            return nullptr;
-
-        default:
-            return formatManager.findFormatForFileExtension("wav");
-    }
+    return formatManager.findFormatForFileExtension(fmt == ExportFormat::AIFF ? "aif" : "wav");
 }
 
 tracktion::core::TimeRange ExportPipeline::editTimeRange(te::Edit& edit)
 {
-    double endSecs = 0.0;
-
+    double end = 0;
     for (auto* track : te::getAudioTracks(edit))
-    {
         for (auto* clip : track->getClips())
-        {
-            double clipEnd = clip->getPosition().getEnd().inSeconds();
-            endSecs = std::max(endSecs, clipEnd);
-        }
-    }
-
-    // Fallback: empty edit produces a 1-second silent file.
-    if (endSecs <= 0.0)
-        endSecs = 1.0;
-
-    return TimeRng(TimePos::fromSeconds(0.0), TimePos::fromSeconds(endSecs));
+            end = std::max(end, clip->getPosition().getEnd().inSeconds());
+    return {tracktion::core::TimePosition::fromSeconds(0),
+            tracktion::core::TimePosition::fromSeconds(end > 0 ? end : 1)};
 }
 
-// ---------------------------------------------------------------------------
-// EXP-01: Export stereo mixdown
-// ---------------------------------------------------------------------------
-
-juce::String ExportPipeline::exportMixdown(te::Edit& edit, const ExportOptions& options)
+juce::String ExportPipeline::renderOne(te::Renderer::Parameters& params,
+                                      const ExportOptions& options, const juce::File& destination)
 {
-    juce::AudioFormat* fmt = formatFor(options.format);
-    if (fmt == nullptr)
-    {
-        if (options.format == ExportFormat::MP3)
-            return "MP3 export requires LAME binary — install LAME and ensure it is in PATH. "
-                   "See: https://lame.sourceforge.io/";
-        return "Unsupported export format.";
-    }
-
-    TimeRng timeRange = editTimeRange(edit);
-
-    te::Renderer::Parameters params(edit);
-    params.destFile           = options.outputFile;
-    params.audioFormat        = fmt;
-    params.bitDepth           = (options.format == ExportFormat::MP3) ? 16 : options.bitDepth;
+    if (destination.isDirectory()) return "Das Exportziel ist ein Ordner.";
+    if (destination.getParentDirectory().createDirectory().failed())
+        return "Exportordner konnte nicht erstellt werden.";
+    // Sibling temporary files permit atomic replacement on the same filesystem.
+    juce::TemporaryFile rendered(destination.getSiblingFile(
+        ".aizana-render-" + juce::Uuid().toString() + (options.format == ExportFormat::AIFF ? ".aif" : ".wav")));
+    juce::TemporaryFile encoded(destination);
+    params.destFile = rendered.getFile();
+    params.audioFormat = formatFor(options.format);
+    params.bitDepth = options.format == ExportFormat::MP3 ? 32 : options.bitDepth;
     params.sampleRateForAudio = options.sampleRate;
-    params.blockSizeForAudio  = 512;
-    params.time               = timeRange;
-    params.realTimeRender     = false;
-    params.usePlugins         = true;
+    params.blockSizeForAudio = 512;
+    params.realTimeRender = false;
+    params.canRenderInMono = false;
+    params.usePlugins = true;
     params.checkNodesForAudio = false;
-    // tracksToDo set below after this block
+    const juce::ScopedValueSetter<std::function<bool()>> cancelScope(
+        AizanaUIBehaviour::renderShouldCancel, options.shouldCancel);
+    const juce::ScopedValueSetter<bool> abortScope(AizanaUIBehaviour::renderWasAborted, false);
+    const auto result = te::Renderer::renderToFile("Aizana Export", params);
+    if (AizanaUIBehaviour::renderWasAborted || (options.shouldCancel && options.shouldCancel()))
+        return "Export abgebrochen oder Render-Zeitlimit erreicht.";
+    if (result != params.destFile || !result.existsAsFile())
+        return "Render fehlgeschlagen: keine vollstaendige Audiodatei.";
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(result));
+    const auto expectedSamples = std::llround(params.time.getLength().inSeconds() * options.sampleRate);
+    if (!reader || reader->numChannels != 2 || reader->sampleRate != options.sampleRate
+        || std::abs(reader->lengthInSamples - expectedSamples) > 1)
+        return "Render fehlgeschlagen: unvollstaendige oder ungueltige Audiodaten.";
+    reader.reset();
 
-    // TE: empty tracksToDo (all bits zero) means "render nothing" — must set all track bits.
-    // ref: Renderer.cpp: `if (r.tracksToDo.countNumberOfSetBits() > 0 && ...)` — gate condition.
-    auto allTracks = te::getAllTracks (edit);
-    for (int i = 0; i < allTracks.size(); ++i)
-        params.tracksToDo.setBit (i);
-
-    params.useMasterPlugins = true;  // include master bus chain (limiter, EQ) in mixdown
-
-    // Ensure the output directory exists — Desktop is always present but user may have
-    // browsed to a custom path whose parent hasn't been created yet.
+    if (options.format == ExportFormat::MP3)
     {
-        auto parentDir = params.destFile.getParentDirectory();
-        if (parentDir != juce::File{} && ! parentDir.isDirectory())
-            parentDir.createDirectory();
+        struct EncoderThread : juce::Thread
+        {
+            EncoderThread(const juce::File& in, const juce::File& out, int rate)
+                : Thread("MP3 Export"), input(in), output(out), bitrate(rate) {}
+            void run() override
+            {
+                error = Mp3Encoder::encode(input, output, bitrate, [this] { return cancelled.load(); });
+            }
+            juce::File input, output;
+            int bitrate;
+            std::atomic<bool> cancelled {false};
+            juce::String error;
+        } worker(result, encoded.getFile(), options.mp3BitrateKbps);
+        if (!worker.startThread()) return "MP3-Encoder konnte nicht gestartet werden.";
+        while (worker.isThreadRunning())
+        {
+            if (options.shouldCancel && options.shouldCancel()) worker.cancelled.store(true);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+        }
+        worker.waitForThreadToExit(-1);
+        if (worker.error.isNotEmpty()) return worker.error;
+        if (options.shouldCancel && options.shouldCancel()) return "Export abgebrochen.";
     }
-
-    if (onProgress)
-        onProgress(0.0f);
-
-    // Playback-Kontext fuer die Dauer des Renders loesen. Ohne das verarbeitet
-    // der LIVE-Graph waehrend des Exports dieselben Plugin-Instanzen weiter und
-    // stoert deren Zustand (DC-Sperren, Kompressor-Huellkurven, Hall-Fahnen) —
-    // der Mixdown ist dann nicht reproduzierbar und weicht von dem ab, was man
-    // gehoert hat. TE erwartet ScopedRenderStatus ausdruecklich (sonst
-    // jassertfalse + "Rendering whilst attached to audio device"). Real gemessen
-    // am Bounce-Pfad: 35 dB Abweichung zwischen zwei Durchgaengen (2026-08-11).
-    // Message-Thread-Pflicht — deckt sich mit der Export-Invariante (I-10).
-    const te::Edit::ScopedRenderStatus srs (edit, true);
-
-    juce::File renderedFile = te::Renderer::renderToFile ("Aizana Mixdown Export", params);
-
-    if (onProgress)
-        onProgress(1.0f);
-
-    // Some TE builds return an empty File even when the render succeeded and wrote
-    // to params.destFile — check both to avoid a false-negative failure report.
-    const bool outputExists = renderedFile.existsAsFile()
-                           || params.destFile.existsAsFile();
-    if (! outputExists)
-        return "Render produced no output file. Ensure the Edit contains audio content.";
-
+    else if (!result.moveFileTo(encoded.getFile()))
+        return "Exportdatei konnte nicht vorbereitet werden.";
+    if (!encoded.overwriteTargetFileWithTemporary())
+        return "Exportdatei konnte nicht gespeichert werden. Vorhandenes Ziel bleibt erhalten.";
     return {};
 }
 
-// ---------------------------------------------------------------------------
-// EXP-02: Export stems (one file per audio track)
-// ---------------------------------------------------------------------------
+juce::String ExportPipeline::exportMixdown(te::Edit& edit, const ExportOptions& options)
+{
+    if (auto error = validate(options); error.isNotEmpty()) return error;
+    if (exportInProgress) return "Ein Export laeuft bereits.";
+    const juce::ScopedValueSetter<bool> busy(exportInProgress, true);
+    te::Renderer::Parameters params(edit);
+    params.time = editTimeRange(edit);
+    auto tracks = te::getAllTracks(edit);
+    for (int i = 0; i < tracks.size(); ++i) params.tracksToDo.setBit(i);
+    params.useMasterPlugins = true;
+    if (onProgress) onProgress(0);
+    // Detach the live graph so plugins are processed exclusively by the renderer.
+    const te::Edit::ScopedRenderStatus renderStatus(edit, true);
+    auto error = renderOne(params, options, options.outputFile);
+    if (error.isEmpty() && onProgress) onProgress(1);
+    return error;
+}
 
 juce::String ExportPipeline::exportStems(te::Edit& edit, const ExportOptions& options)
 {
-    if (! options.outputFile.isDirectory())
-    {
-        if (! options.outputFile.createDirectory())
-            return "Could not create stem output directory: " + options.outputFile.getFullPathName();
-    }
-
-    juce::AudioFormat* fmt = formatFor(options.format);
-    if (fmt == nullptr)
-    {
-        if (options.format == ExportFormat::MP3)
-            return "MP3 stem export requires LAME binary.";
-        return "Unsupported export format.";
-    }
-
+    if (auto error = validate(options); error.isNotEmpty()) return error;
+    if (exportInProgress) return "Ein Export laeuft bereits.";
+    const juce::ScopedValueSetter<bool> busy(exportInProgress, true);
+    if (options.outputFile.createDirectory().failed()) return "Stem-Ordner konnte nicht erstellt werden.";
     auto tracks = te::getAudioTracks(edit);
-    if (tracks.isEmpty())
-        return "No audio tracks to export.";
-
-    const juce::String ext = extensionFor(options.format);
-    TimeRng timeRange = editTimeRange(edit);
-
-    int trackIndex = 0;
-    const int totalTracks = tracks.size();
-
-    // Ein ScopedRenderStatus fuer den GESAMTEN Stem-Durchlauf (nicht pro Stem):
-    // der Playback-Kontext bleibt waehrend aller Renders geloest, sonst gilt
-    // dieselbe Zustandsstoerung wie beim Mixdown fuer jeden einzelnen Stem.
-    const te::Edit::ScopedRenderStatus srs (edit, true);
-
+    if (tracks.isEmpty()) return "Keine Audiospuren zum Exportieren.";
+    const te::Edit::ScopedRenderStatus renderStatus(edit, true);
+    juce::StringArray usedNames;
+    int index = 0;
     for (auto* track : tracks)
     {
-        juce::String trackName = track->getName();
-        if (trackName.isEmpty())
-            trackName = "Track" + juce::String(trackIndex + 1);
-
-        // Sanitise track name for filesystem
-        const juce::String invalidChars("\\/:|?*\"<>");
-        for (int i = 0; i < invalidChars.length(); ++i)
-            trackName = trackName.replaceCharacter(invalidChars[i], '_');
-
-        juce::File stemFile = options.outputFile.getChildFile(trackName + "." + ext);
-
-        // Isolate this track via tracksToDo BigInteger
-        juce::BigInteger tracksToDo;
-        tracksToDo.setBit(track->getIndexInEditTrackList());
-
+        if (options.shouldCancel && options.shouldCancel()) return "Export abgebrochen.";
+        auto name = juce::File::createLegalFileName(track->getName()).trim();
+        if (name.isEmpty() || name == "." || name == "..") name = "Spur";
+        auto unique = name;
+        for (int suffix = 2; usedNames.contains(unique, true); ++suffix)
+            unique = name + "_" + juce::String(suffix);
+        usedNames.add(unique);
         te::Renderer::Parameters params(edit);
-        params.destFile           = stemFile;
-        params.audioFormat        = fmt;
-        params.bitDepth           = (options.format == ExportFormat::MP3) ? 16 : options.bitDepth;
-        params.sampleRateForAudio = options.sampleRate;
-        params.blockSizeForAudio  = 512;
-        params.time               = timeRange;
-        params.realTimeRender     = false;
-        params.usePlugins         = true;
-        params.checkNodesForAudio = false;
-        params.tracksToDo         = tracksToDo;
-
-        if (onProgress)
-            onProgress(static_cast<float>(trackIndex) / static_cast<float>(totalTracks));
-
-        te::Renderer::renderToFile("Stem: " + trackName, params);
-
-        ++trackIndex;
+        params.time = editTimeRange(edit);
+        params.tracksToDo.setBit(track->getIndexInEditTrackList());
+        if (onProgress) onProgress(static_cast<float>(index) / tracks.size());
+        auto error = renderOne(params, options, options.outputFile.getChildFile(unique + "." + extensionFor(options.format)));
+        if (error.isNotEmpty()) return unique + ": " + error;
+        ++index;
     }
-
-    if (onProgress)
-        onProgress(1.0f);
-
+    if (onProgress) onProgress(1);
     return {};
 }

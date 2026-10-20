@@ -16,6 +16,60 @@ checks provide different kinds of evidence.
 | Stem separation | Passed: preview, import, Undo/Redo, cancellation and session change without late import | [Stem checks](OPEN_STEM_RELEASE.md) |
 | Multiple selection and mixer | Passed: selection actions, group-fader Undo and pan display after reload | [Selection](TEST_HISTORY.md), [Mixer](TEST_HISTORY.md) |
 
+## Track-header automation menu follow-up — 20 October 2026
+
+- [x] Existing A button still expands the lane in the new Debug build.
+- [ ] Right-click header → Automation → show/hide; existing curves/mode unchanged.
+- [ ] Choose Pan and a plugin parameter: curve and parameter selector agree.
+- [x] User confirmed mode changes from both menu and lane work on the first
+      selection in the corrected Release build.
+- [ ] Undo/Redo mode change and check both menu tick and lane selector.
+- User found a mode display regression: menu changes displayed Read and the
+  lane dropdown required a second selection. A new real AutomationLane test
+  reproduced six failing assertions. Fixed by decoding TE's text-valued mode
+  through its VariantConverter; all 21 assertions then passed, covering external
+  modes, first dropdown selection, parameter selector, curve preservation and
+  mode Undo/Redo. User confirmed the corrected mode selection in both UI entry
+  points during native retesting.
+- Computer-use targeting was unreliable for the Debug app; native results are
+  not inferred from compilation.
+- User separately confirmed mixer reorder Undo/Redo shortcuts and duplication
+  of a track containing drawn automation in voice testing.
+
+## Mixer interaction follow-up — 20 October 2026
+
+Automated checks cover narrow fader/pan hit geometry, splitter bounds, full
+track copying, independent effect/automation IDs, media references and routing
+through Undo/Redo and save/reload. Native checks below used the new Release build
+in a fresh empty session after the user confirmed the old app was closed.
+
+- [x] Click blank channel areas: selects track without changing level/pan.
+- [x] Drag pan horizontally on the knob; dragging beside it leaves pan unchanged.
+- [x] Group fader drag updates both selected channels; numeric entry with Select
+      All changes both to the entered value without losing the selection.
+- [x] Drag channel name after another channel; arrangement order follows.
+      Edit menu Undo restores the original order.
+- [x] Duplicate from mixer and arrangement context menus; adjacent copy preserves
+      visible level/pan, and Edit menu Undo removes the new copy.
+- [x] Resize at the upper mixer boundary; lower switches remain in place.
+- [ ] Edge autoscroll, drop-before gesture, small window and collapsed dock.
+- [x] User confirmed keyboard Undo/Redo for track reordering.
+- [x] User confirmed track copying retains drawn automation, pan and bus assignment.
+- [ ] Native save/reopen with audio, plugins and automation (automated coverage
+      passes).
+
+## MP3 export follow-up
+
+Automated: mixdown/stems, both MP3 sample rates, all four bitrates, decoded
+stereo content and duration, failure/cancellation and existing-file preservation.
+Independent FFmpeg decoding confirms encoder delay/padding metadata. See
+`tests/test_export_wav.cpp` and the current MP3 entry in `STATUS.md`.
+
+Still a native interaction check: select MP3 in the export dialog, change bitrate,
+choose a destination, cancel a long render, close the window/Escape during export,
+and listen to a real mixed session including master effects. The user's recording,
+mixing and mastering practice test remains separate from the generated-signal tests.
+
 ## Other confirmed insert checks
 
 The [19 October test run](RELEASE_FINAL_CHECK_2026-10-19.md) also establishes:

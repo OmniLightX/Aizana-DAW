@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/common/MixerControls.h"
 #include "InsertRack.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -52,6 +53,7 @@ public:
 
     /** Callback invoked on mouseDown — MixerView wires this to its selection handler. */
     std::function<void (te::AudioTrack*)> onTrackSelected;
+    std::function<void (te::AudioTrack*)> onTrackControlTouched;
 
     /** Called from MixerView::timerCallback with updated meter values. */
     void setMeterValues (float peakDB, float rmsDB, float lufsM, float lufsI);
@@ -81,7 +83,7 @@ private:
     bool          isSelected = false;
 
     // ---- Controls ----
-    juce::Slider     volumeFader;
+    aizana::MixerFader     volumeFader;
     juce::TextButton soloButton { "S" };
     juce::TextButton muteButton { "M" };
     juce::TextButton outputButton;   // cue strips only: "▶ <device>" hardware-output selector

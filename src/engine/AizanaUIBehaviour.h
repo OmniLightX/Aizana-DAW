@@ -32,6 +32,9 @@ namespace te = tracktion::engine;
 class AizanaUIBehaviour : public te::UIBehaviour
 {
 public:
+    // Scoped by ExportPipeline; also leaves freeze renders unaffected.
+    inline static thread_local std::function<bool()> renderShouldCancel;
+    inline static thread_local bool renderWasAborted = false;
     // -------------------------------------------------------------------------
     // Called by te::Renderer::renderToFile — runs the task on a background
     // thread while keeping the message loop alive.
@@ -88,6 +91,12 @@ public:
            #endif
                 juce::Thread::sleep (20);
 
+            if (renderShouldCancel && renderShouldCancel())
+            {
+                renderWasAborted = true;
+                task.signalJobShouldExit();
+            }
+
             const float p = task.getCurrentTaskProgress();
             const auto  now = juce::Time::getMillisecondCounter();
 
@@ -102,6 +111,7 @@ public:
                 // between blocks, so it unwinds cleanly; TaskRunner's dtor then
                 // joins it. (A plugin hard-stuck inside one processBlock still
                 // needs out-of-process hosting — Phase 4.)
+                renderWasAborted = true;
                 task.signalJobShouldExit();
                 break;
             }

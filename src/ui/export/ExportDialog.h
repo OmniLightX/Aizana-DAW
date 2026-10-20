@@ -31,7 +31,7 @@ private:
 
     // Output path
     juce::TextEditor outputPathEditor;
-    juce::TextButton browseButton { "Browse..." };
+    juce::TextButton browseButton { "Auswahl..." };
 
     // Progress — ProgressBar requires a reference to a double in its constructor
     double exportProgress = 0.0;     // 0.0 to 1.0, referenced by ProgressBar
@@ -39,16 +39,19 @@ private:
 
     // Action buttons
     juce::TextButton exportButton { "Export" };
-    juce::TextButton cancelButton { "Cancel" };
+    juce::TextButton cancelButton { "Abbrechen" };
 
     juce::Label statusLabel;  // Shows "Exporting...", "Done!", or error message
 
     bool isExporting = false;
+    bool cancelRequested = false;
+    juce::Label formatLabel, rateLabel, qualityLabel;
+    void updateFormat();
 
     // Async file chooser — stored as member to keep alive across async callbacks
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     void browse();
-    void startExport();
+    void startExport(bool overwriteConfirmed = false);
     ExportOptions buildOptions() const;
 };

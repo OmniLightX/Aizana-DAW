@@ -3,7 +3,68 @@
 As of 20 October 2026. Aizana is provided as source code for users to build.
 Build target: Apple Silicon (arm64), macOS 13.3 or later.
 
-## Verified checks
+## Track-header automation menu — 20 October 2026
+
+- Right-click Automation submenu: show/hide lane, select an available parameter,
+  and choose Read/Touch/Latch/Write. The existing A button remains.
+- Visibility and parameter selection do not change automation mode or curves.
+  Menu mode changes have their own Undo transaction; an open lane follows
+  external mode changes and parameter selection without notification loops.
+- A user-discovered display regression was reproduced in a real AutomationLane
+  test (6 failing assertions): TE stores automation mode as text, not an integer.
+  Correct decoding fixes external mode updates and the first dropdown selection.
+  The regression test now passes all 21 assertions, including mode Undo/Redo,
+  parameter-selector synchronization and unchanged curve data.
+- Corrected Release app builds and bundle audit pass. Final full Debug suite:
+  459 passed, 6 skipped, 50,219 assertions, exit 0. Corrected Release app opened
+  for the user; the user confirmed first-selection mode changes work correctly
+  both in the context menu and in the automation lane.
+
+## Mixer interactions and track actions — 20 October 2026
+
+- Narrow fader/pan hit areas; horizontal pan dragging; channel selection on
+  background/control clicks without losing existing multiple selections.
+- Drag regular channels within their current parent to reorder; duplicate full
+  tracks from mixer or arrangement menus with independent IDs and Undo/Redo.
+  Output routing, shared source media and effect/automation state are covered
+  through duplication, reordering, Undo/Redo and save/reload.
+- Resize the shared lower dock from its upper boundary; bottom switches remain.
+- Full Debug suite at mixer integration: 458 passed, 6 skipped, 50,198 assertions, exit 0; no JUCE
+  assertion/leak diagnostics. New Release subset: 8 cases, 162 assertions,
+  exit 0. Debug/Release app builds and Release bundle audit passed.
+- Native Release checks passed for blank-area selection, unchanged values beside
+  controls, horizontal pan, upper divider resize, grouped faders, numeric entry,
+  reorder with arrangement synchronization, both duplicate menus and menu Undo.
+- User confirmed reorder Undo/Redo, track copying with drawn automation,
+  retained pan and bus assignment during direct testing.
+- Additional read-only code review found no verified blocker or major issue.
+  Remaining native edge cases are recorded in the live checklist.
+
+## MP3 export — 20 October 2026
+
+- Built-in LAME 3.100 encoding for stereo mixdown and stems: 44.1/48 kHz,
+  128/192/256/320 kbit/s CBR. Exact upstream source and license are bundled.
+- Full Debug engine suite at MP3 integration: 450 passed, 6 skipped, 50,036 assertions;
+  no JUCE assertion/leak diagnostic, process exit 0. Optional/plugin and
+  hardware skips were not reclassified as passes in this run.
+- Export subset: Debug 10 cases / 293 assertions (including retained-artifact
+  checks); Release 10 cases / 273 assertions. Both exit 0, covering WAV/AIFF
+  reference signals, MP3 decoding, stems, errors and cancellation.
+- Debug and Release app builds pass. Release bundle audit passes privacy,
+  dependency and license checks; LAME license texts are present and there is
+  no external libmp3lame/Homebrew runtime dependency.
+- Native dialog interaction was not run: a user Aizana instance was active at
+  the pre-launch check. It was neither replaced nor closed; no second app was
+  launched.
+- Independent FFmpeg decoding: all eight MP3 rate/bitrate combinations identify
+  as MP3 stereo at the requested bitrate and decode to exactly one second
+  (44,100 or 48,000 frames). Generated left/right reference tones remain distinct.
+- Existing output files are replaced only after successful completion. Cancelled
+  or failed files preserve the previous destination; finished stems remain.
+- See [implementation and test reproduction](docs/MP3_EXPORT.md) and the separate
+  [native interaction checklist](docs/LIVE_TEST_CHECKLIST.md).
+
+## Verified checks before MP3 integration
 
 - Debug and Release: 444 engine test cases and 49,837 assertions passed in each.
   Six cases were initially skipped. The optional VST3/CLAP checks were

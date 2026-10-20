@@ -54,3 +54,12 @@ full text is also embedded in the ONNX metadata. See OPEN_STEM_RELEASE.md for
 provenance, accepted limitations, trainer warranty limitation and staging status.
 Anonymous first-use model download has not yet been accepted; see
 [the current test status](../STATUS.md).
+
+### MP3 encoder source
+
+The static LAME 3.100 encoder is built from the unmodified, hash-verified
+`extern/lame/lame-3.100.tar.gz`. Include that archive and `cmake/Lame.cmake`
+in the corresponding-source package, together with the matching Aizana source
+and build instructions so recipients can modify LAME and relink Aizana.
+The existing app packaging includes `licenses/LAME/` and the third-party notice.
+See [the LAME provenance record](../extern/lame/README.md).

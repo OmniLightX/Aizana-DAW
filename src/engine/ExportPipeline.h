@@ -12,7 +12,7 @@ enum class ExportFormat
 {
     WAV,   // PCM WAV via juce::WavAudioFormat   — 16/24/32-bit
     AIFF,  // AIFF via juce::AiffAudioFormat      — 16/24/32-bit
-    MP3    // MP3 via juce::LAMEEncoderAudioFormat (requires LAME binary at runtime)
+    MP3    // MP3 via bundled libmp3lame
 };
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,8 @@ struct ExportOptions
 
     ExportFormat format     = ExportFormat::WAV;
     double       sampleRate = 44100.0;   // 44100 | 48000 | 96000 (EXP-04)
+    int          mp3BitrateKbps = 320;  // 128 | 192 | 256 | 320 CBR
+    std::function<bool()> shouldCancel; // polled on the message thread
     int          bitDepth   = 24;        // 16 | 24 | 32 — ignored for MP3
 };
 
@@ -74,10 +76,9 @@ public:
 
 private:
     juce::AudioFormatManager formatManager;
+    juce::String renderOne(te::Renderer::Parameters&, const ExportOptions&, const juce::File&);
 
-    /** Return the juce::AudioFormat* for the requested ExportFormat.
-     *  MP3 requires LAME binary to be found at runtime. Returns nullptr for MP3
-     *  if LAME is unavailable (caller should return an error string). */
+    /** PCM render format; MP3 is encoded from an intermediate WAV. */
     juce::AudioFormat* formatFor(ExportFormat fmt);
 
     /** File extension string — "wav", "aif", or "mp3". */

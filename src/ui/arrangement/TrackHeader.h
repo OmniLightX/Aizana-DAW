@@ -91,6 +91,11 @@ public:
      *  Call after audio device changes or on construction. */
     void populateInputSelector();
 
+    std::function<bool()> isAutomationVisible;
+    std::function<void(bool)> onAutomationVisibility;
+    std::function<void(const juce::String&)> onAutomationParameter;
+    std::function<juce::String()> currentAutomationParameter;
+
     // Callback: called by mouseDown (left click) to notify ArrangementView
     std::function<void (TrackHeader*, bool)> onSelectionRequest;
     // Arrangement can apply M/S to its current header group (bool = solo).

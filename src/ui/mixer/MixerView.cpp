@@ -1,4 +1,5 @@
 #include "MixerView.h"
+#include "engine/TrackOperations.h"
 
 //==============================================================================
 
@@ -38,6 +39,7 @@ MixerView::MixerView (ApplicationState& appState_, MixerEngine& mixerEngine_,
 
 MixerView::~MixerView()
 {
+    cancelPendingUpdate();
     stopTimer();  // Stop before destroying strips to avoid dangling timerCallback
 
     if (auto* edit = appState.editManager.getEdit())
@@ -200,6 +202,8 @@ void MixerView::clearStrips()
 
 void MixerView::detachFromEdit()
 {
+    cancelPendingUpdate();
+    pendingSelection = {};
     // Called BEFORE the old Edit is destroyed (File>New/Open): drop every
     // reference into it — the state listener and all track-bound strips.
     if (auto* edit = appState.editManager.getEdit())
@@ -219,6 +223,11 @@ void MixerView::attachToEdit()
 
 void MixerView::rebuildStrips()
 {
+    juce::Array<te::EditItemID> selectedIDs;
+    for (auto* t : selectedMixerTracks) selectedIDs.add(t->itemID);
+    if (pendingSelection.isValid()) { selectedIDs.clear(); selectedIDs.add(pendingSelection); }
+    const bool forwardNewSelection = pendingSelection.isValid();
+    pendingSelection = {};
     clearStrips();
 
     auto* edit = appState.editManager.getEdit();
@@ -245,6 +254,9 @@ void MixerView::rebuildStrips()
                                                      pluginManager, pluginWindowManager,
                                                      pluginScanner));
         strip->onTrackSelected = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+        strip->onTrackControlTouched = [this](te::AudioTrack* t) { selectForControl(t); };
+        strip->onDuplicateRequested = [this](te::AudioTrack& t) { duplicateTrack(t); };
+        strip->onMoveRequested = [this](te::AudioTrack& a, te::AudioTrack& b, bool after) { moveTrack(a, b, after); };
 
         // UX3 (S1-Semantik): KEINE manuelle Bus-Gruppen-Propagation mehr.
         // Track-Solo = solo-in-place NUR dieser Spur (TE hält den Bus-Pfad offen);
@@ -293,6 +305,7 @@ void MixerView::rebuildStrips()
                                                         pluginManager, pluginWindowManager,
                                                         pluginScanner));
         strip->onTrackSelected = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+        strip->onTrackControlTouched = [this](te::AudioTrack* t) { selectForControl(t); };
         channelStripContainer.addAndMakeVisible (strip);
     };
 
@@ -316,6 +329,7 @@ void MixerView::rebuildStrips()
             continue;
         auto* strip = vcaStrips.add (new VCAStrip (*audioTrack, mixerEngine));
         strip->onTrackSelected  = [this] (te::AudioTrack* t) { setMixerSelectedTrack (t); };
+        strip->onTrackControlTouched = [this](te::AudioTrack* t) { selectForControl(t); };
         strip->onMembersChanged = [this] { refreshAllStrips(); };
         channelStripContainer.addAndMakeVisible (strip);
     }
@@ -327,6 +341,18 @@ void MixerView::rebuildStrips()
         pluginWindowManager,
         pluginScanner);
     addAndMakeVisible (*masterStrip);
+
+    for (auto* s : strips)
+        if (selectedIDs.contains(s->getTrack().itemID))
+        { s->setSelected(true); selectedMixerTracks.add(&s->getTrack()); selectedStrips.add(s); }
+    for (auto* s : busFXStrips)
+        if (selectedIDs.contains(s->getTrack().itemID))
+        { s->setSelected(true); selectedMixerTracks.add(&s->getTrack()); selectedBusFXStrips.add(s); }
+    for (auto* s : vcaStrips)
+        if (selectedIDs.contains(s->getTrack().itemID))
+        { s->setSelected(true); selectedMixerTracks.add(&s->getTrack()); }
+    if (forwardNewSelection && onSelectionForwarded && !selectedMixerTracks.isEmpty())
+        onSelectionForwarded(selectedMixerTracks.getFirst());
 
     // Rebuild send slots on all audio strips from current FX channels
     rebuildAllSends();
@@ -353,7 +379,7 @@ void MixerView::rebuildAllSends()
 //==============================================================================
 // Track selection — used by S/M/R shortcuts when Mixer has keyboard focus
 
-void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
+void MixerView::setMixerSelectedTrack (te::AudioTrack* t, bool takeFocus)
 {
     if (t == nullptr)
     {
@@ -363,7 +389,7 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
         for (auto* s : strips)     s->setSelected (false);
         for (auto* s : busFXStrips) s->setSelected (false);
         for (auto* s : vcaStrips)   s->setSelected (false);
-        grabKeyboardFocus();
+        if (takeFocus) grabKeyboardFocus();
         if (onSelectionForwarded)
             onSelectionForwarded (nullptr);
         return;
@@ -405,7 +431,7 @@ void MixerView::setMixerSelectedTrack (te::AudioTrack* t)
     for (auto* s : vcaStrips)
         s->setSelected (selectedMixerTracks.contains (&s->getTrack()));
 
-    grabKeyboardFocus();
+    if (takeFocus) grabKeyboardFocus();
 
     // Mirror the primary selection into the arrangement (set by MainComponent)
     if (onSelectionForwarded)
@@ -775,7 +801,7 @@ void MixerView::valueTreeChildAdded (juce::ValueTree& parent, juce::ValueTree& c
     if (auto* edit = appState.editManager.getEdit())
     {
         if (parent == edit->state || parent.isAChildOf (edit->state))
-            juce::MessageManager::callAsync ([this] { rebuildStrips(); });
+            triggerAsyncUpdate();
     }
     juce::ignoreUnused (parent, child);
 }
@@ -785,7 +811,7 @@ void MixerView::valueTreeChildRemoved (juce::ValueTree& parent, juce::ValueTree&
     if (auto* edit = appState.editManager.getEdit())
     {
         if (parent == edit->state || parent.isAChildOf (edit->state))
-            juce::MessageManager::callAsync ([this] { rebuildStrips(); });
+            triggerAsyncUpdate();
     }
     juce::ignoreUnused (parent, child);
 }
@@ -795,7 +821,25 @@ void MixerView::valueTreeChildOrderChanged (juce::ValueTree& parent, int, int)
     if (auto* edit = appState.editManager.getEdit())
     {
         if (parent == edit->state || parent.isAChildOf (edit->state))
-            juce::MessageManager::callAsync ([this] { rebuildStrips(); });
+            triggerAsyncUpdate();
     }
     juce::ignoreUnused (parent);
+}
+
+
+void MixerView::selectForControl(te::AudioTrack* track)
+{
+    // Keep selected groups intact while touching a fader; keep text-editor focus.
+    if (!selectedMixerTracks.contains(track)) setMixerSelectedTrack(track, false);
+}
+void MixerView::duplicateTrack(te::AudioTrack& track)
+{
+    if (auto copy = aizana::TrackOperations::duplicateTrack(track))
+    { pendingSelection = copy->itemID; triggerAsyncUpdate(); }
+}
+void MixerView::moveTrack(te::AudioTrack& source, te::AudioTrack& target, bool after)
+{
+    const auto id = source.itemID;
+    if (aizana::TrackOperations::moveTrackRelative(source, target, after))
+    { pendingSelection = id; triggerAsyncUpdate(); }
 }

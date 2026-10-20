@@ -210,6 +210,28 @@ volume balance before adding many effects.
 check the entire mix. Multiple selected tracks can be switched together.
 Check the selection before pressing **M** or **S**.
 
+### Selecting, moving and copying channels
+
+Click anywhere in a channel strip to select its track. Empty space beside the
+fader and pan does not change their values. Adjust level directly on the fader
+or its scale; drag the pan knob horizontally. Clicking a control in an existing
+multiple selection preserves that selection for grouped adjustments.
+
+Drag the channel name or empty strip background onto another audio channel.
+The insertion marker shows whether the track will be placed before or after it.
+The arrangement follows the new order. Tracks remain in their existing folder;
+bus, FX, VCA and cue channels are excluded from this gesture.
+
+Choose **Spur duplizieren** (Duplicate track) from the track header or mixer
+channel context menu to create an adjacent copy with clips, effects, settings
+and automation. Audio files are shared references; clips, effects and automation
+can be edited independently. The copy is not record-armed and does not reuse
+the original freeze cache. Duplication and reordering support Undo/Redo.
+**Command-D** continues to duplicate clips.
+
+Drag the boundary between the arrangement and mixer up or down to resize it.
+View switches remain in the bottom bar.
+
 ### Buses and shared reverb
 
 To process several tracks together:
@@ -231,9 +253,13 @@ control an effect; that control signal is not the same as an audible send.
 
 ### Automation
 
-Open the track's automation view with **A** and select the parameter to edit.
-Points or lines describe its changes over time. The automation lane provides
-**Read**, **Touch**, **Latch**, and **Write** modes:
+Open the track's automation view with the **A** button or right-click its
+header and choose **Automation → Einblenden** (Show). The same menu hides it.
+**Parameter wählen** (Choose parameter) lists volume, pan and available effect
+parameters; choosing one opens its curve. Showing, hiding and choosing a
+parameter do not alter curve data or the automation mode.
+Points or lines describe its changes over time. Both the Automation submenu
+and the automation lane provide **Read**, **Touch**, **Latch**, and **Write** modes:
 
 - **Read:** play back existing automation.
 - **Touch:** write automation while operating a control.
@@ -417,15 +443,21 @@ You do not need to set up AI Studio for ordinary recording, editing, and mixing.
 1. Save the session and check mute/solo and the output to the master.
 2. Choose **Export → Mix exportieren…** (Export Mix) for the full mix, or
    **Export → Stems exportieren…** (Export Stems) for individual tracks.
-3. Select **WAV** or **AIFF**, the sample rate, and bit depth.
+3. Select **WAV**, **AIFF**, or **MP3**, the sample rate, and bit depth or MP3 bitrate.
 4. Select a destination file or folder.
 5. Start the export and wait for the completion message.
 6. Open the resulting file in an audio player and check its beginning, end,
    level, and completeness.
 
-Supported settings are 44.1 / 48 / 96 kHz and 16 / 24 / 32 bit.
-**MP3 is currently not implemented**, even though the dialog offers an entry
-for it. Use WAV or AIFF.
+WAV/AIFF support 44.1 / 48 / 96 kHz and 16 / 24 / 32 bit.
+MP3 supports 44.1 / 48 kHz and 128 / 192 / 256 / 320 kbit/s constant bitrate
+(default: 320). LAME is included; no separate installation is needed. Choosing
+MP3 with 96 kHz selected switches to 48 kHz. The file extension follows the format.
+
+**Abbrechen** cancels the current export. Closing the export window also cancels.
+A failed or cancelled file does not replace an existing destination. For stems,
+files completed before cancellation remain in the destination folder; an error
+stops the remaining stems. Duplicate track names receive numbered suffixes.
 
 Mixdown includes master effects. Before rendering, check that the limiter or
 other master inserts are configured as intended. Exporting stems renders
@@ -472,7 +504,7 @@ Do not assume that the latest change has already been saved.
 | Incorrect AI setup group | Correct the suggestion in the group selector before applying |
 | Stem download fails | Check internet access and public availability of the model release; see chapter 12 |
 | Stem result sounds poor | Keep the original; listen for bleed and model limitations |
-| MP3 export fails | Use WAV or AIFF |
+| MP3 export fails | Choose 44.1 or 48 kHz; check the destination and available disk space, then read the export error |
 | Session reports missing media | Check the complete project folder or backup and mounted drives |
 | App or plugin crashes | Back up the starting session; narrow down the error with a small test session and a specific plugin |
 

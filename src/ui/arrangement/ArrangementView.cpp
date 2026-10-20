@@ -2267,6 +2267,22 @@ void ArrangementView::rebuildTrackRows()
 
         // Wire expansion callback — fires resized() so both header + timeline re-layout
         row->onExpansionChanged = [this] { resized(); };
+        const juce::Component::SafePointer<TrackRow> safeRow (row);
+        header->isAutomationVisible = [safeRow] { return safeRow != nullptr && safeRow->isExpanded(); };
+        header->onAutomationVisibility = [safeRow] (bool visible) {
+            if (safeRow != nullptr) safeRow->setExpanded (visible);
+        };
+        header->currentAutomationParameter = [safeRow] {
+            if (safeRow != nullptr)
+                if (auto* lane = safeRow->getAutomationLane()) return lane->getParameterID();
+            return juce::String();
+        };
+        header->onAutomationParameter = [safeRow] (const juce::String& parameter) {
+            if (safeRow == nullptr) return;
+            safeRow->setExpanded (true);
+            if (auto* lane = safeRow->getAutomationLane()) lane->setParameterID (parameter);
+        };
+
 
         // Create clip components inside the row's clip area
         for (auto* clip : audioTrack->getClips())

@@ -131,6 +131,20 @@ splits a finished mix. These are three independent tasks.
 | Investigate a problem | [Troubleshooting](MANUAL.md#16-troubleshooting) |
 | Redistribute code or the model | [Licensing overview](docs/OPEN_SOURCE_LICENSING.md) and [Distribution](docs/DISTRIBUTION.md) |
 
+## Recent improvements
+
+- Select mixer channels on empty strip areas without changing gain or pan.
+  Drag pan horizontally on the knob; control clicks preserve multiple selection.
+- Reorder audio/instrument tracks in the mixer and duplicate complete tracks
+  from context menus, including clips, effects, automation and output routing.
+- Resize the mixer from its upper boundary.
+- Show automation, choose parameters and select Read/Touch/Latch/Write from the
+  track-header context menu; the existing A button remains available.
+- Export MP3 mixdowns and stems with the built-in encoder.
+
+See the [manual](MANUAL.md) for gestures, the [change log](CHANGELOG.md) for
+changes and [test status](STATUS.md) for verified coverage and remaining checks.
+
 ## Features
 
 | Area | Included features |
@@ -143,11 +157,11 @@ splits a finished mix. These are three independent tasks.
 | Mixer | Audio, bus, FX and master channels, sends, bus routing, VCA groups, sidechain, mute/solo, pan and levels |
 | Displays | Peak/RMS/LUFS, EQ spectrum, waveforms and playhead |
 | Inserts | Individual plugin and chain copying, moving, reordering, bypass, bulk removal, presets and explicitly loaded default presets |
-| Automation | Plugin and mixer parameters with Read/Touch/Latch/Write |
+| Automation | Plugin and mixer parameters with Read/Touch/Latch/Write; track-header menu for lane visibility, parameter and mode selection |
 | Instruments | Aizana Synth with two oscillators and presets; Aizana Drums with an 8×16 sequencer and custom WAV samples |
 | Effects | EQ with band dynamics, compressor, reverb, limiter, de-esser, delay, gate and saturator |
 | Plugin hosting | VST3, Audio Units on macOS and CLAP; install external plugins separately |
-| Export | Stereo mixdown and individual tracks as WAV/AIFF at 44.1/48/96 kHz and 16/24/32 bits; MP3 export is not currently implemented |
+| Export | Stereo mixdown and individual tracks as WAV/AIFF at 44.1/48/96 kHz and 16/24/32 bits, or MP3 at 44.1/48 kHz and 128/192/256/320 kbit/s (built-in LAME encoder) |
 | Session management | Saving, media folders, autosave, backups and recovery |
 | Assistance | KI-Setup for existing stems, rule-based KI-Mix, reference analysis, optional local stem separation and KI-Studio |
 

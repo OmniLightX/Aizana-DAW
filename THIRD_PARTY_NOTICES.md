@@ -16,6 +16,18 @@ licenses of the combined work, including JUCE and Tracktion Engine.
 
 ## Runtime and Framework Dependencies
 
+### LAME 3.100
+
+- Upstream: https://lame.sourceforge.io/
+- License: LGPL-2.0-or-later (library source headers; original LGPL v2 in COPYING).
+- Exact unmodified source: `extern/lame/lame-3.100.tar.gz`; provenance and SHA-256
+  in `extern/lame/README.md`. Original notices: `licenses/LAME/`.
+- Built as a separate static encoder library. No runtime LAME installation is needed.
+- Binary distributions must include the corresponding LAME source and the
+  matching application source/object material and build scripts required to
+  modify the library and relink the executable, as required by LGPL section 6.
+  Include the archive in the corresponding-source package; a link alone is insufficient.
+
 ### JUCE 8
 
 - Location: `extern/JUCE`

@@ -189,3 +189,150 @@ TEST_CASE ("Export: mixdown does not render while attached to the audio device",
 
     tempDir.deleteRecursively();
 }
+
+TEST_CASE("ExportMP3: produces a decodable stereo MP3", "[export][mp3]")
+{
+    ExportFixture f;
+    ExportOptions options;
+    options.format = ExportFormat::MP3;
+    options.outputFile = f.dir.getChildFile("mix.mp3");
+    ExportPipeline pipeline;
+    auto error = pipeline.exportMixdown(*f.manager.getEdit(), options);
+    INFO(error);
+    REQUIRE(error.isEmpty());
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(options.outputFile));
+    REQUIRE(reader != nullptr);
+    CHECK(reader->numChannels == 2);
+    CHECK(reader->sampleRate == 44100);
+    CHECK(std::abs(reader->lengthInSamples / reader->sampleRate - 1.0) < 0.1);
+}
+
+TEST_CASE("Export: AIFF PCM and MP3 rates retain independent stereo content", "[export][mp3]")
+{
+    ExportFixture f;
+    ExportPipeline pipeline;
+    for (auto format : {ExportFormat::AIFF, ExportFormat::MP3})
+        for (double rate : {44100.0, 48000.0})
+            for (int bitrate : {128, 192, 256, 320})
+            {
+                if (format == ExportFormat::AIFF && bitrate != 320) continue;
+                ExportOptions options;
+                options.format = format; options.sampleRate = rate; options.mp3BitrateKbps = bitrate;
+                auto name = juce::String(static_cast<int>(rate)) + "-" + juce::String(bitrate)
+                    + (format == ExportFormat::MP3 ? ".mp3" : ".aif");
+                options.outputFile = f.dir.getChildFile(name);
+                INFO(name);
+                auto error = pipeline.exportMixdown(*f.manager.getEdit(), options);
+                INFO(error); REQUIRE(error.isEmpty());
+                juce::AudioFormatManager formats; formats.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(options.outputFile));
+                REQUIRE(reader != nullptr);
+                CHECK(reader->sampleRate == rate); REQUIRE(reader->numChannels == 2);
+                CHECK(std::abs(reader->lengthInSamples / rate - 1.0) < 0.1);
+                juce::AudioBuffer<float> buffer(2, static_cast<int>(reader->lengthInSamples));
+                REQUIRE(reader->read(&buffer, 0, buffer.getNumSamples(), 0, true, true));
+                // Frequency projection is insensitive to codec delay but catches
+                // silence, corrupted float scaling, and accidentally duplicated channels.
+                for (int channel = 0; channel < 2; ++channel)
+                {
+                    auto magnitude = [&](double frequency)
+                    {
+                        double real = 0, imag = 0;
+                        int start = static_cast<int>(rate * 0.2), count = static_cast<int>(rate * 0.6);
+                        for (int i = start; i < start + count; ++i)
+                        {
+                            auto phase = 2 * juce::MathConstants<double>::pi * frequency * i / rate;
+                            real += buffer.getSample(channel,i) * std::cos(phase);
+                            imag += buffer.getSample(channel,i) * std::sin(phase);
+                        }
+                        return 2 * std::hypot(real, imag) / count;
+                    };
+                    CHECK(magnitude(channel == 0 ? 440 : 660) > 0.17);
+                    CHECK(magnitude(channel == 0 ? 440 : 660) < 0.22);
+                    CHECK(magnitude(channel == 0 ? 660 : 440) < 0.005);
+                }
+                if (auto* path = std::getenv("AIZANA_EXPORT_TEST_ARTIFACTS"))
+                {
+                    juce::File dir(path); REQUIRE(dir.createDirectory().wasOk());
+                    REQUIRE(options.outputFile.copyFileTo(dir.getChildFile(name)));
+                }
+            }
+}
+
+TEST_CASE("Export: rejection and cancellation preserve an existing destination", "[export][mp3]")
+{
+    ExportFixture f;
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.format = ExportFormat::MP3;
+    options.outputFile = f.dir.getChildFile("existing.mp3");
+    REQUIRE(options.outputFile.replaceWithText("keep-existing"));
+    SECTION("unsupported sample rate") { options.sampleRate = 96000; }
+    SECTION("unsupported bitrate") { options.mp3BitrateKbps = 999; }
+    SECTION("cancel before render") { options.shouldCancel = [] { return true; }; }
+    SECTION("cancel during render")
+    {
+        int polls = 0;
+        options.shouldCancel = [&polls] { return ++polls >= 2; };
+        CHECK(pipeline.exportMixdown(*f.manager.getEdit(), options).isNotEmpty());
+        CHECK(polls >= 2);
+        CHECK(options.outputFile.loadFileAsString() == "keep-existing");
+        CHECK(f.dir.findChildFiles(juce::File::findFiles, false).size() == 2);
+        return;
+    }
+    CHECK(pipeline.exportMixdown(*f.manager.getEdit(), options).isNotEmpty());
+    CHECK(options.outputFile.loadFileAsString() == "keep-existing");
+}
+
+TEST_CASE("Export: invalid output and failed stems report errors", "[export][mp3]")
+{
+    ExportFixture f;
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.format = ExportFormat::MP3;
+    options.outputFile = f.dir;
+    CHECK(pipeline.exportMixdown(*f.manager.getEdit(), options).isNotEmpty());
+    options.outputFile = f.dir.getChildFile("input.wav");
+    CHECK(pipeline.exportStems(*f.manager.getEdit(), options).isNotEmpty());
+}
+
+TEST_CASE("ExportMP3: stems are decodable and duplicate names do not collide", "[export][mp3]")
+{
+    ExportFixture f;
+    auto& edit = *f.manager.getEdit();
+    edit.insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(edit), nullptr);
+    auto tracks = te::getAudioTracks(edit);
+    REQUIRE(tracks.size() >= 2);
+    tracks[1]->setSoloIsolate(false);
+    ClipEditor editor(f.manager);
+    REQUIRE(editor.importAudioFile(f.dir.getChildFile("input.wav"), *tracks[1], 0) != nullptr);
+    tracks[0]->setName("same"); tracks[1]->setName("same");
+    ExportOptions options; options.format = ExportFormat::MP3;
+    options.outputFile = f.dir.getChildFile("stems");
+    ExportPipeline pipeline;
+    auto error = pipeline.exportStems(*f.manager.getEdit(), options);
+    INFO(error); REQUIRE(error.isEmpty());
+    CHECK(options.outputFile.getChildFile("same.mp3").existsAsFile());
+    CHECK(options.outputFile.getChildFile("same_2.mp3").existsAsFile());
+    juce::AudioFormatManager formats; formats.registerBasicFormats();
+    for (auto file : options.outputFile.findChildFiles(juce::File::findFiles, false, "*.mp3"))
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+        REQUIRE(reader != nullptr); CHECK(reader->numChannels == 2);
+    }
+}
+
+#include "engine/Mp3Encoder.h"
+TEST_CASE("MP3 encoder: input errors, write errors, and mid-encode cancellation", "[export][mp3]")
+{
+    ExportFixture f;
+    auto target = f.dir.getChildFile("direct.mp3");
+    CHECK(Mp3Encoder::encode(f.dir.getChildFile("missing.wav"), target, 320, {}).isNotEmpty());
+    CHECK(Mp3Encoder::encode(f.dir.getChildFile("input.wav"), f.dir, 320, {}).isNotEmpty());
+    int blocks = 0;
+    CHECK(Mp3Encoder::encode(f.dir.getChildFile("input.wav"), target, 320,
+        [&blocks] { return ++blocks == 3; }).contains("abgebrochen"));
+    CHECK(blocks == 3);
+}
