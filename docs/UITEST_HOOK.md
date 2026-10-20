@@ -1,140 +1,140 @@
-# In-App-Maussteuerung für GUI-Testläufe
+# In-app mouse control for GUI test runs
 
-**Kurz:** Aizana kann in einem eigens gebauten Testbinary über eine unbenannte Pipe
-ferngesteuert werden — Klicken, Ziehen, Tippen, Datei-Drops. Die ausgelieferte App
-kann das **nicht**: dort ist der Code nicht einkompiliert.
+**Summary:** Aizana can be controlled through an unnamed pipe in a dedicated
+test binary: clicking, dragging, typing and file drops. The distributed app
+**cannot** do this: that code is not compiled into it.
 
 ---
 
-## Warum überhaupt
+## Why this exists
 
-Die Live-Test-Checkliste enthält Punkte, die nur eine echte Ziehbewegung prüft:
-Fades aufziehen, Clip-Gain-Kurven zeichnen, Warp-Marker verschieben, Fader ziehen.
-Über die Bedienungshilfen (`scripts/gui-test.sh`) sind Klicks und Namen erreichbar,
-Ziehbewegungen nicht.
+The live-test checklist includes checks that require a real drag gesture:
+creating fades, drawing clip-gain curves, moving warp markers and dragging faders.
+Accessibility (`scripts/gui-test.sh`) exposes clicks and names, but not dragging.
 
-## Prozessgrenze
+## Process boundary
 
-Die Steuerung adressiert ausschließlich JUCE-Komponenten im Testprozess. Sie
-sendet keine systemweiten Mausereignisse an andere Anwendungen.
+The controller addresses only JUCE components in the test process. It does not
+send system-wide mouse events to other applications.
 
-## Wie es funktioniert
+## How it works
 
-Der Hook ruft `juce::ComponentPeer::handleMouseEvent` — genau die Funktion, die
-macOS bei einem echten Klick aufruft (`juce_NSViewComponentPeer_mac.mm`,
-`sendMouseEvent`). Damit laufen JUCE-Trefferprüfung, echte Handler und echtes
-Drücken–Bewegen–Loslassen wie im Alltag.
+The hook calls `juce::ComponentPeer::handleMouseEvent`, the same function macOS
+calls for a real click (`juce_NSViewComponentPeer_mac.mm`, `sendMouseEvent`).
+This runs JUCE hit testing, the actual handlers and the actual
+press–move–release sequence used in normal interaction.
 
-Die Signatur trägt **kein Ziel**: Punkt, Modifier, Druck, Zeit. Adressiert wird das
-Objekt, auf dem die Methode gerufen wird, und `ComponentPeer::getPeer()` zählt nur
-Fenster **dieses** Prozesses. Es gibt in der Kette keinen Parameter, über den ein
-fremder Prozess benannt werden könnte — das Ereignis betritt den Bildschirm nie.
+The signature carries **no target**: point, modifiers, pressure, time. The target
+is the object on which the method is called, and `ComponentPeer::getPeer()`
+enumerates only windows belonging to **this** process. No parameter anywhere in
+the chain can name a foreign process; the event never reaches the screen.
 
-Die Steuerleitung ist eine **unbenannte Pipe auf stdin**: kein Pfad, kein Port, kein
-Eintrag in irgendeinem Namensraum, nur vom startenden Prozess beschreibbar, stirbt
-mit ihm. Ein Socket oder eine beobachtete Datei wäre adressierbar — also eine Tür.
+The control channel is an **unnamed pipe on stdin**: no path, port or entry in
+any namespace, writable only by the launching process and terminating with it.
+A socket or watched file would be addressable, creating an entry point.
 
-## Die Riegel
+## Safeguards
 
-1. **Übersetzungszeit** — ohne `-DAIZANA_UITEST_HOOK=ON` wird `src/testing/UiTestHook.cpp`
-   gar nicht übersetzt; der Header stellt nur ein `constexpr false` bereit. Im
-   ausgelieferten Binary existieren die Anweisungen nicht.
-2. **Laufzeit** — auch im Testbuild nur bei `AIZANA_UITEST=1` **und** stdin als Pipe.
-3. **Werkzeugverbot** — die Übersetzungseinheit referenziert weder CGEvent/CGWarp
-   noch Bedienungshilfen, Sockets, Kindprozesse oder Netz (geprüft an der Symboltabelle).
-4. **Testmodus verkleinert die App** — bei scharfem Hook bleiben aus: der
-   Loopback-Server der KI-Brücke, der CLI-Start des KI-Studios, der Modell-Download.
-   Dazu Splash und Mikrofon-Abfrage (native Dialoge, die den Start blockieren).
-5. **Modifier-Riegel** — `ctrl+alt+cmd` gemeinsam wird abgelehnt. Sonst kippt
-   `Slider::isAbsoluteDragMode` in den Velocity-Modus, der beim Loslassen über
-   `MouseInputSource::setRawMousePosition` → `CGWarpMouseCursorPosition` den
-   **echten** Mauszeiger bewegt. Zusätzlich bricht jede Geste ab, sobald
-   `isUnboundedMouseMovementEnabled()` anspricht.
+1. **Compile time** — without `-DAIZANA_UITEST_HOOK=ON`, `src/testing/UiTestHook.cpp`
+   is not compiled at all; the header exposes only a `constexpr false`.
+   The instructions do not exist in the distributed binary.
+2. **Runtime** — even in the test build, requires both `AIZANA_UITEST=1` **and**
+   stdin connected to a pipe.
+3. **Prohibited facilities** — the translation unit references neither CGEvent/CGWarp
+   nor accessibility, sockets, child processes or networking (checked in the symbol table).
+4. **Test mode reduces the app** — when the hook is active, the AI bridge's
+   loopback server, AI Studio CLI launch and model download remain disabled.
+   So do the splash screen and microphone prompt (native dialogs that block startup).
+5. **Modifier guard** — the combination `ctrl+alt+cmd` is rejected. Otherwise,
+   `Slider::isAbsoluteDragMode` enters velocity mode, which moves the **real**
+   mouse pointer on release via `MouseInputSource::setRawMousePosition` →
+   `CGWarpMouseCursorPosition`. Every gesture also aborts as soon as
+   `isUnboundedMouseMovementEnabled()` reports true.
 
-Belegt durch **fehlgeschlagene Angriffe**, nicht durch Zusagen:
+Demonstrated by **failed attacks**, not assurances:
 
 ```bash
 ./scripts/uitest-guard-check.sh
 ```
 
-Die Prüfungen enthalten Gegenkontrollen, die den jeweiligen Fehlerfall auslösen.
+The checks include counterchecks that trigger the respective failure case.
 
-## Voraussetzungen und Befehlsverhalten
+## Prerequisites and command behavior
 
-- Der Bildschirm muss entsperrt sein; `uitest.py` prüft dies vor dem Start.
-  Eine `OK`-Antwort bestätigt nur den Dispatch, nicht die sichtbare Wirkung.
-- Tastatur-Modifier werden während des Dispatch gesetzt und danach restauriert.
-- Die Zielsuche berücksichtigt die sichtbaren Grenzen sämtlicher Vorfahren.
-  Verdeckte oder weggescrollte Elemente liefern einen Fehler.
-- Für Wellenformprüfungen einen hörbaren Abschnitt des Testmaterials verwenden.
-- Ansichtsmodus und Dockzustand vor jedem Lauf herstellen. `wennfehlt` erlaubt
-  zustandsabhängige Schritte.
-- Native Menübefehle werden mit `menu <top> <itemId>` ausgelöst.
-- `taste backspace` entspricht der rückwärts löschenden MacBook-Taste;
-  `taste delete` löscht vorwärts.
+- The screen must be unlocked; `uitest.py` checks this before launch.
+  An `OK` response confirms dispatch only, not a visible effect.
+- Keyboard modifiers are set during dispatch and restored afterward.
+- Target lookup respects the visible bounds of all ancestors.
+  Hidden or scrolled-out elements return an error.
+- Use an audible section of the test material for waveform checks.
+- Establish the view mode and dock state before each run. `wennfehlt` allows
+  state-dependent steps.
+- Native menu commands are invoked with `menu <top> <itemId>`.
+- `taste backspace` corresponds to the MacBook backward-delete key;
+  `taste delete` deletes forward.
 
-## Grenzen (bleiben beim Menschen)
+## Limitations (remain with the human tester)
 
-- **PopupMenus reagieren nicht auf synthetische Klicks** — weder Einträge erster
-  Ebene noch Untermenüs. `MenuWindow::MouseSourceState::timerCallback` und `isOver()`
-  fragen `source.getScreenPosition()` ab, das über `getRawScreenPosition()` auf
-  `MouseInputSource::getCurrentRawMousePosition()` geht: die **echte** Systemmaus, die
-  der Hook nie bewegt (und nach Riegel 5 auch nicht bewegen darf). Gemessen: ein Klick
-  auf „Duplicate" blieb wirkungslos, ein Untermenü ging weder per Klick noch per
-  Verweilen auf. **Weg dafür: `press <Name>`** — löst den Eintrag über
-  `AccessibilityActionType::press` direkt am Modell aus (bei Untermenüs
-  `showSubMenuFor`), ein Methodenaufruf im Prozess wie `menu <top> <itemId>`. Kein
-  AXUIElement, keine Freigabe der Bedienungshilfen. Damit sind Kontextmenüs
-  vollständig bedienbar; Einträge werden über ihren **Text** adressiert (der steht nur
-  im Accessibility-Titel, siehe `describe()`).
-- **Native Menüleiste** — auf macOS eine NSMenu (`MainWindow.cpp`, `setMacMainMenu`),
-  für Mausereignisse grundsätzlich unerreichbar. Der Hook löst Menüpunkte deshalb
-  direkt am `MenuBarModel` aus (`menu <top> <itemId>`) — ein Methodenaufruf im Prozess.
-- **Native Dialoge** — `NativeMessageBox` und `FileChooser` (NSOpenPanel) kann der
-  Hook *öffnen*, aber nicht bedienen; der Message-Thread blockiert, Kommandos laufen
-  in eine Zeitüberschreitung. Rückfallweg: `scripts/gui-test.sh` (Bedienungshilfen,
-  spricht Elemente über den **Namen einer benannten App** an, streut keine Ereignisse).
-- **Fremd-Plugin-Oberflächen** — eingebettete NSViews bzw. eigener Prozess (OOP).
-  Bekommen ihre Ereignisse von AppKit, nicht von JUCE.
-- **Die Strecke macOS→JUCE selbst** wird nicht geprüft. Ein Fehler, der genau dort
-  säße, fiele nur einem Menschen auf.
+- **PopupMenus do not respond to synthetic clicks**, either top-level entries
+  or submenus. `MenuWindow::MouseSourceState::timerCallback` and `isOver()` query
+  `source.getScreenPosition()`, which follows `getRawScreenPosition()` to
+  `MouseInputSource::getCurrentRawMousePosition()`: the **real** system mouse,
+  which the hook never moves (and must not move under safeguard 5). Observed:
+  clicking “Duplicate” had no effect; a submenu opened neither on click nor hover.
+  **Use `press <Name>` for this**: it invokes the entry directly on the model via
+  `AccessibilityActionType::press` (`showSubMenuFor` for submenus), an in-process
+  method call like `menu <top> <itemId>`. No AXUIElement or accessibility permission.
+  This makes context menus fully operable; entries are addressed by their
+  **text**, which appears only in the accessibility title (see `describe()`).
+- **Native menu bar** — on macOS this is an NSMenu (`MainWindow.cpp`,
+  `setMacMainMenu`), fundamentally unreachable by these mouse events. The hook
+  therefore invokes menu items directly on the `MenuBarModel`
+  (`menu <top> <itemId>`), an in-process method call.
+- **Native dialogs** — the hook can *open* `NativeMessageBox` and `FileChooser`
+  (NSOpenPanel), but cannot operate them; the message thread blocks and commands
+  time out. Fallback: `scripts/gui-test.sh` (accessibility; addresses elements
+  by the **name of a named app**, without broadcasting events).
+- **Third-party plugin interfaces** — embedded NSViews or a separate process
+  (OOP). They receive events from AppKit, not JUCE.
+- **The macOS→JUCE path itself** is not tested. A defect in that path would only
+  be noticed by a human tester.
 
-## Benutzung
+## Usage
 
 ```bash
 cmake -S . -B build-uitest -DCMAKE_BUILD_TYPE=Release -DAIZANA_UITEST_HOOK=ON
 cmake --build build-uitest --target Aizana -j 10
 
-./scripts/uitest.sh lauf drehbuch.txt      # Drehbuch abfahren
-./scripts/uitest.sh lauf -                 # Drehbuch von stdin
+./scripts/uitest.sh lauf drehbuch.txt      # Run a test script
+./scripts/uitest.sh lauf -                 # Read the script from stdin
 ```
 
-Für die Editor-Testskripte 01–03 eine eigene, zur Verwendung freigegebene
-WAV-Datei angeben. Die Skripte verwenden keine mitgelieferte Musikaufnahme:
+For editor test scripts 01–03, supply your own WAV file that you are authorized
+to use. The scripts do not use a bundled music recording:
 
 ```bash
 export AIZANA_TESTWAV="/path/to/test.wav"
 ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/01-editor-vorbereiten.txt
 ```
 
-Drehbuch-Befehle: `klick` · `dklick` · `ziehe <Name> <dx> <dy>` ·
+Script commands: `klick` · `dklick` · `ziehe <Name> <dx> <dy>` ·
 `ziehevon <A> nach <B>` · `taste` · `tippe` · `menu` · `drop` · `bild` · `warte` ·
-`namen`. Rohbefehle des Hooks über `> …` (Hilfe: `> hilfe`).
+`namen`. Send raw hook commands via `> …` (help: `> hilfe`).
 
-**Wichtig:** JUCE lässt nur eine Instanz zu — vor einem Lauf darf keine Aizana
-laufen, sonst reicht der Start nur weiter und der Hook ist still tot. Das Skript
-bricht in dem Fall ab.
+**Important:** JUCE allows only one instance. No Aizana instance may be running
+before a test run, or launch merely forwards to it and the hook silently fails
+to start. The script aborts in that case.
 
-**Elemente werden über NAMEN gefunden**, nie über Koordinaten (`setTitle`-Welle,
-`f846eb9`). Ist ein Name mehrdeutig, meldet `find` einen Fehler und klickt **nicht**
-den ersten Treffer — ein stiller Fehlklick, der Erfolg meldet, ist die Fehlerklasse,
-gegen die die ganze Benennung gebaut wurde.
+**Elements are found by NAME**, never by coordinates (`setTitle` changes,
+`f846eb9`). If a name is ambiguous, `find` reports an error and does **not** click
+the first match. A silent misclick that reports success is precisely the failure
+class this naming system was designed to prevent.
 
-**Gezeichnete Flächen brauchen Namensträger.** Was die App nur *malt* (die Pad-Zeilen
-des Drum-Editors, Insert-Slots), hat keinen Namen und ist damit weder für VoiceOver
-noch für einen Testlauf greifbar. Weg im Drum-Editor: pro Zeile eine Component, die
-**nichts zeichnet und keine Maus annimmt** (`setInterceptsMouseClicks(false,false)`) —
-Klick, Rechtsklick und Datei-Drop laufen unverändert an den Editor darunter, aber die
-Zeile hat einen Namen. Der Name trägt dort auch den **Zustand** („Pad Snare" vs. „Pad
-Snare (Sample)"), sonst wäre eine rein farbliche Anzeige nur per Pixelvergleich
-prüfbar.
+**Painted areas need named components.** What the app only *paints* (drum-editor
+pad rows, insert slots) has no name and is therefore inaccessible to both
+VoiceOver and test runs. The drum editor uses one Component per row that
+**paints nothing and accepts no mouse input** (`setInterceptsMouseClicks(false,false)`).
+Clicks, right-clicks and file drops still reach the editor underneath unchanged,
+but the row has a name. That name also carries **state** (“Pad Snare” vs. “Pad
+Snare (Sample)”); otherwise a purely color-based indicator could only be checked
+by pixel comparison.

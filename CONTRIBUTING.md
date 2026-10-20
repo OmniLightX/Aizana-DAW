@@ -1,6 +1,6 @@
 # Aizana development guide
 
-Build instructions are in [README.md](README.md#aus-dem-quellcode-bauen).
+Build instructions are in [README.md](README.md#build-from-source).
 External pull requests are currently not accepted; bug reports with reproducible
 steps are welcome. This guide documents the architecture for source readers
 and developers working on their own forks.
@@ -91,12 +91,12 @@ externalPlugin->initialiseFully();
 if (auto* pi = externalPlugin->getAudioPluginInstance())
     apiEditor = pi->createEditor();
 
-// CRITICAL — SourceFileReference: BEIDE müssen gesetzt sein, sonst getFile() → empty File
+// CRITICAL — SourceFileReference: BOTH must be set, otherwise getFile() → empty File
 // edit->editFileRetriever = [editFile] { return editFile; };
 // edit->filePathResolver  = [editFile] (const juce::String& desc) -> juce::File {
 //     if (juce::File::isAbsolutePath(desc)) return juce::File(desc);
 //     return editFile.getParentDirectory().getChildFile(desc); };
-// ClipEditor::importAudioFile: setToDirectFileReference(file, false) → absoluter Pfad
+// ClipEditor::importAudioFile: setToDirectFileReference(file, false) → absolute path
 
 // Filter internal TE plugins from user-visible insert slots
 const juce::String t = p->getPluginType();

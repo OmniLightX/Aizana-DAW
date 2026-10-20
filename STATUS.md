@@ -1,47 +1,47 @@
-# Aizana 0.3.0 Alpha — Entwicklungs- und Teststand
+# Aizana 0.3.0 Alpha — development and test status
 
-Stand: 20. Oktober 2026. Aizana wird als Quellcode zum Selbstbauen bereitgestellt.
-Build-Ziel: Apple Silicon (arm64), macOS 13.3 oder neuer.
+As of 20 October 2026. Aizana is provided as source code for users to build.
+Build target: Apple Silicon (arm64), macOS 13.3 or later.
 
-## Bestätigte Prüfungen
+## Verified checks
 
-- Debug und Release: jeweils 444 Engine-Testfälle und 49.837 Assertions bestanden.
-  Sechs Fälle wurden zunächst übersprungen. Die optionalen VST3-/CLAP-Prüfungen
-  wurden mit installierten Plugins nachgeholt: je Konfiguration acht ausgewählte
-  Fälle und 35 Assertions bestanden, ohne Skips. Ein plattformfremder Fall und
-  ein Fall mit nicht verfügbarem MIDI-Gerätesystem bleiben ausgenommen.
-- Kein JUCE-Assertion- oder Leak-Bericht in diesen Läufen. Der separate
-  OOP-Smoke-Test besteht in beiden Konfigurationen.
-- Fresh Air: nur das native Pluginfenster sichtbar, Regler bedienbar;
-  Öffnen, Schließen, Wiederöffnen und Sessionwechsel geprüft. Der vorherige
-  Plugin-Prozess wird beim Wechsel beendet.
-- Spur anlegen, Undo/Redo, Speichern und Wiederöffnen geprüft. Ein nicht mehr
-  beschreibbares Speicherziel meldet einen Fehler und erhält die vorhandene Datei.
-- Einzel-Insert mit Option zwischen zwei Audiokanälen verschieben und ohne
-  Option auf einen Bus kopieren geprüft. Parameterzustand und Undo/Redo sind
-  für die dokumentierten Fälle nachgewiesen.
-- App-Builds und Bundle-Audit bestanden. Modell, Lizenzdatei und Prüfsummenliste
-  wurden vollständig heruntergeladen und mit den Ausgangsdateien verglichen.
+- Debug and Release: 444 engine test cases and 49,837 assertions passed in each.
+  Six cases were initially skipped. The optional VST3/CLAP checks were
+  subsequently run with installed plugins: eight selected cases and 35
+  assertions passed per configuration, with no skips. One case for another
+  platform and one requiring an unavailable MIDI device system remain excluded.
+- No JUCE assertion or leak report in these runs. The separate
+  OOP smoke test passes in both configurations.
+- Fresh Air: only the native plugin window is visible, and controls are usable;
+  opening, closing, reopening and session switching were checked. The previous
+  plugin process terminates when switching sessions.
+- Track creation, Undo/Redo, saving and reopening were checked. A save destination
+  that is no longer writable reports an error and preserves the existing file.
+- Moving a single insert between two audio channels with Option and copying it
+  to a bus without Option were checked. Parameter state and Undo/Redo are
+  verified for the documented cases.
+- App builds and bundle audit passed. The model, license file and checksum list
+  were downloaded in full and compared with the original files.
 
-## Noch nicht vollständig abgenommen
+## Not yet fully accepted
 
-- Anonymer Modellabruf und Erstdownload über den regulären App-Dialog.
-- Physisches MIDI-Keyboard und Hardware-Cue-Ausgänge.
-- Weitere Drittanbieter-OOP-Editoren und deren Klangvergleich; die Fresh-Air-
-  Abnahme ist keine Zusage für jedes Plugin.
-- Noch nicht einzeln belegte Insert-Kombinationen und visuelle Toggle-Zustände;
-  bereits bestandene Ketten-/Preset-Prüfungen stehen in der Live-Übersicht.
-- Erststart auf einem unabhängigen Mac. Kein notarisiertes App-Paket verfügbar.
+- Anonymous model retrieval and first download through the regular app dialog.
+- Physical MIDI keyboard and hardware cue outputs.
+- Other third-party OOP editors and their sound comparison; Fresh Air acceptance
+  does not guarantee that every plugin works.
+- Insert combinations and visual toggle states not yet individually verified;
+  chain/preset checks that have already passed are listed in the live checklist.
+- First launch on an independent Mac. No notarized app package is available.
 
-## Dokumentation
+## Documentation
 
-- [Bedienungsanleitung](MANUAL.md)
-- [Aktuelle Live-Prüfungen](docs/LIVE_TEST_CHECKLIST.md)
-- [OOP-Fenster und Regressionstests](docs/OOP_EDITOR_WINDOWS_2026-10-20.md)
-- [JUCE-Diagnosen und Korrekturen](docs/DEBUG_DIAGNOSTICS_2026-10-19.md)
-- [Modellherkunft und Prüfungen](docs/OPEN_STEM_RELEASE.md)
-- [Komponenten und Lizenzen](THIRD_PARTY_NOTICES.md)
+- [User manual](MANUAL.md)
+- [Current live checks](docs/LIVE_TEST_CHECKLIST.md)
+- [OOP windows and regression tests](docs/OOP_EDITOR_WINDOWS_2026-10-20.md)
+- [JUCE diagnostics and fixes](docs/DEBUG_DIAGNOSTICS_2026-10-19.md)
+- [Model provenance and checks](docs/OPEN_STEM_RELEASE.md)
+- [Components and licenses](THIRD_PARTY_NOTICES.md)
 
-KI-Mixing verwendet eingebaute Analyse- und Mischregeln. Die optionale
-Stem-Trennung verwendet das dokumentierte MIT-Modell. Die Gesamtanwendung ist
-nicht MIT-lizenziert; insbesondere GPL- und AGPL-Bedingungen gelten zusätzlich.
+AI mixing uses built-in analysis and mixing rules. Optional stem separation
+uses the documented MIT model. The application as a whole is not MIT-licensed;
+in particular, GPL and AGPL conditions also apply.

@@ -1,16 +1,16 @@
-# Aizana 0.3.0 Alpha — Prüfübersicht
+# Aizana 0.3.0 Alpha — verification overview
 
-Die aktuelle Übersicht steht in [STATUS.md](../STATUS.md), die native
-Bedienabnahme in [LIVE_TEST_CHECKLIST.md](LIVE_TEST_CHECKLIST.md).
+The current overview is in [STATUS.md](../STATUS.md); native interaction
+acceptance is in [LIVE_TEST_CHECKLIST.md](LIVE_TEST_CHECKLIST.md).
 
-Aizana wird als Quellcode zum Selbstbauen angeboten. Die
-[Build-Anleitung](../README.md#aus-dem-quellcode-bauen) beschreibt den vollständigen
-Checkout mit Submodulen. Ein notarisiertes App-Paket wird nicht angeboten.
+Aizana is available as source code to build yourself. The
+[build instructions](../README.md#build-from-source) describe the complete
+checkout with submodules. A notarized app package is not provided.
 
-- [Modellherkunft und Prüfsumme](OPEN_STEM_RELEASE.md)
-- [Komponenten und Lizenztexte](../THIRD_PARTY_NOTICES.md)
-- [Weitergabe und korrespondierender Quellcode](DISTRIBUTION.md)
-- [Start eines selbst gebauten Alpha-Builds](ALPHA_INSTALL.md)
+- [Model provenance and checksum](OPEN_STEM_RELEASE.md)
+- [Components and license texts](../THIRD_PARTY_NOTICES.md)
+- [Distribution and corresponding source](DISTRIBUTION.md)
+- [Launching a self-built alpha build](ALPHA_INSTALL.md)
 
-Verbleibende Hardware-, Drittanbieter- und Erstdownloadprüfungen sind im
-aktuellen Status ausdrücklich ausgewiesen.
+Remaining hardware, third-party and first-download checks are explicitly listed
+in the current status.

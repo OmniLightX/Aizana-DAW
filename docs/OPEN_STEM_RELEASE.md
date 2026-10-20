@@ -5,7 +5,7 @@ is published. This document describes the model, conversion and test coverage.
 
 ## What the app actually uses
 
-The default KI-Mix uses Aizana's analysis and mixing rules, not pretrained foreign
+The default AI Mix (UI label: KI-Mix) uses Aizana's analysis and mixing rules, not pretrained foreign
 mixing weights. Optional user-supplied models and external AI CLI accounts remain
 separate. The local stem backend uses MVSep Mega 53 Stems v1, trained by Roman
 Solovyev (ZFTurbo), with five original mask heads. No Aizana training took place.

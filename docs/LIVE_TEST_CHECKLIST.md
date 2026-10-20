@@ -1,74 +1,74 @@
-# Aizana — Live-Prüfstand
+# Aizana — live verification status
 
-Stand: 20. Oktober 2026. Diese Übersicht unterscheidet abgeschlossene
-Bedienprüfungen von noch nicht abgenommenen Kombinationen. Automatisierte Tests
-und native Bedienprüfungen sind unterschiedliche Nachweise.
+As of 20 October 2026. This overview distinguishes completed interaction checks
+from combinations not yet accepted. Automated tests and native interaction
+checks provide different kinds of evidence.
 
-## Aktuelle Bedienprüfungen
+## Current interaction checks
 
-| Bereich | Ergebnis | Nachweis |
+| Area | Result | Evidence |
 |---|---|---|
-| OOP-Editor Fresh Air | Bestanden: ein natives Fenster, bedienbare Regler, Wiederöffnung und Sessionwechsel mit beendetem altem Worker | [OOP-Fensterprüfung](OOP_EDITOR_WINDOWS_2026-10-20.md) |
-| Einzel-Insert verschieben | Bestanden: Option-Ziehen zwischen Audiokanälen, Zustand erhalten, Undo/Redo | [Insert-Prüfung](INSERT_FEEDBACK_2026-10-19.md) |
-| Einzel-Insert kopieren | Bestanden: EQ auf Bus kopiert, Quelle erhalten, eigene Zielinstanz | [Insert-Prüfung](INSERT_FEEDBACK_2026-10-19.md) |
-| Spur-Anlage und Session | Bestanden: Anlegen, Undo/Redo, Speichern/Wiederöffnen und Sessionwechsel | [Session-Prüfungen](RELEASE_TESTS_2026-10-20.md) |
-| Speicherfehler | Bestanden: nicht beschreibbares Ziel wird gemeldet, vorhandene Datei bleibt erhalten | [Session-Prüfungen](RELEASE_TESTS_2026-10-20.md) |
-| Stem-Trennung | Bestanden: Vorschau, Import, Undo/Redo, Abbruch und Sessionwechsel ohne verspäteten Import | [Stem-Prüfungen](OPEN_STEM_RELEASE.md) |
-| Mehrfachauswahl und Mixer | Bestanden: Auswahlaktionen, Gruppenfader-Undo und Pan-Anzeige nach Reload | [Auswahl](TEST_HISTORY.md), [Mixer](TEST_HISTORY.md) |
+| Fresh Air OOP editor | Passed: one native window, operable controls, reopening and session change with the old worker terminated | [OOP window check](OOP_EDITOR_WINDOWS_2026-10-20.md) |
+| Move a single insert | Passed: Option-drag between audio channels, state retained, Undo/Redo | [Insert check](INSERT_FEEDBACK_2026-10-19.md) |
+| Copy a single insert | Passed: EQ copied to bus, source retained, separate destination instance | [Insert check](INSERT_FEEDBACK_2026-10-19.md) |
+| Track creation and session | Passed: creation, Undo/Redo, saving/reopening and session change | [Session checks](RELEASE_TESTS_2026-10-20.md) |
+| Save failure | Passed: unwritable destination reported, existing file retained | [Session checks](RELEASE_TESTS_2026-10-20.md) |
+| Stem separation | Passed: preview, import, Undo/Redo, cancellation and session change without late import | [Stem checks](OPEN_STEM_RELEASE.md) |
+| Multiple selection and mixer | Passed: selection actions, group-fader Undo and pan display after reload | [Selection](TEST_HISTORY.md), [Mixer](TEST_HISTORY.md) |
 
-## Weitere bestätigte Insert-Prüfungen
+## Other confirmed insert checks
 
-Der [Prüflauf vom 19. Oktober](RELEASE_FINAL_CHECK_2026-10-19.md) belegt außerdem:
+The [19 October test run](RELEASE_FINAL_CHECK_2026-10-19.md) also establishes:
 
-- EQ-/Kompressorkette auf Bus und FX kopiert; Reihenfolge sowie Undo/Redo geprüft.
-- Bus-Effekte gemeinsam deaktiviert und per Undo wiederhergestellt.
-- FX-Effekte entfernt und per Undo mit ursprünglichen IDs wiederhergestellt;
-  Aux-Return erhalten.
-- Zwischenablage angehängt bzw. ausdrücklich ersetzt; Undo stellt den Ausgang her.
-- Default-Preset auf Master sowie Preset-Datei auf Audiokanal geladen;
-  Reihenfolge, eigene Instanzen und Session-Wiederöffnung geprüft.
-- Bus-Mute und FX-Solo ändern den Engine-Zustand korrekt, einschließlich Undo.
+- EQ/compressor chain copied to bus and FX; order and Undo/Redo checked.
+- Bus effects disabled together and restored through Undo.
+- FX effects removed and restored through Undo with original IDs;
+  aux return retained.
+- Clipboard appended or explicitly replaced; Undo restores the original state.
+- Default preset loaded onto Master and preset file onto an audio channel;
+  order, separate instances and session reopening checked.
+- Bus Mute and FX Solo correctly change engine state, including Undo.
 
-## Abgeschlossener funktionaler Prüflauf
+## Completed functional test round
 
-Die folgenden 21 Prüfungen wurden zwischen dem 11. und 15. Oktober abgeschlossen.
-Sie sind keine Gesamtzählung der automatisierten Tests.
+The following 21 checks were completed between 11 and 15 October.
+They are not a total count of automated tests.
 
-| Kennung | Konkrete Restprüfung | Status |
+| ID | Specific remaining check | Status |
 |---|---|---|
-| ORD3 | Automatische Sicherungen im Backups-Ordner | Erledigt: drei gültige Sicherungen samt Audioverweis |
-| ORD4 | Kontrollierter Absturz und Wiederherstellung | Erledigt: Dialog, Inhalt und korrigierter Speicherweg geprüft |
-| MED1 | Neue Aufnahme im benannten Audioordner | Erledigt: Mikrofonaufnahme, WAV und Hörbestätigung |
-| ORD7 | Alte flache Session und deren Backups | Erledigt: Testkopie geladen, Wellenformen/Transport/Pegel geprüft; Wiederherstellung und rotierender Autosave im benachbarten Backups-Ordner, je 16 Spuren und 14 gültige Audioverweise. Siehe TEST_HISTORY.md |
-| MED2 | Comp-Datei im Audio/Comps-Ordner | Erledigt: viersekündige Comp-WAV im eigenen Audio/Comps-Ordner; neun Abschnittsmittelpunkte samplegenau mit ausgewählten Takes verglichen |
-| MED3 | Bounce-Datei im Audio/Bounces-Ordner | Erledigt: Bounce nur Event in Test-App erstellt; WAV mit Signal, identischer Länge, gültigem Session-Verweis; Undo/Redo und Wiederöffnen bestanden. Siehe TEST_HISTORY.md |
-| MED4 | Aufnahme vor dem ersten Speichern | Erledigt: Aufnahme nach Gerätewechsel und Vorzähler in korrekter unbenannter Ablage; erstes Speichern übernimmt WAV bytegleich in eigenen Audioordner, Wiederöffnen mit Wellenform und laufender Wiedergabe geprüft. Siehe TEST_HISTORY.md |
-| CO1 | Zusammengesetzte Wellenform im Arrangement | Erledigt: Arrangement und Dock zeigen effektiven Comp nach Laden, Rückwechsel und Einklappen; Save erhält aktive Quelle |
-| CO3 | Wellenform ändert sich beim Take-Wechsel | Erledigt: Take 1 über Lane und Rückkehr per Comp anhören live; Undo/Redo korrekt. Bedienprüfung bestätigt Take 2 und Rückkehr zum Comp über Menü. Zusammenstellung bleibt erhalten |
-| S3 | Solo speichern und wieder öffnen | Erledigt: Solo im Mixer gesetzt, per Cmd+S geschrieben, Original wieder geöffnet und Solo-Anzeige bestätigt |
-| S4 | Geladenen Loop ohne Positionssprung weiterziehen | Erledigt: geladener Bereich 0,5–4,5 s  auf 1–5 s verschoben, linke Grenze auf 1,5 s, rechte auf 5,5 s; Bereich wieder auf 0,5–4,5 s zurückgestellt. Kein Sprung zum Songanfang. Siehe TEST_HISTORY.md |
-| V18 | Metronom-Einstellungen speichern und wieder öffnen | Erledigt: Metronom an, Vorzähler/Pre-Roll je 2, Aufnahme-Klick aus, Betonung an, Lautstärke 0,35 gesetzt, gespeichert und nach Wiederöffnen  bestätigt. Siehe TEST_HISTORY.md |
-| T | Instrumentenspur per Tastatur spielen und aufnehmen | Bestanden 2026-10-14: Bedienprüfung bestätigt Spiel, Aufnahme und Wiedergabe; 144 Noten vorhanden. REC, Darstellung, Doppelklick, Löschen/Undo/Redo, Verschieben, Verlängern und Speichern/Wiederöffnen live bestätigt. Vollsuite 414 bestanden/11 übersprungen. Siehe `TEST_HISTORY.md`. |
-| B3 | Synth-Regler, Hüllkurve und Polyphonie | Bestanden 2026-10-14: Live-Regler/Wellenformauswahl und technische Audioabnahme mit Sample-, Hüllkurven- und Vierstimmenvergleich; 9 Synth-Fälle/110 Assertions grün. Kein subjektiver Hörtest behauptet. Siehe `TEST_HISTORY.md`. |
-| B4 | Export gegen Wiedergabe und zweiten Export | Bestanden 2026-10-15: erste zwei Exporte PCM-bitgleich; nach Entmuten erneuter Export Vergleich 3. Bedienprüfung bestätigt identischen Klang gegenüber Projektwiedergabe. Siehe `TEST_HISTORY.md`. |
-| B6 | KI-Ziel bei einer Spur namens Master | ✅ Live 2026-10-15: EQ und Kompressor nur auf normaler Spur Master; Summenkanal und Kontrolle unverändert. |
-| C1 | Tempo-Map vor einem zeitversetzten Clip | Bestanden 2026-10-15: 27 Tempo-Punkte live erzeugt, Grundtempo vor Clip 120,2 BPM; 48 Anschläge maximal 5,98 ms vom Raster, Map und Clipposition gespeichert. 2 Fälle/22 Assertions grün. |
-| C2 | Warnung bei sparsamer Kick-Spur, Gegenprobe Drum-Summe | Bestanden 2026-10-15 mit synthetischen Rhythmussignalen: dünn 45 % Warnung (Schwelle 60 %), dicht ohne Warnung 11 Tempo-Punkte/120,2 BPM. |
-| C3 | Konkrete Ursache einer Vocal-Tuning-Ablehnung | Bestanden 2026-10-15: untonaler Testclip meldet live ausdrücklich keine erkennbare Tonhöhe, keine pauschale Liste anderer Ablehnungsursachen. Automatische C3-Fälle ebenfalls grün. |
-| ORD2-Nachprüfung | Speichern unter im bestehenden Ordner ohne doppelte Schachtelung | Erledigt: zweimal Speichern unter, zweites Mal im bestehenden Ordner mit Ersetzen; gültige Sessiondatei, Audio und Backups, keine doppelte Schachtelung |
-| ORD5-Tastenkürzel | Speichern ausdrücklich über Cmd+S | Erledigt: Cmd+S verdrahtet; erste Zielwahl samt Abbrechen geprüft, danach Mute/Solo aus Arrangement/Mixer in derselben Datei nachgewiesen; Cmd+Option+S separat. Siehe TEST_HISTORY.md |
+| ORD3 | Automatic backups in the Backups folder | Done: three valid backups with audio reference |
+| ORD4 | Controlled crash and recovery | Done: dialog, contents and corrected save path checked |
+| MED1 | New recording in the named audio folder | Done: microphone recording, WAV and listening confirmation |
+| ORD7 | Old flat session and its backups | Done: test copy loaded, waveforms/transport/levels checked; recovery and rotating autosave in the adjacent Backups folder, each with 16 tracks and 14 valid audio references. See TEST_HISTORY.md |
+| MED2 | Comp file in the Audio/Comps folder | Done: four-second comp WAV in its own Audio/Comps folder; nine section midpoints compared sample-exactly against selected takes |
+| MED3 | Bounce file in the Audio/Bounces folder | Done: “Bounce nur Event” created in the test app; WAV with signal, identical length, valid session reference; Undo/Redo and reopening passed. See TEST_HISTORY.md |
+| MED4 | Recording before first save | Done: recording after device change and count-in in the correct unnamed location; first save copies WAV byte-identically to its own audio folder, reopening checked with waveform and active playback. See TEST_HISTORY.md |
+| CO1 | Composite waveform in the arrangement | Done: arrangement and dock show the effective comp after loading, switching back and collapsing; save retains the active source |
+| CO3 | Waveform changes on take switch | Done: take 1 via lane and return via “Comp anhören” live; Undo/Redo correct. Interaction check confirms take 2 and return to comp through the menu. Comp retained |
+| S3 | Save Solo and reopen | Done: Solo set in mixer, written via Cmd+S, original reopened and Solo indicator confirmed |
+| S4 | Continue dragging a loaded loop without a position jump | Done: loaded range 0.5–4.5 s moved to 1–5 s, left boundary to 1.5 s, right to 5.5 s; range restored to 0.5–4.5 s. No jump to song start. See TEST_HISTORY.md |
+| V18 | Save metronome settings and reopen | Done: metronome on, count-in/pre-roll both 2, recording click off, accent on, volume set to 0.35, saved and confirmed after reopening. See TEST_HISTORY.md |
+| T | Play and record an instrument track with the keyboard | Passed 2026-10-14: interaction check confirms playing, recording and playback; 144 notes present. REC, display, double-click, delete/Undo/Redo, moving, extending and saving/reopening confirmed live. Full suite 414 passed/11 skipped. See `TEST_HISTORY.md`. |
+| B3 | Synth controls, envelope and polyphony | Passed 2026-10-14: live controls/waveform selection and technical audio acceptance with sample, envelope and four-voice comparisons; 9 synth cases/110 assertions green. No subjective listening test claimed. See `TEST_HISTORY.md`. |
+| B4 | Export against playback and a second export | Passed 2026-10-15: first two exports PCM-bit-identical; another export after unmuting, comparison 3. Interaction check confirms identical sound against project playback. See `TEST_HISTORY.md`. |
+| B6 | AI target on a track named Master | ✅ Live 2026-10-15: EQ and compressor only on the ordinary track Master; master bus and control unchanged. |
+| C1 | Tempo map before a time-offset clip | Passed 2026-10-15: 27 tempo points created live, base tempo before clip 120.2 BPM; 48 onsets at most 5.98 ms from the grid, map and clip position saved. 2 cases/22 assertions green. |
+| C2 | Warning on sparse kick track, drum-bus countercheck | Passed 2026-10-15 with synthetic rhythm signals: sparse 45% warning (threshold 60%), dense without warning, 11 tempo points/120.2 BPM. |
+| C3 | Specific reason for vocal-tuning rejection | Passed 2026-10-15: non-tonal test clip explicitly reports no detectable pitch live, rather than a generic list of other rejection causes. Automated C3 cases also green. |
+| ORD2-Nachprüfung | Save As in an existing folder without double nesting | Done: Save As twice, second time in the existing folder with replacement; valid session file, audio and backups, no double nesting |
+| ORD5-Tastenkürzel | Save explicitly via Cmd+S | Done: Cmd+S wired up; initial destination selection including cancellation checked, then Mute/Solo from arrangement/mixer verified in the same file; Cmd+Option+S separate. See TEST_HISTORY.md |
 
-## Noch nicht abgenommen
+## Not yet accepted
 
-- Öffentlicher Modell-Erstdownload über den regulären App-Dialog.
-- Physisches MIDI-Keyboard und Cue-Ausgänge an einem Mehrkanal-Interface.
-- Weitere OOP-Drittanbieter-Editoren einschließlich Klangvergleich.
-- Noch nicht einzeln belegte Insert-Kombinationen: ganze Ketten mit Option
-  verschieben, sämtliche Zielkanäle, Umordnung und alle visuellen Toggle-Zustände.
-  Die oben belegten Ketten-, Preset- und Bulk-Prüfungen bleiben bestanden.
-- Drittanbieter-Presets und Sidechain-Konfigurationen mit Undo/Redo in der nativen UI.
-- Vollständiger Bedienvergleich und Lokalisierung aller Dialoge.
+- Public first-time model download through the regular app dialog.
+- Physical MIDI keyboard and cue outputs on a multichannel interface.
+- Other third-party OOP editors, including sound comparison.
+- Insert combinations not yet individually evidenced: moving whole chains with
+  Option, all destination channels, reordering and all visual toggle states.
+  The chain, preset and bulk checks evidenced above remain passed.
+- Third-party presets and sidechain configurations with Undo/Redo in the native UI.
+- Complete interaction comparison and localization of all dialogs.
 
-Die aktuellen automatisierten Ergebnisse stehen in [STATUS.md](../STATUS.md).
-Diese Liste behauptet weder ungetestete Prüfungen als bestanden noch eröffnet sie
-bereits belegte Einzelprüfungen erneut.
+Current automated results are in [STATUS.md](../STATUS.md).
+This list neither claims untested checks as passed nor reopens individual checks
+that already have supporting evidence.

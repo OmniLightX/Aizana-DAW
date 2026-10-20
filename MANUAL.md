@@ -1,452 +1,444 @@
-# Aizana – Bedienungsanleitung
+**English** | [Deutsch](MANUAL.de.md)
 
-Für Aizana 0.3.0 Alpha · Stand: 20. Oktober 2026
+# Aizana – User Manual
 
-Diese Anleitung führt vom ersten Projekt über Aufnahme und Mixing bis zum
-Export. Sie beschreibt den aktuellen macOS-Stand. Einzelne Dialoge und
-Plugin-Menüs verwenden noch englische Bezeichnungen; diese sind hier dort
-angegeben, wo sie beim Auffinden helfen.
+For Aizana 0.3.0 Alpha · Updated: October 20, 2026
 
-Die Alpha wird als Quellcode zum Selbstbauen vorbereitet. Die
-[Build-Anleitung](README.md#aus-dem-quellcode-bauen) und
-[Startanleitung](docs/ALPHA_INSTALL.md) beschreiben die Voraussetzungen.
-Der geprüfte Zielrechner ist ein Mac mit Apple Silicon und macOS 13.3 oder neuer.
-Diese Anleitung ersetzt keine vollständige Geräte- und Plugin-Abnahme.
-Den dokumentierten Prüfstand findest du in [STATUS.md](STATUS.md).
+This manual takes you from your first project through recording and mixing to
+export. It describes the current macOS version. The app interface is German;
+the instructions retain its actual menu and control labels so you can find them.
+Some dialogs and plugin menus already use English labels.
 
-## Inhalt
+The alpha is being prepared as source code for building yourself. The
+[build instructions](README.md#build-from-source) and
+[getting-started guide](docs/ALPHA_INSTALL.md) describe the requirements.
+The verified target machine is an Apple Silicon Mac running macOS 13.3 or later.
+This manual does not replace comprehensive device and plugin validation.
+See [STATUS.md](STATUS.md) for the documented verification status.
 
-1. [Begriffe und Oberfläche](#1-begriffe-und-oberfläche)
-2. [Die erste Session](#2-die-erste-session)
-3. [Audio importieren](#3-audio-importieren)
-4. [Aufnehmen](#4-aufnehmen)
-5. [Loop-Aufnahme und Comping](#5-loop-aufnahme-und-comping)
-6. [Clips bearbeiten](#6-clips-bearbeiten)
-7. [Mischen und Signalwege](#7-mischen-und-signalwege)
-8. [Plugins und Insert-Ketten](#8-plugins-und-insert-ketten)
-9. [MIDI und Instrumente](#9-midi-und-instrumente)
-10. [KI-Setup](#10-ki-setup-für-vorhandene-einzelspuren)
-11. [KI-Mix und Referenzen](#11-ki-mix-und-referenzen)
-12. [Stem-Separation](#12-einen-song-in-stems-trennen)
-13. [KI-Studio und Plugin-Generator](#13-ki-studio-und-plugin-generator)
-14. [Export](#14-mix-und-spuren-exportieren)
-15. [Speichern und Wiederherstellen](#15-speichern-und-wiederherstellen)
-16. [Fehlerhilfe](#16-wenn-etwas-nicht-funktioniert)
-17. [Tastatur und Maus](#17-tastatur-und-maus)
-18. [Lizenzen und weitere Dokumentation](#18-lizenzen-und-weitere-dokumentation)
+## Contents
 
-## 1. Begriffe und Oberfläche
+1. [Terminology and interface](#1-terminology-and-interface)
+2. [Your first session](#2-your-first-session)
+3. [Importing audio](#3-importing-audio)
+4. [Recording](#4-recording)
+5. [Loop recording and comping](#5-loop-recording-and-comping)
+6. [Editing clips](#6-editing-clips)
+7. [Mixing and signal paths](#7-mixing-and-signal-paths)
+8. [Plugins and insert chains](#8-plugins-and-insert-chains)
+9. [MIDI and instruments](#9-midi-and-instruments)
+10. [AI setup](#10-ai-setup-for-existing-individual-tracks)
+11. [AI mixing and references](#11-ai-mixing-and-references)
+12. [Stem separation](#12-separating-a-song-into-stems)
+13. [AI Studio and plugin generator](#13-ai-studio-and-plugin-generator)
+14. [Export](#14-exporting-a-mix-and-tracks)
+15. [Saving and recovery](#15-saving-and-recovery)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Keyboard and mouse](#17-keyboard-and-mouse)
+18. [Licenses and further documentation](#18-licenses-and-further-documentation)
 
-| Begriff | Bedeutung |
+## 1. Terminology and interface
+
+| Term | Meaning |
 |---|---|
-| Session | Dein Projekt mit Spuren, Bearbeitungen, Routing und Pluginzuständen |
-| Spur | Ein Platz für Audio- oder MIDI-Clips und deren Signalweg |
-| Clip | Ein Audio- oder MIDI-Abschnitt im Arrangement |
-| Arrangement / Edit | Zeitliche Anordnung der Clips |
-| Mixer / Mix | Kanalzüge für Pegel, Panorama, Effekte und Routing |
-| Insert | Ein Effekt oder Instrument im Signalweg eines Kanals |
-| Bus | Gemeinsamer Ausgang für mehrere Spuren, etwa alle Drums |
-| FX-Kanal | Parallel beschickter Effektkanal, beispielsweise für gemeinsamen Hall |
-| Send | Anteil eines Signals, der zusätzlich an einen FX-Kanal geschickt wird |
-| Master | Gemeinsamer Hauptausgang der Mischung |
-| Stem | Eine Einzelspur oder Instrumentgruppe; nicht zwingend ein einzelner Klang |
-| Monitoring | Mithören eines Eingangssignals |
+| Session | Your project, including tracks, edits, routing, and plugin states |
+| Track | A place for audio or MIDI clips and their signal path |
+| Clip | An audio or MIDI segment in the arrangement |
+| Arrangement / Edit | The arrangement of clips over time |
+| Mixer / Mix | Channel strips for levels, pan, effects, and routing |
+| Insert | An effect or instrument in a channel's signal path |
+| Bus | A shared output for several tracks, such as all drums |
+| FX channel | An effect channel fed in parallel, for example for shared reverb |
+| Send | A portion of a signal additionally sent to an FX channel |
+| Master | The mix's shared main output |
+| Stem | An individual track or instrument group; not necessarily a single sound |
+| Monitoring | Listening to an input signal |
 
-Oben liegt die Transportleiste mit Wiedergabe, Stopp, Aufnahme, Tempo, Metronom
-und Loop. **Edit** und **Mix** wechseln den Schwerpunkt der Darstellung.
-Über **Ansicht → Einsteiger-Welt** wechselst du die Bedienansicht derselben
-Session. Die Ansicht erzeugt keine zweite Kopie deines Songs.
+The transport bar at the top contains playback, stop, recording, tempo, metronome,
+and loop controls. **Edit** and **Mix** change the focus of the display.
+Use **Ansicht → Einsteiger-Welt** (View → Beginner World) to switch the interface
+view for the same session. This view does not create a second copy of your song.
 
-Spurauswahl und Clipauswahl sind verschieden: Zum Bearbeiten einer Aufnahme
-wählst du den Clip; für Eingang, Solo oder Aufnahmebereitschaft den Spurkopf.
-Pluginfenster können eigene Tastatureingaben abfangen. Klicke zurück ins
-Arrangement, bevor du einen DAW-Tastaturbefehl verwendest.
+Selecting a track and selecting a clip are different: to edit a recording,
+select the clip; for input, solo, or record arming, select the track header.
+Plugin windows may intercept keyboard input. Click back into the arrangement
+before using a DAW keyboard shortcut.
 
-## 2. Die erste Session
+## 2. Your first session
 
-1. Starte die selbst gebaute App.
-2. Öffne **Datei → Neue Session**.
-3. Wähle **Datei → Speichern unter…**, gib dem Song einen Namen und lege einen
-   eigenen Projektordner an. So hat die Session früh einen bewussten Speicherort.
-4. Öffne **Aizana → Einstellungen…** und kontrolliere die Audioeinstellungen.
-   Wähle das Gerät, über das du hören und gegebenenfalls aufnehmen möchtest.
-5. Importiere zum ersten Test eine kurze Audiodatei.
-6. Starte mit der Leertaste. Prüfe, ob sich der Abspielkopf und die Pegelanzeigen
-   bewegen und das Signal am gewählten Ausgang zu hören ist.
-7. Stoppe und speichere mit **Command-S**.
+1. Launch the app you built yourself.
+2. Open **Datei → Neue Session** (File → New Session).
+3. Choose **Datei → Speichern unter…** (File → Save As), name the song, and create
+   a dedicated project folder. This gives the session a deliberate save location early on.
+4. Open **Aizana → Einstellungen…** (Settings) and check the audio settings.
+   Select the device you want to use for listening and, if needed, recording.
+5. Import a short audio file for an initial test.
+6. Start playback with the space bar. Check that the playhead and level meters
+   move and that you can hear the signal at the selected output.
+7. Stop and save with **Command-S**.
 
-Unter **Song → Audiogerät einrichten…** findest du die Zuordnung benannter
-Eingangsbusse zu Hardwarekanälen. Diese Zuordnung ist vom Mix-Bus zu unterscheiden:
-Ein Eingangsbus beschreibt, woher eine Aufnahme kommt, ein Mix-Bus bündelt
-bereits vorhandene Spuren.
+Under **Song → Audiogerät einrichten…** (Set Up Audio Device), you can map named
+input buses to hardware channels. This mapping is distinct from a mix bus:
+an input bus describes where a recording comes from; a mix bus combines
+existing tracks.
 
-Für den Einstieg reicht eine kleine Testsession. Bevor du ein wichtiges Projekt
-in einer neuen Version öffnest, sichere den vollständigen Sessionordner.
+A small test session is enough to get started. Before opening an important
+project in a new version, back up the entire session folder.
 
-## 3. Audio importieren
+## 3. Importing audio
 
-### Eine Datei oder mehrere vorhandene Spuren
+### A file or several existing tracks
 
-Ziehe Audiodateien aus dem Finder ins Arrangement oder nutze
-**Datei → Audio importieren…**. Mehrere Dateien können auf eigenen Spuren landen.
-Prüfe danach Position, Spurname und hörbaren Inhalt.
+Drag audio files from Finder into the arrangement, or use
+**Datei → Audio importieren…** (File → Import Audio). Multiple files may be placed
+on separate tracks. Afterwards, check their positions, track names, and audible content.
 
-Wenn zusammengehörige Stems denselben Startpunkt haben, behalte diese gemeinsame
-Zeitposition beim Import bei. Eine leise oder stumme Einleitung kann Teil der
-gewollten Synchronisierung sein. Schneide sie nicht für jede Datei unabhängig ab.
+If related stems share the same starting point, preserve that shared time
+position when importing. A quiet or silent introduction may be part of their
+intended synchronization. Do not trim it independently for each file.
 
-### Import mit Zuordnungshilfe
+### Import with assignment assistance
 
-**Datei → Stems importieren (KI-Setup)…** analysiert bereits getrennte Spuren
-und schlägt Namen, Gruppen und Pegelanpassungen vor. Vor **Anwenden** kannst du
-die Zuordnung überprüfen. Der genaue Ablauf steht in Kapitel 10.
+**Datei → Stems importieren (KI-Setup)…** (File → Import Stems (AI Setup)) analyzes
+tracks that are already separated and suggests names, groups, and level adjustments.
+You can review the assignments before clicking **Anwenden** (Apply).
+Chapter 10 describes the full procedure.
 
-## 4. Aufnehmen
+## 4. Recording
 
-### Eingang und Aufnahmebereitschaft
+### Input and record arming
 
-1. Erzeuge eine Spur mit **Command-T**.
-2. Wähle am Spurkopf den Audioeingang. Kontrolliere den tatsächlichen
-   Hardwarekanal; ein Mikrofon an Eingang 1 liefert kein Signal an Eingang 2.
-3. Bei Bedarf verwalte die Eingangsbusse über **Song → Audiogerät einrichten…**
-   oder **Manage Buses…** im Eingangsmenü. Gib ihnen verständliche Namen.
-4. Wähle das passende Mono-/Stereo-Spurformat. Der Formatschalter allein
-   verbindet keinen anderen Hardwareeingang.
-5. Aktiviere **REC** am Spurkopf. Das macht die Spur aufnahmebereit.
-6. Aktiviere bei Bedarf **I** zum Mithören durch Aizana.
-7. Kontrolliere den Eingangspegel und starte erst dann die Aufnahme in der
-   Transportleiste.
-8. Stoppe, höre die Aufnahme ab und speichere.
+1. Create a track with **Command-T**.
+2. Select the audio input in the track header. Check the actual hardware channel;
+   a microphone connected to input 1 does not provide a signal on input 2.
+3. If needed, manage input buses through **Song → Audiogerät einrichten…**
+   (Set Up Audio Device) or **Manage Buses…** in the input menu. Give them clear names.
+4. Select the appropriate mono/stereo track format. The format switch alone
+   does not connect a different hardware input.
+5. Enable **REC** in the track header. This arms the track for recording.
+6. If needed, enable **I** to monitor through Aizana.
+7. Check the input level, then start recording in the transport bar.
+8. Stop, listen to the recording, and save.
 
-**REC am Spurkopf und Aufnahme im Transport sind zwei getrennte Schritte.**
-Beim ersten Mikrofonzugriff kann macOS eine Berechtigung verlangen. Wenn keine
-Aufnahme ankommt, kontrolliere zusätzlich die Mikrofonfreigabe in den
-macOS-Systemeinstellungen.
+**REC in the track header and recording in the transport are two separate steps.**
+macOS may ask for permission the first time the microphone is accessed. If no
+recording comes through, also check microphone permission in macOS System Settings.
 
-Beim Mithören über Lautsprecher kann eine Rückkopplung entstehen. Verwende für
-Mikrofonaufnahmen Kopfhörer. Wenn dein Interface bereits direktes Monitoring
-liefert, vermeide unbeabsichtigtes doppeltes Mithören über Interface und DAW.
+Monitoring through speakers can cause feedback. Use headphones for microphone
+recordings. If your interface already provides direct monitoring, avoid
+unintentionally monitoring twice through both the interface and the DAW.
 
-### Metronom, Vorzähler und Punch
+### Metronome, count-in, and punch
 
-Das Metronom schaltest du in der Transportleiste ein. Das zugehörige Menü bietet
-Vorzähler, Pre-Roll und Klicklautstärke. Stelle Tempo und Taktart passend ein,
-bevor du rhythmisch aufnehmen möchtest.
+Enable the metronome in the transport bar. Its menu provides count-in, pre-roll,
+and click volume settings. Set the tempo and time signature appropriately
+before recording in time.
 
-**Auto-Punch** beschränkt die Aufnahme auf den Bereich zwischen den
-Loop-In-/Out-Markern. Kontrolliere diese Grenzen vor dem Start; ein falsch
-gesetzter Bereich kann eine vermeintlich fehlende Aufnahme erklären.
+**Auto-Punch** restricts recording to the region between the loop-in/out markers.
+Check these boundaries before starting; an incorrectly set region may explain
+an apparently missing recording.
 
-Physische MIDI-Keyboard- und separate Hardware-Cue-Tests sind für diesen
-Release-Stand nicht vollständig abgenommen. Das ist von gewöhnlicher
-Audiowiedergabe und dem dokumentierten Aufnahmeweg zu unterscheiden.
+Physical MIDI keyboard tests and separate hardware cue tests have not been
+fully signed off for this release. This is distinct from ordinary audio
+playback and the documented recording path.
 
-## 5. Loop-Aufnahme und Comping
+## 5. Loop recording and comping
 
-1. Setze die Loop-In-/Out-Marker auf den aufzunehmenden Abschnitt.
-2. Aktiviere Loop, wähle den Eingang und schalte die Spur aufnahmebereit.
-3. Starte die Aufnahme und spiele den Abschnitt über mehrere Durchläufe ein.
-4. Stoppe und öffne die Take-Ansicht des aufgenommenen Clips.
-5. Wähle einen ganzen Take zum Gegenhören oder stelle Abschnitte verschiedener
-   Takes zu einem Comp zusammen.
-6. **Zusammengesetzt (Comp)** führt zur erhaltenen Zusammenstellung zurück,
-   wenn du zuvor einen vollständigen Take angehört hast.
-7. Höre die Übergänge ab und speichere die Session.
+1. Set the loop-in/out markers around the section you want to record.
+2. Enable loop, select the input, and arm the track.
+3. Start recording and perform the section over several passes.
+4. Stop and open the recorded clip's take view.
+5. Select a complete take for comparison, or assemble sections of different
+   takes into a comp.
+6. **Zusammengesetzt (Comp)** (Assembled (Comp)) returns to the preserved comp
+   after you have listened to a complete take.
+7. Listen to the transitions and save the session.
 
-Ein Comp ist eine Auswahl aus den Takes. Bewahre die dazugehörigen Audiodateien
-auf. Für den Austausch oder eine Sicherung reicht die Sessiondatei allein nicht.
+A comp is a selection from the takes. Keep the associated audio files.
+The session file alone is not enough for sharing or backup.
 
-## 6. Clips bearbeiten
+## 6. Editing clips
 
-### Auswählen und bewegen
+### Selecting and moving
 
-Klicke einen Clip an. **Command-Klick** fügt weitere Clips zur Auswahl hinzu
-oder entfernt sie daraus. Ein Auswahlrahmen über einer freien Fläche wählt
-Clips im Bereich. Mit dem Pfeilwerkzeug verschiebst du Clips zeitlich oder auf
-eine andere Spur. Kontrolliere nach dem Ablegen Startposition und Zielspur.
+Click a clip. **Command-click** adds other clips to the selection or removes
+them. Dragging a selection rectangle across an empty area selects clips in that
+region. Use the arrow tool to move clips in time or onto another track.
+After dropping, check the start position and destination track.
 
-Das Raster hilft beim rhythmischen Platzieren. **Alt/Option** kann beim
-Clipziehen das Einrasten vorübergehend aufheben. Dieselbe Taste hat beim
-Pluginziehen eine andere Funktion; siehe Kapitel 8.
+The grid helps with rhythmic placement. **Alt/Option** can temporarily disable
+snapping while dragging clips. The same key has a different function when
+dragging plugins; see chapter 8.
 
-### Schneiden, trimmen und Lautstärke
+### Cutting, trimming, and volume
 
-- **Command-E:** am Abspielkopf teilen.
-- **C:** Scherenwerkzeug; **Escape:** zurück zum Pfeil.
-- Ziehen an der unteren Hälfte des linken oder rechten Cliprands trimmt den
-  sichtbaren Audioabschnitt.
-- Fade-Griffe an den oberen Ecken verändern Ein- und Ausblendung.
-- Der Clip-Gain-Griff oben in der Mitte ändert den Pegel des Clips.
-- Zwei überlappende Audioclips auf derselben Spur auswählen und **X** drücken,
-  um einen Crossfade anzulegen.
-- **Command-Z** nimmt eine Bearbeitung zurück.
+- **Command-E:** split at the playhead.
+- **C:** scissors tool; **Escape:** return to the arrow tool.
+- Drag the lower half of a clip's left or right edge to trim the visible audio section.
+- Fade handles at the upper corners change the fade-in and fade-out.
+- The clip gain handle at the top center changes the clip's level.
+- Select two overlapping audio clips on the same track and press **X** to create
+  a crossfade.
+- **Command-Z** undoes an edit.
 
-Trimmen verschiebt die Abspielgrenzen des Clips; es ist kein Löschen des
-Originalaudiomaterials. Nach Schnitten und Fades die Schnittstellen abhören,
-besonders bei Gesang, tiefen Tönen und langen Hallfahnen.
+Trimming moves the clip's playback boundaries; it does not delete the original
+audio material. Listen to edit points after cuts and fades, especially with
+vocals, low notes, and long reverb tails.
 
-### Tempo und weiterführende Bearbeitung
+### Tempo and advanced editing
 
-Das Transporttempo und die Taktart bestimmen das musikalische Raster.
-**Tempo tippen** ermittelt ein Tempo aus mehreren Klicks im Takt.
-Tempoänderungen, Audio-Stretching und Warp-Bearbeitung sind unterschiedliche
-Eingriffe: Eine Änderung des Rasters allein garantiert nicht, dass jede
-importierte Datei musikalisch passend mitläuft.
+The transport tempo and time signature define the musical grid.
+**Tempo tippen** (Tap Tempo) determines a tempo from several clicks in time.
+Tempo changes, audio stretching, and warp editing are different operations:
+changing the grid alone does not guarantee that every imported file will
+follow it musically.
 
-Für weiterführende Audiobearbeitung stehen unter anderem Bounce in Place,
-Transienten-/Warp-Werkzeuge und Offline-Tonhöhenkorrektur zur Verfügung.
-Arbeite dafür zunächst mit einer Kopie der Session und vergleiche das Ergebnis
-mit dem Original. Die konkreten verfügbaren Aktionen hängen von Cliptyp und
-Auswahl ab.
+Advanced audio editing includes Bounce in Place, transient/warp tools, and
+offline pitch correction. Start with a copy of the session and compare the
+result with the original. The specific actions available depend on the clip
+type and selection.
 
-## 7. Mischen und Signalwege
+## 7. Mixing and signal paths
 
-### Pegel und Panorama
+### Levels and pan
 
-Öffne **Mix** oder drücke **Command-M**. Jeder Kanal bietet Pegel, Panorama,
-Mute/Solo und Inserts. Der Master steht rechts. Beginne mit einem hörbaren
-Lautstärkeverhältnis, bevor du viele Effekte einsetzt.
+Open **Mix** or press **Command-M**. Each channel provides level, pan, mute/solo,
+and inserts. The master is on the right. Start by establishing an audible
+volume balance before adding many effects.
 
-**Mute** schaltet eine Spur stumm; **Solo** hilft beim gezielten Abhören.
-Beende Solo zum Prüfen der gesamten Mischung. Mehrere ausgewählte Spuren können
-gemeinsam geschaltet werden. Prüfe die Auswahl, bevor du **M** oder **S** drückst.
+**Mute** silences a track; **Solo** helps you listen selectively. Exit solo to
+check the entire mix. Multiple selected tracks can be switched together.
+Check the selection before pressing **M** or **S**.
 
-### Bus und gemeinsamer Hall
+### Buses and shared reverb
 
-Für eine gemeinsame Bearbeitung mehrerer Spuren:
+To process several tracks together:
 
-1. Erzeuge über das Spur-Kontextmenü einen Bus (**Create Bus from Track**).
-2. Wähle den gewünschten Bus am Ausgang der zu bündelnden Spuren.
-3. Setze gemeinsame Effekte in den Bus und kontrolliere den Weg zum Master.
+1. Create a bus through the track context menu (**Create Bus from Track**).
+2. Select the desired bus as the output of the tracks you want to combine.
+3. Add shared effects to the bus and check its path to the master.
 
-Für parallelen Hall:
+For parallel reverb:
 
-1. Erzeuge einen FX-Kanal (**Create FX Channel**).
-2. Füge dort einen Hall ein.
-3. Beschicke den FX-Kanal über Sends der gewünschten Spuren.
-4. Stelle den Hallanteil mit den Sends und dem FX-Kanalpegel ein.
+1. Create an FX channel (**Create FX Channel**).
+2. Add a reverb to it.
+3. Feed the FX channel using sends from the desired tracks.
+4. Adjust the amount of reverb with the sends and the FX channel level.
 
-Ein Bus ersetzt typischerweise den direkten Ausgang einer Spur. Ein Send
-ergänzt einen parallelen Weg. Vermeide unbeabsichtigte Doppelroutings.
-Sidechain dient dagegen dazu, einen Effekt durch eine andere Spur steuern zu
-lassen; diese Steuerung ist nicht dasselbe wie ein hörbarer Send.
+A bus typically replaces a track's direct output. A send adds a parallel path.
+Avoid unintended double routing. A sidechain, by contrast, lets another track
+control an effect; that control signal is not the same as an audible send.
 
 ### Automation
 
-Öffne die Automationsansicht der Spur über **A** und wähle den zu bearbeitenden
-Parameter. Punkte bzw. Linien beschreiben dessen zeitlichen Verlauf.
-Die Modi **Read**, **Touch**, **Latch** und **Write** stehen in der
-Automationsspur:
+Open the track's automation view with **A** and select the parameter to edit.
+Points or lines describe its changes over time. The automation lane provides
+**Read**, **Touch**, **Latch**, and **Write** modes:
 
-- **Read:** vorhandene Automation wiedergeben.
-- **Touch:** während der Bedienung Automation schreiben.
-- **Latch:** nach einer Bedienung den Wert weiter schreiben.
-- **Write:** Automation während des Schreibens überschreiben.
+- **Read:** play back existing automation.
+- **Touch:** write automation while operating a control.
+- **Latch:** continue writing the value after operating a control.
+- **Write:** overwrite automation while writing.
 
-Teste schreibende Modi zunächst in einer Kopie. Schalte anschließend auf
-**Read** zurück und kontrolliere den Verlauf.
+Test modes that write automation in a copy first. Then switch back to **Read**
+and check the automation.
 
-## 8. Plugins und Insert-Ketten
+## 8. Plugins and insert chains
 
-### Plugins finden und öffnen
+### Finding and opening plugins
 
-Aizana enthält eigene Instrumente und Effekte. Fremde VST3-, AU- und
-CLAP-Plugins installierst du separat. Führe danach
-**Ansicht → Nach Plug-Ins suchen…** aus.
+Aizana includes its own instruments and effects. Install third-party VST3, AU,
+and CLAP plugins separately. Afterwards, run
+**Ansicht → Nach Plug-Ins suchen…** (View → Scan for Plugins).
 
-Klicke im Insert-Kopf auf **+**, um ein Plugin hinzuzufügen. Ein Doppelklick
-auf den Eintrag öffnet seinen Editor. Ein einfacher Klick wählt den Eintrag aus;
-die Auswahl ist farblich erkennbar. Der Punkt rechts am Eintrag schaltet den
-Effekt aktiv oder auf Bypass.
+Click **+** in the insert header to add a plugin. Double-click an entry to open
+its editor. A single click selects the entry; the selection is indicated by
+color. The dot on the right of the entry switches the effect between active
+and bypassed.
 
-### Kopieren und Verschieben
+### Copying and moving
 
-| Geste | Ergebnis |
+| Gesture | Result |
 |---|---|
-| Einzelnen Plugin-Eintrag auf einen anderen Kanal ziehen | Plugin mit Einstellungen kopieren; Original bleibt |
-| Beim Ablegen auf dem anderen Kanal **Alt/Option (⌥)** halten | Plugin verschieben; Original verlässt den Quellkanal |
-| Insert-Titel auf einen anderen Kanal ziehen | Gesamte Effektkette kopieren |
-| Beim Ablegen der Kette **Alt/Option** halten | Kette verschieben |
-| Plugin innerhalb derselben Liste ziehen | Reihenfolge ändern |
+| Drag an individual plugin entry to another channel | Copy the plugin with its settings; the original remains |
+| Hold **Alt/Option (⌥)** when dropping on the other channel | Move the plugin; the original leaves the source channel |
+| Drag the insert title to another channel | Copy the entire effect chain |
+| Hold **Alt/Option** when dropping the chain | Move the chain |
+| Drag a plugin within the same list | Change the order |
 
-Die Option-Taste befindet sich auf der Mac-Tastatur neben Command und kann mit
-**⌥**, **option** oder **alt** beschriftet sein. Entscheidend ist beim
-kanalübergreifenden Ziehen der Zustand beim Ablegen.
+The Option key is next to Command on a Mac keyboard and may be labeled **⌥**,
+**option**, or **alt**. When dragging between channels, its state at the moment
+of dropping is what matters.
 
-Greife für ein einzelnes Plugin dessen Eintrag an, nicht den Insert-Titel.
-Kopieren ergänzt die Zielkette. **Ersetzen** ist eine eigene Menüaktion.
-Über das Pfeilmenü kannst du Ketten kopieren, einfügen, speichern und laden.
-Kettenpresets verwenden die Endung `.aizfxchain`.
+To drag a single plugin, grab its entry, not the insert title. Copying adds to
+the destination chain. **Ersetzen** (Replace) is a separate menu action.
+Use the arrow menu to copy, paste, save, and load chains. Chain presets use
+the `.aizfxchain` extension.
 
-Kopien übernehmen Einstellungen, Reihenfolge und Bypass, aber keine
-Songautomation oder externen Sidechain-Quellverweise. Nach einer Kopie deshalb
-Sidechain und Automation separat kontrollieren. Verschieben erhält die Instanz
-mit ihren Verknüpfungen.
+Copies retain settings, order, and bypass state, but not song automation or
+external sidechain source references. Check sidechain and automation separately
+after copying. Moving preserves the instance and its connections.
 
-### Ausgelagerte Pluginfenster
+### Out-of-process plugin windows
 
-Beim optionalen Hosting in einem separaten Prozess öffnet Aizana direkt den
-nativen Plugin-Editor. Ein zusätzliches Hinweisfenster ist dafür nicht nötig.
-Schließen und erneutes Öffnen sollen dieselbe Plugininstanz weiterverwenden.
-Beim Entfernen des Plugins oder Sessionwechsel werden die zugehörigen Fenster
-geschlossen. Native ausgelagerte Editorfenster lassen sich nicht andocken.
+With optional hosting in a separate process, Aizana opens the native plugin
+editor directly. No additional notification window is needed. Closing and
+reopening should reuse the same plugin instance. Removing the plugin or
+switching sessions closes its associated windows. Native out-of-process editor
+windows cannot be docked.
 
-Der Ablauf ist mit Fresh Air geprüft. Andere Hersteller und Formate können
-abweichendes Verhalten zeigen. Ein separater Prozess ist keine Garantie gegen
-jeden Pluginfehler.
+This workflow has been verified with Fresh Air. Other manufacturers and formats
+may behave differently. A separate process is not a guarantee against every
+plugin failure.
 
-## 9. MIDI und Instrumente
+## 9. MIDI and instruments
 
-Eine MIDI-Spur enthält Noten und Steuerdaten, keine fertige Audioaufnahme.
-Damit sie hörbar wird, braucht sie ein Instrument.
+A MIDI track contains notes and control data, not a finished audio recording.
+It needs an instrument to make it audible.
 
-1. Füge einer geeigneten Spur ein Instrument hinzu, etwa **Synth (Poly)** oder
-   **Drums (Drum Machine)** aus dem Instrumentmenü.
-2. Öffne einen MIDI-Clip per Doppelklick in der Piano-Roll.
-3. Zeichne Noten ein und passe Position und Länge an.
-4. Bearbeite die Anschlagstärke in der Velocity-Spur.
-5. Nutze Quantisierung und Swing nach Bedarf und höre die Wirkung ab.
+1. Add an instrument to a suitable track, such as **Synth (Poly)** or
+   **Drums (Drum Machine)** from the instrument menu.
+2. Double-click a MIDI clip to open it in the piano roll.
+3. Draw notes and adjust their positions and lengths.
+4. Edit note velocities in the velocity lane.
+5. Use quantization and swing as needed, and listen to their effect.
 
-Die Controller-Spur ist zusätzlich einblendbar. Der Synth bietet zwei
-Oszillatoren und Presets. Das Drum-Instrument besitzt einen 8×16-Sequencer und
-kann eigene WAV-Samples verwenden.
+You can also show the controller lane. The synth offers two oscillators and
+presets. The drum instrument has an 8×16 sequencer and can use custom WAV samples.
 
-**Song → Tastatur spielen (Musical Typing)** öffnet die Eingabe über die
-Computertastatur. Das ersetzt keine Abnahme eines externen MIDI-Keyboards.
-Für ein externes Gerät muss dessen MIDI-Eingang an der Spur gewählt sein.
+**Song → Tastatur spielen (Musical Typing)** opens input through the computer
+keyboard. This does not replace validation of an external MIDI keyboard.
+For an external device, its MIDI input must be selected on the track.
 
-## 10. KI-Setup für vorhandene Einzelspuren
+## 10. AI setup for existing individual tracks
 
-Dieses Werkzeug passt zu einem Ordner mit bereits getrennten Aufnahmen,
-beispielsweise Bass, Drums, Gitarren und Gesang.
+This tool is suited to a folder of recordings that are already separated,
+for example bass, drums, guitars, and vocals.
 
-Die folgende Vorschau erscheint im **Pro-Modus**. In der Einsteiger-Welt wird
-der Plan direkt angewendet und kann rückgängig gemacht werden. Wenn du die
-Gruppen vorab selbst zuordnen möchtest, schalte die Einsteiger-Welt vorher
-über das Menü Ansicht aus.
+The following preview appears in **Pro-Modus** (Pro mode). In **Einsteiger-Welt**
+(Beginner World), the plan is applied directly and can be undone. If you want
+to assign the groups yourself beforehand, first disable Beginner World through
+the **Ansicht** (View) menu.
 
-1. Wähle **Datei → Stems importieren (KI-Setup)…**.
-2. Wähle die zusammengehörigen Audiodateien.
-3. Warte auf die Analyse.
-4. Prüfe in **KI-Setup — erkannte Stems** die Dateinamen, vorgeschlagenen
-   Spurnamen, Gruppen und Gain-Werte.
-5. Korrigiere falsche Zuordnungen, etwa wenn ein Effekt wegen seines Dateinamens
-   als Gesang erkannt wurde.
-6. Klicke **Anwenden** und höre die eingerichtete Session ab.
+1. Choose **Datei → Stems importieren (KI-Setup)…** (File → Import Stems (AI Setup)).
+2. Select the related audio files.
+3. Wait for analysis.
+4. In **KI-Setup — erkannte Stems** (AI Setup — Detected Stems), check the file
+   names, suggested track names, groups, and gain values.
+5. Correct incorrect assignments, for example if an effect was identified as
+   vocals because of its file name.
+6. Click **Anwenden** (Apply) and listen to the configured session.
 
-Dateinamen und Audioanalyse liefern Hinweise, keine sichere Instrumenterkennung.
-Für KI-Setup brauchst du weder das 355-MB-Stem-Modell noch einen Claude- oder
-Codex-Zugang. Es zerlegt keine gemischte Datei.
+File names and audio analysis provide clues, not reliable instrument recognition.
+AI setup requires neither the 355 MB stem model nor access to Claude or Codex.
+It does not separate a mixed file.
 
-## 11. KI-Mix und Referenzen
+## 11. AI mixing and references
 
-**KI-Mix** in der Transportleiste bzw. **Song → KI-Mix (Heuristik)…** erstellt
-einen regelbasierten Mischvorschlag. Dafür ist kein mitgeliefertes trainiertes
-Mixing-Modell erforderlich.
+**KI-Mix** (AI Mix) in the transport bar, or **Song → KI-Mix (Heuristik)…**
+(AI Mix (Heuristic)), creates a rule-based mixing suggestion. No bundled trained
+mixing model is required.
 
-1. Speichere deine Ausgangssession.
-2. Kontrolliere Spuren, Gruppen und Routing.
-3. Wähle optional unter **Song → KI-Referenz** ein Genreprofil oder analysiere
-   eine Referenzdatei, die du dafür verwenden darfst.
-4. Starte KI-Mix. Im Einsteigermodus wird der Vorschlag unmittelbar angewendet;
-   im Pro-Modus gibt es eine Vorschau.
-5. Höre das Ergebnis im Zusammenhang ab und vergleiche es mit dem Ausgangsstand.
-6. Passe einzelne Entscheidungen an oder verwende Rückgängig.
+1. Save your starting session.
+2. Check tracks, groups, and routing.
+3. Optionally select a genre profile under **Song → KI-Referenz** (AI Reference),
+   or analyze a reference file that you have permission to use for this purpose.
+4. Start KI-Mix. In beginner mode, the suggestion is applied immediately;
+   in Pro mode, a preview is available.
+5. Listen to the result in context and compare it with the starting point.
+6. Adjust individual decisions or use Undo.
 
-Eine Referenz liefert Zielwerte und Orientierung. Eine angezeigte LUFS-Zahl ist
-kein automatisch verbindliches Lautheitsziel. KI-Mix ersetzt weder die Prüfung
-des Exports noch deine klangliche Entscheidung.
+A reference provides target values and guidance. A displayed LUFS value is not
+automatically a mandatory loudness target. AI mixing replaces neither checking
+the export nor your own decisions about sound.
 
-## 12. Einen Song in Stems trennen
+## 12. Separating a song into stems
 
-Hier wird eine **gemischte Audiodatei** in Instrumentgruppen zerlegt.
-Das ist ein anderer Vorgang als der Import vorhandener Stems.
+This separates a **mixed audio file** into instrument groups.
+It is a different operation from importing existing stems.
 
-1. Wähle **Song → Song in Stems trennen (KI)…**.
-2. Wähle die Quelldatei.
-3. Wenn das Modell noch fehlt, bietet Aizana einen einmaligen Download von
-   ungefähr **355 MB** an. Bestätige ihn nur, wenn du die Funktion nutzen möchtest.
-4. Nach Download und Prüfung wählst du:
-   - **6 Spuren — mit Gitarre und Piano:** Schlagzeug, Bass, Gesang, Gitarre,
-     Klavier und Übriges.
-   - **4 Spuren — Gitarre und Piano in Übriges:** Schlagzeug, Bass, Gesang und
-     Übriges.
-5. Warte auf die lokale Berechnung. Die Fortschrittsanzeige bietet einen Abbruch.
-6. Prüfe im Pro-Modus die anschließende Zuordnung im KI-Setup und übernimm das
-   Ergebnis. In der Einsteiger-Welt wird es unmittelbar angewendet.
-7. Höre jede Ausgabe einzeln und im Zusammenhang ab.
+1. Choose **Song → Song in Stems trennen (KI)…** (Separate Song into Stems (AI)).
+2. Select the source file.
+3. If the model is not yet installed, Aizana offers a one-time download of
+   approximately **355 MB**. Confirm only if you want to use the feature.
+4. After download and verification, choose:
+   - **6 Spuren — mit Gitarre und Piano** (6 Tracks — Including Guitar and Piano):
+     drums, bass, vocals, guitar, piano, and other.
+   - **4 Spuren — Gitarre und Piano in Übriges** (4 Tracks — Guitar and Piano in Other):
+     drums, bass, vocals, and other.
+5. Wait for local processing. The progress display offers cancellation.
+6. In Pro mode, review the subsequent assignments in AI setup and apply the
+   result. In Beginner World, it is applied immediately.
+7. Listen to each output individually and in context.
 
-Beide Ausgabeformen verwenden denselben MVSep-Mega-53-Modellstand. Es werden
-keine zwei getrennten Modelle benötigt. „Übriges“ entsteht aus dem Restsignal.
-Die Schlagzeugausgabe trennt **nicht** zusätzlich Kick, Snare und Hi-Hat in
-eigene Dateien.
+Both output options use the same MVSep-Mega-53 model version. Two separate
+models are not required. “Übriges” (Other) is derived from the residual signal.
+The drums output does **not** additionally separate kick, snare, and hi-hat
+into individual files.
 
-Ausgaben unter der Lautstärkegrenze werden beim Import übersprungen und
-gemeldet. Deshalb müssen nicht immer sechs hörbare Spuren in der Session
-erscheinen, etwa wenn eine Instrumentgruppe in der Quelle fehlt.
+Outputs below the volume threshold are skipped during import and reported.
+Consequently, six audible tracks will not always appear in the session, for
+example when an instrument group is absent from the source.
 
-Die Berechnung erfolgt lokal; für diese Trennung wird dein Audio nicht
-hochgeladen. Der Modelldownload benötigt Internetzugriff und wird auf Größe
-und Prüfsumme kontrolliert. Python ist zur Nutzung der integrierten Trennung
-nicht erforderlich.
+Processing is local; your audio is not uploaded for this separation.
+The model download requires internet access and is checked for size and
+checksum. Python is not required to use the integrated separation.
 
-**Grenzen:** Übersprechen, fehlende Anteile und Artefakte können auftreten.
-Insbesondere synthetische Keyboard-Klangfarben können schlechter getrennt
-werden als akustisches Klavier. Die ursprüngliche Mischung aufbewahren.
-Falls der Build ohne ONNX Runtime erstellt wurde, steht diese Funktion nicht
-zur Verfügung.
+**Limitations:** Bleed, missing components, and artifacts can occur.
+Synthetic keyboard timbres in particular may separate less well than acoustic
+piano. Keep the original mix. If the build was created without ONNX Runtime,
+this feature is unavailable.
 
-**Download-Prüfstand:** Der vollständige Modelltransfer und die Prüfsumme sind
-geprüft. Der anonyme Erstdownload über den App-Dialog ist noch nicht abgenommen;
-den aktuellen Stand nennt [STATUS.md](STATUS.md).
+**Download verification status:** The complete model transfer and checksum
+have been verified. The anonymous first download through the app dialog has
+not yet been signed off; see [STATUS.md](STATUS.md) for the current status.
 
-Herkunft, Lizenz und Prüfgrenzen stehen im
-[Modellbericht](docs/OPEN_STEM_RELEASE.md).
+Provenance, licensing, and verification limits are documented in the
+[model report](docs/OPEN_STEM_RELEASE.md).
 
-## 13. KI-Studio und Plugin-Generator
+## 13. AI Studio and plugin generator
 
-**Song → KI-Studio (Chat: Plugins bauen lassen)…** öffnet die zusätzliche
-Agentenoberfläche. Sie kann lokal installierte Claude-Code- oder Codex-Werkzeuge
-verwenden. Deren Installation, Anmeldung, Kosten und Datenübertragung richten
-sich nach dem jeweiligen Anbieter. Diese Dienste sind nicht Teil der
-kostenlosen Aizana-Lizenz.
+**Song → KI-Studio (Chat: Plugins bauen lassen)…** (AI Studio (Chat: Have Plugins
+Built)) opens the additional agent interface. It can use locally installed
+Claude Code or Codex tools. Installation, sign-in, costs, and data transfers
+are governed by the respective provider. These services are not included in
+the free Aizana license.
 
-**Song → Plugin generieren…** und **Aizana-Plugins verwalten…** gehören zum
-integrierten Generator. Zum Erzeugen neuer Plugins werden Faust und die Apple
-Command Line Tools auf deinem Rechner benötigt. Diese Werkzeuge werden nicht
-mit der App ausgeliefert. Prüfe erzeugte Plugins zunächst in einer Testsession.
+**Song → Plugin generieren…** (Generate Plugin) and **Aizana-Plugins verwalten…**
+(Manage Aizana Plugins) belong to the integrated generator. Creating new plugins
+requires Faust and Apple Command Line Tools on your computer. These tools are
+not shipped with the app. Test generated plugins in a test session first.
 
-Die Einrichtung und technischen Schnittstellen sind in
-[docs/MCP.md](docs/MCP.md) beschrieben. Für normales Aufnehmen, Editieren und
-Mischen musst du KI-Studio nicht einrichten.
+Setup and technical interfaces are described in [docs/MCP.md](docs/MCP.md).
+You do not need to set up AI Studio for ordinary recording, editing, and mixing.
 
-## 14. Mix und Spuren exportieren
+## 14. Exporting a mix and tracks
 
-1. Speichere die Session und kontrolliere Mute/Solo sowie den Ausgang zum Master.
-2. Wähle **Export → Mix exportieren…** für die Gesamtmischung oder
-   **Export → Stems exportieren…** für einzelne Spuren.
-3. Wähle **WAV** oder **AIFF**, Sample-Rate und Bittiefe.
-4. Wähle eine Zieldatei bzw. einen Zielordner.
-5. Starte den Export und warte auf die Abschlussmeldung.
-6. Öffne die erzeugte Datei in einem Audioplayer und kontrolliere Anfang, Ende,
-   Pegel und Vollständigkeit.
+1. Save the session and check mute/solo and the output to the master.
+2. Choose **Export → Mix exportieren…** (Export Mix) for the full mix, or
+   **Export → Stems exportieren…** (Export Stems) for individual tracks.
+3. Select **WAV** or **AIFF**, the sample rate, and bit depth.
+4. Select a destination file or folder.
+5. Start the export and wait for the completion message.
+6. Open the resulting file in an audio player and check its beginning, end,
+   level, and completeness.
 
-Unterstützt sind 44,1 / 48 / 96 kHz und 16 / 24 / 32 Bit.
-**MP3 ist derzeit nicht implementiert**, auch wenn der Dialog einen
-entsprechenden Eintrag anbietet. Verwende WAV oder AIFF.
+Supported settings are 44.1 / 48 / 96 kHz and 16 / 24 / 32 bit.
+**MP3 is currently not implemented**, even though the dialog offers an entry
+for it. Use WAV or AIFF.
 
-Mixdown berücksichtigt die Master-Effekte. Prüfe deshalb vor dem Rendern,
-ob Limiter oder andere Master-Inserts wie gewünscht eingestellt sind.
-Stems exportieren rendert vorhandene Spuren; es führt keine KI-Separation
-einer fertigen Mischung durch.
+Mixdown includes master effects. Before rendering, check that the limiter or
+other master inserts are configured as intended. Exporting stems renders
+existing tracks; it does not perform AI separation of a finished mix.
 
-## 15. Speichern und Wiederherstellen
+## 15. Saving and recovery
 
-**Command-S** speichert die Session. Beim ersten Speichern wählst du Name und
-Ort. **Datei → Speichern unter…** dient zum Speichern unter einem anderen Ziel.
-Zum Öffnen nutze **Datei → Session öffnen…** und wähle die `.tracktion`-Datei.
+**Command-S** saves the session. On the first save, choose a name and location.
+Use **Datei → Speichern unter…** (File → Save As) to save to a different destination.
+To open a session, use **Datei → Session öffnen…** (File → Open Session) and select
+the `.tracktion` file.
 
-Ein Projekt umfasst außerdem seine Medien. Typische Struktur:
+A project also includes its media. Typical structure:
 
 ```text
 My Song/
@@ -457,80 +449,76 @@ My Song/
     Backups/
 ```
 
-Sichere den gesamten Ordner. Bei selbst installierten Plugins können zusätzlich
-externe Samplebibliotheken oder Herstellerdateien erforderlich sein; diese
-werden durch eine Sessiondatei nicht ersetzt.
+Back up the entire folder. Plugins you installed yourself may also require
+external sample libraries or vendor files; a session file does not replace them.
 
-Autosave und Backups ergänzen dein bewusstes Speichern. Wenn Aizana eine
-Wiederherstellung anbietet, prüfe den Stand vor dem Verwerfen. Bei einer
-Speicherfehlermeldung kontrolliere Schreibrechte, freien Speicher und die
-Erreichbarkeit externer Laufwerke. Verlasse dich dann nicht darauf, dass die
-letzte Änderung bereits gesichert wurde.
+Autosave and backups supplement deliberate saving. If Aizana offers recovery,
+check the recovered state before discarding it. If a save error appears, check
+write permissions, free disk space, and the availability of external drives.
+Do not assume that the latest change has already been saved.
 
-## 16. Wenn etwas nicht funktioniert
+## 16. Troubleshooting
 
-| Problem | Erste Prüfung |
+| Problem | First check |
 |---|---|
-| Kein Ton | Läuft der Transport? Richtiger Audioausgang? Mute/Solo? Spur zum Bus/Master geroutet? Masterpegel? |
-| Kein Eingangssignal | Hardwarekanal, Eingangsbus, Interface und macOS-Mikrofonfreigabe prüfen |
-| Keine Aufnahme | Spur-REC und Transportaufnahme getrennt prüfen; Punch-Grenzen kontrollieren |
-| Doppeltes oder verzögertes Mithören | Direktmonitoring des Interfaces und DAW-Monitoring vergleichen |
-| Plugin fehlt | Unterstütztes Format installiert? Danach erneut nach Plugins suchen |
-| Plugin wurde verschoben statt kopiert | Alt/Option beim Ablegen loslassen, wenn eine Kopie gewünscht ist |
-| Ganze Insert-Kette wurde gezogen | Einzelnen Plugin-Eintrag statt Insert-Titel greifen |
-| Tastenkürzel reagiert nicht | Textfeld oder Plugineditor verlassen und passende DAW-Ansicht fokussieren |
-| Falsche KI-Setup-Gruppe | Vorschlag vor Anwenden im Gruppenauswahlfeld korrigieren |
-| Stem-Download scheitert | Internet und öffentliche Verfügbarkeit des Modell-Releases prüfen; Kapitel 12 beachten |
-| Stem-Ergebnis klingt unsauber | Original behalten; Übersprechen und Modellgrenzen gegenhören |
-| MP3-Export schlägt fehl | WAV oder AIFF verwenden |
-| Session meldet fehlende Medien | Vollständigen Projektordner bzw. Sicherung und eingebundene Laufwerke prüfen |
-| App oder Plugin stürzt ab | Ausgangssession sichern; Fehler mit kleiner Testsession und konkretem Plugin eingrenzen |
+| No sound | Is the transport running? Correct audio output? Mute/solo? Track routed to the bus/master? Master level? |
+| No input signal | Check the hardware channel, input bus, interface, and macOS microphone permission |
+| No recording | Check track REC and transport recording separately; check punch boundaries |
+| Doubled or delayed monitoring | Compare the interface's direct monitoring with DAW monitoring |
+| Missing plugin | Is a supported format installed? Scan for plugins again afterwards |
+| Plugin moved instead of copied | Release Alt/Option when dropping if you want a copy |
+| Entire insert chain was dragged | Grab the individual plugin entry instead of the insert title |
+| Shortcut does not respond | Leave the text field or plugin editor and focus the appropriate DAW view |
+| Incorrect AI setup group | Correct the suggestion in the group selector before applying |
+| Stem download fails | Check internet access and public availability of the model release; see chapter 12 |
+| Stem result sounds poor | Keep the original; listen for bleed and model limitations |
+| MP3 export fails | Use WAV or AIFF |
+| Session reports missing media | Check the complete project folder or backup and mounted drives |
+| App or plugin crashes | Back up the starting session; narrow down the error with a small test session and a specific plugin |
 
-Ein hilfreicher Fehlerbericht enthält Version/Commit, macOS-Version,
-Audiogerät, gegebenenfalls Pluginformat und -version sowie reproduzierbare
-Schritte. Beschreibe erwartetes und tatsächliches Verhalten.
-Prüfe Anhänge auf private Pfade, Zugangsdaten und personenbezogene Angaben.
-Veröffentliche nur Audiomaterial, das du teilen darfst.
+A useful bug report includes the version/commit, macOS version, audio device,
+plugin format and version if applicable, and reproducible steps. Describe the
+expected and actual behavior. Check attachments for private paths, credentials,
+and personal information. Publish only audio material you have permission to share.
 
-## 17. Tastatur und Maus
+## 17. Keyboard and mouse
 
-| Befehl | Wirkung |
+| Command | Action |
 |---|---|
-| Leertaste | Wiedergabe starten/stoppen |
-| Command-S | Speichern |
-| Command-Z / Command-Shift-Z | Rückgängig / Wiederholen |
-| Command-T | Spur hinzufügen |
-| Command-M | Mixer umschalten |
-| Command-E | Clips am Abspielkopf teilen |
-| Command-C / Command-V / Command-D | Clips kopieren / einfügen / duplizieren |
-| Command-Klick | Auswahl erweitern oder verkleinern |
-| M / S | Mute / Solo gemäß aktiver Auswahl |
-| R | Aufnahmebereitschaft der aktiven Spur |
-| C / Escape | Schere / Pfeilwerkzeug |
-| F | Automatisches Folgen des Abspielkopfs |
-| X | Crossfade für zwei überlappende Audioclips derselben Spur |
-| Doppelklick auf MIDI-Clip | Piano-Roll öffnen |
-| Doppelklick auf Plugin-Eintrag | Plugineditor öffnen |
-| Alt/Option beim kanalübergreifenden Insert-Ablegen | Verschieben statt kopieren |
+| Space bar | Start/stop playback |
+| Command-S | Save |
+| Command-Z / Command-Shift-Z | Undo / redo |
+| Command-T | Add track |
+| Command-M | Toggle mixer |
+| Command-E | Split clips at the playhead |
+| Command-C / Command-V / Command-D | Copy / paste / duplicate clips |
+| Command-click | Add to or remove from the selection |
+| M / S | Mute / solo according to the active selection |
+| R | Arm the active track for recording |
+| C / Escape | Scissors / arrow tool |
+| F | Automatically follow the playhead |
+| X | Crossfade two overlapping audio clips on the same track |
+| Double-click a MIDI clip | Open the piano roll |
+| Double-click a plugin entry | Open the plugin editor |
+| Alt/Option when dropping inserts between channels | Move instead of copy |
 
-Diese Befehle hängen von Fokus und Auswahl ab. Während einer Texteingabe sollen
-Buchstaben den Text bearbeiten, nicht Mute/Solo oder die Aufnahme auslösen.
+These commands depend on focus and selection. While entering text, letters
+should edit the text rather than trigger mute/solo or recording.
 
-## 18. Lizenzen und weitere Dokumentation
+## 18. Licenses and further documentation
 
-Die Nutzung von Aizana stellt deine damit erstellte Musik nicht automatisch
-unter die Softwarelizenz. Rechte an verwendeten Samples, Aufnahmen und
-Drittanbieter-Plugins musst du unabhängig davon beachten.
+Using Aizana does not automatically place the music you create under the
+software license. You must separately observe the rights associated with any
+samples, recordings, and third-party plugins you use.
 
-Aizana ist nicht insgesamt MIT-lizenziert. Der eigene Code verwendet
-GPL-3.0-or-later; unter anderem JUCE nutzt hier den AGPLv3-Weg. Das Stem-Modell
-hat einen separat dokumentierten MIT-Lizenzweg.
+Aizana as a whole is not MIT-licensed. Its own code uses GPL-3.0-or-later;
+JUCE, among other components, uses the AGPLv3 licensing route here. The stem
+model has a separately documented MIT licensing route.
 
-- [Projektübersicht und Build](README.md)
-- [Lizenzmodell und Weitergabe](docs/OPEN_SOURCE_LICENSING.md)
-- [Projektlizenz](LICENSE.md)
-- [Fremdkomponenten und Urheberhinweise](THIRD_PARTY_NOTICES.md)
-- [Distribution und Quellcodepflichten](docs/DISTRIBUTION.md)
-- [Modellherkunft und Trennungsgrenzen](docs/OPEN_STEM_RELEASE.md)
-- [Aktueller Prüfstand](STATUS.md)
-
+- [Project overview and build](README.md)
+- [Licensing model and redistribution](docs/OPEN_SOURCE_LICENSING.md)
+- [Project license](LICENSE.md)
+- [Third-party components and attribution](THIRD_PARTY_NOTICES.md)
+- [Distribution and source obligations](docs/DISTRIBUTION.md)
+- [Model provenance and separation limits](docs/OPEN_STEM_RELEASE.md)
+- [Current verification status](STATUS.md)

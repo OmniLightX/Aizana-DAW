@@ -1,53 +1,55 @@
-# Sprache — was deutsch wird und was englisch bleibt
+# Language — German UI and English documentation
 
-Aizana wird deutsch ausgeliefert, so wie Logic und Studio One auf einem deutschen
-System deutsch laufen. Eine Umschaltung ist vorerst nicht vorgesehen.
+Aizana currently ships with a German user interface, as Logic and Studio One do
+on a German system. There is currently no UI language switch.
 
-Die folgenden Konventionen halten Menüs, Dialoge und technische Begriffe
-konsistent.
+The primary project documentation is now English. German versions remain
+available as [README.de.md](../README.de.md) and [MANUAL.de.md](../MANUAL.de.md).
+This documentation change does not change the application's UI language.
 
-## 1. Uebersetzt wird, was normale Sprache ist
+The following conventions keep menus, dialogs and technical terms consistent.
 
-Handlungen und Zustaende: Speichern, Speichern unter…, Oeffnen…, Neu,
-Einstellungen…, Spur hinzufuegen, Stummschalten, Rueckgaengig, Wiederholen,
-Importieren, Exportieren, Wiederherstellen, Abbrechen, Schliessen — dazu
-saemtliche Dialogtexte, Meldungen und Tooltips.
+## 1. Translate ordinary language into German
 
-## 2. Englisch bleibt, was im deutschen Studio so gesagt wird
+Actions and states: “Speichern”, “Speichern unter…”, “Oeffnen…”, “Neu”,
+“Einstellungen…”, “Spur hinzufuegen”, “Stummschalten”, “Rueckgaengig”, “Wiederholen”,
+“Importieren”, “Exportieren”, “Wiederherstellen”, “Abbrechen”, “Schliessen” — along
+with all dialog text, messages and tooltips.
+
+## 2. Keep terms used in English in German studios
 
 Loop · Take · Bus · Send · Solo · Click · Stems · Mixer · Tempo · Marker ·
 Automation · Bounce · Song · Session · Backup · Plug-In
 
-Das ist Studiojargon. Studio One laesst diese Begriffe im deutschen Programm
-ebenfalls stehen.
+These are studio terms. Studio One also retains them in its German interface.
 
-## 3. Ordner- und Dateinamen auf der Platte sind englisch
+## 3. Folder and file names on disk are English
 
-Getrennte Kategorie, unabhaengig von der Oberflaechensprache. Studio One legt
-auch im deutschen Programm `Media`, `Mixdown` und `History` an — sogar dort, wo
-die Oberflaeche uebersetzt („Medien"). Logic legt `Audio Files` und `Bounces` an.
+This is a separate category, independent of the interface language. Even in its
+German version, Studio One creates `Media`, `Mixdown` and `History`, including
+where the interface translates the term (“Medien”). Logic creates `Audio Files`
+and `Bounces`.
 
-Aizana entsprechend: `<Name> Audio/`, `Comps/`, `Bounces/`, `Backups/`.
+Aizana follows this convention: `<Name> Audio/`, `Comps/`, `Bounces/`, `Backups/`.
 
-Nicht davon beruehrt sind die Dateinamen INNERHALB dieser Ordner
-(`<Name>_Sicherung_N`, `<Name>_Wiederherstellung`) — bewusst so belassen; der
-Anwender sieht sie im Wiederherstellen-Dialog, dort ist der Text deutsch.
+File names INSIDE these folders (`<Name>_Sicherung_N`, `<Name>_Wiederherstellung`)
+are unaffected. They are deliberately retained because users see them in the
+restore dialog, where the text is German.
 
-## 4. Falls doch einmal umgeschaltet werden soll
+## 4. If a UI language switch is introduced later
 
-Dann ist es eine Umbauarbeit, keine Uebersetzungsarbeit:
+That would require structural changes, not just translation:
 
-* Die Quellsprache muss **Englisch** werden. JUCEs `TRANS()` schlaegt den
-  QUELLTEXT in einer Tabelle nach, und Tracktion Engine liefert seine eigenen
-  Meldungen bereits mit englischen Quelltexten. Nur mit englischen Quelltexten
-  deckt EINE deutsche Tabelle Aizana und die Engine-Meldungen zugleich ab.
-* Betroffen sind rund 358 sichtbare Textliterale, davon mindestens 147
-  nachweislich deutsch. Wegen Regel 2 braeuchte die Tabelle aber nur etwa
-  150–250 Eintraege: was in beiden Sprachen gleich heisst, bekommt keine Zeile —
-  `TRANS()` faellt auf den Quelltext zurueck.
-* **Die GUI-Testautomatik muss die Sprache festnageln** (Deutsch). 209
-  Drehbuchzeilen sprechen Bauteile ueber ihren deutschen Namen an, teils mit
-  Zustand darin („Klick bei Aufnahme: An"). Ohne Pinning meldet der erste Lauf
-  danach reihenweise „nicht gefunden", und man sucht den Fehler an der falschen
-  Stelle. Menueeintraege sind nicht betroffen — die Drehbuecher rufen sie ueber
-  ihre numerische ID auf, nicht ueber den Text.
+* The source language must become **English**. JUCE's `TRANS()` looks up the
+  SOURCE TEXT in a table, and Tracktion Engine already supplies its own messages
+  with English source text. Only English source text allows ONE German table
+  to cover both Aizana and the engine messages.
+* Around 358 visible string literals are affected, at least 147 of them
+  demonstrably German. Because of rule 2, however, the table would need only
+  about 150–250 entries: terms identical in both languages need no entry because
+  `TRANS()` falls back to the source text.
+* **GUI test automation must pin the language** to German. 209 script lines
+  address components by their German names, sometimes including state
+  (“Klick bei Aufnahme: An”). Without pinning, the first run would report many
+  “not found” errors, sending debugging in the wrong direction. Menu entries
+  are unaffected: scripts invoke them by numeric ID, not text.

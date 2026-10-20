@@ -1,55 +1,55 @@
-# Lizenzen und Nutzung
+# Licensing and use
 
-## Nutzung und Weitergabe
+## Use and redistribution
 
-Aizana wird vom Projekt kostenlos als Quellcode über GitHub bereitgestellt.
-Berufliche Nutzung, auch für bezahlte Musikproduktionen, ist erlaubt. Die
-Softwarelizenzen gelten unabhängig davon, ob das Projekt Einnahmen erzielt.
-Es wird kein Zusatz „nur nichtkommerziell“ eingeführt. GPL/AGPL erlauben auch
-kostenpflichtige Weitergabe unter ihren Bedingungen; unsere kostenlose Abgabe
-verbietet Dritten daher nicht pauschal, eigene Distributionen zu verkaufen.
+The project provides Aizana free of charge as source code through GitHub.
+Professional use, including paid music production, is permitted. The software
+licenses apply regardless of whether the project generates revenue.
+No “non-commercial use only” restriction is introduced. GPL/AGPL also permit
+paid redistribution under their terms; our free distribution therefore does
+not impose a blanket ban on third parties selling their own distributions.
 
-Eigener Code bleibt GPL-3.0-or-later. JUCE wird unter dessen AGPLv3-Alternative,
-Tracktion unter GPLv3-or-later verwendet. GPLv3 und AGPLv3 erlauben in Abschnitt
-13 die Kombination, ohne die jeweiligen Komponententexte zu ersetzen. Eine
-pauschale MIT-Lizenz für das Gesamtprojekt wäre kein Ersatz für diese Pflichten.
+The project's own code remains GPL-3.0-or-later. JUCE is used under its AGPLv3
+alternative, and Tracktion under GPLv3-or-later. Section 13 of GPLv3 and AGPLv3
+permits the combination without replacing the respective component texts.
+A blanket MIT license for the whole project would not replace these obligations.
 
-## Komponenten
+## Components
 
-Die vollständigen Lizenz- und Urheberhinweise stehen in
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) und im Verzeichnis `licenses/`.
+The full license and copyright notices are in
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and the `licenses/` directory.
 
-| Komponente | Gewählter Weg / Einordnung | Für die Quellcode-Verteilung |
+| Component | Selected route / classification | For source distribution |
 |---|---|---|
-| Aizana-Code | GPL-3.0-or-later | LICENSE.md, COPYING, Urheber- und Änderungsvermerke erhalten |
-| JUCE 8 | AGPLv3 statt kommerzieller JUCE-Lizenz | COPYING.AGPL und JUCE-/Unterkomponenten-Hinweise erhalten; AGPL-Bedingungen einhalten |
-| Tracktion Engine | GPLv3-or-later statt kommerzieller Lizenz | Exakten Submodulstand, Hinweise und eigenen Recording-Patch bereitstellen |
-| SoundTouch in Tracktion | LGPL-2.1-or-later | Lizenzhinweise und Quellzugang erhalten |
-| demucs.cpp, libebur128, CLAP, clap-helpers | MIT | Copyright- und Lizenztexte erhalten |
-| ONNX Runtime | MIT, weitere Upstream-Hinweise | Version und Bezug dokumentieren; ThirdPartyNotices bei Weitergabe beachten |
-| Eigen | MPL-2.0 und enthaltene kompatible Dritttexte | Dateibezogene Lizenz-/Quellpflichten und zusätzliche Hinweise erhalten |
-| Catch2 | BSL-1.0, Testabhängigkeit | Lizenztext erhalten |
-| Faust | Extern installierter LGPL-Compiler | Compilerlizenz nicht mit Lizenz generierter Ausgabe verwechseln; DSP-/Architektur-/Headerbedingungen beachten |
-| VST3 SDK im festgelegten JUCE-Stand | GPLv3-Alternative | SDK-Lizenztext erhalten; keine Markenfreigabe daraus ableiten |
-| Apple SDKs | Separat bezogene Plattformwerkzeuge | Nicht als eigenen offenen Quellcode oder mit eigener Lizenz ausgeben |
+| Aizana code | GPL-3.0-or-later | Retain LICENSE.md, COPYING, copyright and modification notices |
+| JUCE 8 | AGPLv3 instead of a commercial JUCE license | Retain COPYING.AGPL and JUCE/subcomponent notices; comply with AGPL conditions |
+| Tracktion Engine | GPLv3-or-later instead of a commercial license | Provide the exact submodule revision, notices and the project's recording patch |
+| SoundTouch in Tracktion | LGPL-2.1-or-later | Retain license notices and source access |
+| demucs.cpp, libebur128, CLAP, clap-helpers | MIT | Retain copyright and license texts |
+| ONNX Runtime | MIT, additional upstream notices | Document version and source; observe ThirdPartyNotices when redistributing |
+| Eigen | MPL-2.0 and included compatible third-party texts | Preserve file-level license/source obligations and additional notices |
+| Catch2 | BSL-1.0, test dependency | Retain license text |
+| Faust | Externally installed LGPL compiler | Do not confuse the compiler license with the license of generated output; observe DSP/architecture/header terms |
+| VST3 SDK in the pinned JUCE revision | GPLv3 alternative | Retain SDK license text; do not infer trademark permission from it |
+| Apple SDKs | Separately obtained platform tools | Do not present them as the project's own open source or under the project's own license |
 
-Optionale Drittanbieter-Dienste, Plugins und zusätzlich geladene Modelle
-unterliegen ihren jeweiligen Nutzungs- und Lizenzbedingungen.
+Optional third-party services, plugins and additionally downloaded models
+are subject to their respective terms of use and licenses.
 
-## Quellcode und Abhängigkeiten
+## Source code and dependencies
 
-Ein automatisch erzeugtes GitHub-ZIP enthält keine Submodulquellen. Für den
-vollständigen Checkout ist die dokumentierte Submodulinitialisierung nötig.
-Für eine spätere Binärverteilung gelten zusätzlich die passenden Pflichten zur
-Bereitstellung des vollständigen korrespondierenden Quellcodes, siehe DISTRIBUTION.md.
+An automatically generated GitHub ZIP does not contain submodule sources.
+A complete checkout requires the documented submodule initialization.
+Any future binary distribution is also subject to the applicable obligations
+to provide complete corresponding source; see DISTRIBUTION.md.
 
-Eigene Songs werden nicht allein durch Bearbeitung mit Aizana GPL/AGPL-lizenziert.
-Rechte an verwendeten Samples, Aufnahmen und Plugins bleiben davon unabhängig.
+Your own songs do not become GPL/AGPL-licensed merely by being edited with Aizana.
+Rights to the samples, recordings and plugins used remain separate.
 
-## Weiterführende Lizenztexte
+## Further license texts
 
-- [Projektlizenz](../LICENSE.md)
-- [GPLv3](../COPYING) und [AGPLv3](../COPYING.AGPL)
-- [Vollständige Komponentenhinweise](../THIRD_PARTY_NOTICES.md)
-- [Quellcode-Bereitstellung bei Weitergabe](DISTRIBUTION.md)
-- [Modellherkunft und Modelllizenz](OPEN_STEM_RELEASE.md)
+- [Project license](../LICENSE.md)
+- [GPLv3](../COPYING) and [AGPLv3](../COPYING.AGPL)
+- [Full component notices](../THIRD_PARTY_NOTICES.md)
+- [Source provision when redistributing](DISTRIBUTION.md)
+- [Model provenance and model license](OPEN_STEM_RELEASE.md)

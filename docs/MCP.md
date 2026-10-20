@@ -22,7 +22,7 @@ Live changes use Aizana’s command bridge; audio processing remains local.
 
 ## Two ways to use it
 
-**A) In-app KI-Studio (recommended, built in).** Aizana ships a chat panel — open it via
+**A) In-app AI Studio (UI label: KI-Studio; recommended, built in).** Aizana ships a chat panel — open it via
 **Song → „KI-Studio…"**. It spawns *your* installed `claude` (or `codex`) CLI as the agent
 (login-shell wrapped, so it inherits your PATH and login — no API key) with the bundled
 `aizana-mcp` registered automatically. Describe a plugin in the chat → it's built and shows
@@ -134,7 +134,7 @@ detects new files within a few seconds; otherwise they appear on next launch.
 | `add_reverb`        | `{ track, amount? }` → send the track to a shared "Reverb" FX bus (created once, 100% wet) — the pro send pattern, not a per-track insert. |
 
 Every move applies immediately as **one undo step**, through the same `AICommandBridge`
-path as the "KI-Mix" button.
+path as the AI Mix ("KI-Mix") button.
 
 These require **Aizana to be running** (open it and click the **"KI-Studio"** button so the
 live bridge is up). The app advertises a loopback port + token via
