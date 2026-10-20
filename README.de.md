@@ -297,9 +297,12 @@ das Gegenhören.
 **Stem-Separation** ist ein davon getrenntes Werkzeug zum Aufteilen einer fertigen
 Audiodatei.
 Stem-Separation läuft lokal mit dem MIT-freigegebenen MVSep-Mega-Modell von
-Roman Solovyev (ZFTurbo). Das Modell-Release ist derzeit ein privater Entwurf;
-der öffentliche Erstdownload ist noch nicht verfügbar. Bis zur Veröffentlichung
-und Prüfung des Downloads muss das Modell lokal bereitgestellt werden.
+Roman Solovyev (ZFTurbo). Das
+[Modell-Release](https://github.com/OmniLightX/Aizana-DAW/releases/tag/stem-model-mega53-v1)
+ist unter dem Downloadziel der App freigegeben. Der Zugriff folgt der Sichtbarkeit
+des Repositorys: Solange es privat ist, ist kein App-Download ohne Anmeldung
+möglich. Der Erstdownload ohne Anmeldung muss nach dem Öffentlichstellen noch
+geprüft werden.
 Das optionale Modell umfasst rund 355 MB und wird vor der Verwendung per Größe und SHA-256 geprüft. Sechs Ausgaben
 sind möglich: Schlagzeug, Bass, Gesang, Gitarre, Klavier und Übriges als Restsignal;
 alternativ vier Kategorien. Python ist dafür nicht erforderlich. Modellgewichte

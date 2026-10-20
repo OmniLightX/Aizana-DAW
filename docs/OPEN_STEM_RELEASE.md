@@ -124,8 +124,13 @@ On 20 October all three assets were fully downloaded with authenticated access
 and matched the original files byte for byte. The Release build with the current
 model URL and the bundle audit passed.
 
-Anonymous download and first-use download through the app have not yet been
-accepted. Authenticated transfer verification does not establish that path.
+On 21 October the existing release was taken out of draft status and assigned
+the `stem-model-mega53-v1` tag. The model asset URL now exactly matches the app.
+All three assets were downloaded again with authenticated access; sizes and
+SHA-256 digests match the release metadata and the model checksum manifest.
+The source repository remains private. Anonymous download and first-use download
+through the app have not yet been accepted and must be checked after public
+access is enabled. Authenticated transfer verification does not establish that path.
 
 Six-category separation, preview/import and single-step import Undo/Redo passed.
 Cancellation removed the progress panel without importing tracks or changing
