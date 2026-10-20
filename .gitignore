@@ -90,3 +90,7 @@ xtra mds/
 !/cmake/*.cmake
 !licenses/
 !licenses/**
+
+# Python test-tool caches
+__pycache__/
+*.py[cod]

@@ -1,3 +1,4 @@
+# Voraussetzung: AIZANA_TESTWAV auf eine eigene WAV-Testdatei setzen.
 # Block A — E-V1/E-V2/E-V4/E-V10 + Nachfrage zur fehlenden Wellenform im Arrangement.
 # Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/03-editor-werkzeuge.txt
 
@@ -6,7 +7,7 @@
 # der Pro-Ansicht nichts finden und den Lauf abbrechen.
 wennfehlt Spurbereich Track 1 @ Pro
 warte 2500
-dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
+dropin Spurbereich Track 1 @ 0.40 0.5 $AIZANA_TESTWAV
 warte 3000
 
 # Wellenform im ARRANGEMENT: erscheint sie spaeter? (im Dock ist sie sofort da)

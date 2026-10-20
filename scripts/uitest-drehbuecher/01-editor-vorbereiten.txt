@@ -1,3 +1,4 @@
+# Voraussetzung: AIZANA_TESTWAV auf eine eigene WAV-Testdatei setzen.
 # Session fuer die Editor-Runde aufbauen: 1 Audio-Clip, NICHT am Songanfang.
 # Aufruf: ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/01-editor-vorbereiten.txt
 
@@ -6,7 +7,7 @@ warte 2500
 
 # Datei auf die Clip-Flaeche von Track 1 fallen lassen — bei 40 % der sichtbaren
 # Zeitachse, damit der Clip NICHT bei 0:00 beginnt (Voraussetzung fuer E-V8/E-V10).
-dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
+dropin Spurbereich Track 1 @ 0.40 0.5 $AIZANA_TESTWAV
 warte 2500
 bild 10-clip-importiert
 

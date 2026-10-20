@@ -1,3 +1,4 @@
+# Voraussetzung: AIZANA_TESTWAV auf eine eigene WAV-Testdatei setzen.
 # Block A / E-V1 ff. — Editor-Runde.
 #
 # Ein Lauf = eine frische Session (ApplicationState ruft createNewEdit()). Vorbereitung
@@ -9,7 +10,7 @@
 warte 2500
 
 # --- Vorbereitung: 1 Audio-Clip, NICHT am Songanfang (Voraussetzung E-V8/E-V10) ---
-dropin Spurbereich Track 1 @ 0.40 0.5 <workspace>/Audio Test Material/121 bpm_809.wav
+dropin Spurbereich Track 1 @ 0.40 0.5 $AIZANA_TESTWAV
 warte 3000
 bild 20-clip-importiert
 
