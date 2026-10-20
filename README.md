@@ -39,6 +39,44 @@ einzubringen.
 Aizana ist mein Hobbyprojekt, und ich freue mich, das Ergebnis dieser Arbeit mit
 euch zu teilen.
 
+## Meine Vision: mehr Zeit für Musik
+
+Ich möchte mit Aizana zeigen, wie Mensch und KI beim Musikmachen zusammenarbeiten
+können. Die klangliche Vorstellung, das Gehör und die Entscheidungen bleiben beim
+Menschen. Die Assistenz soll Arbeit abnehmen, Abläufe beschleunigen und helfen,
+länger im kreativen Prozess zu bleiben. Wie viel Unterstützung du nutzt,
+entscheidest du selbst: alles von Hand bearbeiten, einzelne Schritte abgeben
+oder einen ersten Mischvorschlag als Ausgangspunkt nehmen.
+
+Dafür gibt es zwei unterschiedliche Einstiege:
+
+- **KI-Mix** erstellt mit eingebauten Analyse- und Mischregeln einen Vorschlag,
+  ohne Claude- oder Codex-Account. Gerade Einsteiger können daran Pegel,
+  Klangbearbeitung und Routing nachvollziehen, vergleichen und weiterarbeiten.
+  Im Pro-Modus lässt sich der Vorschlag vor dem Anwenden prüfen; im
+  Einsteigermodus wird er direkt übernommen. Die Änderungen sind rückgängig
+  zu machen. Der Vorschlag ist ein Ausgangspunkt zum Lernen und Gegenhören.
+- **KI-Studio** verbindet auf Wunsch deine installierten Claude-Code- oder
+  Codex-Werkzeuge mit der geöffneten Session. Du kannst gezielte Arbeitsschritte
+  in Worten beschreiben, etwa „Setze einen De-Esser auf meine Lead-Vocals“,
+  „Gib den Backings etwas Hall“ oder „Fasse meine Drumspuren in einem Bus zusammen
+  und füge dort einen Kompressor ein“. Die Assistenz kann dafür die vorhandenen
+  Mixing-Werkzeuge aufrufen. Prüfe die Änderungen mit deinem Gehör und passe sie
+  an; die einzelnen Eingriffe lassen sich rückgängig machen. Einrichtung und
+  verfügbare Werkzeuge stehen in der [KI-Studio-Anleitung](docs/MCP.md).
+
+Schon beim **Stem-Import mit KI-Setup** kann Aizana aus Dateinamen und Audioanalyse
+Instrumentgruppen erkennen und Zuordnungen wie Vocals, Drums, Bass, Gitarren oder
+Keys vorschlagen. Dazu kommen Routing und erste Pegelanpassungen. Im Pro-Modus
+prüfst und korrigierst du die Zuordnung vor dem Anwenden; die Einsteigeransicht
+übernimmt sie direkt. Das ordnet bereits vorhandene Einzelspuren und ist etwas
+anderes als die optionale Trennung einer fertigen Mischung in Stems.
+
+Erfahrene Anwender können sämtliche Assistenzfunktionen ungenutzt lassen und
+Aizana als normale DAW bedienen. Dazwischen liegt der Arbeitsablauf, der mich
+besonders interessiert: Ich bestimme die Richtung und gebe gezielt die Schritte
+ab, die mich gerade vom eigentlichen Musikmachen abhalten.
+
 ## Projektstand und Orientierung
 
 **Kostenlos und Open Source:** Wir stellen den Quellcode von Aizana kostenlos
