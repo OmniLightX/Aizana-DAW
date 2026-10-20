@@ -64,8 +64,7 @@ Der geprüfte Build richtet sich an **Apple Silicon (arm64), macOS 13.3 oder neu
 Ein lokaler Build ist nicht Developer-ID-signiert oder notarisiert. Hinweise zum
 Start stehen in [ALPHA_INSTALL.md](docs/ALPHA_INSTALL.md). Aizana verändert keine
 Gatekeeper-Einstellungen. Frühere Release-Pakete enthalten nicht den aktuellen
-Stand von `main`. Das Repository bleibt bis zur ausdrücklichen Freigabe privat;
-der Clone benötigt bis dahin eine Zugriffsberechtigung.
+Stand von `main`.
 
 ## Wofür Aizana gedacht ist
 
@@ -179,7 +178,7 @@ Wiederverwendbare Kopien übernehmen Parameter, Reihenfolge und Bypass. Sie
 kopieren keine zeitbezogene Songautomation oder externe Sidechain-Quellverweise.
 Echte Verschiebeaktionen erhalten die ursprünglichen Instanzen und deren
 Verknüpfungen. Die neue Bedienung ist implementiert und automatisch getestet;
-das kanalübergreifende Alt-/Option-Ziehen wurde ebenfalls geprüft.
+das kanalübergreifende Alt-/Option-Ziehen ist in der nativen Bedienprüfung bestätigt.
 Weitere Prüfgrenzen stehen in [STATUS.md](STATUS.md).
 
 Bei experimentell ausgelagerten Plugins öffnet sich die eigentliche

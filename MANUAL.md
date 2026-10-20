@@ -396,11 +396,9 @@ werden als akustisches Klavier. Die ursprüngliche Mischung aufbewahren.
 Falls der Build ohne ONNX Runtime erstellt wurde, steht diese Funktion nicht
 zur Verfügung.
 
-**Bereitstellungsstand vor Veröffentlichung:** Der Modelltransfer wurde mit
-GitHub-Anmeldung geprüft. Solange der Modell-Release privat bzw. ein Entwurf ist,
-ist der öffentliche Erstdownload noch nicht verfügbar oder abgenommen.
-Ein Downloadfehler in diesem Zustand ist keine Aufforderung, GitHub-Zugangsdaten
-in Dateien einzutragen.
+**Download-Prüfstand:** Der vollständige Modelltransfer und die Prüfsumme sind
+geprüft. Der anonyme Erstdownload über den App-Dialog ist noch nicht abgenommen;
+den aktuellen Stand nennt [STATUS.md](STATUS.md).
 
 Herkunft, Lizenz und Prüfgrenzen stehen im
 [Modellbericht](docs/OPEN_STEM_RELEASE.md).

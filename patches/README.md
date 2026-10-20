@@ -6,7 +6,7 @@ The changes are distributed as `tracktion-recording-errors.patch`; upstream
 copyright and license notices remain unchanged. The relevant date is recorded
 in the Git history of that patch.
 
-`tracktion-recording-errors.patch` preserves the three reviewed Developer changes
+`tracktion-recording-errors.patch` preserves the three reviewed source changes
 against Tracktion Engine `0a5f4e6a5f53d09c89b414a44386a12df7fa1ec6`.
 It also corrects three destination-file error returns in `WaveInputDevice.cpp`:
 these must use `tl::unexpected`, because a plain `String` implicitly constructs
