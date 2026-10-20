@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "../src/plugins/PluginScanner.h"
+#include "SelectedTestPlugins.h"
 
 // ---------------------------------------------------------------------------
 // Helper: build a temp directory to store the KnownPluginList XML
@@ -21,17 +22,14 @@ static juce::File getTempPluginListFile()
 // ---------------------------------------------------------------------------
 // VST3 Test 1: PluginScanner::scanForPlugins finds at least 1 VST3 entry
 // ---------------------------------------------------------------------------
-TEST_CASE ("VST3Scan: scanner finds at least one VST3 plugin in standard search paths",
+TEST_CASE ("VST3Scan: scanner finds the explicitly selected VST3 plugin",
            "[plugins][PLUG-01]")
 {
     PluginScanner scanner;
+    REQUIRE(scanner.getFormatManager().getNumFormats() >= (JUCE_MAC ? 4 : 3));
 
     bool scanComplete = false;
-    scanner.scanForPlugins (
-        [](const PluginScanner::ScanProgress&) {},   // onProgress — ignore
-        [&]() { scanComplete = true; }
-    );
-    scanner.waitForScanComplete (30000);
+    scanTestPlugins (scanner, scanComplete);
 
     REQUIRE (scanComplete);
 
@@ -49,7 +47,7 @@ TEST_CASE ("VST3Scan: scanner finds at least one VST3 plugin in standard search 
     }
 
     if (! foundVST3)
-        SKIP ("No VST3 plugins found in standard search paths — skipping VST3 scan test");
+        SKIP ("Set AIZANA_TEST_VST3 to run the external VST3 integration test");
 
     REQUIRE (foundVST3);
 }
@@ -61,13 +59,10 @@ TEST_CASE ("VST3Scan: KnownPluginList persists scan results across application r
            "[plugins][PLUG-01]")
 {
     PluginScanner scanner;
+    REQUIRE(scanner.getFormatManager().getNumFormats() >= (JUCE_MAC ? 4 : 3));
 
     bool scanComplete = false;
-    scanner.scanForPlugins (
-        [](const PluginScanner::ScanProgress&) {},
-        [&]() { scanComplete = true; }
-    );
-    scanner.waitForScanComplete (30000);
+    scanTestPlugins (scanner, scanComplete);
     REQUIRE (scanComplete);
 
     const int originalCount = scanner.getKnownPlugins().getNumTypes();

@@ -1,13 +1,13 @@
 # Aizana License
 
-Copyright (C) 2026 Aizanagi (Aizana DAW project).
-<!-- PLACEHOLDER. Aizanagi intends to hold copyright via an entity/pseudonym — set the
-     final legal holder (entity or pseudonym) before any commercial/relicensing step;
-     the copyright holder must be unambiguous to ever dual-license or sell the work.
-     Require a Contributor License Agreement (CLA) from any contributor for the same
-     reason. -->
+Copyright (C) 2026 Aizanagi and the Aizana contributors.
 
-Aizana' own source code is free software: you can redistribute it and/or
+Aizanagi is the original project author’s chosen public attribution name,
+not a claim that an incorporated company exists. Contributors retain copyright
+in their respective contributions; this collective notice does not assign rights
+or replace third-party copyright notices.
+
+Aizana's own source code is free software: you can redistribute it and/or
 modify it under the terms of the GNU General Public License as published by the
 Free Software Foundation, either version 3 of the License, or (at your option)
 any later version.
@@ -31,21 +31,24 @@ Aizana also uses Tracktion Engine
 (https://github.com/Tracktion/tracktion_engine), which is dual-licensed under
 GPL3-or-later and a commercial Tracktion Engine license.
 
-By distributing Aizana publicly as open-source software and complying with the
-applicable AGPLv3/GPL3 obligations, no commercial JUCE or Tracktion Engine
-license is required for the open-source release path.
+The open-source distribution uses the GPLv3/AGPLv3 combination permitted by
+section 13 of both licenses. The respective component terms remain applicable;
+this is not a GPL-only binary. Include COPYING and COPYING.AGPL and provide the
+complete corresponding source for the exact distributed binary. See
+docs/DISTRIBUTION.md for the release checklist.
 
-If a commercial (non-GPL) version of Aizana is planned in the future, a
-commercial JUCE license and a Tracktion Engine Indie or Enterprise license must
-be obtained before distribution.
+The commercial alternatives offered by these vendors are not selected for this
+release. Their mention does not impose a purchase requirement on this open-source
+distribution. Original upstream license texts, including their alternative
+licensing offers, are preserved unchanged.
 
 For the detailed dependency and model-weight notices, see
 `THIRD_PARTY_NOTICES.md`.
 
 ## Third-Party License Summary
 
-- **JUCE 8** — AGPLv3/Commercial
-- **Tracktion Engine** — GPL3-or-later/Commercial
+- **JUCE 8** — AGPLv3 (selected open-source route)
+- **Tracktion Engine** — GPL3-or-later (selected open-source route)
 - **SoundTouch** — LGPL-2.1-or-later, bundled inside Tracktion Engine
 - **demucs.cpp** — MIT License
 - **ONNX Runtime** — MIT License
@@ -53,3 +56,7 @@ For the detailed dependency and model-weight notices, see
 - **libebur128** — MIT License
 - **CLAP C API** — MIT License
 - **Catch2** — BSL-1.0 (Boost Software License, test infrastructure only)
+
+- **Optional MVSep Mega 53 model weights and BS-RoFormer architecture** — MIT;
+  exact provenance, conversion and separate download terms are documented in
+  `docs/OPEN_STEM_RELEASE.md` and the full notices in `licenses/Mega53/`.

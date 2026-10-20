@@ -17,6 +17,12 @@
 // ---------------------------------------------------------------------------
 static juce::String findTestClapPlugin()
 {
+    auto selected=juce::SystemStats::getEnvironmentVariable("AIZANA_TEST_CLAP", {});
+    if (selected.isNotEmpty())
+    {
+        REQUIRE(juce::File(selected).exists());
+        return selected;
+    }
     juce::StringArray searchPaths;
 
 #if JUCE_MAC
@@ -41,7 +47,7 @@ static juce::String findTestClapPlugin()
         juce::File dir (path);
         if (dir.exists())
         {
-            auto clapFiles = dir.findChildFiles (juce::File::findFiles, true, "*.clap");
+            auto clapFiles = dir.findChildFiles (juce::File::findFilesAndDirectories, true, "*.clap");
             if (!clapFiles.isEmpty())
                 return clapFiles[0].getFullPathName();
         }

@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "../src/plugins/PluginScanner.h"
+#include "SelectedTestPlugins.h"
 
 // ---------------------------------------------------------------------------
 // AU Test 1: Scanner finds at least one AudioUnit plugin on macOS
@@ -17,13 +18,10 @@ TEST_CASE ("AUScan: scanner finds a built-in macOS AudioUnit plugin",
     SKIP ("AU plugins are macOS-only — skipping on this platform");
 #else
     PluginScanner scanner;
+    REQUIRE(scanner.getFormatManager().getNumFormats() >= (JUCE_MAC ? 4 : 3));
 
     bool scanComplete = false;
-    scanner.scanForPlugins (
-        [](const PluginScanner::ScanProgress&) {},
-        [&]() { scanComplete = true; }
-    );
-    scanner.waitForScanComplete (30000);
+    scanTestPlugins (scanner, scanComplete);
     REQUIRE (scanComplete);
 
     const auto& known = scanner.getKnownPlugins();
@@ -56,13 +54,10 @@ TEST_CASE ("AUScan: AU plugin instantiates without error on macOS",
     SKIP ("AU plugins are macOS-only — skipping on this platform");
 #else
     PluginScanner scanner;
+    REQUIRE(scanner.getFormatManager().getNumFormats() >= (JUCE_MAC ? 4 : 3));
 
     bool scanComplete = false;
-    scanner.scanForPlugins (
-        [](const PluginScanner::ScanProgress&) {},
-        [&]() { scanComplete = true; }
-    );
-    scanner.waitForScanComplete (30000);
+    scanTestPlugins (scanner, scanComplete);
     REQUIRE (scanComplete);
 
     const auto& known = scanner.getKnownPlugins();
@@ -81,23 +76,31 @@ TEST_CASE ("AUScan: AU plugin instantiates without error on macOS",
     if (auDesc == nullptr)
         SKIP ("No AU plugin found to instantiate");
 
-    juce::String errorMessage;
-    std::unique_ptr<juce::AudioPluginInstance> instance;
-
+    struct Result
+    {
+        bool complete=false;
+        juce::String error;
+        std::unique_ptr<juce::AudioPluginInstance> instance;
+    };
+    auto result=std::make_shared<Result>();
     scanner.getFormatManager().createPluginInstanceAsync (
-        *auDesc,
-        44100.0,
-        512,
-        [&](std::unique_ptr<juce::AudioPluginInstance> inst, const juce::String& err)
-        {
-            instance = std::move (inst);
-            errorMessage = err;
-        });
+        *auDesc,44100.0,512,
+        [result](std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& error)
+        { result->instance=std::move(instance);result->error=error;result->complete=true; });
+    const auto deadline=juce::Time::getMillisecondCounterHiRes()+15000.0;
+    while (!result->complete && juce::Time::getMillisecondCounterHiRes()<deadline)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    REQUIRE(result->complete);
+    INFO(result->error);
+    REQUIRE(result->error.isEmpty());
+    REQUIRE(result->instance != nullptr);
+    result->instance->prepareToPlay(44100,512);
+    juce::AudioBuffer<float> audio(juce::jmax(2,result->instance->getTotalNumOutputChannels()),512);
+    audio.clear();juce::MidiBuffer midi;
+    result->instance->processBlock(audio,midi);
+    CHECK(std::isfinite(audio.getMagnitude(0,512)));
+    result->instance->releaseResources();
 
-    // The AU instantiation callback may be synchronous or asynchronous depending on the plugin.
-    // In headless tests we accept a synchronous result.
-    REQUIRE (errorMessage.isEmpty());
-    REQUIRE (instance != nullptr);
 #endif
 }
 

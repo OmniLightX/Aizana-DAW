@@ -1,225 +1,281 @@
-<p align="center">
-  <img src="Resources/brand/aizana-banner.png" alt="Aizana by Aizanagi — open-source AI-assisted Digital Audio Workstation" width="820">
-</p>
+<p align="center"><img src="Resources/AizanaIcon.png" alt="Aizana" width="160"></p>
 
 # Aizana
 
-An open-source, **AI-first DAW** built on JUCE 8 and Tracktion Engine for macOS. Mixing-first design: familiar enough that anyone starts immediately, with AI that turns intent into normal, reviewable, one-undo DAW actions — built for beginners and pros over the same session.
+Aizana ist eine quelloffene, auf Mixing ausgerichtete DAW für macOS. Aufnahme,
+Audio- und MIDI-Bearbeitung, Comping, Busse, FX-Sends und Export gehören zum
+Programm. Die Oberfläche ist deutsch. KI-Funktionen sind zusätzliche Werkzeuge;
+Aufnahme und Mixing benötigen keinen KI-Account.
 
-> **Status: Public Alpha / Developer Preview.** Aizana is real and works, but it is
-> not a finished v1.0. A DAW is high-trust software (it records performances, hosts
-> third-party plugins, writes files) — treat it as a preview, keep backups, and see
-> *Known limitations* below. This is not a replacement for Logic, Studio One, Pro
-> Tools, Ableton, Cubase, or REAPER.
+**Kostenlos und Open Source:** Wir stellen den Quellcode von Aizana kostenlos
+zum Selbstbauen, Nutzen und Weiterentwickeln bereit. Der eigene Code steht unter
+GPL-3.0-or-later; Abhängigkeiten behalten ihre Lizenzbedingungen, insbesondere
+JUCE unter AGPLv3. Die enthaltenen Lizenztexte und Fremdhinweise gelten weiterhin.
+[Lizenzmodell und Pflichten](docs/OPEN_SOURCE_LICENSING.md).
 
-Aizana source code is licensed under GPL-3.0-or-later.
+**Stand: 0.3.0 Alpha, in abschließender Prüfung.** Die aktuelle Quelle enthält die
+Recording-, Speicher-, Comping-, MIDI-Editor- und Mixer-Korrekturen sowie die
+neue Insert-Kettenverwaltung. Offene Abnahmen stehen in [STATUS.md](STATUS.md).
+Eine grüne automatisierte Suite ist keine vollständige Hardware- oder
+Plugin-Kompatibilitätszusage. Sichere wichtige Projekte vor Versionswechseln.
 
-Binary/source distributions also include third-party components under their own
-licenses. In particular, JUCE 8 is AGPLv3/Commercial, and Tracktion Engine is
-GPL3-or-later/Commercial. Public Aizana releases therefore need to comply with
-the applicable copyleft obligations for those components. See
-`THIRD_PARTY_NOTICES.md` for the dependency and model-weight notices.
+## Bezug über GitHub
 
-## Highlights
+Aizana 0.3.0 wird ausschließlich als Quellcode über dieses GitHub-Repository
+bereitgestellt. Für diesen Stand gibt es kein DMG und keinen fertigen
+App-Download. Die Anleitung unter [Aus dem Quellcode bauen](#aus-dem-quellcode-bauen)
+beschreibt den lokalen Build einschließlich der Abhängigkeiten.
 
-### ⭐ Aizana AI Studio — an AI assistant *inside* the DAW
+Der geprüfte Build richtet sich an **Apple Silicon (arm64), macOS 13.3 oder neuer**.
+Ein lokaler Build ist nicht Developer-ID-signiert oder notarisiert. Hinweise zum
+Start stehen in [ALPHA_INSTALL.md](docs/ALPHA_INSTALL.md). Aizana verändert keine
+Gatekeeper-Einstellungen. Frühere Release-Pakete enthalten nicht den aktuellen
+Stand von `main`. Das Repository bleibt bis zur ausdrücklichen Freigabe privat;
+der Clone benötigt bis dahin eine Zugriffsberechtigung.
 
-A chat panel in the transport bar that connects to your locally installed
-**Claude Code** or **Codex CLI** (local-first, no API key handled by Aizana) and
-acts on your session:
+## Wofür Aizana gedacht ist
 
-- **Mix by conversation:** the assistant controls the *running* session over a
-  local loopback bridge — track volumes/pan, mute/solo, EQ, compressors,
-  de-essers, reverb sends, bus creation (14 live tools). Every batch is one
-  undo step.
-- **Generate real plugins from a text description:** the assistant writes
-  Faust DSP, Aizana compiles it to a universal **CLAP** plugin with a working
-  parameter GUI, and it lands in your plugin library under "Aizana" —
-  persistent and reusable like any other plugin. No cloud compile, no account.
+Aizana richtet sich an Menschen, die eigene Musik aufnehmen, vorhandene Spuren
+bearbeiten und Songs mischen möchten. Anfänger und erfahrene Anwender arbeiten
+mit derselben Session; die Beginner- und Pro-Ansichten unterscheiden sich in der
+Darstellung und im Umfang der angebotenen Entscheidungen. Automatische Vorschläge
+bleiben normale, überprüfbare DAW-Bearbeitungen mit Rückgängig-Funktion.
 
-### AI mixing & session setup
+## Funktionsübersicht
 
-- **AI Mix button (heuristic co-pilot):** proposes gain staging, EQ,
-  compression, de-essing, panning, and sub-bus routing as named, jargon-free,
-  reviewable moves — Beginner applies instantly, Pro reviews each move; one
-  undo step.
-- **AI stem separation:** split a full song into stems (drums, bass, vocals,
-  guitar, piano, synths) locally via Demucs v4 and get a ready-routed session.
-- **AI session setup:** drop in stems, instruments are detected and grouped
-  with routing and gain staging applied automatically.
-- **Reference system:** learn tonal balance and level targets from a reference
-  track (or genre preset); nudges gain staging and gently tilts the master EQ —
-  guidance, never forced.
-- **Local-first AI:** inference runs on-device (ONNX Runtime + CoreML / Apple
-  Neural Engine); no audio leaves your computer. A local training-data flywheel
-  records reviewed mix decisions so the AI can learn your taste over time.
+| Bereich | Enthaltene Funktionen |
+|---|---|
+| Aufnahme | Mehrspur-Audio, Eingangswahl, Monitoring, Vorzähler, Metronom, Punch-In/Out, Loop-Takes und Comping |
+| Arrangement | Clip-Auswahl und Mehrfachauswahl, Verschieben, Schneiden, Trimmen, Fades/Crossfades, Clip-Gain, Gain-Hüllkurven, Edit-Gruppen und Zusammenfügen |
+| Audio-Bearbeitung | Bounce in Place, Time-Stretch, Transientenerkennung, Warp-Marker und tonartbezogene Offline-Tonhöhenkorrektur |
+| Tempo | Tempo- und Taktartwechsel, Raster, Quantisierung, Tempo-Ermittlung aus Audio |
+| MIDI | Piano-Roll, Notenlänge, Velocity, Controller-Spur, Quantisierungsstärke, Swing und Skalenbezug |
+| Mixer | Audio-, Bus-, FX- und Masterkanäle, Sends, Bus-Routing, VCA-Gruppen, Sidechain, Mute/Solo, Panorama und Pegel |
+| Anzeigen | Peak/RMS/LUFS, EQ-Spektrum, Wellenformen und Abspielkopf |
+| Inserts | Einzelplugin- und Kettenkopien, Verschieben, Reihenfolge, Bypass, Bulk-Entfernen, Presets und gezielt ladbares Default-Preset |
+| Automation | Pluginparameter und Mischparameter mit Read/Touch/Latch/Write |
+| Instrumente | Aizana Synth mit zwei Oszillatoren und Presets; Aizana Drums mit 8×16-Sequencer und eigenen WAV-Samples |
+| Effekte | EQ mit Banddynamik, Kompressor, Reverb, Limiter, De-Esser, Delay, Gate und Saturator |
+| Plugin-Hosting | VST3, Audio Units auf macOS und CLAP; externe Plugins separat installieren |
+| Export | Stereo-Mixdown und Einzelspuren als WAV/AIFF, 44,1/48/96 kHz und 16/24/32 Bit; MP3-Export ist derzeit nicht implementiert |
+| Sessionverwaltung | Speichern, Medienordner, Autosave, Sicherungen und Wiederherstellung |
+| Assistenz | KI-Setup für vorhandene Stems, regelbasierter KI-Mix, Referenzanalyse, optionale lokale Stem-Separation und KI-Studio |
 
-### Instruments & built-in FX
+Separate Hardware-Cue-Ausgänge und das experimentelle Hosting in getrennten
+Prozessen haben eigene Prüfgrenzen. Die Tabelle beschreibt implementierte
+Funktionen, keine universelle Geräte- oder Plugin-Kompatibilitätsgarantie.
 
-- **Aizana Drums:** drum machine with 8×16 step sequencer, pad grid, and a
-  **WAV sampler** — load your own kick/snare/hats per pad or map a whole kit
-  folder; patterns run transport-synced and persist with the session.
-- **Aizana Synth:** 2-oscillator subtractive synth (filter env, ADSR, 16
-  voices) with factory presets.
-- **8 built-in effects:** parametric EQ (with spectrum analyzer), Compressor
-  (with sidechain), Reverb, Limiter, split-band De-Esser, tempo-synced Delay
-  (ping-pong), Gate (with sidechain key), and a Tape/Tube/Soft Saturator.
+## In wenigen Schritten zum Projekt
 
-### Recording, editing & mixing
+1. Eine neue Session anlegen und mit **Datei → Speichern unter…** Name und Ort
+   wählen. Bereits vorhandene Sessions über **Datei → Session öffnen…** laden.
+2. Audiodateien in das Arrangement ziehen oder über **Datei → Audio importieren…**
+   hinzufügen. Mehrere Dateien können eigene Spuren erhalten.
+3. Für Aufnahme den Eingang am Spurkopf auswählen, **REC** scharfschalten und
+   bei Bedarf Monitoring **I** aktivieren. Erst dann die Transportaufnahme starten.
+   Die Mikrofonfreigabe wird von macOS verwaltet.
+4. Mit **Mix** die Konsole öffnen, Pegel und Panorama einstellen. Busse bündeln
+   Ausgänge; FX-Kanäle werden über Sends beschickt.
+5. Über **Export** Mixdown oder Stems ausgeben. Bereich, Dateiformat,
+   Sample-Rate, Bittiefe, Mute/Solo und Master-Effekte vor dem Export prüfen.
 
-- Multi-track recording with loop **takes and comping**, punch in/out, and
-  input monitoring
-- **Seamless count-in:** the transport rolls through the count bars and punches
-  in sample-accurately, with no stop or gap at the switch. The click is
-  separately switchable for playback and for recording, so it can count you in
-  and then fall silent (vocals) or keep running (beat making)
-- Studio One-style **docked editor** (Edit | Mix | Browse) with dedicated
-  audio-clip and MIDI editing workspaces
-- **Audio bend/warp** (transient-snapped warp markers), **tempo track** with
-  time-signature changes, and **tempo-map extraction** from freely played audio
-- **Vocal tuning** (offline, scale-snapped pitch correction), clip timestretch
-  ("conform to song tempo"), and **clip gain envelopes**
-- Piano Roll with velocity lanes, scale lock, CC lane, and a **quantize bar**
-  (grid / strength / swing)
-- Automation for **every plugin parameter** (Read / Touch / Latch / Write),
-  fades, crossfades, clip trim/gain, edit groups, bounce-in-place
-- Arrangement tools: pointer, range, scissors, eraser and **mute tool**, plus
-  **merge events** (⌘J) — glues clips into one, natively for MIDI and via an
-  event-only render for audio, in a single undo step
-- Full mixing console: buses, FX channels with sends (incl. bus→bus),
-  VCAs, sidechain routing, **cue mixes** to separate hardware outputs
-  (pre-fader), LUFS/peak/RMS metering
-- Adaptive interface: **Beginner and Pro views** over the same session, with a
-  first-run wizard so you never start on a blank screen
-- VST3 / AU / **CLAP** plugin hosting with floating editors; experimental
-  **out-of-process hosting** (crash- and hang-isolated plugins, opt-in via
-  environment flag)
-- Export to WAV / AIFF (mixdown and stems) at 44.1/48/96 kHz
+## Bearbeiten und Comping
 
-### Sessions, files & crash safety
+- Clips auswählen, verschieben, an den Rändern trimmen und über die Fade-Griffe
+  ein- oder ausblenden. Die Werkzeuge sind oben im Arrangement erreichbar.
+- Command-Klick erweitert oder verkleinert die Auswahl. Die Auswahl von
+  Spurköpfen und die Auswahl von Clips sind getrennte Vorgänge.
+- Command-Z nimmt Bearbeitungen zurück, Command-Shift-Z wiederholt sie.
+- Bei Loop-Aufnahme entstehen Takes. In der Take-Ansicht lassen sich Abschnitte
+  verschiedener Takes zu einem Comp zusammenstellen. Ein ganzer Take kann zum
+  Vergleich gewählt werden; **Zusammengesetzt (Comp)** kehrt zur erhaltenen
+  Zusammenstellung zurück.
+- Ein Doppelklick auf einen MIDI-Clip öffnet den Editor. Die Piano-Roll zeigt
+  Noten neben der Klaviatur; darunter liegt die kompakte Velocity-Spur.
+  Die Controller-Spur ist bei Bedarf einblendbar. Noten lassen sich zeichnen,
+  verschieben, verlängern, löschen und quantisieren.
 
-Everything belonging to a session lives in one folder next to it, the way Studio
-One and Logic organise a project:
+## Inserts und FX-Ketten
 
-```
+Audio-, Bus-, FX- und Masterkanäle verwenden denselben Insert-Bereich:
+
+| Bedienung | Wirkung |
+|---|---|
+| Plus im Insert-Kopf | Pluginauswahl öffnen |
+| Doppelklick auf ein Plugin | Pluginfenster öffnen |
+| Punkt rechts am Plugin | Dieses Insert aktivieren/deaktivieren |
+| Plugin innerhalb der Liste ziehen | Reihenfolge ändern |
+| Plugin auf einen anderen Kanal ziehen | Mit Einstellungen kopieren |
+| Insert-Titel auf einen anderen Kanal ziehen | Gesamte Effektkette kopieren |
+| Alt/Option (⌥) beim kanalübergreifenden Ablegen | Bestehende Instanz bzw. Kette verschieben |
+| Power im Kopf | Alle Effekt-Inserts gemeinsam aktivieren/deaktivieren |
+| Pfeilmenü | Kette kopieren, einfügen, speichern, laden oder ausdrücklich ersetzen |
+| Alle entfernen | Effektkette in einem rückgängig machbaren Schritt entfernen |
+
+Kopieren **ergänzt** die Zielkette; Ersetzen ist ein eigener Menüpunkt. Interne
+Routing-, Lautstärke- und Meter-Bausteine sowie Instrumente bleiben geschützt.
+Das **Default-Preset** wird gespeichert und auf Wunsch geladen, nicht automatisch
+auf neue Kanäle angewendet. Presets haben die Endung `.aizfxchain`.
+
+Wiederverwendbare Kopien übernehmen Parameter, Reihenfolge und Bypass. Sie
+kopieren keine zeitbezogene Songautomation oder externe Sidechain-Quellverweise.
+Echte Verschiebeaktionen erhalten die ursprünglichen Instanzen und deren
+Verknüpfungen. Die neue Bedienung ist implementiert und automatisch getestet;
+die vollständige praktische Abnahme ist noch offen, siehe [STATUS.md](STATUS.md).
+
+## Häufige Tastenkürzel
+
+| Taste | Aktion |
+|---|---|
+| Leertaste | Wiedergabe starten/stoppen |
+| Command-S | Session speichern |
+| Command-Z / Command-Shift-Z | Rückgängig / Wiederholen |
+| Command-T | Spur hinzufügen |
+| Command-M | Mixer umschalten |
+| Command-E | Am Abspielkopf teilen |
+| Command-C / V / D | Clips kopieren / einfügen / duplizieren |
+| M / S | Ausgewählte Spur(en) stummschalten / solo |
+| R | Aufnahmebereitschaft der aktiven Spur |
+| C / Escape | Schere / Pfeilwerkzeug |
+| F | Abspielkopf automatisch folgen |
+
+Texteingaben haben Vorrang vor Spur- und Transportbefehlen. Manche Befehle
+wirken abhängig von der aktiven Ansicht und Auswahl.
+
+## Dateien und Sicherungen
+
+```text
 My Song/
-    My Song.tracktion        the session
-    My Song Audio/           recordings, plus Comps/ and Bounces/
-    Backups/                 backups + crash snapshot
+    My Song.tracktion
+    My Song Audio/
+        Comps/
+        Bounces/
+    Backups/
 ```
 
-- **Recordings, comps and bounces are written into that folder** — never loose
-  next to the session or into the system temp directory.
-- **Rotating autosave** (interval configurable, three slots) to step back to an
-  earlier state.
-- **Crash recovery:** a cheap state snapshot is written every minute and a marker
-  is cleared on clean shutdown. If the marker survives, the last session ended in
-  a crash — only then does Aizana offer to restore, and only if the snapshot is
-  newer than the saved session. Restoring writes back to the session, not into
-  the backup folder.
+Beim ersten Speichern werden benötigte Aufnahmen einschließlich alternativer
+Takes in den Session-Medienordner übernommen. Vor dem ersten Speichern legt
+Aizana Aufnahmen im benutzerspezifischen Musikordner ab. Fehlende Medien werden
+als Fehler gemeldet. Autosave und Wiederherstellung ergänzen das ausdrückliche
+Speichern; ein Wiederherstellungsangebot soll nicht ungelesen verworfen werden.
 
-## Requirements
+## KI-Setup, KI-Mix und Stem-Separation
 
-| Dependency | Version | Notes |
-|---|---|---|
-| CMake | 3.25+ | Build system |
-| Xcode | 14+ | macOS toolchain (Command Line Tools sufficient) |
-| JUCE | 8.x | Included as submodule at `extern/JUCE` |
-| Tracktion Engine | 3.x | Included as submodule at `extern/tracktion_engine` |
+Enthalten sind ein polyphoner Synthesizer, ein Drum-Instrument mit Sequencer und
+Sampler sowie EQ mit Banddynamik, Kompressor, Reverb, Limiter, De-Esser, Delay,
+Gate und Saturator. Externe Plugins werden über VST3, Audio Units und CLAP
+gehostet und separat installiert; Drittanbieter-Plugins sind nicht mitgeliefert.
 
-Optional, for the AI Studio assistant: a locally installed
-[Claude Code](https://claude.com/claude-code) or Codex CLI. Optional, for
-generating plugins: the [Faust](https://faust.grame.fr) compiler.
+**KI-Setup** arbeitet mit bereits vorhandenen Einzelspuren: Dateinamen und
+Audioanalyse helfen bei Instrumentzuordnung, Gruppierung, Routing und Gain-Staging.
+Es zerlegt keine gemischte Audiodatei und benötigt dafür keine Stem-Modellgewichte.
 
-## Building
+**KI-Mix** nutzt derzeit Regeln, kein mitgeliefertes trainiertes Mixing-Modell.
+Es schlägt Pegel-, EQ-, Dynamik- und Routing-Anpassungen vor. Eine Referenzdatei
+oder ein Genreprofil kann zusätzliche Zielwerte liefern. Die Ergebnisse sind
+überprüfbar und rückgängig zu machen; automatische Entscheidungen ersetzen nicht
+das Gegenhören.
 
-```bash
-# Clone with submodules
-git clone --recurse-submodules <repo-url>
-cd aizana
+**Stem-Separation** ist ein davon getrenntes Werkzeug zum Aufteilen einer fertigen
+Audiodatei.
+Stem-Separation läuft lokal mit dem MIT-freigegebenen MVSep-Mega-Modell von
+Roman Solovyev (ZFTurbo). Der einmalige optionale Modelldownload umfasst rund
+355 MB und wird vor der Verwendung per Größe und SHA-256 geprüft. Sechs Ausgaben
+sind möglich: Schlagzeug, Bass, Gesang, Gitarre, Klavier und Übriges als Restsignal;
+alternativ vier Kategorien. Python ist dafür nicht erforderlich. Modellgewichte
+sind nicht Bestandteil des Quellcode-Repos. Trennfehler sind möglich, besonders
+bei synthetischen Keyboard-Klangfarben. Herkunft, volle MIT-Hinweise und Grenzen:
+[Stem-Modell und Prüfstand](docs/OPEN_STEM_RELEASE.md). KI-Studio kann
+lokal installierte Claude-Code- oder Codex-CLI-Werkzeuge nutzen; deren Konten,
+Netzwerkzugriffe und Datenschutzbedingungen gelten separat. Eine pauschale
+Zusage, dass bei Nutzung solcher Agenten keine Daten den Rechner verlassen,
+wird nicht gemacht.
 
-# Configure
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+Der Faust-Plugin-Generator ist integriert. Zur Erzeugung neuer Plugins werden
+Faust und die Apple Command Line Tools auf dem jeweiligen Rechner benötigt;
+der Compiler wird nicht mit der App ausgeliefert. Details: [docs/MCP.md](docs/MCP.md).
 
-# Build (replace 8 with your core count)
-cmake --build build --config Release -j8
+## Aus dem Quellcode bauen
+
+Voraussetzungen: Apple Silicon, macOS 13.3+, Apple Command Line Tools (Clang),
+CMake 3.25+, Git und Python 3 für die Prüfskripte; Faust für den Plugin-Generator.
+Die Build-Konfiguration verwendet C++20. Abhängigkeiten werden beim Konfigurieren
+heruntergeladen. Zum Installieren der Apple Command Line Tools dient
+`xcode-select --install`; CMake und Faust müssen im Terminal über ihren Namen
+aufrufbar sein. Der erste Build benötigt Internetzugriff und deutlich mehr Zeit
+als spätere inkrementelle Builds.
+
+```sh
+git clone https://github.com/OmniLightX/Aizana.git
+cd Aizana
+git submodule update --init extern/JUCE extern/tracktion_engine
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAIZANA_UITEST_HOOK=OFF
+cmake --build build --target Aizana engine_tests oop_host_smoke -j4
+python3 tests/test_recording_patch.py
+python3 tests/test_state_patch.py
+ctest --test-dir build --output-on-failure
 ```
 
-The app bundle is written to `build/Aizana_artefacts/Release/Aizana.app`.
+App: `build/Aizana_artefacts/Release/Aizana.app`. Generator und ONNX sind
+standardmäßig aktiviert, sofern die notwendigen Werkzeuge vorhanden sind.
+`AIZANA_BUILD_GENERATOR=OFF` beziehungsweise `AIZANA_ENABLE_ONNX=OFF` erzeugen
+reduzierte Builds. Sie sind nicht funktionsgleich mit dem vollständigen Release.
+Der UI-Test-Hook darf in verteilten Builds niemals aktiviert sein.
+Die versionierten Tracktion-Patches werden beim Konfigurieren geprüft und
+angewendet. Ein abweichender lokaler Dependency-Stand wird nicht überschrieben.
 
-### Universal Binary (Apple Silicon + Intel)
+Die App anschließend über Finder öffnen oder:
 
-```bash
-cmake -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-cmake --build build --config Release -j8
+```sh
+open build/Aizana_artefacts/Release/Aizana.app
 ```
 
-The first `cmake -B build` downloads dependencies via `FetchContent`, including a
-prebuilt ONNX Runtime (~16 MB) for the local inference backend. To build without
-it, configure with `-DAIZANA_ENABLE_ONNX=OFF` (the AI backend then compiles as a
-defined no-op and Aizana falls back to its heuristics).
+Für Diagnoseprüfungen einen separaten Debug-Build anlegen und ebenfalls über
+CTest testen. Dabei muss die normale Aizana-App geschlossen sein, da die
+Geräteeinstellungen gemeinsam genutzt werden. Drittanbieter-Tests benötigen
+gezielt ausgewählte lokale Plugins; siehe [Teststand](docs/RELEASE_TESTS_2026-10-20.md).
+Alte Sessions und generierte Plugins aus der früheren Cloudes-Version werden
+weiter unterstützt. Dafür notwendige alte Dateiformat- und Migrationsbezeichner
+bleiben intern erhalten.
 
-## Known Limitations
+## Lizenz und Mitwirkung
 
-- **macOS only** (CoreAudio; no Windows/Linux build). Prebuilt binaries are
-  currently Apple Silicon (arm64) — Intel Macs need a universal rebuild (see
-  above).
-- **Public alpha** — expect rough edges; session-format stability is not yet
-  guaranteed across versions. Keep backups; don't use on irreplaceable client work yet.
-- **AI mixing is heuristic** today (Grammy-informed rules). A trained local model is
-  in progress — the inference seam is in place but ships without a bundled model, so
-  mixing currently runs on the heuristics.
-- **Plugin compatibility** across the full VST3/AU/CLAP ecosystem is not yet
-  exhaustively tested; out-of-process hosting is experimental and off by default.
-- **Model weights are not bundled** (see below) — stem separation downloads them on
-  first use.
-- **The interface is German.** A language switch is not currently planned;
-  `docs/SPRACHE.md` explains the reasoning and what one would actually cost.
-  Folder names Aizana writes to disk are English (`<Name> Audio`, `Comps`,
-  `Bounces`, `Backups`), the way Studio One and Logic keep them English on a
-  German system.
+Eigener Aizana-Code: **GPL-3.0-or-later**. Die Kombination mit JUCE verwendet den
+AGPLv3-Open-Source-Weg; Tracktion und weitere Komponenten behalten ihre eigenen
+Lizenzen. Siehe [LICENSE.md](LICENSE.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+und [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) zu Quellcode und Pflichten.
+Eigene Songs werden durch die Verwendung einer GPL/AGPL-DAW nicht automatisch
+unter deren Softwarelizenz gestellt.
 
-## AI Model Weights
 
-Aizana's stem separation uses the Demucs v4 hybrid-transformer models
-(© Meta / Facebook Research, [facebookresearch/demucs](https://github.com/facebookresearch/demucs)),
-run locally through the MIT-licensed [demucs.cpp](https://github.com/sevagh/demucs.cpp)
-inference library (vendored at `extern/demucs_cpp`).
+### Warum steht bei manchen Abhängigkeiten „Commercial“?
 
-**The model weights are not part of this software.** They are not bundled in
-the app, not stored in this repository, and never distributed by the Aizana
-project. On first use, Aizana offers to download them directly from public
-hosting onto your machine; that download happens between you and the hosting
-provider. All inference runs locally — no audio ever leaves your computer.
+JUCE und Tracktion bieten jeweils zwei alternative Lizenzwege. **Aizana verwendet
+hier den Open-Source-Weg:** JUCE unter AGPLv3, Tracktion unter GPL-3.0-or-later.
+Die zusätzliche kommerzielle Lizenzoption des jeweiligen Herstellers wird für
+diesen Weg nicht benötigt. Sie ist keine Kaufpflicht für Aizana-Nutzende.
+Die Original-Lizenztexte werden vollständig erhalten, einschließlich der dort
+beschriebenen Alternativen.
 
-Licensing note: the Demucs *code* is explicitly MIT-licensed; Meta has not
-published an explicit license statement for the pretrained *weights*
-(see [facebookresearch/demucs#327](https://github.com/facebookresearch/demucs/issues/327)).
-Aizana therefore only links to the publicly hosted files instead of
-redistributing them. The GPL-3.0 license of Aizana covers the Aizana source
-code only and does not extend to the model weights.
+| Bestandteil | Hier verwendete Lizenz |
+|---|---|
+| Eigener Aizana-Code | GPL-3.0-or-later |
+| JUCE 8 | AGPLv3 |
+| Tracktion Engine | GPL-3.0-or-later |
+| MVSep-Mega-Modellgewichte und relevante Modellimplementierung | MIT, konkrete Herkunft und Änderungen siehe Modellbericht |
+| ONNX Runtime, libebur128, CLAP und weitere Komponenten | MIT sowie enthaltene Fremdhinweise |
+| SoundTouch | LGPL-2.1-or-later |
+| Eigen | MPL-2.0 sowie enthaltene Fremdhinweise |
+| Catch2 (Tests) | BSL-1.0 |
 
-## Project Structure
+Dies ist die Übersicht, nicht der Ersatz für die vollständigen Texte in
+[licenses/](licenses/), [COPYING](COPYING), [COPYING.AGPL](COPYING.AGPL) und
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Bei Weitergabe oder Änderungen
+müssen insbesondere Lizenz- und Urheberhinweise, Änderungsvermerke und die
+jeweiligen Quellcodepflichten erhalten beziehungsweise erfüllt werden.
+Apple-Buildwerkzeuge, optionale KI-Dienste und selbst installierte Plugins werden
+separat bezogen und nicht durch Aizanas Projektlizenz mitlizenziert.
 
-```
-src/
-  app/         — application entry, main shell, legacy migration
-  ai/          — StemAnalyzer, SessionPlanner, StemImport/SeparationEngine,
-                 MixingEngine, AiAgentBridge, live-session AI server
-  audio/       — AudioEngine, recording
-  engine/      — MixerEngine, ClipEditor, TempoEngine, WarpEngine,
-                 VocalTuner, ExportPipeline, AICommandBridge
-  fx/          — 8 built-in effects (EQ, Comp, Reverb, Limiter, De-Esser,
-                 Delay, Gate, Saturator)
-  instruments/ — Aizana Drums (sequencer + sampler), Aizana Synth
-  generator/   — text → Faust → CLAP plugin generator
-  plugins/     — plugin scanning/hosting, out-of-process hosting
-  mcp/         — aizana-mcp server (AI Studio tool backend)
-  metering/    — LUFS/peak/RMS metering
-  ui/          — arrangement, mixer, docked editor, piano roll, AI Studio,
-                 beginner view, onboarding, comping, automation
-extern/
-  JUCE/
-  tracktion_engine/
-  demucs_cpp/  — vendored MIT inference library for stem separation
-```
+Externe Pull Requests werden derzeit nicht angenommen. Bugreports mit
+Versionsnummer und reproduzierbaren Schritten sind willkommen. Eigene Forks und
+Änderungen sind im Rahmen der Lizenz erlaubt.

@@ -19,6 +19,7 @@ juce_add_console_app(engine_tests
 
 target_sources(engine_tests PRIVATE
     test_main.cpp
+    test_recording_start.cpp
     test_plugin_bus_state.cpp
     test_undo.cpp
     test_clip_editing.cpp
@@ -201,6 +202,8 @@ target_compile_definitions(engine_tests PRIVATE
     # Tracktion debug assertions reference members compiled only in Debug.
     # Preserve Release semantics; Debug is the mandatory diagnostic gate.
     JUCE_LOG_ASSERTIONS=$<IF:$<CONFIG:Debug>,1,0>
+    JUCE_PLUGINHOST_VST3=1
+    JUCE_PLUGINHOST_AU=$<BOOL:${APPLE}>
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_APPLICATION_NAME_STRING="AizanaEngineTests"

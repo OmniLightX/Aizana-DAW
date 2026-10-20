@@ -1,0 +1,95 @@
+diff --git a/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.cpp b/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.cpp
+index 6197eb7d61a..64097655a63 100644
+--- a/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.cpp
++++ b/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.cpp
+@@ -792,10 +792,10 @@ void EditPlaybackContext::prepareForPlaying (TimePosition startTime)
+     createPlayAudioNodesIfNeeded (startTime);
+ }
+ 
+-void EditPlaybackContext::prepareForRecording (TimePosition startTime, TimePosition punchIn)
++juce::Result EditPlaybackContext::prepareForRecording (TimePosition startTime, TimePosition punchIn)
+ {
+     createPlayAudioNodesIfNeeded (startTime);
+-    startRecording (startTime, punchIn);
++    return startRecording (startTime, punchIn);
+ }
+ 
+ static SelectionManager* findAppropriateSelectionManager (Edit& ed)
+diff --git a/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.h b/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.h
+index ad953f773e3..c199193a2bc 100644
+--- a/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.h
++++ b/modules/tracktion_engine/playback/tracktion_EditPlaybackContext.h
+@@ -35,7 +35,7 @@ public:
+ 
+     // Prepares the graph but doesn't actually start the playhead
+     void prepareForPlaying (TimePosition startTime);
+-    void prepareForRecording (TimePosition startTime, TimePosition punchIn);
++    juce::Result prepareForRecording (TimePosition startTime, TimePosition punchIn);
+ 
+     // Plays this context in sync with another context
+     void syncToContext (EditPlaybackContext* contextToSyncTo, TimePosition previousBarTime, TimeDuration syncInterval);
+diff --git a/modules/tracktion_engine/playback/tracktion_TransportControl.cpp b/modules/tracktion_engine/playback/tracktion_TransportControl.cpp
+index ca969c8cf6f..d3bd0157084 100644
+--- a/modules/tracktion_engine/playback/tracktion_TransportControl.cpp
++++ b/modules/tracktion_engine/playback/tracktion_TransportControl.cpp
+@@ -1441,7 +1441,12 @@ std::optional<std::pair<SyncPoint, std::optional<TimeRange>>> TransportControl::
+                 const auto currentPos = playbackContext->getPosition();
+                 const auto punchInTime = edit.recordingPunchInOut ? getLoopRange().getStart() : currentPos;
+ 
+-                playbackContext->prepareForRecording (currentPos, punchInTime);
++                if (auto result = playbackContext->prepareForRecording (currentPos, punchInTime); result.failed())
++                {
++                    engine.getUIBehaviour().showWarningAlert (TRANS("Recording"), result.getErrorMessage());
++                    return std::nullopt;
++                }
++
+                 transportState->safeRecording = engine.getPropertyStorage().getProperty (SettingID::safeRecord, false);
+ 
+                 sendChangeMessage();
+@@ -1557,7 +1562,13 @@ std::optional<std::pair<SyncPoint, std::optional<TimeRange>>> TransportControl::
+                         TransportHelpers::resyncLauncherClips (*this, punchInPoint, false);
+                     }
+ 
+-                    playbackContext->prepareForRecording (prerollStart, transportState->startTime.get());
++                    if (auto result = playbackContext->prepareForRecording (prerollStart, transportState->startTime.get()); result.failed())
++                    {
++                        engine.getUIBehaviour().showWarningAlert (TRANS("Recording"), result.getErrorMessage());
++                        clearPlayingFlags();
++                        playHeadWrapper->stop();
++                        return std::nullopt;
++                    }
+ 
+                     if (edit.getNumCountInBeats() > 0)
+                     {
+diff --git a/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp b/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp
+--- a/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp
++++ b/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp
+@@ -308,23 +308,23 @@
+         {
+             TRACKTION_LOG_ERROR ("Record fail: can't create parent directory: " + recordedFile.getFullPathName());
+ 
+-            return TRANS("The directory\nXZZX\ndoesn't exist")
+-                .replace ("XZZX", recordedFile.getParentDirectory().getFullPathName());
++            return tl::unexpected (TRANS("The directory\nXZZX\ndoesn't exist")
++                .replace ("XZZX", recordedFile.getParentDirectory().getFullPathName()));
+         }
+ 
+         if (! recordedFile.getParentDirectory().hasWriteAccess())
+         {
+             TRACKTION_LOG_ERROR ("Record fail: directory is read-only: " + recordedFile.getFullPathName());
+ 
+-            return TRANS("The directory\nXZZX\n doesn't have write-access")
+-                .replace ("XZZX", recordedFile.getParentDirectory().getFullPathName());
++            return tl::unexpected (TRANS("The directory\nXZZX\n doesn't have write-access")
++                .replace ("XZZX", recordedFile.getParentDirectory().getFullPathName()));
+         }
+ 
+         if (! recordedFile.deleteFile())
+         {
+             TRACKTION_LOG_ERROR ("Record fail: can't overwrite file: " + recordedFile.getFullPathName());
+ 
+-            return TRANS("Can't overwrite the existing file:") + "\n" + recordedFile.getFullPathName();
++            return tl::unexpected (TRANS("Can't overwrite the existing file:") + "\n" + recordedFile.getFullPathName());
+         }
+ 
+         return recordedFile;

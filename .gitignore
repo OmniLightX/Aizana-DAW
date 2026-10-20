@@ -85,3 +85,8 @@ xtra mds/
 !/cmake/
 !/cmake/ApplyTracktionStatePatch.cmake
 !/tests/RunEngineTests.cmake
+
+# Public source distribution inputs
+!/cmake/*.cmake
+!licenses/
+!licenses/**

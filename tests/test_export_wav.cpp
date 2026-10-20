@@ -1,11 +1,8 @@
 #include "ScopedTestLogger.h"
 // test_export_wav.cpp — EXP-01: Stereo-Mixdown-Export; EXP-04: Format/Samplerate
 //
-// Die ersten drei Faelle sind seit Phase 1 Stubs geblieben (die Renderer-Pfade
-// waren headless nicht fahrbar, bis JUCE_MODAL_LOOPS_PERMITTED auch fuer
-// engine_tests gesetzt wurde). Neu dazu 2026-08-11 ein Fall, der den
-// Auslieferungspfad an genau der Stelle absichert, an der er nachweislich
-// falsch lief:
+// Die frueheren Platzhalter pruefen jetzt Header, PCM und Wiederholbarkeit.
+// Der weitere Regressionstest sichert den Offline-/Live-Graph-Konflikt ab:
 //
 //   Waehrend eines Offline-Renders haengt der Edit weiter am Audio-Geraet, und
 //   der LIVE-Graph verarbeitet dieselben Plugin-Instanzen weiter. Bei
@@ -19,16 +16,92 @@
 #include "engine/ClipEditor.h"
 #include "engine/ExportPipeline.h"
 
-TEST_CASE("ExportWAV: rendered output matches expected offline render checksum", "[export][EXP-01][stub]") {
-    SKIP("Stub — implement when RenderPipeline is available (plan 01-07)");
-}
+namespace
+{
+struct ExportFixture
+{
+    juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("aizana-export-contract", {}, false);
+    EditManager manager;
+    ExportFixture()
+    {
+        REQUIRE(dir.createDirectory().wasOk());
+        manager.createNewEdit();
+        // Tracktion initializes the master at -3 dB; this reference uses unity gain.
+        auto& edit=*manager.getEdit();
+        auto& um=edit.getUndoManager(); um.beginNewTransaction("Reference unity gain");
+        edit.getMasterVolumePlugin()->volume.setValue(te::decibelsToVolumeFaderPosition(0.0f), &um);
+        edit.getMasterVolumePlugin()->setVolumeDb(0.0f);
 
-TEST_CASE("ExportWAV: 96kHz/24-bit export produces valid WAV header with correct sample rate", "[export][EXP-04][stub]") {
-    SKIP("Stub — implement when RenderPipeline is available (plan 01-07)");
+        auto input = dir.getChildFile("input.wav");
+        auto stream = input.createOutputStream();
+        REQUIRE(stream != nullptr);
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(stream.get(),44100,2,24,{},0));
+        REQUIRE(writer != nullptr); stream.release();
+        juce::AudioBuffer<float> audio(2,44100);
+        for (int c=0;c<2;++c)
+            for (int i=0;i<44100;++i)
+                audio.setSample(c,i,0.2f*std::sin(2.0*juce::MathConstants<double>::pi*(c==0?440:660)*i/44100.0));
+        REQUIRE(writer->writeFromAudioSampleBuffer(audio,0,audio.getNumSamples()));
+        writer.reset();
+        ClipEditor editor(manager);
+        REQUIRE(editor.importAudioFile(input,*te::getAudioTracks(*manager.getEdit())[0],0.0) != nullptr);
+    }
+    ~ExportFixture() { dir.deleteRecursively(); }
+    juce::AudioBuffer<float> render(double rate,int bits,const char* filename)
+    {
+        ExportOptions options;
+        options.outputFile=dir.getChildFile(filename);options.sampleRate=rate;options.bitDepth=bits;
+        ExportPipeline pipeline;
+        REQUIRE(pipeline.exportMixdown(*manager.getEdit(),options).isEmpty());
+        juce::AudioFormatManager formats;formats.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(options.outputFile));
+        REQUIRE(reader != nullptr);
+        CHECK(reader->sampleRate==rate);CHECK(reader->bitsPerSample==bits);REQUIRE(reader->numChannels==2);
+        CHECK(std::abs(reader->lengthInSamples-(juce::int64)rate)<=1);
+        juce::AudioBuffer<float> result(2,(int)reader->lengthInSamples);
+        REQUIRE(reader->read(&result,0,result.getNumSamples(),0,true,true));
+        // Independent known stereo signal. The pinned TE WaveNode uses JUCE's
+        // Lagrange interpolator without source-latency compensation: two SOURCE
+        // samples (45.35 us at 44.1 kHz), also at unity ratio. Verify this fixed
+        // response, not a best-fit shift which could hide a new alignment bug.
+        // Edges are omitted because clip start/end fades affect them.
+        for(int c=0;c<2;++c)
+        {
+            double error=0.0;
+            for(int i=(int)(rate*0.1);i<(int)(rate*0.9);++i)
+            {
+                auto expected=0.2*std::sin(2.0*juce::MathConstants<double>::pi*(c==0?440:660)*(i/rate - 2.0/44100.0));
+                error=std::max(error,std::abs(result.getSample(c,i)-expected));
+            }
+            INFO("channel="<<c<<" rate="<<rate<<" bits="<<bits<<" max error="<<error);
+            // WaveNode rounds each resampled block to whole source frames.
+            // Bound that quantisation by half a source sample at this frequency;
+            // unity-rate output has no such block-rounding allowance.
+            const double phaseBound = rate == 44100.0 ? 0.0
+                : 0.2 * 2.0 * juce::MathConstants<double>::pi * (c == 0 ? 440 : 660) / 44100.0 * 0.5;
+            CHECK(error < phaseBound + 2.0 / 32768.0);
+        }
+        return result;
+    }
+};
 }
-
-TEST_CASE("ExportWAV: 44.1kHz/16-bit and 48kHz/24-bit exports both produce valid WAV files", "[export][EXP-04][stub]") {
-    SKIP("Stub — implement when RenderPipeline is available (plan 01-07)");
+TEST_CASE("ExportWAV: repeatable PCM matches the independent stereo reference", "[export][EXP-01]")
+{
+    ExportFixture f;
+    auto a=f.render(44100,24,"first.wav");auto b=f.render(44100,24,"second.wav");
+    REQUIRE(a.getNumSamples()==b.getNumSamples());
+    for(int c=0;c<2;++c)
+        CHECK(std::memcmp(a.getReadPointer(c),b.getReadPointer(c),a.getNumSamples()*sizeof(float))==0);
+}
+TEST_CASE("ExportWAV: 96kHz/24-bit output has valid header and stereo signal", "[export][EXP-04]")
+{
+    ExportFixture f;f.render(96000,24,"96k.wav");
+}
+TEST_CASE("ExportWAV: 44.1kHz/16-bit and 48kHz/24-bit retain the stereo signal", "[export][EXP-04]")
+{
+    ExportFixture f;f.render(44100,16,"44k.wav");f.render(48000,24,"48k.wav");
 }
 
 // ---------------------------------------------------------------------------

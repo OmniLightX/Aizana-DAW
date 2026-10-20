@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.25)
-project(Aizana VERSION 0.2.1)
+# The bundled ONNX Runtime requires macOS 13.3. Do not inherit the build Mac's
+# newer OS version as an accidental deployment requirement.
+if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+project(Aizana VERSION 0.3.0)
 
+# Release binaries must not embed the maintainer's source/build paths.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}=."
+                        "-ffile-prefix-map=${CMAKE_BINARY_DIR}=./build")
+endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -16,6 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Version comes from the pinned submodule (extern/JUCE, commit 19edd538), NOT from
 # this comment — read modules/juce_core/juce_core.h if in doubt.
 # Must be added BEFORE tracktion_engine modules, which use JUCE targets.
+include(cmake/ApplyTracktionRecordingPatch.cmake)
 add_subdirectory(extern/JUCE)
 
 # Tracktion Engine v3.2.0 — Add only the modules/ directory, NOT the root CMakeLists.txt.
@@ -129,10 +140,10 @@ if(AIZANA_BUILD_GENERATOR AND FAUST_EXECUTABLE)
     # clap CMake project (target-name clash with clap_api above).
     FetchContent_Declare(clap_gen
         GIT_REPOSITORY https://github.com/free-audio/clap.git
-        GIT_TAG        main)
+        GIT_TAG        a47f6badb49d948fd009998f28309cdab78979c9)
     FetchContent_Declare(clap_helpers
         GIT_REPOSITORY https://github.com/free-audio/clap-helpers.git
-        GIT_TAG        main)
+        GIT_TAG        629ae7526740e3d0ee4d64c230df183ecdb2ff5a)
     FetchContent_Populate(clap_gen)
     FetchContent_Populate(clap_helpers)
 
@@ -171,7 +182,7 @@ endif()
 juce_add_gui_app(Aizana
     PRODUCT_NAME                    "Aizana"
     BUNDLE_ID                       "com.aizanagi.aizana"
-    VERSION                         "0.2.1"
+    VERSION                         "${PROJECT_VERSION}"
     ICON_BIG                        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AizanaIcon.png"
     MICROPHONE_PERMISSION_ENABLED   TRUE
     MICROPHONE_PERMISSION_TEXT      "Aizana needs microphone access to record audio tracks."
@@ -369,7 +380,7 @@ target_compile_definitions(Aizana PRIVATE
     # these, addDefaultFormats() adds nothing for the format and the user's library never
     # appears — independent of the in-process crash issue (Fix 4).
     #
-    # AU (enabled 2026-06-07): the user's 1141-plugin library is largely AudioUnits, so
+    # AU hosting supports AudioUnit libraries alongside VST3, so
     # they stay invisible without this. Safe to enable now because (a) AUs are probed in
     # the crash/hang-isolated worker (60s watchdog → a stalling AU blacklists itself and
     # the scan continues), (b) incremental persistence means a slow first AU scan is
@@ -408,7 +419,9 @@ if(AIZANA_ENABLE_ONNX)
     target_link_libraries(Aizana PRIVATE onnxruntime)
     target_compile_definitions(Aizana PRIVATE AIZANA_HAVE_ONNXRUNTIME=1)
     set_target_properties(Aizana PROPERTIES
-        BUILD_RPATH "${AIZANA_ORT_LIBDIR};@executable_path/../Frameworks")
+        BUILD_RPATH "@executable_path/../Frameworks"
+        INSTALL_RPATH "@executable_path/../Frameworks"
+        BUILD_WITH_INSTALL_RPATH TRUE)
     add_custom_command(TARGET Aizana POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Frameworks"
@@ -422,6 +435,8 @@ endif()
 # Contents/Resources/Generator so the in-app generator can load them (Iteration B).
 if(AIZANA_HAVE_GENERATOR)
     add_dependencies(Aizana aizana_generator_templates)
+    # A changed template must rerun bundling even when no C++ source changed.
+    set_property(TARGET Aizana APPEND PROPERTY LINK_DEPENDS "${GEN_CLAPS}")
     target_compile_definitions(Aizana PRIVATE AIZANA_HAVE_GENERATOR=1)
     add_custom_command(TARGET Aizana POST_BUILD
         # Clear first so removed/renamed templates don't linger in the bundle.
@@ -505,3 +520,28 @@ endif()
 
 enable_testing()
 add_subdirectory(tests)
+
+# License and source-access notices travel with the app, not only the repository.
+file(GLOB_RECURSE AIZANA_LICENSE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")
+set_property(TARGET Aizana APPEND PROPERTY LINK_DEPENDS
+    ${AIZANA_LICENSE_FILES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
+    "${CMAKE_CURRENT_SOURCE_DIR}/COPYING.AGPL"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/DISTRIBUTION.md")
+add_custom_command(TARGET Aizana POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/licenses"
+        "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
+        "${CMAKE_CURRENT_SOURCE_DIR}/COPYING.AGPL"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/DISTRIBUTION.md"
+        "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses/"
+    VERBATIM)

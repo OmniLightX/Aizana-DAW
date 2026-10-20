@@ -1,3 +1,7 @@
 
 # Unified diff context lines contain a required single-space prefix.
 patches/tracktion-state-lifecycle.patch -whitespace
+patches/tracktion-recording-errors.patch -whitespace
+
+# Preserve verbatim upstream notices, including original whitespace and line endings.
+licenses/** -whitespace

@@ -5,7 +5,9 @@ obligations that matter for public source or binary distribution.
 
 This is a technical release checklist, not legal advice. When shipping a public
 binary, include this notice, the project license, the exact source for the
-released commit, and the source or license text for each bundled dependency.
+released commit, and the applicable license texts and notices for each bundled
+dependency. License texts do not replace corresponding source where a component's
+license requires it; follow `docs/DISTRIBUTION.md` for source delivery.
 
 ## Project License
 
@@ -39,6 +41,31 @@ list is in `extern/JUCE/LICENSE.md`.
 - Upstream: https://github.com/Tracktion/tracktion_engine
 - License page: https://github.com/Tracktion/tracktion_engine/blob/develop/LICENSE.md
 
+### Tracktion transitive components
+
+The pinned engine also contains these components. Header notices remain in the
+submodule; selected embedded notices are additionally preserved in
+`licenses/Tracktion/embedded/`. Inclusion here inventories source, not a claim
+that every platform-specific component executes in the macOS app.
+
+| Component | Upstream license | Evidence |
+|---|---|---|
+| Airwindows | MIT, Chris Johnson | `licenses/Tracktion/Airwindows/LICENSE` and origin record |
+| CHOC | ISC, additional notices where specified | `licenses/Tracktion/3rd_party/choc/LICENSE.md` |
+| crill | BSL-1.0 | `licenses/Tracktion/3rd_party/crill/LICENSE.txt` |
+| farbot | MIT | `licenses/Tracktion/tracktion_graph/3rd_party/farbot/LICENSE` |
+| rpmalloc | Public-domain dedication | embedded rpmalloc header notice |
+| ConcurrentQueue | Simplified BSD / Boost option | embedded ConcurrentQueue header notice |
+| tl::expected | CC0-1.0 | `licenses/Tracktion/expected/COPYING` and header |
+| libsamplerate | BSD-2-Clause | `licenses/Tracktion/libsamplerate/COPYING` and header |
+| NanoRange | BSL-1.0 | embedded header; full BSL text also in crill/Catch2 notices |
+| rigtorp MPMCQueue | MIT | embedded MPMCQueue header notice |
+| magic_enum | MIT | embedded magic_enum header notice |
+| doctest 2.4.11 | MIT; acknowledged BSL-derived portions | `licenses/Tracktion/doctest/LICENSE.txt`, header and BSL text |
+
+Upstream license additions include retrieval origins. They supplement, rather
+than replace, copyrights and modification notices in the pinned engine.
+
 Aizana modifications by Aizanagi and the Aizana contributors, 20 October 2026:
 `patches/tracktion-state-lifecycle.patch` preserves plugin bus layouts when
 derived metadata is absent, validates layouts before changing processor buses,
@@ -59,6 +86,12 @@ notices remain intact.
   releases should include the SoundTouch notice and corresponding source offer.
 
 ### ONNX Runtime
+
+The supplied ThirdPartyNotices file is a broad upstream aggregation, including
+components for configurations/platforms other than this macOS build. Its listing
+of a component alone does not prove that component is linked here. Aizana does
+not relabel all entries as MIT or redistribute the ONNX binary in its Git tree;
+the configured build downloads the separately licensed upstream distribution.
 
 - Location: downloaded by CMake when `AIZANA_ENABLE_ONNX=ON`
 - License: MIT
@@ -118,60 +151,62 @@ Aizana uses Apple platform APIs such as CoreAudio, AudioUnit, AVFoundation, and
 CoreML through JUCE, Tracktion Engine, and macOS SDKs. These are system/platform
 interfaces and are not bundled as Aizana source dependencies.
 
-For public macOS distribution, prefer a notarized direct download over Mac App
-Store distribution because GPL/AGPL-style copyleft and app-store terms can be
-hard to reconcile.
+Current distribution is source through GitHub, with local builds using Apple
+development tools. Apple SDKs remain separately obtained platform requirements.
 
 ## AI and Model Weight Notices
 
-### demucs.cpp
+### MVSep Mega 53 Stems v1 (optional model data)
 
-- Location: `extern/demucs_cpp`
-- License: MIT
-- Use in Aizana: local source-separation inference wrapper for Demucs-format
-  models.
-- Upstream: https://github.com/sevagh/demucs.cpp
+- Original trainer: Roman Solovyev (ZFTurbo); model weights explicitly released
+  under MIT: https://github.com/ZFTurbo/Music-Source-Separation-Training/issues/245
+- Original checkpoint and configuration: upstream release v1.0.21.
+- Architecture attribution: Phil Wang, BS-RoFormer (MIT).
+- Full notices: `licenses/Mega53/LICENSE.Mega53` and
+  `licenses/Mega53/LICENSE.BS-RoFormer`; also embedded in the converted ONNX file.
+- Aizana selects the original drums, bass, vocal, guitar and piano heads, without
+  retraining. Native STFT/ISTFT surround the exported mask network. The sixth
+  output, Other, is the input minus the five estimates. Four-category mode folds
+  guitar and piano into Other. This is a conversion, not a newly trained model.
+- Exact upstream sources, hashes, changes and the final artifact are recorded in
+  `docs/research/mega53/candidate-manifest.json` and `docs/OPEN_STEM_RELEASE.md`.
+- Model data is downloaded only with user consent, then size/SHA-256 verified.
+  No weights or private test audio are tracked in this source repository.
+- The trainer does not warrant rights in all training recordings or provide
+  indemnification. MIT permission is not a blanket training-data clearance.
 
-### Demucs Code
+### Legacy demucs.cpp source
 
-- Upstream: https://github.com/facebookresearch/demucs
-- License: MIT for the Demucs source code.
+`extern/demucs_cpp` remains MIT-licensed archival source, with its notice retained
+at `licenses/demucs.cpp/LICENSE`. The active separation backend does not load or
+request Demucs/htdemucs weights. Earlier research about their ambiguous weight
+license remains historical evidence, not the active provider description.
 
-### Demucs / htdemucs Model Weights
+## Integrated plugin generator
 
-Aizana must not bundle pretrained Demucs model weights in the source repo or
-binary release unless the distributor has independently verified the right to do
-so.
+The Faust-to-CLAP generator is part of this release. Faust 2.85.5 is a build-time
+and optional runtime tool installed by the user; its compiler binary is not
+bundled. The installed compiler is LGPL-2.1-or-later (see licenses/Faust-COPYING.txt).
+The license of generated output depends on the input DSP libraries and
+architecture files, not automatically on the compiler license.
 
-Aizana' current public-release-safe model is:
+Bundled templates are built from generator/templates, the Faust CLAP architecture,
+Faust headers/standard libraries, and CLAP/clap-helpers. Their source inputs and
+notices must accompany the corresponding-source distribution. Some unmodified
+Faust architecture headers include their own special exception; retain it.
+The CLAP backend itself does not carry that exception in its file header; do
+not assume every architecture file grants identical output permissions. The
+source-only distribution obtains Faust separately. Generated output must retain
+the actual applicable notices. The current reverb uses stereo_freeverb; generated
+metadata identifies MIT-style STK-4.3 filter code and LGPL-with-exception maths.
+Other functions in the same library have different terms and must not be
+automatically treated as having those same permissions.
+Do not apply a blanket claim that all generated plugins have no license obligations.
 
-- no model weights in the Git repository
-- no model weights in the app bundle
-- first-use download initiated by the user
-- clear UI/distribution notice showing the model source and explaining that the
-  download happens between the user and the hosting provider
-
-Current code points at the Hugging Face dataset:
-
-- https://huggingface.co/datasets/Retrobear/demucs.cpp
-
-The dataset card labels the converted weights as MIT and lists the original
-Meta/Facebook Research weight origins. Because model weights are separate from
-source code and have historically had licensing ambiguity, any distributor that
-bundles weights should re-check the current model license before release.
-
-## Not Yet Integrated (add before shipping the plugin generator)
-
-The Text→Faust→CLAP plugin generator (Spike S2, proven; not yet in the app) will
-add these and they must be listed here once integrated:
-
-- **Faust compiler** (GRAME) — GPL with the *Faust exception*, which permits the
-  compiler's generated output to be relicensed; the bundled Faust runtime/architecture
-  headers are permissive/GPL-compatible. Confirm at release.
-- **clap-helpers** (https://github.com/free-audio/clap-helpers) — MIT; C++ wrapper
-  headers required by Faust's CLAP architecture.
-- Faust standard libraries used per template (mostly permissive / STK-style) — verify
-  per template that is shipped.
+- CLAP generator API: a47f6badb49d948fd009998f28309cdab78979c9 (MIT).
+- clap-helpers: 629ae7526740e3d0ee4d64c230df183ecdb2ff5a (MIT).
+- Host CLAP API remains pinned to 1.2.0 (MIT).
+- Faust: https://faustdoc.grame.fr/manual/faq/
 
 ## Local Test Assets
 
@@ -193,8 +228,16 @@ Before a public source or binary release:
 2. Include source access for the exact binary release.
 3. Include notices for JUCE, Tracktion Engine, SoundTouch, ONNX Runtime, Eigen,
    libebur128, CLAP, Catch2 if tests are shipped, and VST3 SDK where applicable.
-4. Do not bundle Demucs/htdemucs weights unless their separate license has been
-   verified for redistribution.
+4. Preserve the optional Mega model's MIT notices, exact provenance and conversion
+   record; do not reintroduce unqualified Demucs/htdemucs weight downloads.
 5. Do not ship ignored local audio material.
 6. Avoid implying endorsement by Apple, Fender, PreSonus, Steinberg, Avid,
    Ableton, FabFilter, Meta, Microsoft, or other third parties.
+
+## Source and binary delivery
+
+Complete collected license texts are in licenses/. Include them in the app's
+Resources/Licenses directory and in the source archive. A private GitHub URL
+alone is not a public corresponding-source offer. The source archive must
+include submodules and the recording patch, not only the top-level checkout.
+See docs/DISTRIBUTION.md and docs/RELEASE_READINESS.md.

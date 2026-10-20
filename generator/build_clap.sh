@@ -25,7 +25,9 @@ META
 
 # Compile/link -> universal, self-contained .clap (clap-helpers-impl = template instantiation;
 # faust_gui_globals = the one-time GUI::gTimedZoneMap definition).
-clang++ -std=c++17 -O2 -fPIC -shared -arch arm64 -arch x86_64 \
+clang++ -std=c++17 -O2 -fPIC -shared -arch arm64 -arch x86_64 -mmacosx-version-min=13.3 \
+  -Wl,-install_name,"@rpath/${BASE}.clap" \
+  -ffile-prefix-map="$WORK"=generator-work \
   -I"$FAUST_INC" -I"$CLAP_INC" -I"$HELP_INC" -I"$WORK" \
   "$WORK/${BASE}_clap.cpp" "$ARCHDIR/clap/clap-helpers-impl.cpp" "$GLOBALS" \
   -o "$OUT"
