@@ -7,6 +7,40 @@ Audio- und MIDI-Bearbeitung, Comping, Busse, FX-Sends und Export gehören zum
 Programm. Die Oberfläche ist deutsch. KI-Funktionen sind zusätzliche Werkzeuge;
 Aufnahme und Mixing benötigen keinen KI-Account.
 
+[Bedienungsanleitung](MANUAL.md) ·
+[Erster Start](docs/ALPHA_INSTALL.md) ·
+[Funktionsübersicht](#funktionsübersicht) ·
+[Selbst bauen](#aus-dem-quellcode-bauen) ·
+[Lizenzen](#lizenz-und-mitwirkung)
+
+## Wie Aizana entstanden ist
+
+Ich bin Audioingenieur und komme aus der Musik, nicht aus der Softwareentwicklung.
+Aizana begann mit einer persönlichen Frage: Wie weit komme ich, wenn ich meine
+Erfahrung mit Audio und meine Vorstellungen von einer DAW mit den Möglichkeiten
+von KI verbinde?
+
+Aus dieser Neugier sind Monate intensiver Arbeit geworden. Ich habe das Projekt
+allein mit Unterstützung von KI entwickelt, Ideen ausprobiert, Ergebnisse
+getestet, Fehler gesucht und vieles wieder überarbeitet. Die KI hat mir bei der
+technischen Umsetzung geholfen. Was daraus werden sollte und wie es sich beim
+Musikmachen bedienen lassen soll, habe ich aus meiner eigenen Praxis eingebracht.
+
+Dabei baut Aizana auf bestehenden Open-Source-Projekten auf. Ohne die Arbeit
+dieser Entwickler wäre das in dieser Form nicht möglich gewesen. Die verwendeten
+Komponenten, ihre Urheber und die jeweiligen Lizenzen sind im Projekt dokumentiert.
+
+Ich teile Aizana und den Quellcode kostenlos mit euch, weil ich zeigen möchte,
+was aus einem solchen persönlichen Experiment entstehen kann. Wer ebenfalls Musik
+macht, neugierig auf die Technik ist oder selbst daran weiterarbeiten möchte, ist
+eingeladen, es auszuprobieren und sich unter den jeweiligen Lizenzbedingungen
+einzubringen.
+
+Aizana ist mein Hobbyprojekt, und ich freue mich, das Ergebnis dieser Arbeit mit
+euch zu teilen.
+
+## Projektstand und Orientierung
+
 **Kostenlos und Open Source:** Wir stellen den Quellcode von Aizana kostenlos
 zum Selbstbauen, Nutzen und Weiterentwickeln bereit. Der eigene Code steht unter
 GPL-3.0-or-later; Abhängigkeiten behalten ihre Lizenzbedingungen, insbesondere
@@ -40,6 +74,30 @@ bearbeiten und Songs mischen möchten. Anfänger und erfahrene Anwender arbeiten
 mit derselben Session; die Beginner- und Pro-Ansichten unterscheiden sich in der
 Darstellung und im Umfang der angebotenen Entscheidungen. Automatische Vorschläge
 bleiben normale, überprüfbare DAW-Bearbeitungen mit Rückgängig-Funktion.
+
+Du kannst mit einer leeren Session beginnen und aufnehmen oder vorhandene
+Einzelspuren importieren. Im Arrangement legst du den zeitlichen Ablauf fest;
+im Mixer bearbeitest du Klang, Pegel und Signalwege. Die fertige Mischung lässt
+sich als Audiodatei exportieren. Für diesen Ablauf sind weder ein KI-Abonnement
+noch zusätzliche Modellgewichte nötig.
+
+Die Assistenzfunktionen ergänzen diesen Arbeitsablauf: KI-Setup hilft beim
+Einordnen vorhandener Einzelspuren, KI-Mix erstellt einen regelbasierten
+Mischvorschlag, und die optionale Stem-Separation zerlegt einen fertigen Mix.
+Diese drei Aufgaben sind voneinander unabhängig.
+
+### Welche Anleitung brauche ich?
+
+| Dein Ziel | Einstieg |
+|---|---|
+| Aizana erstmalig bauen und starten | [Build-Anleitung](#aus-dem-quellcode-bauen) und [Erster Start](docs/ALPHA_INSTALL.md) |
+| Einen Song importieren, bearbeiten und mischen | [Bedienungsanleitung](MANUAL.md), Kapitel 2–8 |
+| Mikrofon oder Instrument aufnehmen | [Aufnahme](MANUAL.md#4-aufnehmen) |
+| Vorhandene Stems automatisch zuordnen | [KI-Setup](MANUAL.md#10-ki-setup-für-vorhandene-einzelspuren) |
+| Eine gemischte Datei in Instrumentgruppen zerlegen | [Stem-Separation](MANUAL.md#12-einen-song-in-stems-trennen) |
+| Fertige Audiodateien ausgeben | [Export](MANUAL.md#14-mix-und-spuren-exportieren) |
+| Einen Fehler eingrenzen | [Fehlerhilfe](MANUAL.md#16-wenn-etwas-nicht-funktioniert) |
+| Code oder Modell weitergeben | [Lizenzübersicht](docs/OPEN_SOURCE_LICENSING.md) und [Distribution](docs/DISTRIBUTION.md) |
 
 ## Funktionsübersicht
 
@@ -121,7 +179,14 @@ Wiederverwendbare Kopien übernehmen Parameter, Reihenfolge und Bypass. Sie
 kopieren keine zeitbezogene Songautomation oder externe Sidechain-Quellverweise.
 Echte Verschiebeaktionen erhalten die ursprünglichen Instanzen und deren
 Verknüpfungen. Die neue Bedienung ist implementiert und automatisch getestet;
-die vollständige praktische Abnahme ist noch offen, siehe [STATUS.md](STATUS.md).
+das kanalübergreifende Alt-/Option-Ziehen wurde ebenfalls geprüft.
+Weitere Prüfgrenzen stehen in [STATUS.md](STATUS.md).
+
+Bei experimentell ausgelagerten Plugins öffnet sich die eigentliche
+Pluginoberfläche ohne zusätzliches Hinweisfenster. Dieser Ablauf ist mit
+Fresh Air einschließlich Bedienung und Sessionwechsel geprüft; er ist keine
+Zusage für sämtliche Drittanbieter-Plugins. Native Fenster ausgelagerter Plugins
+lassen sich nicht in das angedockte Editorpanel einbetten.
 
 ## Häufige Tastenkürzel
 
@@ -279,6 +344,18 @@ separat bezogen und nicht durch Aizanas Projektlizenz mitlizenziert.
 Externe Pull Requests werden derzeit nicht angenommen. Bugreports mit
 Versionsnummer und reproduzierbaren Schritten sind willkommen. Eigene Forks und
 Änderungen sind im Rahmen der Lizenz erlaubt.
+
+## Fehler melden und die Alpha ausprobieren
+
+Für einen nachvollziehbaren Fehlerbericht sind die Aizana-Version bzw. der
+verwendete Commit, macOS-Version, Audiogerät und die Schritte bis zum Fehler
+hilfreich. Bei einem Pluginproblem gehören Format und Pluginversion dazu.
+Beschreibe, was du erwartet hast und was tatsächlich passiert ist.
+
+Prüfe Screenshots, Protokolle und Beispielsessions vor dem Teilen auf persönliche
+Angaben. Verwende nur Audiomaterial, das du dafür weitergeben darfst. Zugangsdaten,
+Lizenzschlüssel und private Aufnahmen gehören nicht in öffentliche Fehlerberichte.
+Die [Bedienungsanleitung](MANUAL.md) enthält eine erste Fehlerhilfe.
 
 ## Entwicklungshistorie
 
