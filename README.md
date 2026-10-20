@@ -1,4 +1,4 @@
-<p align="center"><img src="Resources/AizanaIcon.png" alt="Aizana" width="160"></p>
+<p align="center"><img src="Resources/brand/aizana-banner.png" alt="Aizana — Open-source Digital Audio Workstation" width="820"></p>
 
 # Aizana
 
