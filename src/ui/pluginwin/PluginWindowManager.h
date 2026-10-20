@@ -104,6 +104,10 @@ private:
     // Floating windows — keyed by plugin pointer
     std::map<te::Plugin*, std::unique_ptr<FloatingPluginWindow>> floatingWindows;
 
+    // Keep remote plugins alive until close/removal/session swap. They own their
+    // window in the worker; there is deliberately no host DocumentWindow.
+    std::map<te::Plugin*, te::Plugin::Ptr> remotePlugins;
+
     // Set of plugins currently in the docked panel
     std::set<te::Plugin*> dockedPlugins;
 

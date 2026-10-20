@@ -26,7 +26,8 @@ namespace
     {
         juce::AudioParameterFloat* gain = nullptr;
 
-        GainStubProcessor()
+        bool withEditor = false;
+        explicit GainStubProcessor (bool editor = false) : withEditor (editor)
         {
             addParameter (gain = new juce::AudioParameterFloat (
                 juce::ParameterID { "gain", 1 }, "Gain", 0.0f, 1.0f, 1.0f));
@@ -42,14 +43,17 @@ namespace
         double getTailLengthSeconds() const override { return 0.0; }
         bool acceptsMidi() const override { return true; }
         bool producesMidi() const override { return true; }
-        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+        juce::AudioProcessorEditor* createEditor() override
+        {
+            return withEditor ? new juce::GenericAudioProcessorEditor (*this) : nullptr;
+        }
         bool hasEditor() const override
         {
             // Metadata queries may execute UI/plugin code. Abort the worker if
             // the coordinator dispatch regresses to the IPC receiver thread.
             if (! juce::MessageManager::getInstance()->isThisTheMessageThread())
                 std::_Exit (31);
-            return false;
+            return withEditor;
         }
         int getNumPrograms() override { return 1; }
         int getCurrentProgram() override { return 0; }
@@ -111,10 +115,10 @@ int main (int argc, char* argv[])
         commandLine << (i > 1 ? " " : "") << juce::String (argv[i]);
 
     aizana::PluginLoader loader =
-        [] (const juce::PluginDescription&, double, int, juce::String&)
+        [] (const juce::PluginDescription& d, double, int, juce::String&)
             -> std::unique_ptr<juce::AudioProcessor>
         {
-            return std::make_unique<GainStubProcessor>();
+            return std::make_unique<GainStubProcessor> (d.name == "SmokeGainEditor");
         };
 
     // ---- Worker role ----
@@ -128,7 +132,8 @@ int main (int argc, char* argv[])
 
     // ---- Host role ----
     juce::PluginDescription desc;
-    desc.name             = "SmokeGainStub";
+    const bool testEditor = commandLine.contains ("--gui-test");
+    desc.name             = testEditor ? "SmokeGainEditor" : "SmokeGainStub";
     desc.pluginFormatName = "Test";
     desc.fileOrIdentifier = "smoke";
 
@@ -142,8 +147,38 @@ int main (int argc, char* argv[])
         pass = fail ("parameter name did not survive the boundary");
     if (! proxy->acceptsMidi() || ! proxy->producesMidi())
         pass = fail ("MIDI flags did not survive the boundary");
-    if (proxy->hasEditor())   // stub has none — E5.5 flag must cross correctly
+    if (proxy->hasEditor() != testEditor)   // metadata must cross correctly
         pass = fail ("hasEditor flag did not survive the boundary");
+
+    // An OOP editor belongs exclusively to the worker: no extra host panel.
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> hostEditor (proxy->createEditor());
+        if (hostEditor != nullptr)
+            pass = fail ("OOP proxy created an unwanted second host editor");
+    }
+
+    // Optional live GUI regression: one worker-owned editor, hide and reopen.
+    // Never enabled by ordinary headless CTest runs.
+    if (testEditor)
+    {
+        auto waitVisible = [&] (bool expected)
+        {
+            for (int i = 0; i < 100; ++i)
+            {
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+                if (proxy->isChildGuiVisible() == expected) return true;
+            }
+            return false;
+        };
+        for (int i = 0; i < 3; ++i)
+        {
+            proxy->showChildGui();
+            if (! waitVisible (true)) pass = fail ("worker editor did not open");
+            proxy->showChildGui(); // repeated open must reuse the editor
+            proxy->hideChildGui();
+            if (! waitVisible (false)) pass = fail ("worker editor did not close");
+        }
+    }
 
     proxy->prepareToPlay (44100.0, 64);
     if (! proxy->isChildConnected())

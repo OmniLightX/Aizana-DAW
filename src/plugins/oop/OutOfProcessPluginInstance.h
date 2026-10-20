@@ -73,10 +73,8 @@ namespace aizana
         bool acceptsMidi() const override { return childAcceptsMidi; }     // E5.4
         bool producesMidi() const override { return childProducesMidi; }   // E5.4
 
-        /** E5.5: die ECHTE Plugin-GUI lebt als child-owned Fenster im Worker-Prozess
-            (crash-sicher; ein GUI-Hänger friert die DAW nicht ein). Der Host-Editor
-            ist ein schmales Panel mit "GUI öffnen" und öffnet das Child-Fenster
-            direkt mit; sein Schließen schließt auch das Child-Fenster. */
+        /** The native editor lives exclusively in the worker process. The window
+            manager calls showChildGui directly; createEditor returns nullptr. */
         juce::AudioProcessorEditor* createEditor() override;
         bool hasEditor() const override { return childHasEditor; }
 
@@ -84,6 +82,7 @@ namespace aizana
             Coordinator-Kanal; ohne lebenden Worker ein No-op). */
         void showChildGui();
         void hideChildGui();
+        bool isChildGuiVisible() const noexcept;
         int getNumPrograms() override { return 1; }
         int getCurrentProgram() override { return 0; }
         void setCurrentProgram (int) override {}

@@ -43,9 +43,11 @@ namespace aizana
         class ChildPluginGuiWindow final : public juce::DocumentWindow
         {
         public:
-            ChildPluginGuiWindow (const juce::String& name, juce::AudioProcessorEditor* editor)
+            ChildPluginGuiWindow (const juce::String& name, juce::AudioProcessorEditor* editor,
+                                  std::function<void()> onClosed)
                 : juce::DocumentWindow (name, juce::Colours::darkgrey,
-                                        juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton)
+                                        juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton),
+                  closed (std::move (onClosed))
             {
                 setUsingNativeTitleBar (true);
                 setContentOwned (editor, true);
@@ -55,7 +57,13 @@ namespace aizana
                 toFront (true);
             }
 
-            void closeButtonPressed() override { setVisible (false); }
+            void closeButtonPressed() override
+            {
+                setVisible (false);
+                if (closed) closed();
+            }
+        private:
+            std::function<void()> closed;
         };
 
         // ===================================================================
@@ -223,14 +231,30 @@ namespace aizana
 
                     if (guiWindow == nullptr)
                         if (auto* ed = plugin->createEditorIfNeeded())
-                            guiWindow = std::make_unique<ChildPluginGuiWindow> (plugin->getName(), ed);
+                            guiWindow = std::make_unique<ChildPluginGuiWindow> (
+                                plugin->getName(), ed, [this] { replyGuiVisible (false); });
 
                     if (guiWindow != nullptr)
                     {
                         guiWindow->setVisible (true);
+                        // The editor belongs to a separate process. On macOS,
+                        // ordering its window front does not activate that process.
+                        // This runs only for an explicit editor-open request.
+                        juce::Process::makeForegroundProcess();
                         guiWindow->toFront (true);
                     }
+                    replyGuiVisible (guiWindow != nullptr && guiWindow->isVisible());
                 });
+            }
+
+            void replyGuiVisible (bool visible)
+            {
+                juce::MemoryBlock mb;
+                juce::MemoryOutputStream out (mb, false);
+                out.writeString ("guivisible");
+                out.writeBool (visible);
+                out.flush();
+                sendMessageToCoordinator (mb);
             }
 
             void handleHideGui()
@@ -238,7 +262,10 @@ namespace aizana
                 juce::MessageManager::callAsync ([this, alive = aliveGuard]
                 {
                     if (alive->load())
+                    {
                         guiWindow.reset();
+                        replyGuiVisible (false);
+                    }
                 });
             }
 
@@ -348,6 +375,8 @@ namespace aizana
                 sendMessageToWorker (mb);
             }
 
+            bool isGuiVisible() const noexcept { return guiVisible.load(); }
+
             void sendSimple (const char* type)   // E5.5: showgui / hidegui
             {
                 juce::MemoryBlock mb;
@@ -432,6 +461,10 @@ namespace aizana
                     stateOk.store (in.read (stateBlock.getData(), (int) size) == (int) size);
                     stateEvent.signal();
                 }
+                else if (type == "guivisible")
+                {
+                    guiVisible.store (in.readBool());
+                }
                 else if (type == "stateset")
                 {
                     stateSetEvent.signal();
@@ -441,6 +474,7 @@ namespace aizana
             void handleConnectionLost() override
             {
                 lost.store (true);
+                guiVisible.store (false);
                 ready.store (false);
                 infoOk.store (false);
                 stateOk.store (false);
@@ -454,6 +488,7 @@ namespace aizana
 
             bool                    launchedOk { false };
             std::atomic<bool>       lost { false };
+            std::atomic<bool>       guiVisible { false };
             std::atomic<bool>       ready { false };
             std::atomic<bool>       infoOk { false };
             std::atomic<bool>       stateOk { false };
@@ -747,54 +782,17 @@ namespace aizana
     }
 
     //==============================================================================
-    // E5.5 — Host-Editor: schmales Panel; die echte GUI ist das Child-Fenster.
-    //==============================================================================
-    namespace
-    {
-        class OopHostEditor final : public juce::AudioProcessorEditor
-        {
-        public:
-            explicit OopHostEditor (OutOfProcessPluginInstance& o)
-                : juce::AudioProcessorEditor (o), owner (o)
-            {
-                info.setText (juce::String::fromUTF8 ("Die Plugin-Oberfl\xc3\xa4" "che l\xc3\xa4" "uft in einem "
-                                                      "eigenen Prozess (absturzsicher) und \xc3\xb6" "ffnet "
-                                                      "als eigenes Fenster."),
-                              juce::dontSendNotification);
-                info.setJustificationType (juce::Justification::centred);
-                info.setFont (juce::FontOptions (13.0f));
-                addAndMakeVisible (info);
-
-                openBtn.setButtonText (juce::String::fromUTF8 ("GUI \xc3\xb6" "ffnen"));
-                openBtn.onClick = [this] { owner.showChildGui(); };
-                addAndMakeVisible (openBtn);
-
-                setSize (360, 110);
-                owner.showChildGui();   // direkt mit aufmachen — ein Klick weniger
-            }
-
-            ~OopHostEditor() override
-            {
-                owner.hideChildGui();   // Host-Fenster zu → Child-Fenster zu
-            }
-
-            void resized() override
-            {
-                auto r = getLocalBounds().reduced (12);
-                openBtn.setBounds (r.removeFromBottom (28).withSizeKeepingCentre (140, 28));
-                info.setBounds (r);
-            }
-
-        private:
-            OutOfProcessPluginInstance& owner;
-            juce::Label       info;
-            juce::TextButton  openBtn;
-        };
-    }
-
+    // Editors are shown directly in the worker by PluginWindowManager. Creating
+    // a host AudioProcessorEditor here would produce a redundant second window.
     juce::AudioProcessorEditor* OutOfProcessPluginInstance::createEditor()
     {
-        return new OopHostEditor (*this);
+        return nullptr;
+    }
+
+    bool OutOfProcessPluginInstance::isChildGuiVisible() const noexcept
+    {
+        return impl->coordinator != nullptr && impl->coordinator->isUsable()
+               && impl->coordinator->isGuiVisible();
     }
 
     void OutOfProcessPluginInstance::showChildGui()
