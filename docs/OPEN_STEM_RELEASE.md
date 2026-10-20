@@ -33,16 +33,19 @@ inside the downloadable ONNX model. Architecture attribution is Phil Wang;
 weight/repository attribution is Roman Solovyev. The conversion selects five
 original independent heads without retraining, exports the mask graph with ONNX
 opset 17, strips exporter doc strings and adds license/provenance metadata.
-Native code performs STFT/ISTFT and derives the residual. Reproduction tools and
-pinned inputs are in `docs/research/mega53/` and `scripts/package_mega53_model.py`.
+Native code performs STFT/ISTFT and derives the residual. The metadata-packaging tool is `scripts/package_mega53_model.py`; it records
+the upstream checkpoint hash and checks the expected raw ONNX input hash.
+The original training/export environment is not included in this repository.
 Conversion/evaluation Python packages are developer tools, not app dependencies
 or redistributed Python implementations. Spleeter was compared, not integrated.
 
 Final artifact: `mega53-five-masks-v1.onnx`, 355012879 bytes.
 SHA-256: `d546b9780159ee8e54c3cf7c0446a4204b8793e363941122b4c115089d369cc2`.
 The raw research export has a different checksum because it lacks the final
-embedded notices/metadata. Exact upstream and converted hashes are retained in
-`docs/research/mega53/candidate-manifest.json`.
+embedded notices/metadata. The upstream checkpoint SHA-256 is
+`c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f`.
+The raw export SHA-256 checked by the packaging tool is
+`1bcfad5784703e38ab03e19db52cee1f796406472a52f8ac44dcad00e2fc95db`.
 
 For this integration, Aizana uses converted pretrained weights; it does not
 redistribute the original training recordings or train a replacement model.

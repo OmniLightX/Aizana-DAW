@@ -168,7 +168,8 @@ development tools. Apple SDKs remain separately obtained platform requirements.
   output, Other, is the input minus the five estimates. Four-category mode folds
   guitar and piano into Other. This is a conversion, not a newly trained model.
 - Exact upstream sources, hashes, changes and the final artifact are recorded in
-  `docs/research/mega53/candidate-manifest.json` and `docs/OPEN_STEM_RELEASE.md`.
+  `docs/OPEN_STEM_RELEASE.md`. Metadata packaging and input-hash checks are in
+  `scripts/package_mega53_model.py`.
 - Model data is downloaded only with user consent, then size/SHA-256 verified.
   No weights or private test audio are tracked in this source repository.
 - The trainer does not warrant rights in all training recordings or provide
