@@ -347,6 +347,10 @@ migration identifiers needed for this compatibility remain in the code.
 
 ## Licensing and contributions
 
+Community versions may retain the Aizana name and logo, including commercial
+versions, with clear origin, modification and maintainer identification.
+See [name and logo permissions](docs/BRANDING.md).
+
 Original Aizana code: **GPL-3.0-or-later**. The combination with JUCE uses the
 AGPLv3 open-source route; Tracktion and other components retain their own
 licenses. See [LICENSE.md](LICENSE.md),

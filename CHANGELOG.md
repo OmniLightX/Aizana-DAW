@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased — 20 October 2026
+## Unreleased — 21 October 2026
 
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
@@ -50,3 +50,10 @@ installer, signed app or downloadable binary release.
   automation mode selection in both menu and lane.
 - Remaining native combinations and optional hardware checks are recorded in
   [the live checklist](docs/LIVE_TEST_CHECKLIST.md); see [STATUS.md](STATUS.md).
+
+### Name and artwork permissions
+
+- Permit use of the Aizana name, logo and banner in clearly labelled community
+  versions, including commercial distributions, with origin and maintainer
+  identification and no false implication of official approval.
+- Document the terms in English and German and link them from both guides.

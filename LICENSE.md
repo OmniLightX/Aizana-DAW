@@ -63,3 +63,9 @@ For the detailed dependency and model-weight notices, see
 - **Optional MVSep Mega 53 model weights and BS-RoFormer architecture** — MIT;
   exact provenance, conversion and separate download terms are documented in
   `docs/OPEN_STEM_RELEASE.md` and the full notices in `licenses/Mega53/`.
+
+## Project name and artwork
+
+Permission to use the Aizana name, project logo and README banner is specified
+in [Name and logo permissions](docs/BRANDING.md). This includes clearly labelled
+community versions and does not change the software licenses above.

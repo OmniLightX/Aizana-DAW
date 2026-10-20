@@ -360,6 +360,10 @@ bleiben intern erhalten.
 
 ## Lizenz und Mitwirkung
 
+Community-Versionen dürfen den Aizana-Namen und das Logo behalten, auch bei
+kommerzieller Weitergabe. Herkunft, Änderungen und Verantwortliche müssen klar
+erkennbar sein. Siehe [Nutzung von Name und Logo](docs/BRANDING.de.md).
+
 Eigener Aizana-Code: **GPL-3.0-or-later**. Die Kombination mit JUCE verwendet den
 AGPLv3-Open-Source-Weg; Tracktion und weitere Komponenten behalten ihre eigenen
 Lizenzen. Siehe [LICENSE.md](LICENSE.md), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)

@@ -539,6 +539,10 @@ should edit the text rather than trigger mute/solo or recording.
 
 ## 18. Licenses and further documentation
 
+Community versions may use the Aizana name and logo under the
+[name and logo permissions](docs/BRANDING.md). Modified versions must clearly
+identify their origin and maintainers without implying official approval.
+
 MP3 export uses **LAME 3.100**, an open-source encoder under
 **LGPL-2.0-or-later**. Original source, license texts and redistribution details
 are documented in the [licensing overview](docs/OPEN_SOURCE_LICENSING.md#mp3-encoder-attribution).

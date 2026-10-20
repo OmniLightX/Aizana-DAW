@@ -556,6 +556,11 @@ Buchstaben den Text bearbeiten, nicht Mute/Solo oder die Aufnahme auslösen.
 
 ## 18. Lizenzen und weitere Dokumentation
 
+Community-Versionen dürfen Aizana-Name und Logo nach den
+[Nutzungsregeln für Name und Logo](docs/BRANDING.de.md) verwenden.
+Veränderte Versionen müssen Herkunft und Verantwortliche deutlich nennen
+und dürfen keine offizielle Freigabe vortäuschen.
+
 Der MP3-Export verwendet **LAME 3.100**, einen Open-Source-Encoder unter
 **LGPL-2.0-or-later**. Originalquellcode, Lizenztexte und Hinweise zur Weitergabe
 sind in der [Lizenzübersicht](docs/OPEN_SOURCE_LICENSING.md#mp3-encoder-attribution)
