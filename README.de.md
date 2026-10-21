@@ -31,6 +31,8 @@ Musikmachen bedienen lassen soll, habe ich aus meiner eigenen Praxis eingebracht
 Dabei baut Aizana auf bestehenden Open-Source-Projekten auf. Ohne die Arbeit
 dieser Entwickler wäre das in dieser Form nicht möglich gewesen. Die verwendeten
 Komponenten, ihre Urheber und die jeweiligen Lizenzen sind im Projekt dokumentiert.
+An dieser Stelle möchte ich mich bei euch für eure Arbeit und dafür bedanken,
+dass ihr sie als Open Source zur Verfügung stellt.
 
 Ich teile Aizana und den Quellcode kostenlos mit euch, weil ich zeigen möchte,
 was aus einem solchen persönlichen Experiment entstehen kann. Wer ebenfalls Musik
@@ -389,7 +391,7 @@ beschriebenen Alternativen.
 | Eigener Aizana-Code | GPL-3.0-or-later |
 | JUCE 8 | AGPLv3 |
 | Tracktion Engine | GPL-3.0-or-later |
-| MVSep-Mega-Modellgewichte und relevante Modellimplementierung | MIT, konkrete Herkunft und Änderungen siehe Modellbericht |
+| MVSep-Mega-53-Modellgewichte und relevante Modellimplementierung | MIT, konkrete Herkunft und Änderungen siehe Modellbericht |
 | ONNX Runtime, libebur128, CLAP und weitere Komponenten | MIT sowie enthaltene Fremdhinweise |
 | LAME 3.100 (MP3-Encoder) | LGPL-2.0-or-later; Originalquellcode und Lizenztexte enthalten |
 | SoundTouch | LGPL-2.1-or-later |

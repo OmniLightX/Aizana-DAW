@@ -93,8 +93,11 @@ notices remain intact.
 - License: LGPL-2.1-or-later
 - Use in Aizana: enabled through `TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1`
   for clip time-stretching.
-- Release note: LGPL is compatible with GPL/AGPL distribution, but binary
-  releases should include the SoundTouch notice and corresponding source offer.
+- Copyright and license notice: `licenses/Tracktion/embedded/SoundTouch.txt`.
+  The complete LGPL-2.1 text is also included in `licenses/Faust-COPYING.txt`;
+  it applies independently to SoundTouch.
+- Binary distributions must retain these notices and provide the applicable
+  corresponding-source and relinking materials; see `docs/DISTRIBUTION.md`.
 
 ### ONNX Runtime
 
@@ -189,10 +192,11 @@ development tools. Apple SDKs remain separately obtained platform requirements.
 
 ### Legacy demucs.cpp source
 
-`extern/demucs_cpp` remains MIT-licensed archival source, with its notice retained
-at `licenses/demucs.cpp/LICENSE`. The active separation backend does not load or
-request Demucs/htdemucs weights. Earlier research about their ambiguous weight
-license remains historical evidence, not the active provider description.
+`extern/demucs_cpp` remains MIT-licensed legacy source. CMake still builds its
+static library and lists it as a link dependency of the app and tests; Eigen
+remains its header dependency. Preserve `licenses/demucs.cpp/LICENSE` and the
+applicable Eigen notices. The active separation backend uses Mega 53 through
+RoFormer/ONNX and does not load or download Demucs/htdemucs weights.
 
 ## Integrated plugin generator
 
@@ -225,5 +229,6 @@ Do not apply a blanket claim that all generated plugins have no license obligati
 Complete collected license texts are in licenses/. Include them in the app's
 Resources/Licenses directory and in the source archive. A private GitHub URL
 alone is not a public corresponding-source offer. The source archive must
-include submodules and the recording patch, not only the top-level checkout.
+include submodules and both Tracktion patches (recording errors and state
+lifecycle), not only the top-level checkout.
 See docs/DISTRIBUTION.md and docs/RELEASE_READINESS.md.

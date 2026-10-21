@@ -29,6 +29,8 @@ making music guided what the program should become and how it should feel to use
 Aizana builds on existing open-source projects. Without those developers' work,
 it would not have been possible in this form. The components, their authors and
 their respective licenses are documented in this repository.
+I would also like to thank you for your work and for making it available as
+open source.
 
 I am sharing Aizana and its source code for free to show what can grow out of a
 personal experiment like this. If you make music, are curious about the technology
@@ -376,7 +378,7 @@ describe.
 | Original Aizana code | GPL-3.0-or-later |
 | JUCE 8 | AGPLv3 |
 | Tracktion Engine | GPL-3.0-or-later |
-| MVSep-Mega model weights and relevant model implementation | MIT; specific provenance and modifications are documented in the model report |
+| MVSep Mega 53 model weights and relevant model implementation | MIT; specific provenance and modifications are documented in the model report |
 | ONNX Runtime, libebur128, CLAP and other components | MIT and included third-party notices |
 | LAME 3.100 (MP3 encoder) | LGPL-2.0-or-later; original source and license texts included |
 | SoundTouch | LGPL-2.1-or-later |

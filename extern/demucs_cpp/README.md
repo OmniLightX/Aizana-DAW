@@ -11,8 +11,18 @@ Source-separation inference library for Demucs v4 hybrid-transformer models.
   its own audio I/O via JUCE.
 - Dependency: Eigen (header-only), pinned via FetchContent in the root
   CMakeLists.txt to the same commit upstream vendors (`dd8c71e6…`).
-- Models: ggml weights (htdemucs-6s, htdemucs_ft_*) are downloaded at runtime,
-  never bundled. NOTE: verify the WEIGHTS license before public release —
-  the code is MIT, the model weights are licensed separately.
-- Constraint: inference operates at 44.1 kHz stereo only — callers must
-  resample (see src/ai/StemSeparationEngine).
+
+## Status in Aizana
+
+This is retained legacy source. CMake still builds `demucs_inference` and lists
+it as a link dependency of the app and tests, with Eigen as its header dependency.
+It is not the active stem-separation backend.
+
+Aizana uses MVSep Mega 53 through `RoFormerStemBackend` and ONNX Runtime. It does
+not download or load htdemucs/ggml model weights. The active model's provenance,
+conversion and MIT notices are documented in
+[the model report](../../docs/OPEN_STEM_RELEASE.md).
+
+The MIT notice for this retained source and Eigen's applicable notices remain
+necessary while these sources and dependencies are included. They do not describe
+the license of the separately downloaded Mega 53 model.

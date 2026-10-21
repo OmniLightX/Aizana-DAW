@@ -23,10 +23,11 @@ The full license and copyright notices are in
 |---|---|---|
 | Aizana code | GPL-3.0-or-later | Retain LICENSE.md, COPYING, copyright and modification notices |
 | JUCE 8 | AGPLv3 instead of a commercial JUCE license | Retain COPYING.AGPL and JUCE/subcomponent notices; comply with AGPL conditions |
-| Tracktion Engine | GPLv3-or-later instead of a commercial license | Provide the exact submodule revision, notices and the project's recording patch |
+| Tracktion Engine | GPLv3-or-later instead of a commercial license | Provide the exact submodule revision, notices and both project patches (recording errors and state lifecycle) |
 | LAME 3.100 MP3 encoder | LGPL-2.0-or-later | Retain original license/copyright notices and bundled source; preserve relinking materials for static binary distribution |
 | SoundTouch in Tracktion | LGPL-2.1-or-later | Retain license notices and source access |
-| demucs.cpp, libebur128, CLAP, clap-helpers | MIT | Retain copyright and license texts |
+| libebur128, CLAP, clap-helpers | MIT | Retain copyright and license texts |
+| demucs.cpp (retained legacy source/build dependency) | MIT | Retain its notice while included; active stem separation uses Mega 53/ONNX |
 | ONNX Runtime | MIT, additional upstream notices | Document version and source; observe ThirdPartyNotices when redistributing |
 | Eigen | MPL-2.0 and included compatible third-party texts | Preserve file-level license/source obligations and additional notices |
 | Catch2 | BSL-1.0, test dependency | Retain license text |
