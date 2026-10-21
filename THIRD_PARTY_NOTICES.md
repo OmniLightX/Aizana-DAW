@@ -117,15 +117,12 @@ the configured build downloads the separately licensed upstream distribution.
   components; ship its `ThirdPartyNotices.txt` (included in the downloaded archive)
   alongside any binary release.
 
-### Eigen
+### Eigen within ONNX Runtime
 
-- Location: downloaded by CMake through `FetchContent`
-- License: primarily MPL-2.0, with some compatible third-party files
-- Use in Aizana: header-only dependency for the vendored `demucs.cpp`
-  inference library.
-- Upstream: https://gitlab.com/libeigen/eigen
-- License notes: see Eigen's `COPYING.README`, `COPYING.MPL2`, and related
-  copying files in the fetched source.
+Eigen is listed under MPL-2.0 in the upstream ONNX Runtime notices retained at
+`licenses/ONNX-Runtime/ThirdPartyNotices.txt`. Aizana uses the prebuilt ONNX
+Runtime package; it does not separately fetch or build Eigen. Preserve the
+complete upstream notices when redistributing that package.
 
 ### libebur128
 
@@ -189,14 +186,6 @@ development tools. Apple SDKs remain separately obtained platform requirements.
   No weights or private test audio are tracked in this source repository.
 - The trainer does not warrant rights in all training recordings or provide
   indemnification. MIT permission is not a blanket training-data clearance.
-
-### Legacy demucs.cpp source
-
-`extern/demucs_cpp` remains MIT-licensed legacy source. CMake still builds its
-static library and lists it as a link dependency of the app and tests; Eigen
-remains its header dependency. Preserve `licenses/demucs.cpp/LICENSE` and the
-applicable Eigen notices. The active separation backend uses Mega 53 through
-RoFormer/ONNX and does not load or download Demucs/htdemucs weights.
 
 ## Integrated plugin generator
 

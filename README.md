@@ -382,7 +382,7 @@ describe.
 | ONNX Runtime, libebur128, CLAP and other components | MIT and included third-party notices |
 | LAME 3.100 (MP3 encoder) | LGPL-2.0-or-later; original source and license texts included |
 | SoundTouch | LGPL-2.1-or-later |
-| Eigen | MPL-2.0 and included third-party notices |
+| Eigen (within the ONNX Runtime notices) | MPL-2.0; no separate Eigen build dependency |
 | Catch2 (tests) | BSL-1.0 |
 
 This is an overview, not a replacement for the full texts in [licenses/](licenses/),

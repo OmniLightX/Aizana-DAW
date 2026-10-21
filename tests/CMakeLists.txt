@@ -246,7 +246,6 @@ target_link_libraries(engine_tests PRIVATE
     tracktion::tracktion_engine
     ebur128
     aizana_lame
-    demucs_inference
 )
 
 # Expose CLAP include path (consistent with Aizana app target)

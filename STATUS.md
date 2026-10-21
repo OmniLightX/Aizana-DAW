@@ -1,11 +1,18 @@
 # Aizana 0.3.0 Alpha — test status
 
-Recorded checks through 20 October 2026; documentation consolidated 21 October.
+Recorded checks through 21 October 2026.
 Target: Apple Silicon (arm64), macOS 13.3 or later. Aizana is distributed as
 source code. This page records completed runs; it does not imply a fresh full
 suite for every documentation-only commit.
 
 ## Automated results
+
+- After removal of the legacy Demucs library and separate Eigen build dependency:
+  Debug and Release app/test builds passed. The full Debug suite again passed
+  459 cases with 6 skips and 50,219 assertions. Real Mega 53 reference/output
+  tests passed 125 assertions each in Debug and Release; ordinary Release stem tests passed
+  58 assertions. Both app bundles retain ONNX notices and exclude the old
+  standalone Demucs/Eigen notice folders. The Release bundle audit passed.
 
 - Latest full Debug engine suite: **459 passed, 6 skipped, 50,219 assertions**,
   exit 0. The diagnostic gate found no JUCE assertion or leaked-object report.

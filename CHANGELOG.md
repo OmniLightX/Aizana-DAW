@@ -37,6 +37,13 @@ installer, signed app or downloadable binary release.
   overwrite prompts and stem error handling.
 - Bundle upstream encoder source, build integration and license notices.
 
+### Build dependencies
+
+- Remove the unused legacy demucs.cpp library and its separate Eigen download
+  from the app and test builds. Stem separation continues to use Mega 53/ONNX.
+- Remove obsolete standalone notices; preserve the complete ONNX Runtime notices,
+  including its Eigen attribution. Incremental app builds remove old notice folders.
+
 ### Documentation and validation
 
 - Update English/German manuals and feature guides, export/distribution notes,

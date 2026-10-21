@@ -27,9 +27,8 @@ The full license and copyright notices are in
 | LAME 3.100 MP3 encoder | LGPL-2.0-or-later | Retain original license/copyright notices and bundled source; preserve relinking materials for static binary distribution |
 | SoundTouch in Tracktion | LGPL-2.1-or-later | Retain license notices and source access |
 | libebur128, CLAP, clap-helpers | MIT | Retain copyright and license texts |
-| demucs.cpp (retained legacy source/build dependency) | MIT | Retain its notice while included; active stem separation uses Mega 53/ONNX |
 | ONNX Runtime | MIT, additional upstream notices | Document version and source; observe ThirdPartyNotices when redistributing |
-| Eigen | MPL-2.0 and included compatible third-party texts | Preserve file-level license/source obligations and additional notices |
+| Eigen listed within ONNX Runtime | MPL-2.0 | Preserve the complete ONNX Runtime ThirdPartyNotices; no separate Eigen source dependency is fetched |
 | Catch2 | BSL-1.0, test dependency | Retain license text |
 | Faust | Externally installed LGPL compiler | Do not confuse the compiler license with the license of generated output; observe DSP/architecture/header terms |
 | VST3 SDK in the pinned JUCE revision | GPLv3 alternative | Retain SDK license text; do not infer trademark permission from it |

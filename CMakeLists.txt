@@ -63,31 +63,8 @@ FetchContent_Declare(clap_api
     GIT_TAG        1.2.0)
 FetchContent_MakeAvailable(clap_api)
 
-# Eigen — header-only linear algebra, dependency of the vendored demucs.cpp
-# inference library (extern/demucs_cpp). Pinned to the exact commit upstream
-# demucs.cpp vendors so numerical behaviour matches the spike benchmark.
-FetchContent_Declare(eigen
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-    GIT_TAG        dd8c71e62852b2fe429edb6682ac91fd1c578a26)
-set(EIGEN_BUILD_DOC OFF CACHE BOOL "" FORCE)
-set(EIGEN_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+# Keep dependency self-tests disabled; Aizana registers its own tests below.
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_Populate(eigen)   # headers only — do NOT add Eigen's CMake project
-
-# ---------------------------------------------------------------------------
-# demucs.cpp inference library (vendored, MIT — see extern/demucs_cpp/README.md)
-# Legacy MIT code retained for reproducibility. The active StemSeparationEngine
-# uses RoFormer/ONNX and does not load or download Demucs weights.
-# ---------------------------------------------------------------------------
-file(GLOB DEMUCS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/extern/demucs_cpp/src/*.cpp)
-add_library(demucs_inference STATIC ${DEMUCS_SOURCES})
-target_include_directories(demucs_inference PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/extern/demucs_cpp/src
-    ${eigen_SOURCE_DIR})
-target_compile_features(demucs_inference PUBLIC cxx_std_17)
-# Eigen needs NDEBUG + optimisation in all configs we ship; -O3 keeps inference
-# at the benchmarked ~1.6x realtime instead of >10x in unoptimised builds.
-target_compile_options(demucs_inference PRIVATE -O3 -DNDEBUG)
 
 # ---------------------------------------------------------------------------
 # ONNX Runtime 1.20.1 — prebuilt macOS universal2 (arm64 + x86_64) with the
@@ -406,7 +383,6 @@ target_link_libraries(Aizana PRIVATE
     tracktion::tracktion_engine
     ebur128
     aizana_lame
-    demucs_inference
     AizanaBrand
     "$<$<PLATFORM_ID:Darwin>:-framework AVFoundation>"
 )
@@ -536,6 +512,10 @@ set_property(TARGET Aizana APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/DISTRIBUTION.md")
 add_custom_command(TARGET Aizana POST_BUILD
+    # Remove notices left by older incremental builds; ONNX's own notices remain.
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses/demucs.cpp"
+        "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses/Eigen"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_BUNDLE_CONTENT_DIR:Aizana>/Resources/Licenses"
     COMMAND ${CMAKE_COMMAND} -E copy_directory

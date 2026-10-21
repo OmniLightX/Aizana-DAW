@@ -395,7 +395,7 @@ beschriebenen Alternativen.
 | ONNX Runtime, libebur128, CLAP und weitere Komponenten | MIT sowie enthaltene Fremdhinweise |
 | LAME 3.100 (MP3-Encoder) | LGPL-2.0-or-later; Originalquellcode und Lizenztexte enthalten |
 | SoundTouch | LGPL-2.1-or-later |
-| Eigen | MPL-2.0 sowie enthaltene Fremdhinweise |
+| Eigen (in den ONNX-Runtime-Lizenzhinweisen) | MPL-2.0; keine separate Eigen-Build-Abhängigkeit |
 | Catch2 (Tests) | BSL-1.0 |
 
 Dies ist die Übersicht, nicht der Ersatz für die vollständigen Texte in

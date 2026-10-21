@@ -53,9 +53,9 @@ For the detailed dependency and model-weight notices, see
   [`extern/lame/README.md`](extern/lame/README.md), notices in `licenses/LAME/`,
   static-link redistribution requirements in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md#lame-3100)
 - **SoundTouch** — LGPL-2.1-or-later, bundled inside Tracktion Engine
-- **demucs.cpp (retained legacy source/build dependency)** — MIT License
 - **ONNX Runtime** — MIT License
-- **Eigen** — primarily MPL-2.0
+- **Eigen (listed within ONNX Runtime)** — MPL-2.0; see the complete upstream
+  notices in `licenses/ONNX-Runtime/ThirdPartyNotices.txt`
 - **libebur128** — MIT License
 - **CLAP C API** — MIT License
 - **Catch2** — BSL-1.0 (Boost Software License, test infrastructure only)
