@@ -45,7 +45,7 @@ installer, signed app or downloadable binary release.
 - New automation UI regression: reproduced six failures before the correction;
   all 21 assertions pass after correction, including Undo/Redo and curve preservation.
 - Mixer/track subset: 8 cases and 162 assertions passed in Debug and Release.
-- Corrected Release app build and bundle audit pass. Direct user testing confirms
+- Corrected Release app build and bundle audit pass. Native interaction checks confirmed
   track reorder Undo/Redo, copying with automation/pan/bus assignment and first-click
   automation mode selection in both menu and lane.
 - Remaining native combinations and optional hardware checks are recorded in

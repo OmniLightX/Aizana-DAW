@@ -2,7 +2,7 @@
 # E-V11 (Trim an echten Clip-Kanten).
 #
 # Aufruf:
-#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#   AIZANA_TESTWAV=/path/to/fixtures/testmaterial_laut.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/11-block-a-atmer-anker-trim.txt
 
 vorn

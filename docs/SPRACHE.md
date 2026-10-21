@@ -36,20 +36,12 @@ File names INSIDE these folders (`<Name>_Sicherung_N`, `<Name>_Wiederherstellung
 are unaffected. They are deliberately retained because users see them in the
 restore dialog, where the text is German.
 
-## 4. If a UI language switch is introduced later
+## 4. Adding translations
 
-That would require structural changes, not just translation:
+Keep user-facing strings separate from serialized keys and session paths.
+JUCE's `TRANS()` looks up source text; a future translation layer must cover
+both Aizana and the engine's messages consistently.
 
-* The source language must become **English**. JUCE's `TRANS()` looks up the
-  SOURCE TEXT in a table, and Tracktion Engine already supplies its own messages
-  with English source text. Only English source text allows ONE German table
-  to cover both Aizana and the engine messages.
-* Around 358 visible string literals are affected, at least 147 of them
-  demonstrably German. Because of rule 2, however, the table would need only
-  about 150–250 entries: terms identical in both languages need no entry because
-  `TRANS()` falls back to the source text.
-* **GUI test automation must pin the language** to German. 209 script lines
-  address components by their German names, sometimes including state
-  (“Klick bei Aufnahme: An”). Without pinning, the first run would report many
-  “not found” errors, sending debugging in the wrong direction. Menu entries
-  are unaffected: scripts invoke them by numeric ID, not text.
+GUI tests currently address components by their German labels. Pin the test
+language and update label-dependent checks when adding translations. Native
+menu tests that use item IDs are separate from those label lookups.

@@ -51,7 +51,7 @@ A socket or watched file would be addressable, creating an entry point.
    `CGWarpMouseCursorPosition`. Every gesture also aborts as soon as
    `isUnboundedMouseMovementEnabled()` reports true.
 
-Demonstrated by **failed attacks**, not assurances:
+The guard checks include negative controls:
 
 ```bash
 ./scripts/uitest-guard-check.sh

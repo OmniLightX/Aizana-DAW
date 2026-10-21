@@ -356,7 +356,7 @@ open build/Aizana_artefacts/Release/Aizana.app
 Für Diagnoseprüfungen einen separaten Debug-Build anlegen und ebenfalls über
 CTest testen. Dabei muss die normale Aizana-App geschlossen sein, da die
 Geräteeinstellungen gemeinsam genutzt werden. Drittanbieter-Tests benötigen
-gezielt ausgewählte lokale Plugins; siehe [Teststand](docs/RELEASE_TESTS_2026-10-20.md).
+gezielt ausgewählte lokale Plugins; siehe [Teststand](docs/TESTING.md).
 Alte Sessions und generierte Plugins aus der früheren Cloudes-Version werden
 weiter unterstützt. Dafür notwendige alte Dateiformat- und Migrationsbezeichner
 bleiben intern erhalten.
@@ -420,11 +420,3 @@ Prüfe Screenshots, Protokolle und Beispielsessions vor dem Teilen auf persönli
 Angaben. Verwende nur Audiomaterial, das du dafür weitergeben darfst. Zugangsdaten,
 Lizenzschlüssel und private Aufnahmen gehören nicht in öffentliche Fehlerberichte.
 Die [Bedienungsanleitung](MANUAL.de.md) enthält eine erste Fehlerhilfe.
-
-## Entwicklungshistorie
-
-Dieses Repository übernimmt die bereinigte Entwicklungshistorie des bisherigen
-Aizana-Projekts. Das neue GitHub-Erstellungsdatum bezeichnet den Umzug, nicht den
-Beginn der Entwicklung. Entwicklungsschritte und ursprüngliche Commit-Zeitstempel
-bleiben nachvollziehbar. Der aktuelle Branch enthält den gepflegten Quellstand;
-historische Stände beschreiben ihre jeweilige Version.

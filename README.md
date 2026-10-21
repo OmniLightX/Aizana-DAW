@@ -344,7 +344,7 @@ open build/Aizana_artefacts/Release/Aizana.app
 For diagnostics, create a separate Debug build and test it with CTest as well.
 The normal Aizana app must be closed because these runs share device settings.
 Third-party tests require explicitly selected local plugins; see the
-[test report](docs/RELEASE_TESTS_2026-10-20.md). Old sessions and generated plugins
+[test report](docs/TESTING.md). Old sessions and generated plugins
 from the earlier Cloudes version remain supported. Legacy file-format and
 migration identifiers needed for this compatibility remain in the code.
 
@@ -405,11 +405,3 @@ Check screenshots, logs and example sessions for personal information before
 sharing them. Only use audio you have permission to share. Credentials, license
 keys and private recordings do not belong in public bug reports. The
 [user manual](MANUAL.md) includes initial troubleshooting steps.
-
-## Development history
-
-This repository carries forward the cleaned development history of the earlier
-Aizana project. Its new GitHub creation date marks the move, not the start of
-development. Development steps and original commit timestamps remain traceable.
-The current branch is the maintained source; historical snapshots describe
-their respective versions.

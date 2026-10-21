@@ -9,7 +9,7 @@
 #   P7b-L — die gesetzten Warp-Marker im gespeicherten Session-Inhalt.
 #
 # Aufruf:
-#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#   AIZANA_TESTWAV=/path/to/fixtures/testmaterial_laut.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/28-dock-block.txt
 
 vorn

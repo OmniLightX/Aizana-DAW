@@ -11,7 +11,7 @@
 # solange mehrere gleichnamige Clips existieren. Zaehlen ohne zu raten.
 #
 # Aufruf:
-#   AIZANA_TESTKURZ=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#   AIZANA_TESTKURZ=/path/to/fixtures/testmaterial_kurz.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/13-block-d-auswahl.txt
 
 vorn

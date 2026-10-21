@@ -5,7 +5,7 @@
 #   ffmpeg -i "$AIZANA_TESTWAV" -af volumedetect -f null /dev/null   # max_volume pruefen
 #
 # Aufruf:
-#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_laut.wav \
+#   AIZANA_TESTWAV=/path/to/fixtures/testmaterial_laut.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/10-block-a-editor.txt
 
 vorn

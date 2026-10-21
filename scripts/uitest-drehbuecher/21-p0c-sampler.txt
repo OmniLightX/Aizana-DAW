@@ -17,7 +17,7 @@
 # weil es ein reiner Menueeintrag ist.
 #
 # Aufruf:
-#   AIZANA_TESTWAV=~/Desktop/"Aizana Testläufe"/2026-08-12/testmaterial_kurz.wav \
+#   AIZANA_TESTWAV=/path/to/fixtures/testmaterial_kurz.wav \
 #     ./scripts/uitest.sh lauf scripts/uitest-drehbuecher/21-p0c-sampler.txt
 
 vorn

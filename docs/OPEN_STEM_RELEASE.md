@@ -82,27 +82,15 @@ accounts are not redistributed under Aizana's license.
 
 ## Verified tests and accepted limitations
 
-- Complete engine suite: 431 passed, 11 skipped, 49622 assertions. The shared
-  debug harness emitted JUCE teardown diagnostics; this is not claimed to be a
-  diagnostic-free run.
-- End-to-end native engine test: both four/six output modes passed; float WAVs,
-  aligned length, non-overwrite and cancellation cleanup passed (69 assertions).
-- Public full Release suite: 432 passed, 11 skipped; 49673 assertions passed.
-- Public Release app and test targets built successfully. Four recording-patch
-  regressions passed. Selected bundle privacy/dependency/license audit passed
-  across eight Mach-O files; full source license hashes matched ten direct
-  dependency records and 71 collected notices.
-- Public Release real-model tests also passed: 125 assertions across native
-  reference parity and complete engine output/cancellation tests.
+- Current full-suite and build results are recorded in [STATUS.md](../STATUS.md).
+- Real-model tests passed 125 assertions across native reference parity and
+  complete engine output/cancellation checks.
 - Exact final packaged model: native six-waveform parity passed, 56 assertions;
   maximum allowed per-sample error 0.0002, RMS error 0.00001 and reconstructed
   mixture error 0.000001 against the independent reference.
 - Short stereo lengths and spectral boundaries, missing models and early cancel
   are covered by regression tests. The app Debug build passed.
-- Independent read-only review found no verified new blocker or warning; its
-  sandbox prevented two temporary-directory test executions, and it did not
-  independently rerun full-model or GUI tests.
-- The authorized real multitrack test improved guitar by about 9.5–9.9 dB SI-SDR,
+- A multitrack evaluation improved guitar by about 9.5–9.9 dB SI-SDR,
   but worsened its particular synthesized piano-like timbre. This timbre limitation is retained in the evaluation results.
 - A separate acoustic-piano test improved mixed-piano SI-SDR by 20.54 dB with
   Mega versus 5.59 dB with Spleeter. Solo piano measured 37.30 dB with Mega.
@@ -120,17 +108,11 @@ accounts are not redistributed under Aizana's license.
 The optional model is separate data, accompanied by `MODEL_LICENSES.txt` and
 `SHA256SUMS`. The model contains 355012879 bytes with SHA-256
 `d546b9780159ee8e54c3cf7c0446a4204b8793e363941122b4c115089d369cc2`.
-On 20 October all three assets were fully downloaded with authenticated access
-and matched the original files byte for byte. The Release build with the current
-model URL and the bundle audit passed.
-
-On 21 October the existing release was taken out of draft status and assigned
-the `stem-model-mega53-v1` tag. The model asset URL now exactly matches the app.
-All three assets were downloaded again with authenticated access; sizes and
-SHA-256 digests match the release metadata and the model checksum manifest.
-The source repository remains private. Anonymous download and first-use download
-through the app have not yet been accepted and must be checked after public
-access is enabled. Authenticated transfer verification does not establish that path.
+The [model release](https://github.com/OmniLightX/Aizana-DAW/releases/tag/stem-model-mega53-v1)
+uses the download URL configured in the app. Full authenticated downloads of
+all three assets matched their recorded sizes and SHA-256 digests. Anonymous
+first-use download through the app remains a separate check in
+[STATUS.md](../STATUS.md).
 
 Six-category separation, preview/import and single-step import Undo/Redo passed.
 Cancellation removed the progress panel without importing tracks or changing

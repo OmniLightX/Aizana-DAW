@@ -170,4 +170,4 @@ result listing the available plugin-generation and live-mixing tools.
 - External AI clients have their own data-handling policies. Prompts and tool
   responses may be processed by their providers.
 - Default plugin hosting is in-process. Optional out-of-process hosting uses a
-  separate worker; see [the tested behavior and limits](OOP_EDITOR_WINDOWS_2026-10-20.md).
+  separate worker; see [the tested behavior and limits](TESTING.md).
