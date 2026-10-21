@@ -94,3 +94,20 @@ xtra mds/
 # Python test-tool caches
 __pycache__/
 *.py[cod]
+
+# Local credentials, signing material and assistant state
+.env
+.env.*
+!.env.example
+!.env.sample
+*.p12
+*.pfx
+*.keychain
+*.keychain-db
+.codex/
+.agents/
+.planning/
+
+# Local Aizana sessions and recovery files
+*.tracktion
+*.tracktionedit

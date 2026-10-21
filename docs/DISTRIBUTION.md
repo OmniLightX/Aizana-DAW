@@ -51,7 +51,7 @@ The source-only app distribution does not include pretrained weights. The option
 Mega 53 ONNX conversion is separate model data, not a prebuilt application or
 installer. Its own MIT notices, exact source/changes and SHA-256 accompany it;
 full text is also embedded in the ONNX metadata. See OPEN_STEM_RELEASE.md for
-provenance, accepted limitations, trainer warranty limitation and staging status.
+provenance, accepted limitations, trainer warranty limitation and download status.
 Anonymous first-use model download has not yet been accepted; see
 [the current test status](../STATUS.md).
 

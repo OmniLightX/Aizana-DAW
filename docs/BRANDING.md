@@ -27,6 +27,7 @@ their respective licenses. Existing copyright and license notices must be
 preserved as required by those licenses. See the [project license](../LICENSE.md)
 and [third-party notices](../THIRD_PARTY_NOTICES.md).
 
-Contributions to the original project are welcome but are not a condition of
-this permission. Developing a derivative under your own name and logo remains
-possible under the software licenses.
+Contributing back is not a condition of this permission. Bug reports are welcome;
+external pull requests are currently not accepted, as described in
+[the development guide](../CONTRIBUTING.md). Developing a derivative under your
+own name and logo remains possible under the software licenses.

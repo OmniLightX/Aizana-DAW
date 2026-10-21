@@ -410,5 +410,6 @@ keys and private recordings do not belong in public bug reports. The
 
 This repository carries forward the cleaned development history of the earlier
 Aizana project. Its new GitHub creation date marks the move, not the start of
-development. Personal information has been removed; development steps and
-original commit timestamps remain traceable.
+development. Development steps and original commit timestamps remain traceable.
+The current branch is the maintained source; historical snapshots describe
+their respective versions.

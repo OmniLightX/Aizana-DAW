@@ -30,6 +30,8 @@ Lizenzen. Bestehende Copyright- und Lizenzhinweise müssen entsprechend diesen
 Lizenzen erhalten bleiben. Siehe [Projektlizenz](../LICENSE.md) und
 [Fremdkomponenten](../THIRD_PARTY_NOTICES.md).
 
-Beiträge zum ursprünglichen Projekt sind willkommen, aber keine Voraussetzung
-für diese Erlaubnis. Eine Weiterentwicklung unter eigenem Namen und mit eigenem
-Logo bleibt nach Maßgabe der Softwarelizenzen möglich.
+Beiträge zum ursprünglichen Projekt sind keine Voraussetzung für diese Erlaubnis.
+Fehlerberichte sind willkommen; externe Pull Requests werden derzeit nicht
+angenommen. Das beschreibt die [Entwickleranleitung](../CONTRIBUTING.md). Eine
+Weiterentwicklung unter eigenem Namen und mit eigenem Logo bleibt nach Maßgabe
+der Softwarelizenzen möglich.

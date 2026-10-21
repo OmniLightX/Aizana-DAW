@@ -425,5 +425,6 @@ Die [Bedienungsanleitung](MANUAL.de.md) enthält eine erste Fehlerhilfe.
 
 Dieses Repository übernimmt die bereinigte Entwicklungshistorie des bisherigen
 Aizana-Projekts. Das neue GitHub-Erstellungsdatum bezeichnet den Umzug, nicht den
-Beginn der Entwicklung. Persönliche Angaben wurden entfernt; Entwicklungsschritte
-und ursprüngliche Commit-Zeitstempel bleiben nachvollziehbar.
+Beginn der Entwicklung. Entwicklungsschritte und ursprüngliche Commit-Zeitstempel
+bleiben nachvollziehbar. Der aktuelle Branch enthält den gepflegten Quellstand;
+historische Stände beschreiben ihre jeweilige Version.

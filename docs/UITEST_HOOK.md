@@ -125,8 +125,8 @@ Script commands: `klick` · `dklick` · `ziehe <Name> <dx> <dy>` ·
 before a test run, or launch merely forwards to it and the hook silently fails
 to start. The script aborts in that case.
 
-**Elements are found by NAME**, never by coordinates (`setTitle` changes,
-`f846eb9`). If a name is ambiguous, `find` reports an error and does **not** click
+**Elements are found by NAME**, never by coordinates (component `setTitle` values).
+If a name is ambiguous, `find` reports an error and does **not** click
 the first match. A silent misclick that reports success is precisely the failure
 class this naming system was designed to prevent.
 
