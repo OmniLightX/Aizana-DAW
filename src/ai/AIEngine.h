@@ -6,17 +6,17 @@
 #include <functional>
 
 /**
- * AIEngine — the background worker pool (Phase 2, Block B scaffolding).
+ * AIEngine — background worker pool for analysis and inference.
  *
- * Architecture invariant (CLAUDE.md): "AI inference always on a dedicated background
+ * Architecture invariant: "AI inference always on a dedicated background
  * thread — NEVER on or near the audio thread" and "AI->TE mutations ONLY via the
  * Command Queue". AIEngine enforces both: work runs on a juce::ThreadPool, and any
  * resulting Edit mutation goes back through the AICommandBridge (which applies it on
  * the message thread as ONE undo transaction). The Edit is never touched directly here.
  *
- * Phase 2 = plumbing. It owns a swappable IInferenceBackend (OnnxModelRunner stub by
- * default); Phase 3's real worker (stem separation, instrument detection, mixing model)
- * slots in unchanged.
+ * Owns a replaceable IInferenceBackend, initially OnnxModelRunner. The backend
+ * remains unavailable until a valid model is loaded; callers can use heuristic
+ * behavior when no model or ONNX Runtime support is available.
  */
 class AIEngine
 {
@@ -40,7 +40,7 @@ public:
     /** Loads an ONNX model into the backend if it is an OnnxModelRunner. Synchronous —
         call from a worker (it builds an ORT session). Returns true on success; a missing
         or invalid model leaves the backend unavailable (callers fall back to heuristics).
-        Slice 5a: dropping a model at the path below activates local ML with no rebuild. */
+        Model loading does not require rebuilding the application. */
     bool tryLoadModel (const juce::File& modelFile);
 
     int  getNumThreads() const noexcept;

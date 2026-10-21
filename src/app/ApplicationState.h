@@ -29,24 +29,23 @@ struct ApplicationState
 
     // AI→TE command queue bridge — the ONLY path for AI-driven Edit mutations
     // (background AI thread enqueues, message thread applies; see AICommandBridge).
-    // Phase 2 core: instantiated and ready for the Phase 3 AI worker.
     AICommandBridge aiCommandBridge { editManager };
 
     // "Das Dial" — the single source of truth for UIMode + assist prominence + work
-    // context (Phase 2, Block A). Reads any persisted mode/assist on construction.
+    // context. Reads any persisted mode/assist on construction.
     UIStateManager uiState { editManager.getEngine() };
 
-    // The translator (Phase 2, Block B) — intent -> editable TE command batches,
-    // applied via aiCommandBridge as one undo step. Heuristic for now; ML in Phase 3.
+    // Rule-based intent translation into editable TE command batches,
+    // applied via aiCommandBridge as one undo step.
     IntentEngine intentEngine { editManager };
 
-    // The conversation (Phase 2, Block B) — master meter -> jargon-free feedback +
+    // Master meter -> jargon-free feedback +
     // 1-click intents for the Beginner Coach rail. Passive; the UI polls current().
     HeuristicFeedbackEngine heuristicFeedbackEngine { audioEngine };
 
-    // The background worker pool (Phase 2, Block B) — runs AI work off the audio/message
-    // threads and routes any Edit mutation back through aiCommandBridge. Stub backend
-    // (OnnxModelRunner) for now; Phase 3's real worker slots in unchanged.
+    // Background worker pool: runs AI work off the audio/message threads and
+    // routes Edit mutations through aiCommandBridge. OnnxModelRunner remains
+    // unavailable until a valid model is loaded.
     AIEngine aiEngine { aiCommandBridge };
 
     ApplicationState()

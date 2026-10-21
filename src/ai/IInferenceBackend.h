@@ -4,13 +4,12 @@
 #include <vector>
 
 /**
- * IInferenceBackend — the swappable inference seam (Phase 2, Block B scaffolding).
+ * IInferenceBackend — replaceable interface for model inference.
  *
  * Abstracts "run a model" so the rest of Aizana never depends on a concrete ML
- * runtime. Phase 2 ships a stub (OnnxModelRunner) with no real model; Phase 3 backs
- * it with ONNX Runtime + the CoreML execution provider (Apple Neural Engine) WITHOUT
- * touching callers. Inference always runs on a background thread (AIEngine) — never
- * on or near the audio thread.
+ * runtime. OnnxModelRunner provides the ONNX Runtime implementation when enabled
+ * at build time, with optional CoreML acceleration and CPU fallback. Inference
+ * runs on a background thread (AIEngine), never on the audio thread.
  */
 class IInferenceBackend
 {
