@@ -13,8 +13,23 @@ suite for every documentation-only commit.
   existing plugin after a failed compile. The JUCE diagnostic gate was clean.
   Recording/state/CoreAudio patch tests passed (6/4/2). Release app build and
   bundle audit passed. The subsequent full Debug suite passed 467 cases,
-  6 skips and 50,859 assertions, with a clean JUCE diagnostic gate. The GitHub
-  workflow is now active; its first clean hosted run is pending verification.
+  6 skips and 50,866 assertions, with a clean JUCE diagnostic gate. The GitHub
+  workflow is now active; hosted Release run
+  [40039334331](https://github.com/OmniLightX/Aizana-DAW/actions/runs/40039334331)
+  and independent rerun
+  [40041084368](https://github.com/OmniLightX/Aizana-DAW/actions/runs/40041084368)
+  passed the build, patch checks and both CTest targets.
+
+- Warp crash investigation: hosted run 40037494124 stopped with SIGSEGV during
+  `WarpEngine: RENDER PROOF`. No native stack was retained in that run. Thirty
+  isolated local Release Warp runs passed. A separate AddressSanitizer Debug
+  suite passed 462 cases, 11 skips and 50,818 assertions; ONNX and the generator
+  were disabled only in that diagnostic build. Ten additional isolated ASan
+  Warp runs passed 58 assertions each without a reported memory error.
+  The crash has not been reproduced or attributed to a confirmed cause, and
+  is **not recorded as fixed**. CI now retains crash diagnostics on failure.
+  A subsequent complete local Release run with the failed CI run's seed
+  (`2477304931`) passed 467 cases, 6 skips and 50,866 assertions, exit 0.
 
 - CoreAudio combined-device restart: deferred shutdown regression and patch
   application/idempotence tests passed. Debug suite again passed 465 cases,
@@ -43,7 +58,7 @@ suite for every documentation-only commit.
   58 assertions. Both app bundles retain ONNX notices and exclude the old
   standalone Demucs/Eigen notice folders. The Release bundle audit passed.
 
-- Latest full Debug engine suite: **467 passed, 6 skipped, 50,859 assertions**,
+- Latest full Debug engine suite: **467 passed, 6 skipped, 50,866 assertions**,
   exit 0. The diagnostic gate found no JUCE assertion or leaked-object report.
 - Automation UI regression: 21 assertions passed, covering mode/parameter
   synchronization, first selection, Undo/Redo and curve preservation.

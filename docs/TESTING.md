@@ -44,6 +44,27 @@ clean build procedure, not a claim of byte-identical binary reproducibility.
 No signing credentials, private plugins or personal recordings are required.
 The workflow does not replace the separate local Debug diagnostic run.
 
+On failure, CI preserves CTest logs and available `engine_tests` crash reports
+for seven days and attempts a focused Warp debugger run. Diagnostic collection
+cannot turn a failed test into a passing workflow.
+
+For memory-error investigation, use a separate AddressSanitizer build:
+
+```sh
+cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+  -DAIZANA_ENABLE_ONNX=OFF -DAIZANA_BUILD_GENERATOR=OFF \
+  -DCMAKE_CXX_FLAGS='-fsanitize=address -fno-omit-frame-pointer' \
+  -DCMAKE_C_FLAGS='-fsanitize=address -fno-omit-frame-pointer' \
+  -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address
+cmake --build build-asan --target engine_tests -j3
+build-asan/tests/engine_tests_artefacts/Debug/engine_tests '[warp]'
+```
+
+Omit the filter to run the complete diagnostic suite. ONNX and generator checks
+are excluded in this configuration; it supplements the regular build rather
+than replacing it. A passing rerun does not establish that an intermittent crash
+has been fixed.
+
 ## Optional plugin and model fixtures
 
 VST3 and CLAP integration tests require explicitly selected installed plugins:

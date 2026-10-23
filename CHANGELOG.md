@@ -5,10 +5,13 @@
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
 
-### Build compatibility
+### Build and test compatibility
 
 - Use aggregate initialization for JUCE cleanup guards so the stem pipeline and
   its tests also compile with the Apple Clang version on the macOS 14 CI runner.
+- Synchronize hosted recording regressions with actual transport and thumbnail
+  state, with bounded waits, instead of assuming audio advances in wall time.
+  Observe a real loop wrap before checking the post-wrap live waveform.
 
 ### Plugin generator
 
