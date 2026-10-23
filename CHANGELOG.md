@@ -5,6 +5,11 @@
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
 
+### Build compatibility
+
+- Use aggregate initialization for JUCE cleanup guards so the stem pipeline and
+  its tests also compile with the Apple Clang version on the macOS 14 CI runner.
+
 ### Plugin generator
 
 - Escape display names as C++ string literals, preserving quotes, backslashes,

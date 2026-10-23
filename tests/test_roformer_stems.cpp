@@ -115,7 +115,7 @@ TEST_CASE ("Stem engine writes both output modes without overwriting and cleans 
     const auto directory = juce::File::getSpecialLocation (juce::File::tempDirectory)
         .getNonexistentChildFile ("aizana_stem_engine", {});
     REQUIRE (directory.createDirectory());
-    const auto cleanup = juce::ScopeGuard ([&] { directory.deleteRecursively(); });
+    const auto cleanup = juce::ScopeGuard { [&] { directory.deleteRecursively(); } };
     auto sentinel = directory.getChildFile ("Drums.wav");
     REQUIRE (sentinel.replaceWithText ("existing stem must survive"));
     juce::AudioFormatManager formats;

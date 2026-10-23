@@ -139,10 +139,10 @@ juce::Result StemSeparationEngine::separateNow (const juce::File& song, const ju
     stemsOut.clear();
     juce::Array<juce::File> created;
     bool complete = false;
-    const auto cleanup = juce::ScopeGuard ([&]
+    const auto cleanup = juce::ScopeGuard { [&]
     {
         if (! complete) for (const auto& file : created) file.deleteFile();
-    });
+    } };
     auto report = [&] (float value, const juce::String& text) { if (progress) progress (value, text); };
     try
     {
