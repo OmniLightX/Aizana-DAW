@@ -40,9 +40,33 @@ jobs:
           python3 tests/test_coreaudio_patch.py
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Capture crash diagnostics
+        if: failure()
+        timeout-minutes: 5
+        continue-on-error: true
+        run: |
+          mkdir -p build/Testing/Temporary/crashes
+          python3 - <<'PYREPORT'
+          from pathlib import Path
+          import shutil, time
+          destination = Path('build/Testing/Temporary/crashes')
+          for attempt in range(10):
+              reports = []
+              for root in (Path.home() / 'Library/Logs/DiagnosticReports', Path('/Library/Logs/DiagnosticReports')):
+                  reports.extend(root.glob('engine_tests*'))
+              for report in reports:
+                  if report.is_file():
+                      shutil.copy2(report, destination / report.name)
+              if reports:
+                  break
+              time.sleep(1)
+          PYREPORT
+          lldb --batch -o 'process launch' -k 'thread backtrace all' -- \
+            build/tests/engine_tests_artefacts/Release/engine_tests '[warp]' \
+            > build/Testing/Temporary/warp-debugger.log 2>&1
       - name: Preserve test diagnostics
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: test-diagnostics
           path: build/Testing/Temporary/
