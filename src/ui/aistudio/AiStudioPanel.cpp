@@ -269,6 +269,12 @@ void AiStudioPanel::send()
     }
     else // Codex
     {
+        const auto workspaceResult = AiAgentBridge::codexWorkspace().createDirectory();
+        if (workspaceResult.failed())
+        {
+            appendLine ("\n[!] Codex workspace: " + workspaceResult.getErrorMessage() + "\n");
+            return;
+        }
         argv      = AiAgentBridge::buildCodexArgs (cli.executable, prompt, mcpBin, toolchain);
         parseJson = false;  // codex exec prints plain text
     }

@@ -10,6 +10,10 @@ PIN = '0a5f4e6a5f53d09c89b414a44386a12df7fa1ec6'
 FILES = [f'modules/tracktion_engine/playback/{name}' for name in (
     'tracktion_EditPlaybackContext.cpp', 'tracktion_EditPlaybackContext.h',
     'tracktion_TransportControl.cpp', 'devices/tracktion_WaveInputDevice.cpp')]
+FILES += ['modules/tracktion_engine/' + path for path in (
+    'utilities/tracktion_EngineBehaviour.h',
+    'playback/graph/tracktion_EditNodeBuilder.cpp',
+    'model/clips/tracktion_Clip.cpp')]
 
 
 class RecordingPatchTests(unittest.TestCase):
@@ -21,7 +25,11 @@ class RecordingPatchTests(unittest.TestCase):
         for folder in ('cmake', 'patches', 'extern/tracktion_engine'):
             (self.root / folder).mkdir(parents=True, exist_ok=True)
         for path in ('cmake/ApplyTracktionRecordingPatch.cmake',
-                     'patches/tracktion-recording-errors.patch'):
+                     'patches/tracktion-recording-errors.patch',
+                     'cmake/ApplyTracktionRecordingMonitoringPatch.cmake',
+                     'patches/tracktion-recording-monitoring.patch',
+                     'cmake/ApplyTracktionRecordingOverlapPatch.cmake',
+                     'patches/tracktion-recording-overlap.patch'):
             shutil.copyfile(REPO / path, self.root / path)
         for path in FILES:
             target = self.engine / path
@@ -45,6 +53,31 @@ class RecordingPatchTests(unittest.TestCase):
         result = self.apply()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.contents(), patched)
+
+    def apply_full_chain(self):
+        script = self.root / 'check.cmake'
+        script.write_text(''.join(
+            f'include("{self.root / "cmake" / name}")\n' for name in (
+                'ApplyTracktionRecordingPatch.cmake',
+                'ApplyTracktionRecordingMonitoringPatch.cmake',
+                'ApplyTracktionRecordingOverlapPatch.cmake')))
+        return subprocess.run(['cmake', '-P', str(script)], capture_output=True, text=True)
+
+    def test_full_monitoring_and_overlap_chain_is_idempotent(self):
+        result = self.apply_full_chain()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        patched = self.contents()
+        result = self.apply_full_chain()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.contents(), patched)
+
+    def test_overlap_local_edits_are_preserved(self):
+        self.assertEqual(self.apply_full_chain().returncode, 0)
+        path = self.engine / FILES[-1]
+        path.write_bytes(path.read_bytes() + b'\n// user edit\n')
+        before = self.contents()
+        self.assertNotEqual(self.apply_full_chain().returncode, 0)
+        self.assertEqual(self.contents(), before)
 
     def test_local_edits_are_preserved(self):
         path = self.engine / FILES[0]

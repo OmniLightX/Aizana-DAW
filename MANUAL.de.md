@@ -129,6 +129,26 @@ Beim Mithören über Lautsprecher kann eine Rückkopplung entstehen. Verwende f�
 Mikrofonaufnahmen Kopfhörer. Wenn dein Interface bereits direktes Monitoring
 liefert, vermeide unbeabsichtigtes doppeltes Mithören über Interface und DAW.
 
+Während einer Audioaufnahme bleibt vorhandenes Material auf der aufnehmenden
+Spur im Aufnahmebereich stumm. Der Eingang und andere Spuren bleiben hörbar,
+sofern ihr Monitoring beziehungsweise Routing aktiviert ist. Vor und nach
+einem Punch-Bereich wird vorhandenes Material wiedergegeben. Die vorhandenen
+Clips werden durch diese Monitoring-Regel nicht gelöscht.
+
+Bei einem weiteren Aufnahmedurchgang ohne Loop hat die neue Aufnahme in ihrem
+Zeitbereich Vorrang vor älteren Clips derselben Spur. Außerhalb der Überlappung
+bleibt das bisherige Material hörbar; die ursprünglichen Clips und Audiodateien
+bleiben erhalten. Per Rechtsklick auf einen überlappenden Clip und **Aufnahme
+bevorzugen** lässt sich ein früherer Durchgang auswählen. Diese Auswahl ist
+rückgängig machbar und wird mit der Session gespeichert. Bereits vorhandene
+Überlappungen aus älteren Sessions lassen sich über dasselbe Menü auflösen.
+Loop-Takes werden weiterhin über die bestehende Take-/Comping-Auswahl bedient.
+
+Während der Aufnahme zeigt das Arrangement das eingehende Audiosignal als
+wachsende Wellenform. Ihre Höhe entspricht dem aufgenommenen Signal; die
+Pegelanzeigen im Mixer bleiben unabhängig davon. Die Anzeige berücksichtigt
+Scrollen, Zoom, Punch-Grenzen und den aktuellen Loop-Durchgang.
+
 ### Metronom, Vorzähler und Punch
 
 Das Metronom schaltest du in der Transportleiste ein. Das zugehörige Menü bietet
@@ -237,6 +257,11 @@ Ziehe die Trennkante zwischen Arrangement und Mixer nach oben oder unten, um
 dessen Höhe zu ändern. Die Ansichtsschalter bleiben in der unteren Leiste.
 
 ### Bus und gemeinsamer Hall
+
+Rechtsklicke auf den Namen oder die freie Fläche eines Bus-, FX- oder Cue-Kanals
+und wähle **Kanal entfernen**, um ihn samt Inserts zu löschen. Eingänge auf diesen
+Bus gehen danach zum Master; Sends zu diesem FX-/Cue-Kanal werden entfernt.
+Rückgängig stellt den Kanal und die betroffenen Verbindungen gemeinsam wieder her.
 
 Für eine gemeinsame Bearbeitung mehrerer Spuren:
 
@@ -440,6 +465,11 @@ Agentenoberfläche. Sie kann lokal installierte Claude-Code- oder Codex-Werkzeug
 verwenden. Deren Installation, Anmeldung, Kosten und Datenübertragung richten
 sich nach dem jeweiligen Anbieter. Diese Dienste sind nicht Teil der
 kostenlosen Aizana-Lizenz.
+
+Wähle nach Installation und Anmeldung der Codex-CLI im Feld **KI** den Eintrag
+**Codex**. Mit **Neu verbinden** werden neu installierte Werkzeuge erkannt.
+Codex-Werkzeugaufrufe durchlaufen eine automatische Freigabeprüfung. Die
+unterstützte CLI und Einrichtung stehen in [docs/MCP.md](docs/MCP.md).
 
 **Song → Plugin generieren…** und **Aizana-Plugins verwalten…** gehören zum
 integrierten Generator. Zum Erzeugen neuer Plugins werden Faust und die Apple

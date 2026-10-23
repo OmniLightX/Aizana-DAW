@@ -1,0 +1,20 @@
+--- a/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp
++++ b/modules/tracktion_engine/playback/devices/tracktion_WaveInputDevice.cpp
+@@ -270,7 +270,7 @@
+             }
+         }
+ 
+-        if (muteTrackContentsWhilstRecording && isActivelyRecording)
++        if (muteTrackContentsWhilstRecording && isActivelyRecording && muteTrackNow)
+             return true;
+ 
+         if (isTrackRecordingWithPunch
+@@ -374,6 +374,8 @@
+                     rc->adjustSamples += context.getLatencySamples();
+ 
+                 rc->adjustDurationAtStart = TimeDuration::fromSamples (rc->adjustSamples, rc->sampleRate);
++
++                rc->muteTimes = punchRange;
+ 
+                 if (edit.recordingPunchInOut)
+                 {

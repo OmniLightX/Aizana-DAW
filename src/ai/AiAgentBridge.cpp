@@ -176,6 +176,12 @@ namespace aizana
         return args;
     }
 
+    juce::File AiAgentBridge::codexWorkspace()
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+            .getChildFile ("Aizana/aistudio/workspace");
+    }
+
     juce::StringArray AiAgentBridge::buildCodexArgs (const juce::File& codexExe,
                                                     const juce::String& prompt,
                                                     const juce::File& aizanaMcpBinary,
@@ -186,6 +192,13 @@ namespace aizana
         juce::StringArray args;
         args.add (codexExe.getFullPathName());
         args.add ("exec");
+        // The installed DAW is not a source checkout. Keep the agent's workspace
+        // separate from the GUI's inherited working directory (often /).
+        args.add ("--skip-git-repo-check");
+        args.add ("--cd"); args.add (codexWorkspace().getFullPathName());
+        // exec cannot show interactive approvals. Review tool requests instead
+        // of rejecting every MCP call or bypassing the sandbox.
+        args.add ("--approve-for-me");
         args.add ("-c");
         args.add ("mcp_servers.aizana.command=\"" + aizanaMcpBinary.getFullPathName() + "\"");
         if (toolchainDir != juce::File())

@@ -1,0 +1,12 @@
+find_package(Git REQUIRED)
+set(_juce "${CMAKE_CURRENT_LIST_DIR}/../extern/JUCE")
+file(SHA256 "${_juce}/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp" _hash)
+if(_hash STREQUAL "a5726b01377eb12147d6abc30681d7944befa30055a9a326c4f4b3a685507495")
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${CMAKE_CURRENT_LIST_DIR}/../patches/juce-coreaudio-async-restart.patch"
+                    WORKING_DIRECTORY "${_juce}" RESULT_VARIABLE _result ERROR_VARIABLE _error)
+    if(NOT _result EQUAL 0)
+        message(FATAL_ERROR "CoreAudio restart patch failed: ${_error}")
+    endif()
+elseif(NOT _hash STREQUAL "587b39d65ba7a4bb2070a9cb1547ba8fd5013b688f7bedb7620228f55a17c631")
+    message(FATAL_ERROR "Unrecognised JUCE CoreAudio source; preserve local edits before applying restart patch")
+endif()

@@ -1,0 +1,48 @@
+--- a/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
++++ b/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
+@@ -242,6 +242,9 @@
+     /// Allows a new clip to be customised.
+     virtual void newClipAdded (Clip&, [[ maybe_unused ]] bool fromRecording)        {}
+ 
++    /// Clip playback exclusions, evaluated while building the graph (never on the audio thread).
++    virtual juce::Array<TimeRange> getClipPlaybackMuteTimes (const Clip&, const juce::Array<Clip*>*) { return {}; }
++
+     struct ControlSurfaces
+     {
+         bool mackieMCU = true;
+--- a/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp
++++ b/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp
+@@ -873,7 +873,16 @@
+         return createNodeForContainerClip (*containerClip, trackMuteState, params, role);
+ 
+     if (auto audioClip = dynamic_cast<AudioClipBase*> (&clip))
+-        return createNodeForAudioClip (*audioClip, false, params, role);
++    {
++        auto node = createNodeForAudioClip (*audioClip, false, params, role);
++        if (node && role == ClipRole::arranger)
++        {
++            auto muteTimes = clip.edit.engine.getEngineBehaviour().getClipPlaybackMuteTimes (clip, params.allowedClips);
++            if (! muteTimes.isEmpty())
++                node = makeNode<TimedMutingNode> (std::move (node), std::move (muteTimes), params.processState.playHeadState);
++        }
++        return node;
++    }
+ 
+     if (auto midiClip = dynamic_cast<MidiClip*> (&clip))
+         return createNodeForMidiClip (*midiClip, trackMuteState, params, role);
+--- a/modules/tracktion_engine/model/clips/tracktion_Clip.cpp
++++ b/modules/tracktion_engine/model/clips/tracktion_Clip.cpp
+@@ -484,7 +484,12 @@
+ {
+     if (tree == state)
+     {
+-        if (id == IDs::start || id == IDs::length || id == IDs::offset)
++        if (id == juce::Identifier ("aizanaRecordingPriority"))
++        {
++            changed();
++            edit.restartPlayback();
++        }
++        else if (id == IDs::start || id == IDs::length || id == IDs::offset)
+         {
+             if (auto track = getTrack())
+             {

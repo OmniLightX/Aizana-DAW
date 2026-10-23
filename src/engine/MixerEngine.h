@@ -62,6 +62,9 @@ class MixerEngine
 public:
     explicit MixerEngine (EditManager& editManager);
 
+    /** Delete a bus/FX/cue channel and its incoming routes in one undo step. */
+    bool deleteChannel (te::AudioTrack&);
+
     // -------------------------------------------------------------------------
     // MIX-01: Channel strip parameters
     // -------------------------------------------------------------------------

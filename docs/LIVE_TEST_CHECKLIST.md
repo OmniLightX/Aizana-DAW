@@ -73,3 +73,43 @@ they are not marked as manually passed on that basis.
 
 See [test status](../STATUS.md), [test reproduction](TESTING.md),
 [MP3 checks](MP3_EXPORT.md) and [model evidence](OPEN_STEM_RELEASE.md).
+
+### Bus/FX channel removal
+
+Pending live verification in the rebuilt app:
+- Right-click a bus/FX/cue name or empty strip area and choose **Kanal entfernen**.
+- Check that plugin windows close, source outputs return to master and sends to
+  the removed return disappear; unrelated bus/FX routes must remain unchanged.
+- Undo and redo; check the restored inserts and connections, then save/reopen.
+
+### Recording monitoring
+
+- [ ] Record over an existing clip: hear the input, not the old clip; other
+      tracks continue playing. Stop and verify recorded audio.
+- [ ] Punch recording: hear existing audio before and after the punch region.
+- [ ] Loop recording: old clips remain silent across loops; takes and comping
+      remain available after stopping.
+
+### Successive recording playback
+
+- [ ] Record, stop, rewind and record again without looping: hear only the new
+      pass in the overlap during subsequent playback.
+- [ ] Record a shorter replacement inside a longer take: check the original
+      before and after it, plus the transitions for clicks.
+- [ ] Right-click an overlapping clip, choose **Aufnahme bevorzugen**, switch
+      back, Undo/Redo, save and reopen. Confirm all source audio remains intact.
+
+### Live recording waveform (pending hardware/UI verification)
+
+- [ ] Record quiet and loud passages: waveform grows before Stop and reflects input amplitude; existing mixer meters behave unchanged.
+- [ ] Scroll and zoom while recording; waveform stays aligned with the timeline and does not cover headers.
+- [ ] Check stereo and simultaneous armed tracks, silence, pre-roll, punch-in/out, and several loop passes.
+- [ ] Stop and record again: completed waveform remains and the new live waveform belongs only to the active recording.
+
+### CoreAudio device switching
+
+- [x] Two output round trips between built-in speakers and AirPods Pro with built-in microphone input while stopped, in the corrected Release build.
+- [ ] Repeat the output switches during playback.
+- [ ] Disconnect/reconnect the Bluetooth device; check app responsiveness, audio restart, and reported sample rate.
+- [ ] Close the device/settings during a pending change; verify no unexpected restart or crash.
+- [ ] Repeat with the audio interface and check recording/monitoring after switching.

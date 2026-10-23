@@ -5,7 +5,33 @@
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
 
+### Audio devices
+
+- Defer combined CoreAudio input/output restarts to the message thread, avoiding
+  synchronous shutdown from device-notification callbacks (including Bluetooth
+  device changes). Cancel queued restarts when closing the device.
+
+### Recording
+
+- Draw live audio waveforms in the arrangement using the recording engine’s
+  existing thumbnails, without changing input audio or mixer meters.
+
+- Give new non-loop audio recordings playback priority over overlapping clips,
+  preserving original audio and playback outside the overlap. Add an undoable
+  recording-choice menu; selections persist with the session.
+
+- Mute existing audio clips on the recording track during capture, preserving
+  playback before and after punch recording and playback on other tracks.
+
+### KI-Studio
+
+- Fix Codex startup outside a Git checkout, use a dedicated workspace and enable
+  automatic approval review so non-interactive MCP calls can be evaluated.
+
 ### Mixer and track editing
+
+- Remove bus, FX and cue channels from their mixer context menu. Incoming outputs
+  return to master and sends to the removed return are cleared, with Undo/Redo.
 
 - Select channels by clicking empty strip areas or controls. Existing multiple
   selections remain selected when operating their controls.

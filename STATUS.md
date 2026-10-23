@@ -1,11 +1,31 @@
 # Aizana 0.3.0 Alpha — test status
 
-Recorded checks through 21 October 2026.
+Recorded checks through 23 October 2026.
 Target: Apple Silicon (arm64), macOS 13.3 or later. Aizana is distributed as
 source code. This page records completed runs; it does not imply a fresh full
 suite for every documentation-only commit.
 
 ## Automated results
+
+- CoreAudio combined-device restart: deferred shutdown regression and patch
+  application/idempotence tests passed. Debug suite again passed 465 cases,
+  6 skips, 50,838 assertions with clean JUCE diagnostics; Release build and
+  bundle audit passed. In the rebuilt app, two round trips between AirPods Pro
+  output and built-in speakers with built-in microphone input completed without
+  a crash. Switching during playback, physical disconnect/reconnect and interface
+  recording remain live checks; this is not a general crash-immunity claim.
+
+- Live recording waveform: simulated-input drawing test passed 45 assertions
+  across normal, punch and loop recording, including scrolling and stop.
+  Release app build and bundle audit passed. The subsequent full Debug suite
+  passed with clean JUCE diagnostics. Real-device/UI verification remains pending.
+
+- Successive recording playback: rendered audio verifies new-take priority in
+  partial overlaps, original audio outside the overlap, previous-take selection,
+  Undo/Redo and save/reload. Recording-start tests also verify automatic priority
+  assignment after a real synthetic-input recording. Loop-take containers and
+  unrelated tracks are covered. Debug tests and the Release app build passed;
+  native menu and microphone checks for this playback change remain pending.
 
 - After removal of the legacy Demucs library and separate Eigen build dependency:
   Debug and Release app/test builds passed. The full Debug suite again passed
@@ -14,7 +34,7 @@ suite for every documentation-only commit.
   58 assertions. Both app bundles retain ONNX notices and exclude the old
   standalone Demucs/Eigen notice folders. The Release bundle audit passed.
 
-- Latest full Debug engine suite: **459 passed, 6 skipped, 50,219 assertions**,
+- Latest full Debug engine suite: **465 passed, 6 skipped, 50,838 assertions**,
   exit 0. The diagnostic gate found no JUCE assertion or leaked-object report.
 - Automation UI regression: 21 assertions passed, covering mode/parameter
   synchronization, first selection, Undo/Redo and curve preservation.

@@ -1,0 +1,67 @@
+--- a/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp
++++ b/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp
+@@ -1580,6 +1580,7 @@
+ 
+     void close() override
+     {
++        stopTimer();
+         stop();
+         fifo.clear();
+         active = false;
+@@ -1636,18 +1637,8 @@
+ 
+     void restartAsync() override
+     {
+-        {
+-            const ScopedLock sl (closeLock);
+-
+-            if (active)
+-            {
+-                if (callback != nullptr)
+-                    previousCallback = callback;
+-
+-                close();
+-            }
+-        }
+-
++        // CoreAudio notifications may arrive on the HAL thread. Never close
++        // devices or notify the engine from that thread; coalesce on the UI timer.
+         startTimer (100);
+     }
+ 
+@@ -1688,7 +1679,7 @@
+             }
+ 
+             const ScopedLock sl (callbackLock);
+-            previousCallback = callback = newCallback;
++            callback = newCallback;
+         }
+     }
+ 
+@@ -1710,7 +1701,6 @@
+     WeakReference<CoreAudioIODeviceType> owner;
+     CriticalSection callbackLock;
+     AudioIODeviceCallback* callback = nullptr;
+-    AudioIODeviceCallback* previousCallback = nullptr;
+     double currentSampleRate = 0;
+     int currentBufferSize = 0;
+     bool active = false;
+@@ -1729,7 +1719,17 @@
+     {
+         stopTimer();
+ 
+-        restart (previousCallback);
++        // A user-initiated close must not be undone by a queued notification.
++        if (! active)
++            return;
++
++        AudioIODeviceCallback* callbackToRestart = nullptr;
++        {
++            const ScopedLock sl (callbackLock);
++            callbackToRestart = callback;
++        }
++
++        restart (callbackToRestart);
+     }
+ 
+     void shutdown (const String& error)

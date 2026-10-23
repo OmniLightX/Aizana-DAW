@@ -72,6 +72,11 @@ TEST_CASE ("AiAgentBridge: buildCodexArgs runs `exec` and registers the MCP serv
     const auto args = AiAgentBridge::buildCodexArgs (exe, "make a reverb", bin, tc);
     CHECK (args[0] == exe.getFullPathName());
     CHECK (args.contains ("exec"));
+    // Finder-launched DAWs do not run inside a source checkout.
+    CHECK (args.contains ("--skip-git-repo-check"));
+    CHECK (args.contains ("--approve-for-me"));
+    CHECK (args.contains ("--cd"));
+    CHECK (juce::File (args[args.indexOf ("--cd") + 1]).getFileName() == "workspace");
     CHECK (args.contains ("make a reverb"));
     bool hasServerOverride = false;
     for (const auto& a : args)

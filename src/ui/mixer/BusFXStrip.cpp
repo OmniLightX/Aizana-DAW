@@ -204,7 +204,25 @@ void BusFXStrip::paint (juce::Graphics& g)
 
 void BusFXStrip::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isPopupMenu()) return;
+    if (e.mods.isPopupMenu())
+    {
+        // Insert and send controls own their contextual menus.
+        if (e.eventComponent != this && e.eventComponent != &trackNameLabel
+            && e.eventComponent != &meterDisplay)
+            return;
+        juce::PopupMenu menu;
+        menu.addItem (1, "Kanal entfernen");
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&trackNameLabel),
+            [safe = juce::Component::SafePointer<BusFXStrip> (this)] (int result)
+            {
+                if (! safe || result != 1) return;
+                for (auto* plugin : safe->track.pluginList.getPlugins())
+                    safe->pluginWindowManager.closePluginWindowNow (*plugin);
+                // Deletion may rebuild and destroy this component. No access afterwards.
+                safe->mixerEngine.deleteChannel (safe->track);
+            });
+        return;
+    }
     if (e.eventComponent == this || e.eventComponent == &trackNameLabel)
     {
         if (onTrackSelected) onTrackSelected(&track);

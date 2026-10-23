@@ -3,6 +3,7 @@
 #include "ArrangementView.h"
 #include "app/MainComponent.h"
 #include "engine/ClipEditor.h"
+#include "engine/AizanaEngineBehaviour.h"
 #include "engine/ClipGainEnvelope.h"
 #include "ui/common/TrackColours.h"
 #include "ui/pluginbrowser/PluginBrowserPopup.h"
@@ -867,6 +868,29 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
                           ! wc->getAutoTempo());
         }
 
+        // Separate recording passes remain intact; choose which overlapping clip wins.
+        juce::Array<te::EditItemID> recordingChoices;
+        if (dynamic_cast<te::WaveAudioClip*> (&clip) != nullptr)
+            if (auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack()))
+            {
+                juce::PopupMenu recordings;
+                juce::int64 highestPriority = 0;
+                for (auto* candidate : track->getClips())
+                    if (candidate->getPosition().time.overlaps (clip.getPosition().time))
+                        highestPriority = std::max (highestPriority, AizanaEngineBehaviour::recordingPriority (*candidate));
+                for (auto* candidate : track->getClips())
+                    if (dynamic_cast<te::WaveAudioClip*> (candidate) != nullptr
+                        && candidate->getPosition().time.overlaps (clip.getPosition().time))
+                    {
+                        recordingChoices.add (candidate->itemID);
+                        recordings.addItem (10000 + recordingChoices.size() - 1,
+                            juce::String (recordingChoices.size()) + ": " + candidate->getName(), true,
+                            highestPriority > 0 && AizanaEngineBehaviour::recordingPriority (*candidate) == highestPriority);
+                    }
+                if (recordingChoices.size() > 1)
+                    menu.addSubMenu (juce::String::fromUTF8 ("Aufnahme bevorzugen"), recordings);
+            }
+
         // Takes submenu: shown for WaveAudioClip when loop recording produced multiple takes
         int totalTakes = 0;
         int activeTake = 0;
@@ -915,8 +939,21 @@ void ClipComponent::mouseDown (const juce::MouseEvent& e)
         }
 
         menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
-            [this, clipFx] (int result)
+            [this, clipFx, recordingChoices, safe = juce::Component::SafePointer<ClipComponent> (this)] (int result)
             {
+                if (safe == nullptr) return;
+                if (result >= 10000 && result < 10000 + recordingChoices.size())
+                {
+                    if (auto* track = dynamic_cast<te::AudioTrack*> (clip.getTrack()))
+                        for (auto* candidate : track->getClips())
+                            if (candidate->itemID == recordingChoices[result - 10000])
+                            {
+                                clip.edit.getUndoManager().beginNewTransaction ("Aufnahme bevorzugen");
+                                AizanaEngineBehaviour::preferRecording (*candidate);
+                                break;
+                            }
+                    return;
+                }
                 // ---- Event-FX ----
                 if (result == 399)
                 {

@@ -1,4 +1,5 @@
 #include "ArrangementView.h"
+#include "LiveRecordingWaveform.h"
 #include "ui/common/AizanaIcons.h"
 #include "AddTracksDialog.h"
 #include "engine/InstrumentTracks.h"
@@ -979,47 +980,23 @@ void ArrangementView::paintOverChildren (juce::Graphics& g)
         g.drawVerticalLine (x2, (float)trackTopPx, (float)trackBotPx);
     }
 
-    // ---- Live recording placeholder ----
-    // Tracktion Engine commits the real WaveAudioClip when recording stops. During
-    // capture we draw a non-persistent recording region so the arrangement behaves
-    // like a professional DAW without mutating clip state on every audio block.
+    // Draw directly from the engine's live recording thumbnails, including
+    // their actual punch/loop positions rather than the timer's first tick.
     if (auto* edit = appState.editManager.getEdit())
     {
-        if (edit->getTransport().isRecording()
-            && playheadPositionSecs > recordingOverlayStartSecs
-            && ! trackRows.isEmpty())
+        if (edit->getTransport().isRecording())
         {
-            const int x1 = kHeaderWidth + (int)(recordingOverlayStartSecs * pixelsPerSecond)
-                           - timelineViewport.getViewPositionX();
-            const int x2 = kHeaderWidth + (int)(playheadPositionSecs * pixelsPerSecond)
-                           - timelineViewport.getViewPositionX();
-            const int viewScrollY    = timelineViewport.getViewPositionY();
-            const int timelineOriginY = kTimelineTopY;
-
-            int cumY = 0;
+            int y = kTimelineTopY - timelineViewport.getViewPositionY();
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion ({ kHeaderWidth, kTimelineTopY,
+                                  getWidth() - kHeaderWidth, getHeight() - kTimelineTopY });
             for (auto* row : trackRows)
             {
-                const int rowH = (int)(row->getPreferredHeight() * trackHeightScale);
-                const bool armed = (bool) row->getTrack().state.getProperty ("armed", false);
-
-                if (armed)
-                {
-                    const int top = timelineOriginY + cumY - viewScrollY + 4;
-                    const int bottom = timelineOriginY + cumY + rowH - viewScrollY - 4;
-                    const auto rect = juce::Rectangle<int> (x1, top,
-                                                            juce::jmax (2, x2 - x1),
-                                                            juce::jmax (8, bottom - top));
-
-                    if (rect.getRight() >= kHeaderWidth && rect.getX() <= getWidth())
-                    {
-                        g.setColour (juce::Colour (0x883a9bdc));
-                        g.fillRoundedRectangle (rect.toFloat(), 3.0f);
-                        g.setColour (juce::Colour (0xff56c6f0));
-                        g.drawRoundedRectangle (rect.toFloat().reduced (0.5f), 3.0f, 1.0f);
-                    }
-                }
-
-                cumY += rowH;
+                const int height = (int) (row->getPreferredHeight() * trackHeightScale);
+                LiveRecordingWaveform::draw (g, row->getTrack(),
+                    { kHeaderWidth, y + 4, getWidth() - kHeaderWidth, juce::jmax (8, height - 8) },
+                    pixelsPerSecond, timelineViewport.getViewPositionX());
+                y += height;
             }
         }
     }
@@ -1169,10 +1146,11 @@ void ArrangementView::timerCallback()
     const bool isRecording = edit->getTransport().isRecording();
     const double newPos = edit->getTransport().getPosition().inSeconds();
 
-    if (isRecording && ! wasRecordingLastTick)
-        recordingOverlayStartSecs = newPos;
-    else if (! isRecording && wasRecordingLastTick)
-        juce::MessageManager::callAsync ([this] { rebuildTrackRows(); });
+    if (! isRecording && wasRecordingLastTick)
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<ArrangementView> (this)]
+        {
+            if (safe != nullptr) safe->rebuildTrackRows();
+        });
 
     wasRecordingLastTick = isRecording;
 

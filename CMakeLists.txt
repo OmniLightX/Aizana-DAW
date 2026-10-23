@@ -27,6 +27,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # this comment — read modules/juce_core/juce_core.h if in doubt.
 # Must be added BEFORE tracktion_engine modules, which use JUCE targets.
 include(cmake/ApplyTracktionRecordingPatch.cmake)
+include(cmake/ApplyTracktionRecordingMonitoringPatch.cmake)
+include(cmake/ApplyTracktionRecordingOverlapPatch.cmake)
+include(cmake/ApplyJuceCoreAudioPatch.cmake)
 add_subdirectory(extern/JUCE)
 
 # Tracktion Engine v3.2.0 — Add only the modules/ directory, NOT the root CMakeLists.txt.
@@ -204,6 +207,7 @@ target_sources(Aizana PRIVATE
     src/generator/PluginSpec.cpp
     src/generator/FaustEmitter.cpp
     src/generator/LocalComposer.cpp
+    src/engine/AizanaEngineBehaviour.cpp
     src/engine/EditManager.cpp
     src/engine/SessionPaths.cpp
     src/engine/RemovableMediaGuard.cpp

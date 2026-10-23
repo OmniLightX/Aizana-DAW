@@ -128,6 +128,23 @@ Monitoring through speakers can cause feedback. Use headphones for microphone
 recordings. If your interface already provides direct monitoring, avoid
 unintentionally monitoring twice through both the interface and the DAW.
 
+During audio recording, existing clips on the recording track are silent
+within the capture region. Input monitoring and other tracks remain audible
+when their monitoring and routing are enabled. Existing audio plays before
+and after a punch region. This monitoring rule does not delete existing clips.
+
+A subsequent recording pass with looping off takes playback priority over
+older clips on the same track within its time range. Existing audio outside
+the overlap remains audible; original clips and audio files are preserved.
+Right-click an overlapping clip and choose **Aufnahme bevorzugen** to select
+an earlier pass. The choice supports Undo/Redo and is saved with the session.
+The same menu can resolve existing overlaps in older sessions. Loop takes
+continue to use the existing take and comping controls.
+
+During recording, the arrangement displays the incoming audio as a growing
+waveform. Its height reflects the recorded signal; mixer meters remain separate.
+The waveform follows scrolling, zoom, punch boundaries, and the current loop pass.
+
 ### Metronome, count-in, and punch
 
 Enable the metronome in the transport bar. Its menu provides count-in, pre-roll,
@@ -233,6 +250,11 @@ Drag the boundary between the arrangement and mixer up or down to resize it.
 View switches remain in the bottom bar.
 
 ### Buses and shared reverb
+
+Right-click the name or empty background of a bus, FX or cue channel and choose
+**Kanal entfernen** (Remove channel) to delete it and its inserts. Tracks routed
+to it return to the master; sends to its FX/cue return are removed. Undo restores
+the channel and affected connections together.
 
 To process several tracks together:
 
@@ -429,6 +451,11 @@ Built)) opens the additional agent interface. It can use locally installed
 Claude Code or Codex tools. Installation, sign-in, costs, and data transfers
 are governed by the respective provider. These services are not included in
 the free Aizana license.
+
+Choose **Codex** in the **KI** dropdown after installing and signing in to its CLI.
+Use **Neu verbinden** to detect newly installed tools. Codex tool requests undergo
+automatic approval review; the supported CLI and setup are described in
+[docs/MCP.md](docs/MCP.md).
 
 **Song → Plugin generieren…** (Generate Plugin) and **Aizana-Plugins verwalten…**
 (Manage Aizana Plugins) belong to the integrated generator. Creating new plugins

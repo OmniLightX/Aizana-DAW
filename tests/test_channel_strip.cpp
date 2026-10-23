@@ -460,3 +460,52 @@ TEST_CASE ("Mixer: a continuous grouped fader move is one undo step", "[mixer][f
     REQUIRE (undo.undo());
     CHECK_THAT (mixer.getVolume (*a), Catch::Matchers::WithinAbs (-3.4f, 0.01f));
 }
+
+TEST_CASE ("Mixer: deleting bus and FX restores routing with undo", "[mixer][channel-delete]")
+{
+    EditManager em;
+    em.createNewEdit();
+    auto& edit = *em.getEdit();
+    MixerEngine mixer (em);
+    auto* source = getFirstAudioTrack (edit);
+    auto* bus = mixer.createBusChannel ("Delete bus");
+    auto* fx = mixer.createFXChannel ("Delete FX");
+    REQUIRE (source);
+    REQUIRE (bus);
+    REQUIRE (fx);
+    auto* otherBus = mixer.createBusChannel ("Keep bus");
+    auto* otherSource = insertAudioTrack (edit);
+    REQUIRE (otherBus);
+    REQUIRE (otherSource);
+    mixer.routeTrackToBus (*otherSource, *otherBus);
+    const auto busID = bus->itemID;
+    const auto fxID = fx->itemID;
+    mixer.routeTrackToBus (*source, *bus);
+    mixer.createFXSend (*source, *fx, -12.0f);
+    auto& undo = edit.getUndoManager();
+    undo.clearUndoHistory();
+    REQUIRE (mixer.deleteChannel (*bus));
+    CHECK (mixer.getBusChannelFor (*source) == nullptr);
+    CHECK_FALSE (source->state.hasProperty (kOutputBusNameProp));
+    CHECK (mixer.getBusChannelFor (*otherSource) == otherBus);
+    REQUIRE (undo.undo());
+    bus = te::findAudioTrackForID (edit, busID);
+    REQUIRE (bus);
+    CHECK (mixer.getBusChannelFor (*source) == bus);
+    CHECK (source->state[kOutputBusNameProp].toString() == "Delete bus");
+    REQUIRE (undo.redo());
+    CHECK (te::findAudioTrackForID (edit, busID) == nullptr);
+    fx = te::findAudioTrackForID (edit, fxID);
+    REQUIRE (fx);
+    REQUIRE (mixer.deleteChannel (*fx));
+    auto sends = [&] { int n = 0; for (auto* p : source->pluginList)
+        if (dynamic_cast<te::AuxSendPlugin*> (p)) ++n; return n; };
+    CHECK (sends() == 0);
+    REQUIRE (undo.undo());
+    CHECK (te::findAudioTrackForID (edit, fxID) != nullptr);
+    CHECK (sends() == 1);
+    REQUIRE (undo.redo());
+    CHECK (sends() == 0);
+    CHECK (mixer.getBusChannelFor (*otherSource) == otherBus);
+    CHECK_FALSE (mixer.deleteChannel (*source));
+}

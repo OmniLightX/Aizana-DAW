@@ -774,3 +774,33 @@ void MixerEngine::toggleSoloGroup (const juce::Array<te::AudioTrack*>& tracks)
         t->state.setProperty (te::IDs::solo, enable, &um);
     }
 }
+
+
+bool MixerEngine::deleteChannel (te::AudioTrack& channel)
+{
+    auto* edit = editManager.getEdit();
+    if (edit == nullptr || &channel.edit != edit
+        || (! isBusChannel (channel) && ! isFXChannel (channel) && ! isCueChannel (channel)))
+        return false;
+
+    auto& undo = edit->getUndoManager();
+    undo.beginNewTransaction ("Kanal entfernen: " + channel.getName());
+    const auto busNumber = getBusNumberForReturnTrack (channel);
+    for (auto* source : te::getAudioTracks (*edit))
+    {
+        if (source == &channel) continue;
+        if (source->getOutput().getDestinationTrack() == &channel)
+        {
+            source->getOutput().setOutputToDefaultDevice (false);
+            source->state.removeProperty (kOutputBusNameProp, &undo);
+        }
+        if (busNumber >= 0)
+            for (auto* p : source->pluginList.getPlugins())
+                if (auto* send = dynamic_cast<te::AuxSendPlugin*> (p))
+                    if (send->getBusNumber() == busNumber)
+                        source->pluginList.state.removeChild (send->state, &undo);
+    }
+    edit->deleteTrack (&channel);
+    undo.beginNewTransaction();
+    return true;
+}

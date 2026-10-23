@@ -54,6 +54,9 @@ namespace aizana
                                                   bool firstTurn,
                                                   const juce::File& mcpConfig);
 
+        /** Private working directory for Codex launched from the GUI. */
+        static juce::File codexWorkspace();
+
         /** Build the Codex `exec` argv for one turn, registering the aizana MCP server via
             -c config overrides (no global config change). Codex prints plain text → stream raw
             (no stream-json parsing). */

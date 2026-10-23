@@ -3,6 +3,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_core/juce_core.h>
 #include "AizanaUIBehaviour.h"
+#include "AizanaEngineBehaviour.h"
 #include "WarpEngine.h"
 #include "SessionPaths.h"
 #include <optional>
@@ -197,7 +198,7 @@ public:
     void trimClip (te::Clip& clip, double newStartTime, double newEndTime);
 
 private:
-    te::Engine engine { "Aizana", std::make_unique<AizanaUIBehaviour>(), nullptr };
+    te::Engine engine { "Aizana", std::make_unique<AizanaUIBehaviour>(), std::make_unique<AizanaEngineBehaviour>() };
     std::unique_ptr<te::Edit> edit;
 
     // P7b: stößt bei jeder Warp-Änderung (auch Undo/Redo) den KORREKTEN

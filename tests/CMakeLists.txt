@@ -19,6 +19,7 @@ juce_add_console_app(engine_tests
 
 target_sources(engine_tests PRIVATE
     test_main.cpp
+    test_recording_overlap.cpp
     test_recording_start.cpp
     test_plugin_bus_state.cpp
     test_undo.cpp
@@ -148,6 +149,7 @@ target_sources(engine_tests PRIVATE
     ../src/ai/AiAgentBridge.cpp
     ../src/ai/AiLiveProtocol.cpp
     ../src/ai/OnnxModelRunner.cpp
+    ../src/engine/AizanaEngineBehaviour.cpp
     ../src/engine/EditManager.cpp
     ../src/engine/SessionPaths.cpp
     ../src/engine/RemovableMediaGuard.cpp

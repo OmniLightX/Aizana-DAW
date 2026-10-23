@@ -43,3 +43,39 @@ and monitoring still require a hardware test.
 When upgrading Tracktion, review whether upstream includes equivalent handling.
 Update or retire the patch and its expected hashes together; never bypass a hash
 failure by blindly replacing local dependency files.
+
+## Recording monitoring and overlap playback
+
+On 23 October 2026, Aizana added two further patches against the same pinned
+engine. `tracktion-recording-monitoring.patch` limits recording-time clip
+muting to the actual capture window, including punch boundaries. It applies
+after the recording-error patch.
+
+`tracktion-recording-overlap.patch` adds a graph-build callback for clip playback
+exclusions, uses Tracktion's timed muting node, and rebuilds playback when the
+persisted recording priority changes (including Undo/Redo). Aizana uses this
+to preserve all source clips while playing the preferred recording in overlap
+regions. The callback is evaluated outside audio processing; its ranges are
+sorted and merged before the realtime node receives them.
+
+Both patches use checked source hashes and reject unexpected edits. The full
+chain and repeat configuration are covered by `test_recording_patch.py`.
+Upstream copyright and GPL/commercial license notices are retained.
+
+## JUCE CoreAudio restart (23 October 2026)
+
+`juce-coreaudio-async-restart.patch` targets JUCE commit
+`19edd538429c93d277bf95b55aaa7e3eb545f951`. CoreAudio device notifications
+schedule the combiner restart on its message-thread timer instead of closing
+and notifying audio callbacks on the HAL notification thread. Explicit close
+cancels the timer; a queued notification cannot reopen an inactive device.
+Callback selection is protected by the callback lock. This is a local targeted
+fix, not an upstream JUCE upgrade.
+
+`cmake/ApplyJuceCoreAudioPatch.cmake` applies the patch before JUCE configuration,
+accepts the exact patched state, and rejects unknown source changes.
+`python3 tests/test_coreaudio_patch.py` exercises the production callback bodies
+with a fake device and verifies application, idempotence and edit preservation.
+A real Bluetooth/input-output device-switch test remains necessary.
+
+Related upstream report: [CoreAudio device-switch race](https://forum.juce.com/t/data-race-when-switching-audio-device-sample-rate/65502).

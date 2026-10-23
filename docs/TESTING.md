@@ -17,6 +17,7 @@ After configuring and building the targets described in the README:
 ```sh
 python3 tests/test_recording_patch.py
 python3 tests/test_state_patch.py
+python3 tests/test_coreaudio_patch.py
 ctest --test-dir build --output-on-failure
 ```
 
@@ -26,7 +27,8 @@ leaked-object report, including output during process shutdown. A passing Releas
 run alone does not establish Debug assertion cleanliness. Hidden diagnostic
 probes are intentionally failing controls, not ordinary passing test cases.
 
-The two Python suites operate on isolated copies of the dependency sources.
+The recording-patch suite has six checks, including the monitoring/overlap
+patch chain; the state-patch suite has four. Both operate on isolated copies of the dependency sources.
 They verify exact upstream/patched hashes, idempotence and rejection of mixed or
 unexpected local modifications. The build must never silently overwrite an
 unknown dependency state. See [patch provenance](../patches/README.md).
@@ -93,3 +95,15 @@ This checks selected local-path markers, deployment targets, external library
 load paths and required license files. It does not establish notarization,
 first launch on another Mac, complete license compliance or universal plugin
 compatibility. Production builds must use `AIZANA_UITEST_HOOK=OFF`.
+
+The `[recording-waveform]` test uses a disposable edit and simulated audio input.
+It renders the same live-thumbnail drawing function used by the arrangement to
+an image before recording stops, checks waveform pixels (not just the region
+background), and covers normal recording, punch, looping, scrolling, and stop.
+This does not replace the microphone and arrangement interaction checks.
+
+`test_coreaudio_patch.py` executes the patched restart notification and timer
+bodies against a fake device: notification must only schedule work, and a closed
+device must not restart. It also checks clean patch application, repeated
+configuration, and preservation of unknown local edits. This is a control-flow
+regression test, not a substitute for Bluetooth hardware switching.

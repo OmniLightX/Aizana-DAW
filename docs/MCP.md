@@ -29,6 +29,14 @@ Live changes use Aizana’s command bridge; audio processing remains local.
 up live in the **"Aizana"** plugin group. Requirements: `brew install faust` and an
 installed, logged-in `claude`/`codex` CLI. Nothing else to configure.
 
+Select **Codex** in the KI dropdown to use your existing Codex CLI login. The
+in-app integration requires a CLI with `exec --approve-for-me` support (tested
+with 0.153.2). It uses automatic approval review for tool requests and keeps the
+workspace-write sandbox enabled. Requests may be rejected by that review.
+Codex runs in `~/Library/Aizana/aistudio/workspace`, with the Git-repository check
+disabled because an installed DAW is not a source checkout. Aizana registers its
+MCP server for that invocation; it does not modify your global Codex configuration.
+
 
 **B) External Claude Code / Codex (your own terminal).** Register `aizana-mcp` with your CLI
 yourself and generate plugins from any project — see the setup below.
