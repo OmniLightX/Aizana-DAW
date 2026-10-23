@@ -29,6 +29,13 @@ The generated-plugin scan runs inside Aizana; it is not a sandbox for untrusted
 code. Only authorize generation from sources you trust. A test session helps
 protect your mix, but does not isolate plugin code from your account or process.
 
+Compiler processes share a 120-second deadline across Faust and Clang. Output is
+drained while they run and limited to 1 MiB per process. On timeout the compiler
+process group is terminated and temporary build files are removed. A failed
+compile is not registered as a plugin and does not replace an existing plugin.
+Display names are encoded as C++ string literals; this is a correctness measure,
+not a sandbox for DSP source. See [Security policy](../SECURITY.md).
+
 ## Two ways to use it
 
 **A) In-app AI Studio (UI label: KI-Studio; recommended, built in).** Aizana ships a chat panel — open it via

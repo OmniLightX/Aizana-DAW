@@ -475,6 +475,10 @@ unterstützte CLI und Einrichtung stehen in [docs/MCP.md](docs/MCP.md).
 integrierten Generator. Zum Erzeugen neuer Plugins werden Faust und die Apple
 Command Line Tools auf deinem Rechner benötigt. Diese Werkzeuge werden nicht
 mit der App ausgeliefert. Prüfe erzeugte Plugins zunächst in einer Testsession.
+Überschreiten Faust und Clang zusammen das Compiler-Zeitlimit von zwei Minuten,
+bricht die Generierung mit einer Fehlermeldung ab. Ein fehlgeschlagener
+Compilerlauf lässt eine bestehende Plugin-Datei unverändert. Prüfe vor einem
+neuen Versuch die Compiler-Ausgabe.
 
 Generierte Plugins führen nativen Code mit deinen Benutzerrechten aus. Aizana
 lädt und initialisiert sie bereits beim Scannen, noch vor dem Einfügen in eine

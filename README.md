@@ -331,6 +331,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAIZANA_UITEST_HOOK=OFF
 cmake --build build --target Aizana engine_tests oop_host_smoke -j4
 python3 tests/test_recording_patch.py
 python3 tests/test_state_patch.py
+python3 tests/test_coreaudio_patch.py
 ctest --test-dir build --output-on-failure
 ```
 

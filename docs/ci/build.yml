@@ -1,0 +1,50 @@
+name: macOS build and tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Initialize pinned dependencies
+        run: git submodule update --init extern/JUCE extern/tracktion_engine
+      - name: Install compiler prerequisites
+        run: |
+          brew install cmake faust
+          cmake --version
+          faust --version
+          clang++ --version
+      - name: Configure Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAIZANA_UITEST_HOOK=OFF
+      - name: Build
+        run: cmake --build build --target Aizana engine_tests oop_host_smoke -j3
+      - name: Verify dependency patches
+        run: |
+          python3 tests/test_recording_patch.py
+          python3 tests/test_state_patch.py
+          python3 tests/test_coreaudio_patch.py
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Preserve test diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-diagnostics
+          path: build/Testing/Temporary/
+          retention-days: 7
+          if-no-files-found: ignore

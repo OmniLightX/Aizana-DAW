@@ -57,6 +57,12 @@ TEST_CASE ("FaustCompiler: compiles a runtime DSP into a real .clap", "[faustgen
     REQUIRE (r.clapFile.getSize() > 1000);          // a real dylib, not an empty stub
     REQUIRE (r.clapFile.getFileName() == "runtime_tremolo.clap");
 
+    juce::MemoryBlock original, afterFailure;
+    REQUIRE (r.clapFile.loadFileAsData (original));
+    const auto failed = FaustCompiler::compile ("not valid Faust syntax", "Runtime Tremolo", tc, outDir);
+    CHECK_FALSE (failed.ok);
+    REQUIRE (r.clapFile.loadFileAsData (afterFailure));
+    CHECK (original == afterFailure);
     outDir.deleteRecursively();
 }
 
@@ -85,7 +91,8 @@ TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue chang
                             .getChildFile ("aizana_faustgen_param_test");
     outDir.deleteRecursively();
 
-    const auto r = FaustCompiler::compile (dsp, "Runtime Gain", tc, outDir);
+    const juce::String displayName = juce::String::fromUTF8 ("Runtime \"Gain\" \\ Grüße\n7");
+    const auto r = FaustCompiler::compile (dsp, displayName, tc, outDir);
     INFO ("compiler log:\n" << r.log);
     REQUIRE (r.ok);
     REQUIRE (r.clapFile.existsAsFile());
@@ -95,6 +102,7 @@ TEST_CASE ("FaustCompiler: host a generated .clap and prove param setValue chang
     juce::OwnedArray<juce::PluginDescription> descs;
     fmt.findAllTypesForFile (descs, r.clapFile.getFullPathName());
     REQUIRE (descs.size() >= 1);
+    CHECK (descs[0]->name == displayName);
 
     std::unique_ptr<juce::AudioPluginInstance> instance;
     juce::String err;
@@ -225,4 +233,47 @@ TEST_CASE ("Generated library: registerGeneratedPlugins adds a generated .clap t
     CHECK (nameInList (r.clapFile.getFullPathName()).isEmpty());
 
     dir.deleteRecursively();
+}
+
+#include "generator/CompilerProcess.h"
+#include <chrono>
+
+TEST_CASE ("Compiler process enforces deadlines and drains output", "[compiler-process]")
+{
+    juce::String log;
+    CHECK (aizana::detail::runCompilerProcess ({"/bin/sh", "-c", "printf hello; printf error >&2; exit 7"}, log, 2000) == 7);
+    CHECK (log.contains ("hello"));
+    CHECK (log.contains ("error"));
+    log.clear();
+    const auto start = std::chrono::steady_clock::now();
+    CHECK (aizana::detail::runCompilerProcess ({"/bin/sh", "-c", "sleep 30 & wait"}, log, 150) == -2);
+    CHECK (std::chrono::steady_clock::now() - start < std::chrono::seconds (3));
+    CHECK (log.contains ("timed out"));
+    log.clear();
+    CHECK (aizana::detail::runCompilerProcess ({"/bin/sh", "-c", "while :; do printf 012345678901234567890123456789; done"}, log, 250) == -2);
+    CHECK (log.length() < 1050000);
+    log.clear();
+    CHECK (aizana::detail::runCompilerProcess ({"/definitely/missing/compiler"}, log, 100) == -1);
+    // Parent exits, but descendant keeps stdout open: deadline must still apply.
+    log.clear();
+    CHECK (aizana::detail::runCompilerProcess ({"/bin/sh", "-c", "sleep 30 & exit 0"}, log, 150) == -2);
+}
+
+TEST_CASE ("Compiler display name survives C++ parsing exactly", "[compiler-process]")
+{
+    const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("aizana-literal-" + juce::Uuid().toString());
+    REQUIRE (dir.createDirectory().wasOk());
+    const juce::String name = juce::String::fromUTF8 ("Quote\" Slash\\\n\r\t Grüße 7; #error nope");
+    const auto source = dir.getChildFile ("literal.cpp");
+    REQUIRE (source.replaceWithText ("#include <cstdio>\nint main(){std::fputs(" +
+        aizana::detail::cppStringLiteral (name) + ",stdout);}\n"));
+    juce::String log;
+    const auto exe = dir.getChildFile ("literal");
+    REQUIRE (aizana::detail::runCompilerProcess ({"/usr/bin/clang++", "-std=c++17",
+        source.getFullPathName(), "-o", exe.getFullPathName()}, log, 10000) == 0);
+    log.clear();
+    REQUIRE (aizana::detail::runCompilerProcess ({exe.getFullPathName()}, log, 1000) == 0);
+    CHECK (log == name);
+    CHECK (dir.deleteRecursively());
 }

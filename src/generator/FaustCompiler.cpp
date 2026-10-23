@@ -1,24 +1,10 @@
 #include "FaustCompiler.h"
+#include "CompilerProcess.h"
 
 namespace aizana
 {
     namespace
     {
-        // Run a process (no shell → paths with spaces are safe via StringArray). Returns
-        // exit code; appends combined output to `log`. -1 if it couldn't start.
-        int run (const juce::StringArray& args, juce::String& log)
-        {
-            juce::ChildProcess proc;
-            if (! proc.start (args, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr))
-            {
-                log << "\n[!] could not start: " << args.joinIntoString (" ");
-                return -1;
-            }
-            log << proc.readAllProcessOutput();      // blocks until the process exits
-            proc.waitForProcessToFinish (120000);
-            return proc.getExitCode();
-        }
-
         juce::File firstExisting (const juce::StringArray& paths)
         {
             for (const auto& p : paths)
@@ -46,21 +32,18 @@ namespace aizana
         {
             // last resort: ask the shell
             juce::String out;
-            juce::ChildProcess which;
-            if (which.start (juce::StringArray { "/usr/bin/which", "faust" }))
+            if (detail::runCompilerProcess ({ "/usr/bin/which", "faust" }, out, 5000) == 0)
             {
-                out = which.readAllProcessOutput().trim();
-                if (juce::File::isAbsolutePath (out))
-                    tc.faust = juce::File (out);
+                out = out.trim();
+                if (juce::File::isAbsolutePath (out)) tc.faust = juce::File (out);
             }
         }
 
         if (tc.faust.existsAsFile())
         {
             juce::String log;
-            juce::ChildProcess proc;
-            if (proc.start (juce::StringArray { tc.faust.getFullPathName(), "--archdir" }))
-                tc.archdir = proc.readAllProcessOutput().trim();
+            if (detail::runCompilerProcess ({ tc.faust.getFullPathName(), "--archdir" }, log, 5000) == 0)
+                tc.archdir = log.trim();
 
             // <prefix>/include holds the Faust C++ runtime headers (faust/dsp/dsp.h …)
             tc.faustInclude = tc.faust.getParentDirectory().getParentDirectory().getChildFile ("include");
@@ -143,7 +126,7 @@ namespace aizana
         const auto safeName = pluginName.isNotEmpty() ? pluginName : juce::String ("Generated Plugin");
         work.getChildFile ("plugin_metadata.h").replaceWithText (
             "#define FAUST_PLUGIN_ID \"com.aizanagi.aizana.gen." + id + "\"\n"
-            "#define FAUST_PLUGIN_NAME \"" + safeName + "\"\n"
+            "#define FAUST_PLUGIN_NAME " + detail::cppStringLiteral (safeName) + "\n"
             "#define FAUST_PLUGIN_VENDOR \"Aizana\"\n"
             "#define FAUST_PLUGIN_VERSION \"1.0.0\"\n"
             "#define FAUST_PLUGIN_DESCRIPTION \"Aizana generated plugin\"\n"
@@ -155,11 +138,17 @@ namespace aizana
         const auto outClap = outDir.getChildFile (id + ".clap");
         dsp.replaceWithText (faustDspSource);
 
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds (120);
+        const auto remainingMs = [&] {
+            return static_cast<int> (std::chrono::duration_cast<std::chrono::milliseconds>
+                (deadline - std::chrono::steady_clock::now()).count());
+        };
+
         // 1) Faust DSP + CLAP architecture → standalone C++
-        const int fc = run (juce::StringArray {
+        const int fc = detail::runCompilerProcess (juce::StringArray {
             tc.faust.getFullPathName(),
             "-a", tc.archdir + "/clap/clap-arch.cpp",
-            dsp.getFullPathName(), "-o", genCpp.getFullPathName() }, r.log);
+            dsp.getFullPathName(), "-o", genCpp.getFullPathName() }, r.log, remainingMs());
 
         if (fc != 0 || ! genCpp.existsAsFile())
         {
@@ -169,7 +158,7 @@ namespace aizana
         }
 
         // 2) clang++ → universal, self-contained .clap
-        const int cc = run (juce::StringArray {
+        const int cc = detail::runCompilerProcess (juce::StringArray {
             "/usr/bin/clang++", "-std=c++17", "-O2", "-fPIC", "-shared",
             "-arch", "arm64", "-arch", "x86_64",
             "-I" + tc.faustInclude.getFullPathName(),
@@ -179,16 +168,25 @@ namespace aizana
             genCpp.getFullPathName(),
             tc.archdir + "/clap/clap-helpers-impl.cpp",
             tc.guiGlobals.getFullPathName(),
-            "-o", outClap.getFullPathName() }, r.log);
+            "-o", work.getChildFile ("result.clap").getFullPathName() }, r.log, remainingMs());
 
-        work.deleteRecursively();
-
-        if (cc != 0 || ! outClap.existsAsFile())
+        const auto built = work.getChildFile ("result.clap");
+        if (cc != 0 || ! built.existsAsFile())
         {
             r.log = "clang link failed.\n" + r.log;
+            work.deleteRecursively();
             return r;
         }
 
+        juce::TemporaryFile publication (outClap);
+        if (! built.copyFileTo (publication.getFile())
+            || ! publication.overwriteTargetFileWithTemporary())
+        {
+            r.log << "\nCould not publish compiled plugin.";
+            work.deleteRecursively();
+            return r;
+        }
+        work.deleteRecursively();
         r.ok = true;
         r.clapFile = outClap;
         return r;

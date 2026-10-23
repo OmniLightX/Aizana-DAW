@@ -461,6 +461,9 @@ automatic approval review; the supported CLI and setup are described in
 (Manage Aizana Plugins) belong to the integrated generator. Creating new plugins
 requires Faust and Apple Command Line Tools on your computer. These tools are
 not shipped with the app. Test generated plugins in a test session first.
+Generation stops with an error if Faust and Clang exceed their shared two-minute
+compiler budget. A failed compile leaves any existing plugin file unchanged;
+check the compiler diagnostics before retrying.
 
 Generated plugins execute native code with your user permissions. Aizana loads
 and initializes them while scanning, before insertion on a track. Only generate

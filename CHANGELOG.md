@@ -1,9 +1,17 @@
 # Change log
 
-## Unreleased — 23 October 2026
+## Unreleased — 24 October 2026
 
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
+
+### Plugin generator
+
+- Escape display names as C++ string literals, preserving quotes, backslashes,
+  line breaks and UTF-8 text without interpreting them as generated source.
+- Drain compiler output without blocking, cap diagnostics at 1 MiB per process,
+  and enforce a shared 120-second Faust/Clang budget. Terminate the compiler
+  process group on timeout. Publish only successfully linked plugins.
 
 ### Documentation
 

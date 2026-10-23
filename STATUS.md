@@ -1,11 +1,20 @@
 # Aizana 0.3.0 Alpha — test status
 
-Recorded checks through 23 October 2026.
+Recorded checks through 24 October 2026.
 Target: Apple Silicon (arm64), macOS 13.3 or later. Aizana is distributed as
 source code. This page records completed runs; it does not imply a fresh full
 suite for every documentation-only commit.
 
 ## Automated results
+
+- Generator report follow-up: 14 targeted Debug cases, 83 assertions passed,
+  including real Faust/Clang compilation, special-character display names,
+  host parameter/audio response, timeout/output limits and preservation of an
+  existing plugin after a failed compile. The JUCE diagnostic gate was clean.
+  Recording/state/CoreAudio patch tests passed (6/4/2). Release app build and
+  bundle audit passed. The full-suite result below predates these generator
+  changes; a new complete run is still pending. The GitHub workflow is prepared under docs/ci/ but not active: the current
+  credential lacks workflow scope. No hosted run has taken place.
 
 - CoreAudio combined-device restart: deferred shutdown regression and patch
   application/idempotence tests passed. Debug suite again passed 465 cases,
