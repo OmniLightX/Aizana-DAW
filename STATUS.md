@@ -12,9 +12,9 @@ suite for every documentation-only commit.
   host parameter/audio response, timeout/output limits and preservation of an
   existing plugin after a failed compile. The JUCE diagnostic gate was clean.
   Recording/state/CoreAudio patch tests passed (6/4/2). Release app build and
-  bundle audit passed. The full-suite result below predates these generator
-  changes; a new complete run is still pending. The GitHub workflow is prepared under docs/ci/ but not active: the current
-  credential lacks workflow scope. No hosted run has taken place.
+  bundle audit passed. The subsequent full Debug suite passed 467 cases,
+  6 skips and 50,859 assertions, with a clean JUCE diagnostic gate. The GitHub
+  workflow is now active; its first clean hosted run is pending verification.
 
 - CoreAudio combined-device restart: deferred shutdown regression and patch
   application/idempotence tests passed. Debug suite again passed 465 cases,
@@ -43,7 +43,7 @@ suite for every documentation-only commit.
   58 assertions. Both app bundles retain ONNX notices and exclude the old
   standalone Demucs/Eigen notice folders. The Release bundle audit passed.
 
-- Latest full Debug engine suite: **465 passed, 6 skipped, 50,838 assertions**,
+- Latest full Debug engine suite: **467 passed, 6 skipped, 50,859 assertions**,
   exit 0. The diagnostic gate found no JUCE assertion or leaked-object report.
 - Automation UI regression: 21 assertions passed, covering mode/parameter
   synchronization, first selection, Undo/Redo and curve preservation.

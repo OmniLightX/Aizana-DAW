@@ -35,19 +35,14 @@ unknown dependency state. See [patch provenance](../patches/README.md).
 
 ## Clean CI build
 
-The prepared [macOS build and tests workflow](ci/build.yml) checks out pinned submodules
+[macOS build and tests](../.github/workflows/build.yml) checks out pinned submodules
 on an Apple Silicon macOS runner, installs CMake/Faust, builds the Release app and
-test targets, verifies dependency patches and runs CTest. Once installed as `.github/workflows/build.yml`, it runs on main pushes,
+test targets, verifies dependency patches and runs CTest. It runs on main pushes,
 pull requests and manual dispatch, with read-only repository permissions. Runner
 images and Homebrew tools evolve; their versions are logged. This is a repeatable
 clean build procedure, not a claim of byte-identical binary reproducibility.
 No signing credentials, private plugins or personal recordings are required.
 The workflow does not replace the separate local Debug diagnostic run.
-
-The current GitHub credential lacks the `workflow` scope, so the file is a
-reviewable template under `docs/ci/`, not an active Actions workflow. Installation
-requires a credential authorized to modify workflows. No hosted CI result is
-claimed before activation and the first completed run.
 
 ## Optional plugin and model fixtures
 
