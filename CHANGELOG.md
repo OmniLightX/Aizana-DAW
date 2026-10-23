@@ -1,9 +1,15 @@
 # Change log
 
-## Unreleased — 21 October 2026
+## Unreleased — 23 October 2026
 
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
+
+### Documentation
+
+- Summarize live recording waveforms, recording selection and channel removal
+  in both READMEs; explain native execution during generated-plugin scanning
+  in the manuals and MCP guide.
 
 ### Audio devices
 

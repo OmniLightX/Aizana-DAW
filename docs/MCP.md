@@ -20,6 +20,15 @@ Live changes use Aizana’s command bridge; audio processing remains local.
 
 ---
 
+## Generated plugins run native code
+
+Authorizing `compile_plugin` permits Faust DSP to be compiled into native code
+and made available to Aizana under your user account. Generated CLAP plugins
+are loaded and initialized during scanning, before you insert them on a track.
+The generated-plugin scan runs inside Aizana; it is not a sandbox for untrusted
+code. Only authorize generation from sources you trust. A test session helps
+protect your mix, but does not isolate plugin code from your account or process.
+
 ## Two ways to use it
 
 **A) In-app AI Studio (UI label: KI-Studio; recommended, built in).** Aizana ships a chat panel — open it via

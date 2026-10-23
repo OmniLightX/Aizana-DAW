@@ -147,6 +147,10 @@ Diese drei Aufgaben sind voneinander unabhängig.
 - Audio- und Instrumentenspuren im Mixer umsortieren und über das Kontextmenü
   vollständig duplizieren, einschließlich Clips, Effekten, Automation und Routing.
 - Mixerhöhe an der oberen Trennkante ändern.
+- Wellenformen schon während der Aufnahme sehen. Neue Aufnahmen haben bei
+  Überlappungen Vorrang; frühere Aufnahmen bleiben erhalten und auswählbar.
+- Bus-, FX- und Cue-Kanäle per Kontextmenü entfernen, einschließlich
+  Routing-Bereinigung und Rückgängig/Wiederholen.
 - Automation per Rechtsklick auf den Spurkopf einblenden, Parameter wählen und
   Read/Touch/Latch/Write umschalten; der A-Schalter bleibt verfügbar.
 - MP3-Mixdown und Einzelspurexport mit integriertem Encoder.

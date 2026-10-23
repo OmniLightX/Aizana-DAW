@@ -140,6 +140,10 @@ splits a finished mix. These are three independent tasks.
 - Reorder audio/instrument tracks in the mixer and duplicate complete tracks
   from context menus, including clips, effects, automation and output routing.
 - Resize the mixer from its upper boundary.
+- See a growing waveform while recording. New recording passes take playback
+  priority in overlapping sections; select earlier recordings without deleting them.
+- Remove bus, FX and cue channels from their context menu, with routing cleanup
+  and Undo/Redo.
 - Show automation, choose parameters and select Read/Touch/Latch/Write from the
   track-header context menu; the existing A button remains available.
 - Export MP3 mixdowns and stems with the built-in encoder.

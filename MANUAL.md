@@ -462,6 +462,10 @@ automatic approval review; the supported CLI and setup are described in
 requires Faust and Apple Command Line Tools on your computer. These tools are
 not shipped with the app. Test generated plugins in a test session first.
 
+Generated plugins execute native code with your user permissions. Aizana loads
+and initializes them while scanning, before insertion on a track. Only generate
+plugins from trusted sources; using a test session does not sandbox their code.
+
 Setup and technical interfaces are described in [docs/MCP.md](docs/MCP.md).
 You do not need to set up AI Studio for ordinary recording, editing, and mixing.
 

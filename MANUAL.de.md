@@ -476,6 +476,11 @@ integrierten Generator. Zum Erzeugen neuer Plugins werden Faust und die Apple
 Command Line Tools auf deinem Rechner benötigt. Diese Werkzeuge werden nicht
 mit der App ausgeliefert. Prüfe erzeugte Plugins zunächst in einer Testsession.
 
+Generierte Plugins führen nativen Code mit deinen Benutzerrechten aus. Aizana
+lädt und initialisiert sie bereits beim Scannen, noch vor dem Einfügen in eine
+Spur. Verwende dafür nur vertrauenswürdige Quellen; eine Testsession isoliert
+den Plugin-Code nicht.
+
 Die Einrichtung und technischen Schnittstellen sind in
 [docs/MCP.md](docs/MCP.md) beschrieben. Für normales Aufnehmen, Editieren und
 Mischen musst du KI-Studio nicht einrichten.
