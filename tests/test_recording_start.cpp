@@ -108,6 +108,18 @@ struct RecordingFixture
     }
     void pump (int milliseconds = 150)
     { juce::MessageManager::getInstance()->runDispatchLoopUntil (milliseconds); }
+
+    template <typename Predicate>
+    bool waitUntil (Predicate ready, int timeoutMs = 15000)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds (timeoutMs);
+        while (! ready())
+        {
+            if (std::chrono::steady_clock::now() >= deadline) return false;
+            pump (20);
+        }
+        return true;
+    }
 };
 }
 
@@ -211,8 +223,8 @@ TEST_CASE ("Recording clip muting follows the capture window", "[recording-monit
     REQUIRE (transport.isRecording());
     CHECK (muted (*track) == ! punch);
     CHECK_FALSE (muted (*other));
-    for (int i = 0; i < 40 && transport.getPosition().inSeconds() < 0.8; ++i) f.pump (30);
-    REQUIRE (transport.getPosition().inSeconds() >= 0.8);
+    // Hosted audio advances by processed samples, not message-loop wall time.
+    REQUIRE (f.waitUntil ([&] { return transport.getPosition().inSeconds() >= 0.8; }));
     CHECK (muted (*track));
     CHECK_FALSE (muted (*other));
     if (looping)
@@ -226,8 +238,7 @@ TEST_CASE ("Recording clip muting follows the capture window", "[recording-monit
     }
     if (punch)
     {
-        for (int i = 0; i < 60 && transport.getPosition().inSeconds() < 1.8; ++i) f.pump (30);
-        REQUIRE (transport.getPosition().inSeconds() >= 1.8);
+        REQUIRE (f.waitUntil ([&] { return transport.getPosition().inSeconds() >= 1.8; }));
         CHECK_FALSE (muted (*track));
     }
     transport.stop (false, false);
@@ -250,8 +261,35 @@ TEST_CASE ("Live recording waveform is visible before stop and follows scrolling
     transport.setLoopRange ({ tracktion::core::TimePosition::fromSeconds (0.5),
                              tracktion::core::TimePosition::fromSeconds (3.0) });
     transport.record (false);
-    f.pump (mode == 2 ? 3800 : 1000);
+    if (mode == 2)
+    {
+        // Observe an actual loop wrap; a fixed sleep may not process a full
+        // pass on a busy hosted runner.
+        double previous = 0.0;
+        REQUIRE (f.waitUntil ([&]
+        {
+            const double now = transport.getPosition().inSeconds();
+            const bool wrapped = previous > 2.5 && now < previous;
+            previous = now;
+            return wrapped;
+        }));
+    }
+    // Also leave visible material after the loop boundary, rather than testing
+    // a zero-width instant at the exact wrap point.
+    REQUIRE (f.waitUntil ([&] { return transport.getPosition().inSeconds() >= 0.8; }));
     REQUIRE (transport.isRecording());
+    REQUIRE (f.waitUntil ([&]
+    {
+        for (auto* input : f.edit->getEditInputDevices().getDevicesForTargetTrack (*track))
+        {
+            if (! input->isRecording (track->itemID)) continue;
+            const auto file = input->getRecordingFile (track->itemID);
+            if (file == juce::File()) continue;
+            if (f.engine.getRecordingThumbnailManager().getThumbnailFor (file)->thumb->getTotalLength() > 0.2)
+                return true;
+        }
+        return false;
+    }));
     juce::Image image (juce::Image::ARGB, 400, 80, true);
     juce::Graphics g (image);
     INFO ("position=" << transport.getPosition().inSeconds());
