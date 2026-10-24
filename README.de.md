@@ -122,6 +122,19 @@ Start stehen in [ALPHA_INSTALL.md](docs/ALPHA_INSTALL.md). Aizana verändert kei
 Gatekeeper-Einstellungen. Frühere Release-Pakete enthalten nicht den aktuellen
 Stand von `main`.
 
+### Hier anfangen
+
+1. Verwende einen Mac mit Apple Silicon und macOS 13.3 oder neuer.
+2. Installiere die unter [Aus dem Quellcode bauen](#aus-dem-quellcode-bauen)
+   genannten Werkzeuge und führe dort die Befehle der Reihe nach aus.
+3. Öffne anschließend `build/Aizana_artefacts/Release/Aizana.app`.
+   Für die ersten Schritte hilft das [Handbuch](MANUAL.de.md).
+
+**Bitte mit Git klonen, nicht „Code → Download ZIP“ verwenden.** Das GitHub-ZIP
+enthält die eingebundenen Submodule (JUCE und Tracktion Engine) nicht vollständig.
+Die Bauanleitung lädt sie mit `git submodule update --init` nach. Der lokale
+`build`-Ordner und die App entstehen erst beim Bauen; sie fehlen nicht im Download.
+
 ## Wofür Aizana gedacht ist
 
 Aizana richtet sich an Menschen, die eigene Musik aufnehmen, vorhandene Spuren

@@ -117,6 +117,20 @@ A local build is not Developer ID signed or notarized. See
 change Gatekeeper settings. Earlier release packages do not contain the current
 state of `main`.
 
+### Start here
+
+1. Use an Apple Silicon Mac running macOS 13.3 or later.
+2. Install the tools listed under [Build from source](#build-from-source), then
+   follow its commands in order.
+3. Open `build/Aizana_artefacts/Release/Aizana.app`.
+   See the [manual](MANUAL.md) for your first session.
+
+**Clone with Git rather than using “Code → Download ZIP”.** GitHub's ZIP does
+not include the full contents of the JUCE and Tracktion Engine submodules.
+The build instructions fetch them with `git submodule update --init`. Your local
+`build` directory and app are created during the build; they are not missing
+from the download.
+
 ## Who Aizana is for
 
 Aizana is for people who want to record their own music, edit existing tracks and
