@@ -30,7 +30,14 @@ suite for every documentation-only commit.
   8 cases under ASan with clean JUCE diagnostics. Deterministic queue and
   missing-output regressions have been added. The complete post-fix Debug suite
   passed 469 cases, 6 skips and 50,879 assertions with a clean diagnostic gate.
-  Release and hosted post-fix suites are pending. The earlier CI SIGSEGV had no stack, so an identical cause cannot
+  The complete local Release suite also passed 469 cases, 6 skips and 50,879
+  assertions; forty Release stress rounds passed 240 assertions. Release bundle
+  audit passed. The complete post-fix ASan diagnostic suite passed 464 cases,
+  11 skips and 50,831 assertions, with ONNX/generator disabled only in that
+  diagnostic configuration. Hosted run
+  [40044378452](https://github.com/OmniLightX/Aizana-DAW/actions/runs/40044378452)
+  on `f63c60d7` passed the fresh Release build, all 16 patch checks, both CTest
+  targets and the additional forty-round Warp stress check. The earlier CI SIGSEGV had no stack, so an identical cause cannot
   be established from that old log alone.
 
 - CoreAudio combined-device restart: deferred shutdown regression and patch
