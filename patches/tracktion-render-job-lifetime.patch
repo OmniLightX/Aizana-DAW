@@ -1,0 +1,71 @@
+diff --git a/modules/tracktion_engine/model/export/tracktion_RenderManager.cpp b/modules/tracktion_engine/model/export/tracktion_RenderManager.cpp
+index fae834667b3..b2caf847a68 100644
+--- a/modules/tracktion_engine/model/export/tracktion_RenderManager.cpp
++++ b/modules/tracktion_engine/model/export/tracktion_RenderManager.cpp
+@@ -59,7 +59,7 @@ juce::ThreadPoolJob::JobStatus RenderManager::Job::runJob()
+ 
+         const bool completedOk = completeRender();
+ 
+-        if (! proxy.isNull() && completedOk)
++        if (! shouldExit() && ! proxy.isNull() && completedOk)
+             callBlocking ([this]
+                           {
+                           engine.getAudioFileManager().validateFile (proxy, true);
+@@ -72,8 +72,17 @@ juce::ThreadPoolJob::JobStatus RenderManager::Job::runJob()
+     }
+     catch ([[ maybe_unused ]] std::runtime_error& e)
+     {
+-        DBG(e.what());
+-        jassertfalse;
++        // callBlocking deliberately throws when the current job is cancelled.
++        // Cancellation is expected, but still publish a terminal failure when
++        // no caller has already sent the completion notification.
++        if (! shouldExit())
++        {
++            DBG(e.what());
++            jassertfalse;
++        }
++        const juce::ScopedLock sl (finishedLock);
++        if (! hasFinished)
++            sendCompletionMessages (false);
+     }
+ 
+     return jobHasFinished;
+@@ -132,13 +141,18 @@ void RenderManager::Job::handleMessage (const juce::Message& message)
+     {
+         case UpdateMessage::started:
+             // starts the job running
+-            engine.getRenderManager().addJobToPool (this);
+-            listeners.call (&Listener::jobStarted, *this);
++            if (! hasFinished)
++            {
++                engine.getRenderManager().addJobToPool (this);
++                listeners.call (&Listener::jobStarted, *this);
++            }
+             break;
+ 
+         case UpdateMessage::succeded:
+         case UpdateMessage::cancelled:
+-            if (isRunning())
++            // A cancelled job may still be queued, even though isRunning() is
++            // false. Keep its self-reference until the pool releases it.
++            if (engine.getBackgroundJobs().containsJob (this))
+             {
+                 const juce::ScopedLock sl (messageLock);
+                 messagesToResend.addIfNotAlreadyThere (type);
+diff --git a/modules/tracktion_engine/utilities/tracktion_BackgroundJobs.h b/modules/tracktion_engine/utilities/tracktion_BackgroundJobs.h
+index 08cc70a2279..dfd395a51dc 100644
+--- a/modules/tracktion_engine/utilities/tracktion_BackgroundJobs.h
++++ b/modules/tracktion_engine/utilities/tracktion_BackgroundJobs.h
+@@ -71,6 +71,11 @@ public:
+         pool.removeJob (job, interruptIfRunning, timeOutMilliseconds);
+     }
+ 
++    bool containsJob (ThreadPoolJobWithProgress* job) const
++    {
++        return pool.contains (job);
++    }
++
+     void stopAndDeleteAllRunningJobs()
+     {
+         // Call this twice as the first call may only stop (and not delete) running jobs

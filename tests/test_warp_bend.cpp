@@ -307,3 +307,114 @@ TEST_CASE ("WarpEngine: warp state survives save/reload", "[warp][p7b]")
     CHECK (WarpEngine::isWarped (*reloaded));
     CHECK (WarpEngine::getMarkers (*reloaded).size() == 2);
 }
+
+// Explicit diagnostic stress probe: exercise cancellation while render callbacks
+// and deferred source changes are in flight. Uses disposable generated audio.
+TEST_CASE ("Warp render survives rapid edits and session replacement", "[.warp-stress]")
+{
+    for (int iteration = 0; iteration < 40; ++iteration)
+    {
+        INFO ("iteration " << iteration);
+        WarpFixture f;
+        WarpEngine::setWarpEnabled (*f.clip, true);
+        const int marker = WarpEngine::addMarkerAtSourceTime (*f.clip, 0.75);
+        for (int move = 0; move < 12; ++move)
+        {
+            WarpEngine::moveMarker (*f.clip, marker, 0.25 + move * 0.04);
+            WarpEngine::kickWarpRender (*f.clip);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
+        }
+        f.em.createNewEdit();
+        f.clip = nullptr;
+        // Finish asynchronous cancellation before destroying the test engine;
+        // this probe exercises session replacement, not stopping its message loop.
+        for (int tick = 0; tick < 500 && f.em.getEngine().getBackgroundJobs().getNumJobs() != 0; ++tick)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        REQUIRE (f.em.getEngine().getBackgroundJobs().getNumJobs() == 0);
+        REQUIRE (te::getAudioTracks (*f.em.getEdit()).size() == 1);
+    }
+}
+
+TEST_CASE ("Cancelled render jobs remain alive until the worker queue releases them", "[warp][render-job-lifetime]")
+{
+    EditManager em;
+    auto& jobs = em.getEngine().getBackgroundJobs();
+    juce::WaitableEvent releaseWorkers (true);
+    std::atomic<int> started { 0 }, destroyed { 0 };
+
+    struct Blocker final : te::ThreadPoolJobWithProgress
+    {
+        Blocker (juce::WaitableEvent& e, std::atomic<int>& s)
+            : ThreadPoolJobWithProgress ("render lifetime test blocker"), gate (e), started (s) {}
+        ~Blocker() override { prepareForJobDeletion(); }
+        float getCurrentTaskProgress() override { return 0.0f; }
+        JobStatus runJob() override
+        {
+            ++started;
+            gate.wait (10000);
+            return jobHasFinished;
+        }
+        juce::WaitableEvent& gate;
+        std::atomic<int>& started;
+    };
+    struct Probe final : te::RenderManager::Job
+    {
+        Probe (te::Engine& e, std::atomic<int>& d)
+            : Job (e, te::AudioFile (e)), destroyed (d) {}
+        ~Probe() override { ++destroyed; }
+        bool setUpRender() override { return false; }
+        bool renderNextBlock() override { return true; }
+        bool completeRender() override { return false; }
+        std::atomic<int>& destroyed;
+    };
+
+    juce::OwnedArray<Blocker> blockers;
+    for (int i = 0; i < 8; ++i)
+    {
+        auto* blocker = blockers.add (new Blocker (releaseWorkers, started));
+        jobs.addJob (blocker, false);
+    }
+    // Always release the real workers, including on a failed assertion.
+    const auto cleanup = juce::ScopeGuard { [&]
+    {
+        releaseWorkers.signal();
+        jobs.stopAndDeleteAllRunningJobs();
+    } };
+    auto waitFor = [] (const auto& condition)
+    {
+        for (int i = 0; i < 500 && ! condition(); ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        return condition();
+    };
+    REQUIRE (waitFor ([&] { return started.load() == 8; }));
+    te::RenderManager::Job::Ptr probe = new Probe (em.getEngine(), destroyed);
+
+    SECTION ("cancel after enqueue while every worker is busy")
+    {
+        REQUIRE (waitFor ([&] { return jobs.containsJob (probe.get()); }));
+        probe->cancelJob();
+        probe = nullptr;
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        CHECK (destroyed.load() == 0);
+    }
+    SECTION ("cancel before the deferred start message")
+    {
+        probe->cancelJob();
+        probe = nullptr;
+        REQUIRE (waitFor ([&] { return destroyed.load() == 1; }));
+    }
+
+    releaseWorkers.signal();
+    REQUIRE (waitFor ([&] { return destroyed.load() == 1; }));
+}
+
+TEST_CASE ("Cancelled Warp target is not reported ready before its file exists", "[warp][render-job-lifetime]")
+{
+    WarpFixture f;
+    WarpEngine::setWarpEnabled (*f.clip, true);
+    WarpEngine::kickWarpRender (*f.clip);
+    f.clip->cancelCurrentRender();
+    REQUIRE_FALSE (f.clip->getAudioFile().getFile().existsAsFile());
+    REQUIRE (WarpEngine::isWarpRenderPending (*f.clip));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+}

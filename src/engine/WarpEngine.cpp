@@ -268,7 +268,10 @@ bool WarpEngine::isWarpRenderPending (const te::WaveAudioClip& clip)
     // Bewusst KEIN AudioFile::isValid() hier: das liest den AudioFileCache, der
     // während/nach dem Render veraltete Info liefern kann — die Job-Existenz ist
     // das autoritative „läuft noch"-Signal.
-    return c.getAudioFile().getFile() != target.getFile();
+    // A cancelled job leaves the registry before a replacement is ready.
+    // Adopting the target path alone does not mean its file exists yet.
+    return c.getAudioFile().getFile() != target.getFile()
+           || ! target.getFile().existsAsFile();
 }
 
 //==============================================================================

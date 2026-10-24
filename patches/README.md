@@ -79,3 +79,22 @@ with a fake device and verifies application, idempotence and edit preservation.
 A real Bluetooth/input-output device-switch test remains necessary.
 
 Related upstream report: [CoreAudio device-switch race](https://forum.juce.com/t/data-race-when-switching-audio-device-sample-rate/65502).
+
+## Render-job lifetime (24 October 2026)
+
+`tracktion-render-job-lifetime.patch` targets the same pinned Tracktion version.
+A cancelled render job can be queued without currently running. Releasing its
+self-reference based only on `isRunning()` left a freed pointer in JUCE's worker
+queue. The completion callback now waits until the pool no longer contains the
+job; a cancellation before the deferred start prevents enqueueing altogether.
+Expected cancellation of a blocking callback completes as a cancelled job,
+while unexpected exceptions retain their diagnostics. This changes background
+and message-thread lifecycle handling, not audio processing.
+
+`ApplyTracktionRenderJobPatch.cmake` verifies both affected source hashes before
+applying anything and preserves unknown local edits. Application, repeat
+configuration, missing sources and mixed/modified states are checked by
+`python3 tests/test_render_job_patch.py`. The C++ regression occupies every worker
+and cancels a queued job, and separately cancels before its start message.
+The explicit `[.warp-stress]` probe exercises rapid Warp edits and session swaps.
+Upstream copyright and license notices remain unchanged.

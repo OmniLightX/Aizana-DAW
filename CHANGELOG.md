@@ -5,6 +5,13 @@
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
 
+### Background rendering
+
+- Keep cancelled render jobs alive until JUCE's worker queue has released them.
+  Previously a queued job could be freed while still referenced by the pool,
+  causing a use-after-free during rapid Warp edits. Cancellation before the
+  deferred start now also prevents the job from being enqueued.
+
 ### Build and test compatibility
 
 - Use aggregate initialization for JUCE cleanup guards so the stem pipeline and

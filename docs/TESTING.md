@@ -17,6 +17,7 @@ After configuring and building the targets described in the README:
 ```sh
 python3 tests/test_recording_patch.py
 python3 tests/test_state_patch.py
+python3 tests/test_render_job_patch.py
 python3 tests/test_coreaudio_patch.py
 ctest --test-dir build --output-on-failure
 ```
@@ -28,7 +29,8 @@ run alone does not establish Debug assertion cleanliness. Hidden diagnostic
 probes are intentionally failing controls, not ordinary passing test cases.
 
 The recording-patch suite has six checks, including the monitoring/overlap
-patch chain; the state-patch suite has four. Both operate on isolated copies of the dependency sources.
+patch chain; the state and render-job patch suites have four each. They operate
+on isolated copies of the dependency sources.
 They verify exact upstream/patched hashes, idempotence and rejection of mixed or
 unexpected local modifications. The build must never silently overwrite an
 unknown dependency state. See [patch provenance](../patches/README.md).
@@ -60,6 +62,8 @@ cmake --build build-asan --target engine_tests -j3
 build-asan/tests/engine_tests_artefacts/Debug/engine_tests '[warp]'
 ```
 
+Use `[render-job-lifetime]` for deterministic queued-job cancellation checks
+and `[.warp-stress]` for forty rounds of rapid Warp changes and session replacement.
 Omit the filter to run the complete diagnostic suite. ONNX and generator checks
 are excluded in this configuration; it supplements the regular build rather
 than replacing it. A passing rerun does not establish that an intermittent crash

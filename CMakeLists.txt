@@ -38,6 +38,7 @@ add_subdirectory(extern/JUCE)
 # inclusion. JUCE is already available via the add_subdirectory(extern/JUCE) above.
 # GPL3/Commercial dual-license; Aizana is GPL3 (see LICENSE.md).
 include(cmake/ApplyTracktionStatePatch.cmake)
+include(cmake/ApplyTracktionRenderJobPatch.cmake)
 add_subdirectory(extern/tracktion_engine/modules)
 
 # ---------------------------------------------------------------------------

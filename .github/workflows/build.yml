@@ -37,9 +37,14 @@ jobs:
         run: |
           python3 tests/test_recording_patch.py
           python3 tests/test_state_patch.py
+          python3 tests/test_render_job_patch.py
           python3 tests/test_coreaudio_patch.py
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Warp cancellation stress
+        run: >-
+          cmake -DTEST_EXECUTABLE="$PWD/build/tests/engine_tests_artefacts/Release/engine_tests"
+          '-DTEST_ARGS=[.warp-stress]' -P tests/RunEngineTests.cmake
       - name: Capture crash diagnostics
         if: failure()
         timeout-minutes: 5

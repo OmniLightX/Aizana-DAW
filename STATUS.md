@@ -20,16 +20,18 @@ suite for every documentation-only commit.
   [40041084368](https://github.com/OmniLightX/Aizana-DAW/actions/runs/40041084368)
   passed the build, patch checks and both CTest targets.
 
-- Warp crash investigation: hosted run 40037494124 stopped with SIGSEGV during
-  `WarpEngine: RENDER PROOF`. No native stack was retained in that run. Thirty
-  isolated local Release Warp runs passed. A separate AddressSanitizer Debug
-  suite passed 462 cases, 11 skips and 50,818 assertions; ONNX and the generator
-  were disabled only in that diagnostic build. Ten additional isolated ASan
-  Warp runs passed 58 assertions each without a reported memory error.
-  The crash has not been reproduced or attributed to a confirmed cause, and
-  is **not recorded as fixed**. CI now retains crash diagnostics on failure.
-  A subsequent complete local Release run with the failed CI run's seed
-  (`2477304931`) passed 467 cases, 6 skips and 50,866 assertions, exit 0.
+- Warp cancellation: a focused AddressSanitizer stress probe reproduced a
+  heap-use-after-free in JUCE's worker queue. Tracktion released a cancelled
+  render job while it was still queued. The lifecycle patch now retains the
+  job until the pool releases it and prevents enqueueing after cancellation.
+  Expected cancellation of blocking callbacks follows the normal failure
+  completion path. Warp readiness also requires the output file to exist.
+  The previously crashing probe plus Warp checks passed 305 assertions in
+  8 cases under ASan with clean JUCE diagnostics. Deterministic queue and
+  missing-output regressions have been added. The complete post-fix Debug suite
+  passed 469 cases, 6 skips and 50,879 assertions with a clean diagnostic gate.
+  Release and hosted post-fix suites are pending. The earlier CI SIGSEGV had no stack, so an identical cause cannot
+  be established from that old log alone.
 
 - CoreAudio combined-device restart: deferred shutdown regression and patch
   application/idempotence tests passed. Debug suite again passed 465 cases,
@@ -58,7 +60,7 @@ suite for every documentation-only commit.
   58 assertions. Both app bundles retain ONNX notices and exclude the old
   standalone Demucs/Eigen notice folders. The Release bundle audit passed.
 
-- Latest full Debug engine suite: **467 passed, 6 skipped, 50,866 assertions**,
+- Latest full Debug engine suite: **469 passed, 6 skipped, 50,879 assertions**,
   exit 0. The diagnostic gate found no JUCE assertion or leaked-object report.
 - Automation UI regression: 21 assertions passed, covering mode/parameter
   synchronization, first selection, Undo/Redo and curve preservation.
