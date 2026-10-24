@@ -69,7 +69,7 @@ they are not marked as manually passed on that basis.
 - [ ] MP3 dialog format/bitrate selection, cancellation, Escape/window close and
       listening to a real mixed session including master effects.
 - [x] Full anonymous model download from the app URL: size and SHA-256 verified (24 October 2026).
-- [ ] First model download through the app dialog.
+- [x] First model download through the app dialog (24 October 2026): existing model temporarily backed up, download consent accepted, new installed file verified by size and SHA-256.
 - [ ] First launch on an independent Mac.
 
 See [test status](../STATUS.md), [test reproduction](TESTING.md),

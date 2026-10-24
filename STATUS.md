@@ -102,8 +102,7 @@ Reproduction and coverage: [Testing](docs/TESTING.md).
 
 ## Remaining checks and limitations
 
-- First model download through the ordinary app dialog. Full anonymous download
-  from its configured URL passed on 24 October 2026 (HTTP 200, size and SHA-256 verified).
+
 - Physical MIDI keyboard and hardware cue outputs.
 - Other third-party OOP editors and audio comparisons.
 - Remaining insert/sidechain/preset combinations and visual toggle states.
@@ -116,3 +115,7 @@ Reproduction and coverage: [Testing](docs/TESTING.md).
 
 Detailed cases: [interaction checklist](docs/LIVE_TEST_CHECKLIST.md).
 Model-specific evidence and quality limits: [model report](docs/OPEN_STEM_RELEASE.md).
+
+Model delivery verified on 24 October 2026: anonymous full download and first-use
+download through the ordinary app dialog both installed the expected model bytes
+(size and SHA-256 checked).

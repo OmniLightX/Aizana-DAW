@@ -113,9 +113,11 @@ uses the download URL configured in the app. Full authenticated downloads of
 all three assets matched their recorded sizes and SHA-256 digests. On 24 October
 2026, after the repository became public, a full unauthenticated download from
 the exact app URL returned HTTP 200, 355012879 bytes and the expected SHA-256.
-No token, cookies or GitHub login were supplied. First-use download through the
-app dialog remains a separate UI check in
-[STATUS.md](../STATUS.md).
+No token, cookies or GitHub login were supplied. The ordinary app dialog was
+also verified on 24 October 2026: with the existing model temporarily backed up,
+a synthetic WAV triggered the download offer; accepting it installed a new model
+with the expected size and SHA-256. This checks delivery and installation, not
+the separation quality of the synthetic test signal.
 
 Six-category separation, preview/import and single-step import Undo/Redo passed.
 Cancellation removed the progress panel without importing tracks or changing
