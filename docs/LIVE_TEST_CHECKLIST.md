@@ -1,7 +1,7 @@
 # Native interaction checklist
 
-Recorded checks through 20 October 2026. Checked items were observed in native
-interaction; unchecked items remain outstanding even if engine tests cover
+Recorded checks through 24 October 2026. Checked items were observed in native
+interaction or confirmed during user testing; unchecked items remain outstanding even if engine tests cover
 related behavior. Use disposable sessions and test files.
 
 ## Mixer and track actions
@@ -92,15 +92,16 @@ Pending live verification in the rebuilt app:
 
 ### Successive recording playback
 
-- [ ] Record, stop, rewind and record again without looping: hear only the new
+- [x] Record, stop, rewind and record again without looping: hear only the new
       pass in the overlap during subsequent playback.
 - [ ] Record a shorter replacement inside a longer take: check the original
       before and after it, plus the transitions for clicks.
 - [ ] Right-click an overlapping clip, choose **Aufnahme bevorzugen**, switch
       back, Undo/Redo, save and reopen. Confirm all source audio remains intact.
 
-### Live recording waveform (pending hardware/UI verification)
+### Live recording waveform
 
+- [x] Live waveform appears during recording (confirmed in user testing on 24 October 2026).
 - [ ] Record quiet and loud passages: waveform grows before Stop and reflects input amplitude; existing mixer meters behave unchanged.
 - [ ] Scroll and zoom while recording; waveform stays aligned with the timeline and does not cover headers.
 - [ ] Check stereo and simultaneous armed tracks, silence, pre-roll, punch-in/out, and several loop passes.
