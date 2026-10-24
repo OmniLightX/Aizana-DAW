@@ -110,8 +110,11 @@ The optional model is separate data, accompanied by `MODEL_LICENSES.txt` and
 `d546b9780159ee8e54c3cf7c0446a4204b8793e363941122b4c115089d369cc2`.
 The [model release](https://github.com/OmniLightX/Aizana-DAW/releases/tag/stem-model-mega53-v1)
 uses the download URL configured in the app. Full authenticated downloads of
-all three assets matched their recorded sizes and SHA-256 digests. Anonymous
-first-use download through the app remains a separate check in
+all three assets matched their recorded sizes and SHA-256 digests. On 24 October
+2026, after the repository became public, a full unauthenticated download from
+the exact app URL returned HTTP 200, 355012879 bytes and the expected SHA-256.
+No token, cookies or GitHub login were supplied. First-use download through the
+app dialog remains a separate UI check in
 [STATUS.md](../STATUS.md).
 
 Six-category separation, preview/import and single-step import Undo/Redo passed.

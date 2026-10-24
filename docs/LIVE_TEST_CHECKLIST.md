@@ -68,7 +68,8 @@ they are not marked as manually passed on that basis.
 - [x] Stem cancellation and session switching prevent late import.
 - [ ] MP3 dialog format/bitrate selection, cancellation, Escape/window close and
       listening to a real mixed session including master effects.
-- [ ] Anonymous first model download through the app.
+- [x] Full anonymous model download from the app URL: size and SHA-256 verified (24 October 2026).
+- [ ] First model download through the app dialog.
 - [ ] First launch on an independent Mac.
 
 See [test status](../STATUS.md), [test reproduction](TESTING.md),

@@ -102,7 +102,8 @@ Reproduction and coverage: [Testing](docs/TESTING.md).
 
 ## Remaining checks and limitations
 
-- Anonymous first model download through the ordinary app dialog.
+- First model download through the ordinary app dialog. Full anonymous download
+  from its configured URL passed on 24 October 2026 (HTTP 200, size and SHA-256 verified).
 - Physical MIDI keyboard and hardware cue outputs.
 - Other third-party OOP editors and audio comparisons.
 - Remaining insert/sidechain/preset combinations and visual toggle states.
