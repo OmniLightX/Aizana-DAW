@@ -59,6 +59,28 @@ und Loop. **Edit** und **Mix** wechseln den Schwerpunkt der Darstellung.
 Über **Ansicht → Einsteiger-Welt** wechselst du die Bedienansicht derselben
 Session. Die Ansicht erzeugt keine zweite Kopie deines Songs.
 
+### Symbole der Transportleiste
+
+Die Schalter stehen von links nach rechts in dieser Reihenfolge. Wenn du mit
+der Maus darüberfährst, erscheint zusätzlich eine kurze Funktionsbeschreibung.
+
+| Symbol / Aussehen | Knopf | Funktion |
+|---|---|---|
+| Pfeil nach links mit senkrechtem Strich | Zum Start | Stoppt den Transport und springt zum Songanfang. |
+| Grünes Dreieck | Wiedergabe | Startet die Wiedergabe; erneutes Klicken stoppt an der aktuellen Position. |
+| Quadrat | Stopp | Stoppt Wiedergabe oder Aufnahme an der aktuellen Position. |
+| Roter Kreis | Aufnahme | Startet die Aufnahme auf aufnahmebereiten Spuren; erneutes Klicken beendet sie. Eingang und Spur-REC vorher einstellen. |
+| Metronom | Metronom | Schaltet den Klick ein oder aus. |
+| Kleiner Pfeil nach unten neben dem Metronom | Metronom-Einstellungen | Öffnet Vorzähler, Pre-Roll, Taktbetonung und Klicklautstärke. |
+| Roter Punkt zwischen eckigen Klammern | Auto-Punch | Begrenzt die Aufnahme auf den Bereich zwischen den Loop-In-/Out-Markern. |
+| Kreispfeil | Loop | Schaltet die Wiederholung zwischen den Loop-In-/Out-Markern ein oder aus. |
+| Kreis mit senkrechtem Strich | Tempo tippen | Mehrfach im Takt klicken, um das Songtempo zu setzen. Nach mehr als zwei Sekunden Pause beginnt eine neue Tippfolge. |
+
+Das letzte Symbol steht für **Tempo tippen**, nicht für einen Ein-/Ausschalter.
+Details zu Vorzähler, Pre-Roll und Punch stehen unter
+[Aufnahme](#4-aufnehmen), zur Wiederholung unter
+[Loop-Aufnahme und Comping](#5-loop-aufnahme-und-comping).
+
 Spurauswahl und Clipauswahl sind verschieden: Zum Bearbeiten einer Aufnahme
 wählst du den Clip; für Eingang, Solo oder Aufnahmebereitschaft den Spurkopf.
 Pluginfenster können eigene Tastatureingaben abfangen. Klicke zurück ins

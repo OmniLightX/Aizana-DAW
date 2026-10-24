@@ -59,6 +59,26 @@ and loop controls. **Edit** and **Mix** change the focus of the display.
 Use **Ansicht → Einsteiger-Welt** (View → Beginner World) to switch the interface
 view for the same session. This view does not create a second copy of your song.
 
+### Transport bar symbols
+
+The controls appear in this order from left to right. Hover over a button for
+a short description of its function.
+
+| Symbol / appearance | Button | Function |
+|---|---|---|
+| Left arrow with a vertical bar | Zum Start (Return to Start) | Stops the transport and returns to the beginning of the song. |
+| Green triangle | Wiedergabe (Play) | Starts playback; clicking again stops at the current position. |
+| Square | Stopp (Stop) | Stops playback or recording at the current position. |
+| Red circle | Aufnahme (Record) | Starts recording on armed tracks; clicking again ends recording. Select the input and enable track REC first. |
+| Metronome | Metronom (Metronome) | Toggles the click on or off. |
+| Small downward arrow beside the metronome | Metronom-Einstellungen (Metronome Settings) | Opens count-in, pre-roll, downbeat accent, and click volume settings. |
+| Red dot between square brackets | Auto-Punch | Restricts recording to the region between the loop in/out markers. |
+| Circular arrow | Loop | Toggles repeated playback between the loop in/out markers. |
+| Circle with a vertical stroke | Tempo tippen (Tap Tempo) | Click repeatedly in time to set the song tempo. A pause of more than two seconds starts a new tap sequence. |
+
+The last symbol means **Tap Tempo**, not power on/off. See the recording and
+loop recording sections below for count-in, pre-roll, punch, and loop workflows.
+
 Selecting a track and selecting a clip are different: to edit a recording,
 select the clip; for input, solo, or record arming, select the track header.
 Plugin windows may intercept keyboard input. Click back into the arrangement
