@@ -69,6 +69,20 @@ Dafür gibt es zwei unterschiedliche Einstiege:
   an; die einzelnen Eingriffe lassen sich rückgängig machen. Einrichtung und
   verfügbare Werkzeuge stehen in der [KI-Studio-Anleitung](docs/MCP.md).
 
+### Eigene Audio-Plugins erzeugen
+
+Der **integrierte Plugin-Generator** erzeugt echte CLAP-Effekte für deine
+Plugin-Bibliothek. Der lokale Composer setzt unterstützte Beschreibungen aus
+vorhandenen DSP-Bausteinen zusammen, ohne KI-Konto oder Netzwerk. Optional können
+Claude Code oder Codex über KI-Studio/MCP neuen Faust-DSP-Code schreiben und
+kompilieren lassen, etwa für einen verzerrten Telefon-Vocal-Effekt. Aizana erkennt
+das erzeugte Plugin; du kannst es anschließend als Insert verwenden.
+
+Dafür müssen Faust und die Apple Command Line Tools lokal installiert sein.
+Erzeugte Plugins führen nativen Code aus; verwende vertrauenswürdige Quellen
+und prüfe das Ergebnis. Einrichtung, Ablauf und Grenzen:
+[Plugin-Generator und MCP](docs/MCP.md).
+
 Schon beim **Stem-Import mit KI-Setup** kann Aizana aus Dateinamen und Audioanalyse
 Instrumentgruppen erkennen und Zuordnungen wie Vocals, Drums, Bass, Gitarren oder
 Keys vorschlagen. Dazu kommen Routing und erste Pegelanpassungen. Im Pro-Modus
@@ -173,6 +187,7 @@ Bedienwege: [Handbuch](MANUAL.de.md). Änderungen und Prüfstand:
 | Automation | Pluginparameter und Mischparameter mit Read/Touch/Latch/Write; Spurkopf-Menü für Sichtbarkeit, Parameter und Modus |
 | Instrumente | Aizana Synth mit zwei Oszillatoren und Presets; Aizana Drums mit 8×16-Sequencer und eigenen WAV-Samples |
 | Effekte | EQ mit Banddynamik, Kompressor, Reverb, Limiter, De-Esser, Delay, Gate und Saturator |
+| Plugin-Generator | Faust zu CLAP; lokaler Composer aus DSP-Bausteinen und optionale Codegenerierung durch externe KI-Agenten über MCP |
 | Plugin-Hosting | VST3, Audio Units auf macOS und CLAP; externe Plugins separat installieren |
 | Export | Stereo-Mixdown und Einzelspuren als WAV/AIFF, 44,1/48/96 kHz und 16/24/32 Bit, oder MP3 mit 44,1/48 kHz und 128/192/256/320 kbit/s (integrierter LAME-Encoder) |
 | Sessionverwaltung | Speichern, Medienordner, Autosave, Sicherungen und Wiederherstellung |
@@ -305,10 +320,9 @@ Audiodatei.
 Stem-Separation läuft lokal mit dem MIT-freigegebenen MVSep-Mega-Modell von
 Roman Solovyev (ZFTurbo). Das
 [Modell-Release](https://github.com/OmniLightX/Aizana-DAW/releases/tag/stem-model-mega53-v1)
-ist unter dem Downloadziel der App freigegeben. Der Zugriff folgt der Sichtbarkeit
-des Repositorys: Solange es privat ist, ist kein App-Download ohne Anmeldung
-möglich. Der Erstdownload ohne Anmeldung muss nach dem Öffentlichstellen noch
-geprüft werden.
+ist unter dem Downloadziel der App öffentlich verfügbar. Der vollständige Download
+ohne Anmeldung und die Installation über den App-Dialog wurden am 24. Oktober
+2026 mit Dateigröße und SHA-256 geprüft.
 Das optionale Modell umfasst rund 355 MB und wird vor der Verwendung per Größe und SHA-256 geprüft. Sechs Ausgaben
 sind möglich: Schlagzeug, Bass, Gesang, Gitarre, Klavier und Übriges als Restsignal;
 alternativ vier Kategorien. Python ist dafür nicht erforderlich. Modellgewichte

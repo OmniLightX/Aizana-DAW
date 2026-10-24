@@ -64,6 +64,19 @@ There are two different entry points:
   individual operations can be undone. Setup and available tools are described
   in the [AI Studio guide](docs/MCP.md).
 
+### Generate your own audio plugins
+
+The **integrated plugin generator** creates real CLAP effects for your plugin
+library. The local composer assembles supported descriptions from existing DSP
+blocks, without an AI account or network. Optionally, Claude Code or Codex can
+write new Faust DSP through AI Studio/MCP and have it compiled, for example into
+a distorted telephone vocal effect. Aizana detects the generated plugin so you
+can insert it on a track.
+
+Faust and Apple Command Line Tools must be installed locally. Generated plugins
+execute native code; use trusted sources and check the result. Setup, workflow
+and limitations: [Plugin generator and MCP](docs/MCP.md).
+
 When **importing stems with KI-Setup**, Aizana can use filenames and audio
 analysis to recognize instrument groups and suggest assignments such as vocals,
 drums, bass, guitars or keys. It also provides routing and initial level
@@ -166,6 +179,7 @@ changes and [test status](STATUS.md) for verified coverage and remaining checks.
 | Automation | Plugin and mixer parameters with Read/Touch/Latch/Write; track-header menu for lane visibility, parameter and mode selection |
 | Instruments | Aizana Synth with two oscillators and presets; Aizana Drums with an 8×16 sequencer and custom WAV samples |
 | Effects | EQ with band dynamics, compressor, reverb, limiter, de-esser, delay, gate and saturator |
+| Plugin generator | Faust to CLAP; local composer using DSP blocks and optional code generation by external AI agents through MCP |
 | Plugin hosting | VST3, Audio Units on macOS and CLAP; install external plugins separately |
 | Export | Stereo mixdown and individual tracks as WAV/AIFF at 44.1/48/96 kHz and 16/24/32 bits, or MP3 at 44.1/48 kHz and 128/192/256/320 kbit/s (built-in LAME encoder) |
 | Session management | Saving, media folders, autosave, backups and recovery |
@@ -295,10 +309,9 @@ the result rather than relying solely on automatic decisions.
 **Stem separation** is a separate tool for splitting a finished audio file.
 It runs locally using Roman Solovyev's (ZFTurbo) MIT-licensed MVSep-Mega model.
 The [model release](https://github.com/OmniLightX/Aizana-DAW/releases/tag/stem-model-mega53-v1)
-is published at the URL used by the app. Download access follows repository
-visibility: while this repository is private, anonymous in-app download is not
-available. First-use download without authentication remains to be verified
-after the repository becomes public.
+is publicly available at the URL used by the app. A full unauthenticated download
+and installation through the app dialog were verified on 24 October 2026,
+including file size and SHA-256.
 The optional model is approximately 355 MB and is checked for
 size and SHA-256 before use. Six outputs are available: drums, bass, vocals,
 guitar, piano and other as a residual signal; a four-category mode is also
