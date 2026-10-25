@@ -1,3 +1,4 @@
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "ScopedTestLogger.h"
 // test_export_wav.cpp — EXP-01: Stereo-Mixdown-Export; EXP-04: Format/Samplerate
 //
@@ -335,4 +336,72 @@ TEST_CASE("MP3 encoder: input errors, write errors, and mid-encode cancellation"
     CHECK(Mp3Encoder::encode(f.dir.getChildFile("input.wav"), target, 320,
         [&blocks] { return ++blocks == 3; }).contains("abgebrochen"));
     CHECK(blocks == 3);
+}
+
+#include "plugins/BuiltInPluginFormat.h"
+#include "fx/DelayProcessor.h"
+#include "engine/MixerEngine.h"
+
+namespace {
+juce::File qa3Dir(const juce::File& fallback) {
+    const auto requested=juce::SystemStats::getEnvironmentVariable("AIZANA_QA_OUTPUT_DIR", {});
+    auto f=requested.isEmpty() ? fallback.getChildFile("qa3") : juce::File(requested);
+    f.createDirectory(); return f;
+}
+double qa3Rms(const juce::File& file, double start=0.1, double duration=0.5) {
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> r(fm.createReaderFor(file)); REQUIRE(r);
+    juce::AudioBuffer<float> b(2,(int)(duration*r->sampleRate));
+    REQUIRE(r->read(&b,0,b.getNumSamples(),(juce::int64)(start*r->sampleRate),true,true));
+    return b.getRMSLevel(0,0,b.getNumSamples());
+}
+}
+TEST_CASE("QA3 export retains audible delay after the final clip", "[qa3]") {
+    ExportFixture f; auto& e=*f.manager.getEdit(); auto* t=te::getAudioTracks(e)[0];
+    auto ptr=e.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName,BuiltInPluginFormat::getDescriptionFor("Aizana Delay"));
+    REQUIRE(ptr); t->pluginList.insertPlugin(ptr,-1,nullptr);
+    auto* ext=dynamic_cast<te::ExternalPlugin*>(ptr.get()); REQUIRE(ext); ext->initialiseFully();
+    auto* delay=dynamic_cast<DelayProcessor*>(ext->getAudioPluginInstance()); REQUIRE(delay);
+    delay->setTimeMs(350); delay->setFeedback(50); delay->setMix(100); ext->flushPluginStateToValueTree();
+    auto out=qa3Dir(f.dir);
+    REQUIRE(f.manager.saveEdit(out.getChildFile("delay-session/delay-session.tracktion")).wasOk());
+    ExportPipeline pipeline; ExportOptions o; o.outputFile=out.getChildFile("delay-normal.wav");
+    REQUIRE(pipeline.exportMixdown(e,o).isEmpty());
+    {
+        EditManager reopened;
+        REQUIRE(reopened.loadEdit(out.getChildFile("delay-session/delay-session.tracktion")));
+        ExportOptions again; again.outputFile=out.getChildFile("delay-reopened.wav");
+        REQUIRE(pipeline.exportMixdown(*reopened.getEdit(),again).isEmpty());
+        CHECK(std::abs(qa3Rms(o.outputFile,0.5,0.3)-qa3Rms(again.outputFile,0.5,0.3))<0.0001);
+    }
+    // Silent MIDI clip only extends the export interval, allowing the same FX to decay.
+    te::ClipPosition pos{tracktion::core::TimeRange(tracktion::core::TimePosition::fromSeconds(1),tracktion::core::TimePosition::fromSeconds(3)),{}};
+    REQUIRE(t->insertNewClip(te::TrackItem::Type::midi,"tail window",pos,nullptr));
+    o.outputFile=out.getChildFile("delay-padded-control.wav"); REQUIRE(pipeline.exportMixdown(e,o).isEmpty());
+    const auto tail=qa3Rms(o.outputFile,1.1,0.2); REQUIRE(tail>0.01);
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> r(fm.createReaderFor(out.getChildFile("delay-normal.wav"))); REQUIRE(r);
+    INFO("normal duration=" << r->lengthInSamples/r->sampleRate << " control tail RMS=" << tail);
+    CHECK(r->lengthInSamples/r->sampleRate >= 5.0);
+    CHECK(qa3Rms(out.getChildFile("delay-normal.wav"),1.1,0.2)>0.01);
+}
+TEST_CASE("QA3 routed track stem contains its audio", "[qa3]") {
+    ExportFixture f; auto& e=*f.manager.getEdit(); auto* t=te::getAudioTracks(e)[0]; t->setName("Source");
+    MixerEngine mixer(f.manager); auto* bus=mixer.createBusChannel("Bus"); REQUIRE(bus); mixer.routeTrackToBus(*t,*bus);
+    auto second=e.insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(e),nullptr);
+    REQUIRE(second); second->setName("Second"); second->setSoloIsolate(false);
+    ClipEditor editor(f.manager);
+    REQUIRE(editor.importAudioFile(f.dir.getChildFile("input.wav"),*second,0));
+    mixer.routeTrackToBus(*second,*bus);
+    ExportPipeline pipeline; ExportOptions o; o.outputFile=qa3Dir(f.dir).getChildFile("routed-mix.wav");
+    REQUIRE(pipeline.exportMixdown(e,o).isEmpty()); const auto mix=qa3Rms(o.outputFile); REQUIRE(mix>0.01);
+    o.outputFile=qa3Dir(f.dir).getChildFile("routed-stems"); REQUIRE(pipeline.exportStems(e,o).isEmpty());
+    const auto stem=qa3Rms(o.outputFile.getChildFile("Source.wav"));
+    INFO("mix RMS=" << mix << " source stem RMS=" << stem);
+    CHECK(stem>0.01);
+    CHECK_THAT(stem, Catch::Matchers::WithinAbs(mix * 0.5, 0.0001));
+    CHECK_THAT(qa3Rms(o.outputFile.getChildFile("Second.wav")), Catch::Matchers::WithinAbs(stem, 0.0001));
+    CHECK_THAT(qa3Rms(o.outputFile.getChildFile("Bus.wav")), Catch::Matchers::WithinAbs(mix, 0.0001));
+    CHECK(t->getOutput().getDestinationTrack()==bus);
+    CHECK(second->getOutput().getDestinationTrack()==bus);
 }

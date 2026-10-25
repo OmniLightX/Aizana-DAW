@@ -18,6 +18,11 @@ namespace te = tracktion::engine;
 MainComponent::MainComponent (ApplicationState& appState_)
     : appState (appState_)
 {
+    stemImportEngine.onError = [] (const juce::String& error)
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                               "KI-Setup", error);
+    };
     // ── Named Input Buses (Phase 2) ──────────────────────────────────────────
     // Re-seed / re-bind Named Buses whenever the Edit is swapped (File>New /
     // File>Open). A fresh or loaded Edit does not inherit the previous Edit's
@@ -1418,20 +1423,17 @@ void MainComponent::handleFileImportAudio()
             auto tracks2 = te::getAudioTracks (*edit2);
             if (tracks2.isEmpty()) { fileChooser.reset(); return; }
 
-            auto& track   = *tracks2[0];
-            auto& undoMgr = appState.editManager.getUndoManager();
-            undoMgr.beginNewTransaction ("Import audio file");
+            auto* track = arrangementView.getSelectedTrack();
+            if (! tracks2.contains (track))
+                track = tracks2[0];
 
-            using TimePos = tracktion::core::TimePosition;
-            using TimeRng = tracktion::core::TimeRange;
-
-            te::ClipPosition pos { TimeRng (TimePos::fromSeconds (0.0),
-                                             TimePos::fromSeconds (30.0)), {} };
-            auto* clip = track.insertNewClip (te::TrackItem::Type::wave,
-                                               audioFile.getFileNameWithoutExtension(),
-                                               pos, nullptr);
-            if (auto* waveClip = dynamic_cast<te::WaveAudioClip*> (clip))
-                waveClip->getSourceFileReference().setToDirectFileReference (audioFile, false);
+            const double start = edit2->getTransport().getPosition().inSeconds();
+            if (clipEditor.importAudioFile (audioFile, *track, start) == nullptr)
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Audio importieren",
+                    juce::String::fromUTF8 ("Die Audiodatei konnte nicht gelesen werden: ")
+                        + audioFile.getFileName());
 
             fileChooser.reset();
         });
@@ -1493,6 +1495,12 @@ void MainComponent::startStemAnalysis (const juce::Array<juce::File>& files)
 
 void MainComponent::onStemPlanReady (const SessionPlan& plan)
 {
+    if (! plan.errors.isEmpty())
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+            "KI-Setup", plan.errors.joinIntoString ("\n"));
+        return; // Retry the selection after removing invalid files.
+    }
     if (plan.tracks.isEmpty())
         return;
 

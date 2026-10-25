@@ -2,6 +2,7 @@
 #include "AizanaUIBehaviour.h"
 #include "Mp3Encoder.h"
 #include <atomic>
+#include <cmath>
 
 namespace
 {
@@ -51,8 +52,24 @@ tracktion::core::TimeRange ExportPipeline::editTimeRange(te::Edit& edit)
     for (auto* track : te::getAudioTracks(edit))
         for (auto* clip : track->getClips())
             end = std::max(end, clip->getPosition().getEnd().inSeconds());
+    // Include effect decay in the actual render interval, so the WAV length
+    // check below remains exact (Renderer endAllowance may stop at silence).
+    // Summing declared tails is conservative for parallel/serial bus chains.
+    double tail = 0.0;
+    auto addTail = [&tail] (te::Plugin* plugin)
+    {
+        if (! plugin->isEnabled()) return;
+        if (auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin))
+            ext->initialiseFully();
+        const double seconds = plugin->getTailLength();
+        if (seconds > 0.0)
+            tail = std::min (60.0, tail + (std::isfinite(seconds) ? seconds : 60.0));
+    };
+    for (auto* track : te::getAllTracks(edit))
+        for (auto* plugin : track->getAllPlugins()) addTail(plugin);
+    for (auto* plugin : edit.getMasterPluginList()) addTail(plugin);
     return {tracktion::core::TimePosition::fromSeconds(0),
-            tracktion::core::TimePosition::fromSeconds(end > 0 ? end : 1)};
+            tracktion::core::TimePosition::fromSeconds((end > 0 ? end : 1) + tail)};
 }
 
 juce::String ExportPipeline::renderOne(te::Renderer::Parameters& params,
@@ -145,22 +162,41 @@ juce::String ExportPipeline::exportStems(te::Edit& edit, const ExportOptions& op
     if (exportInProgress) return "Ein Export laeuft bereits.";
     const juce::ScopedValueSetter<bool> busy(exportInProgress, true);
     if (options.outputFile.createDirectory().failed()) return "Stem-Ordner konnte nicht erstellt werden.";
-    auto tracks = te::getAudioTracks(edit);
-    if (tracks.isEmpty()) return "Keine Audiospuren zum Exportieren.";
+    if (te::getAudioTracks(edit).isEmpty()) return "Keine Audiospuren zum Exportieren.";
     const te::Edit::ScopedRenderStatus renderStatus(edit, true);
+    edit.flushState();
+    // Render a private snapshot: taking a source stem before its downstream bus
+    // must not modify the live session routing, undo history, or dirty state.
+    const auto snapshotState = edit.state.createCopy();
+    auto tracks = te::getAudioTracks(edit);
+    const auto time = editTimeRange(edit);
     juce::StringArray usedNames;
     int index = 0;
-    for (auto* track : tracks)
+    for (auto* originalTrack : tracks)
     {
         if (options.shouldCancel && options.shouldCancel()) return "Export abgebrochen.";
+        // A fresh snapshot per stem also avoids asynchronous routing-cache
+        // updates from one stem affecting the next bus render.
+        te::Edit::Options snapshotOptions { edit.engine, snapshotState.createCopy(), edit.getProjectItemID() };
+        snapshotOptions.role = te::Edit::forRendering;
+        snapshotOptions.editFileRetriever = edit.editFileRetriever;
+        snapshotOptions.filePathResolver = edit.filePathResolver;
+        auto snapshot = te::Edit::createEdit(snapshotOptions);
+        if (! snapshot) return "Export-Snapshot konnte nicht erstellt werden.";
+        auto* track = dynamic_cast<te::AudioTrack*>(te::getAllTracks(*snapshot)[originalTrack->getIndexInEditTrackList()]);
+        if (! track) return "Exportspur konnte nicht gefunden werden.";
         auto name = juce::File::createLegalFileName(track->getName()).trim();
         if (name.isEmpty() || name == "." || name == "..") name = "Spur";
         auto unique = name;
         for (int suffix = 2; usedNames.contains(unique, true); ++suffix)
             unique = name + "_" + juce::String(suffix);
         usedNames.add(unique);
-        te::Renderer::Parameters params(edit);
-        params.time = editTimeRange(edit);
+        // Source stems include their own inserts/fader. Bus stems include
+        // their upstream channels. Downstream buses/master are separate stems.
+        auto& output = track->getOutput();
+        output.setOutputToDefaultDevice(false);
+        te::Renderer::Parameters params(*snapshot);
+        params.time = time;
         params.tracksToDo.setBit(track->getIndexInEditTrackList());
         if (onProgress) onProgress(static_cast<float>(index) / tracks.size());
         auto error = renderOne(params, options, options.outputFile.getChildFile(unique + "." + extensionFor(options.format)));

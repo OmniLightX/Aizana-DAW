@@ -125,19 +125,26 @@ namespace
 
     struct Levels { double rmsDb = -120.0; double peakDb = -120.0; };
 
-    Levels fileLevels (const juce::File& f)
+    Levels fileLevels (const MixApplyEngine::TrackScan& scan)
     {
         juce::AudioFormatManager afm;
         afm.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> r (afm.createReaderFor (f));
+        std::unique_ptr<juce::AudioFormatReader> r (afm.createReaderFor (scan.source));
         if (r == nullptr || r->lengthInSamples <= 0 || r->sampleRate <= 0.0)
             return {};
 
-        const int len = (int) juce::jmin ((juce::int64) r->lengthInSamples,
-                                          (juce::int64) (r->sampleRate * 30.0));   // cap at 30s
+        const auto start = juce::jlimit<juce::int64> (0, r->lengthInSamples,
+            std::llround (scan.sourceOffsetSeconds * r->sampleRate));
+        const auto available = r->lengthInSamples - start;
+        const auto wanted = scan.sourceLengthSeconds < 0 ? available
+            : (juce::int64) std::llround (scan.sourceLengthSeconds * r->sampleRate);
+        const int len = (int) juce::jmin<juce::int64> (available,
+            juce::jmin<juce::int64> (wanted, (juce::int64) (r->sampleRate * 30.0)));
+        if (len <= 0) return {};
         const int chans = (int) juce::jmax (1u, r->numChannels);
         juce::AudioBuffer<float> buf (chans, len);
-        r->read (&buf, 0, len, 0, true, true);
+        if (! r->read (&buf, 0, len, start, true, true)) return {};
+        buf.applyGain (juce::Decibels::decibelsToGain (scan.clipGainDb));
 
         double sumSq = 0.0;
         float  peak  = 0.0f;
@@ -189,6 +196,16 @@ std::vector<MixApplyEngine::TrackScan> MixApplyEngine::scanTracks() const
         s.id     = t->itemID;
         s.name   = t->getName();
         s.source = src;
+        for (auto* clip : t->getClips())
+            if (auto* wave = dynamic_cast<te::WaveAudioClip*> (clip))
+                if (wave->getSourceFileReference().getFile() == src)
+                {
+                    const auto pos = wave->getPosition();
+                    s.sourceOffsetSeconds = pos.getOffset().inSeconds() * wave->getSpeedRatio();
+                    s.sourceLengthSeconds = pos.getLength().inSeconds() * wave->getSpeedRatio();
+                    s.clipGainDb = wave->getGainDB();
+                    break;
+                }
         if (auto* vp = t->getVolumePlugin())
             s.currentPan = vp->pan.get();
 
@@ -216,7 +233,7 @@ std::vector<TrackMixProfile> MixApplyEngine::profilesFromScan (const std::vector
         p.subRole    = c.subRole;
         p.side       = c.side;
 
-        const auto lv = fileLevels (s.source);   // file I/O — caller runs us off the message thread
+        const auto lv = fileLevels (s);   // file I/O — caller runs us off the message thread
         p.rmsDb  = lv.rmsDb;
         p.peakDb = lv.peakDb;
 

@@ -39,6 +39,9 @@ public:
         tracktion::engine::EditItemID id;
         juce::String name;
         juce::File   source;
+        double sourceOffsetSeconds = 0.0;
+        double sourceLengthSeconds = -1.0;
+        float clipGainDb = 0.0f;
         float        currentPan = 0.0f;
     };
 

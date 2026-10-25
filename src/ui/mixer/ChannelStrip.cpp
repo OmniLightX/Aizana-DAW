@@ -1,3 +1,4 @@
+#include "engine/FaderLimits.h"
 #include "ChannelStrip.h"
 #include "plugins/PluginManager.h"
 #include "plugins/PluginScanner.h"
@@ -247,7 +248,7 @@ ChannelStrip::ChannelStrip (te::AudioTrack& track_, MixerEngine& mixerEngine_,
     // ---- Volume fader ----
     volumeFader.setSliderStyle    (juce::Slider::LinearVertical);
     volumeFader.setTextBoxStyle   (juce::Slider::TextBoxBelow, false, 50, 16);
-    volumeFader.setRange          (-60.0, 6.0, 0.1);
+    volumeFader.setRange          (-60.0, aizana::kMaxFaderGainDb, 0.1);
     volumeFader.setDoubleClickReturnValue (true, 0.0);  // double-click resets to 0 dB
     volumeFader.setTextValueSuffix(" dB");
     volumeFader.setValue          (mixerEngine.getVolume (track), juce::dontSendNotification);

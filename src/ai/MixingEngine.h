@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/FaderLimits.h"
+
 #include "MixAction.h"
 #include "ReferenceProfile.h"
 #include "StemAnalyzer.h"     // StemSide
@@ -75,7 +77,7 @@ namespace aizana
         // Gain staging (matches SessionPlanner's language; re-balances the live mix).
         static constexpr double kVocalRmsDb   = -16.0;   // vocals sit a touch hotter
         static constexpr double kDefaultRmsDb = -18.0;   // everything else
-        static constexpr double kMaxGainDb    =  12.0;
+        static constexpr double kMaxGainDb    = aizana::kMaxFaderGainDb;
         static constexpr double kMinGainDb    = -24.0;
         static constexpr double kSilenceRmsDb = -60.0;   // below: leave the track alone
         static constexpr double kMinGainMoveDb = 0.5;    // skip no-op fader moves

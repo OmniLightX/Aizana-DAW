@@ -73,10 +73,10 @@ TEST_CASE ("SessionPlanner: gain staging targets -18 dBFS RMS (vocals -16)", "[p
     const auto plan = SessionPlanner::plan (stems);
 
     // 3 active tracks → estimated sum -18 + 10*log10(3) = -13.2 dB, within the
-    // -12 dB budget → no trim. Gains hit the per-track targets exactly.
-    REQUIRE_THAT (plan.tracks[0].gainDb, Catch::Matchers::WithinAbs (12.0, 0.01)); // -30→-18
+    // -12 dB budget → no trim. Quiet tracks are limited to the supported +6 dB fader ceiling.
+    REQUIRE_THAT (plan.tracks[0].gainDb, Catch::Matchers::WithinAbs (6.0, 0.01)); // limited by fader
     REQUIRE_THAT (plan.tracks[1].gainDb, Catch::Matchers::WithinAbs (-8.0, 0.01)); // -10→-18
-    REQUIRE_THAT (plan.tracks[2].gainDb, Catch::Matchers::WithinAbs (10.0, 0.01)); // -26→-16
+    REQUIRE_THAT (plan.tracks[2].gainDb, Catch::Matchers::WithinAbs (6.0, 0.01)); // limited by fader
 }
 
 TEST_CASE ("SessionPlanner: gain clamps, silence never boosted", "[planner]")
@@ -87,7 +87,7 @@ TEST_CASE ("SessionPlanner: gain clamps, silence never boosted", "[planner]")
 
     const auto plan = SessionPlanner::plan (stems);
 
-    // Clamped to +12 max (one active track → no trim)
+    // Clamped to +6 max (one active track → no trim)
     REQUIRE_THAT (plan.tracks[0].gainDb,
                   Catch::Matchers::WithinAbs (SessionPlanner::kMaxGainDb, 0.01));
     // Silence: gain stays 0 — never boost noise floors

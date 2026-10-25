@@ -333,13 +333,13 @@ TEST_CASE ("MixingEngine: ML backend refines gain magnitude, clamped", "[mixing]
     REQUIRE (base != nullptr);
     const float heuristic = base->gainDb;
 
-    SECTION ("positive trim is clamped to +kMlTrimClampDb")
+    SECTION ("positive trim cannot exceed the supported +6 dB fader ceiling")
     {
         FakeBackend ml (+5.0f);            // asks for +5, clamp is ±2
         const auto plan = MixingEngine::mix (tracks, nullptr, {}, &ml);
         const auto* g = find (plan, MixActionType::SetTrackGain, "Synth");
         REQUIRE (g != nullptr);
-        REQUIRE (g->gainDb == Catch::Approx (heuristic + MixingEngine::kMlTrimClampDb));
+        REQUIRE (g->gainDb == Catch::Approx (6.0));
         REQUIRE (ml.lastInputSize == (int) aizana::mixfeatures::GainTrimCount);
     }
 
