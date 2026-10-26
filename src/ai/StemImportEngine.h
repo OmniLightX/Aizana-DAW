@@ -31,6 +31,8 @@ public:
         Must be called on the message thread inside an open transaction. */
     void applyPlanNow (const SessionPlan& plan, juce::UndoManager& um);
 
+    std::function<void (const juce::String&)> onError;
+
 private:
     EditManager&     editManager;
     MixerEngine&     mixerEngine;

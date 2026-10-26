@@ -28,6 +28,7 @@ enum class StemSide { None, Left, Right };
 struct StemInfo
 {
     juce::File   file;
+    juce::String error;            // non-empty when audio cannot be decoded
     juce::String instrument;       // display label → track name ("Kick", "Vocals", …)
     juce::String group;            // mixer group → named bus ("Drums", "Bass", "Guitars",
                                    //                          "Vocals", "Keys", "FX", "Other")

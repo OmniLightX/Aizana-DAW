@@ -487,14 +487,22 @@ StemInfo StemAnalyzer::analyzeFile (const juce::File& file)
     juce::AudioFormatManager afm;
     afm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (afm.createReaderFor (file));
-    if (reader == nullptr || reader->lengthInSamples <= 0 || reader->sampleRate <= 0.0)
+    if (reader == nullptr || reader->lengthInSamples <= 0 || reader->sampleRate <= 0.0
+        || reader->numChannels == 0)
+    {
+        info.error = "Audiodatei konnte nicht gelesen werden: " + file.getFileName();
         return info;
+    }
 
     // Analysis window: first 30 s are plenty for features and level estimates.
     const int numToRead = (int) juce::jmin<juce::int64> (reader->lengthInSamples,
                                                          (juce::int64) (30.0 * reader->sampleRate));
     juce::AudioBuffer<float> buf ((int) reader->numChannels, numToRead);
-    reader->read (&buf, 0, numToRead, 0, true, true);
+    if (! reader->read (&buf, 0, numToRead, 0, true, true))
+    {
+        info.error = "Audiodatei konnte nicht gelesen werden: " + file.getFileName();
+        return info;
+    }
 
     // Mono mixdown
     juce::AudioBuffer<float> mono (1, numToRead);
@@ -502,8 +510,16 @@ StemInfo StemAnalyzer::analyzeFile (const juce::File& file)
     for (int ch = 0; ch < buf.getNumChannels(); ++ch)
         mono.addFrom (0, 0, buf, ch, 0, numToRead, 1.0f / (float) buf.getNumChannels());
 
-    const float peak = mono.getMagnitude (0, 0, numToRead);
-    const float rms  = mono.getRMSLevel (0, 0, numToRead);
+    // Level measurement uses channel energy, not the phase-sensitive mono sum.
+    float peak = 0.0f;
+    double energy = 0.0;
+    for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+    {
+        peak = std::max (peak, buf.getMagnitude (ch, 0, numToRead));
+        const double channelRms = buf.getRMSLevel (ch, 0, numToRead);
+        energy += channelRms * channelRms;
+    }
+    const float rms = (float) std::sqrt (energy / buf.getNumChannels());
     info.peakDb = juce::Decibels::gainToDecibels (peak, -120.0f);
     info.rmsDb  = juce::Decibels::gainToDecibels (rms,  -120.0f);
 

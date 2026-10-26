@@ -35,6 +35,24 @@ They verify exact upstream/patched hashes, idempotence and rejection of mixed or
 unexpected local modifications. The build must never silently overwrite an
 unknown dependency state. See [patch provenance](../patches/README.md).
 
+## Stem export signal regressions
+
+The `[export]` tests include `[stem-sends]` and `[stem-sidechain]` cases:
+
+- Source and direct-bus stems retain their expected levels.
+- Pre- and post-fader sends, disabled sends and cascaded FX returns produce
+  the expected PCM levels, without adding the sources' direct output.
+- A 100% wet delay remains silent before its first repeat and retains its decay
+  after the source clip ends.
+- A compressor responds to an external key while its own source remains below
+  threshold. Parameters are written through the host before snapshotting.
+- A source inside a submix remains exportable independently, including its send.
+- Live routing, send settings, track count and the undo description are preserved.
+
+Use synthetic fixtures; these checks do not establish compatibility with every
+third-party plugin. The complete suite also covers export cancellation and
+preservation of existing output files.
+
 ## Clean CI build
 
 [macOS build and tests](../.github/workflows/build.yml) checks out pinned submodules

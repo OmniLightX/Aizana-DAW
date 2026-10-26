@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/FaderLimits.h"
+
 #include "StemAnalyzer.h"
 #include "ReferenceProfile.h"
 #include <juce_graphics/juce_graphics.h>
@@ -35,6 +37,7 @@ struct PlannedTrack
 
 struct SessionPlan
 {
+    juce::StringArray errors;
     juce::Array<PlannedTrack> tracks;
     juce::StringArray         groups;   // buses to create, stable mixer order
 };
@@ -57,7 +60,7 @@ public:
     static constexpr double kTargetRmsDb   = -18.0;  // per-track target after gain
     static constexpr double kVocalRmsDb    = -16.0;  // vocals sit slightly hotter
     static constexpr double kMaxSumRmsDb   = -12.0;  // estimated master sum budget
-    static constexpr double kMaxGainDb     =  12.0;  // never boost more than this
+    static constexpr double kMaxGainDb     = aizana::kMaxFaderGainDb;  // never boost more than this
     static constexpr double kMinGainDb     = -24.0;
     static constexpr double kSilenceRmsDb  = -60.0;  // below: leave gain at 0
 

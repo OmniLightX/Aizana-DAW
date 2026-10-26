@@ -67,6 +67,21 @@ void StemImportEngine::applyPlanNow (const SessionPlan& plan, juce::UndoManager&
     if (edit == nullptr)
         return;
 
+    // Revalidate the complete batch before mutations: files may have changed
+    // while the preview was open. Do not create orphan tracks or buses.
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    for (const auto& planned : plan.tracks)
+    {
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (planned.file));
+        if (! reader || reader->sampleRate <= 0 || reader->lengthInSamples <= 0
+            || reader->numChannels == 0)
+        {
+            if (onError) onError ("Audiodatei konnte nicht gelesen werden: " + planned.file.getFileName());
+            return;
+        }
+    }
+
     // 1) Stem tracks FIRST (buses must end up at the END of the track list).
     juce::Array<te::AudioTrack*> created;
 

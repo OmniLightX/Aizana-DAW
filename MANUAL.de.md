@@ -538,6 +538,18 @@ Mixdown berücksichtigt die Master-Effekte. Prüfe deshalb vor dem Rendern,
 ob Limiter oder andere Master-Inserts wie gewünscht eingestellt sind.
 Stems exportieren rendert vorhandene Spuren; es führt keine KI-Separation
 einer fertigen Mischung durch.
+Quellspuren enthalten ihre eigenen Inserts und Fader-Einstellungen vor
+nachgeschalteten Bussen. Bus-Stems enthalten ihre gerouteten Eingangsspuren;
+FX-Stems enthalten ihre Send-Eingänge und Effekte, ohne das direkte Signal der
+Quellspuren beizumischen. Master-Inserts sind in Stems nicht enthalten.
+Summiere Quellspuren nicht zusammen mit Bussen, die diese Spuren bereits
+enthalten, da deren Beitrag dadurch doppelt wiedergegeben wird.
+
+Der Stem-Export arbeitet mit temporären Session-Kopien und verändert das Routing
+der Session nicht. Der Exportzeitraum enthält zusätzlich die Summe der von
+aktivierten Plugins gemeldeten Ausklangzeiten, begrenzt auf 60 Sekunden.
+Plugins, die keinen Ausklang melden, verlängern den Zeitraum nicht; höre das
+Ende der exportierten Datei deshalb ab.
 
 ## 15. Speichern und Wiederherstellen
 

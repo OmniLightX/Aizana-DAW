@@ -372,8 +372,9 @@ te::WaveAudioClip* ClipEditor::importAudioFile (const juce::File& audioFile,
     afm.registerBasicFormats();
 
     std::unique_ptr<juce::AudioFormatReader> reader (afm.createReaderFor (audioFile));
-    if (reader == nullptr)
-        return nullptr;  // Unrecognised format
+    if (reader == nullptr || reader->sampleRate <= 0.0
+        || reader->lengthInSamples <= 0 || reader->numChannels == 0)
+        return nullptr;  // Reject invalid/empty audio before changing the edit
 
     double durationSecs = static_cast<double> (reader->lengthInSamples)
                           / reader->sampleRate;

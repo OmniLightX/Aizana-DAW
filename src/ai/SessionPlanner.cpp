@@ -54,10 +54,16 @@ double SessionPlanner::groupOffsetDb (const juce::String& group, const Reference
 }
 
 //==============================================================================
-SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& stems,
+SessionPlan SessionPlanner::plan (const juce::Array<StemInfo>& inputs,
                                   const ReferenceProfile* reference)
 {
     SessionPlan out;
+    juce::Array<StemInfo> stems;
+    for (const auto& input : inputs)
+        if (input.error.isNotEmpty())
+            out.errors.add (input.error);
+        else
+            stems.add (input);
 
     // --- Tracks: one per stem, duplicate names suffixed " 2", " 3", …
     juce::StringArray usedNames;

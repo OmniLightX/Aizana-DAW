@@ -516,6 +516,16 @@ stops the remaining stems. Duplicate track names receive numbered suffixes.
 Mixdown includes master effects. Before rendering, check that the limiter or
 other master inserts are configured as intended. Exporting stems renders
 existing tracks; it does not perform AI separation of a finished mix.
+Source stems contain their own inserts and fader processing before downstream
+buses. Bus stems include their routed inputs; FX stems include their send inputs
+and effects, without adding the sources' direct output. Master inserts are not
+included in stems. Do not sum source stems together with buses that already
+contain those sources, as that doubles their contribution.
+
+Rendering uses temporary session copies for stems and leaves the session routing
+unchanged. The export interval includes the sum of enabled plugins' reported
+release/tail times, capped at 60 additional seconds. Plugins that report no tail
+cannot extend the interval; listen to the end of the exported file.
 
 ## 15. Saving and recovery
 
