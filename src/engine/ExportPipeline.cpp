@@ -193,11 +193,37 @@ juce::String ExportPipeline::exportStems(te::Edit& edit, const ExportOptions& op
         usedNames.add(unique);
         // Source stems include their own inserts/fader. Bus stems include
         // their upstream channels. Downstream buses/master are separate stems.
-        auto& output = track->getOutput();
-        output.setOutputToDefaultDevice(false);
+        // A submix child is exported before its parent processing, just like
+        // an explicitly routed source. Only the disposable snapshot is changed.
+        if (track->isPartOfSubmix())
+            snapshot->moveTrack(track, te::TrackInsertPoint::getEndOfTracks(*snapshot));
+        track->getOutput().setOutputToDefaultDevice(false);
+
+        // Aux returns and sidechains need the other tracks' graph nodes even
+        // when those tracks are not audible in this stem. Do not mute sources or
+        // turn down their faders: that would also change post-fader sends.
+        // Preserve internal routing and collect only the OTHER terminal outputs
+        // in a silent sink, downstream of their inserts, sends and sidechains.
+        auto sink = snapshot->insertNewAudioTrack(
+            te::TrackInsertPoint::getEndOfTracks(*snapshot), nullptr);
+        if (! sink) return "Export-Signalweg konnte nicht erstellt werden.";
+        sink->setSoloIsolate(true); // keep processing dependencies during solo
+        auto* sinkVolume = sink->getVolumePlugin();
+        if (! sinkVolume) return "Export-Signalweg konnte nicht stummgeschaltet werden.";
+        sinkVolume->volume.setValue(0.0f, nullptr);
+        sinkVolume->setSliderPos(0.0f);
+        sink->getOutput().setOutputToDefaultDevice(false);
+        for (auto* other : te::getAllTracks(*snapshot))
+            if (other != track && other != sink.get() && ! other->isPartOfSubmix())
+                if (auto* output = te::getTrackOutput(*other))
+                    if (output->getDestinationTrack() == nullptr)
+                        output->setOutputToTrack(sink.get());
+
         te::Renderer::Parameters params(*snapshot);
         params.time = time;
-        params.tracksToDo.setBit(track->getIndexInEditTrackList());
+        const auto renderTracks = te::getAllTracks(*snapshot);
+        for (int i = 0; i < renderTracks.size(); ++i)
+            params.tracksToDo.setBit(i);
         if (onProgress) onProgress(static_cast<float>(index) / tracks.size());
         auto error = renderOne(params, options, options.outputFile.getChildFile(unique + "." + extensionFor(options.format)));
         if (error.isNotEmpty()) return unique + ": " + error;

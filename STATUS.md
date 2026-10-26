@@ -1,11 +1,22 @@
 # Aizana 0.3.0 Alpha — test status
 
-Recorded checks through 24 October 2026.
+Recorded checks through 26 October 2026.
 Target: Apple Silicon (arm64), macOS 13.3 or later. Aizana is distributed as
 source code. This page records completed runs; it does not imply a fresh full
 suite for every documentation-only commit.
 
 ## Automated results
+
+- Import, AI level analysis and stem export follow-up: complete local Debug and
+  Release suites each passed 482 cases, with 6 existing skips and 51,122
+  assertions. Both CTest targets passed in each configuration, including the
+  out-of-process hosting smoke test; Debug passed the JUCE diagnostic gate.
+  New signal checks cover pre/post-fader and disabled sends, cascaded FX,
+  wet delay without dry leakage, decay after the clip, external sidechain
+  compression and submix children. The send regression failed with silent FX
+  output before the correction. Release bundle audit passed (8 Mach-O files),
+  as did the 6 recording, 4 state, 4 render-job and 2 CoreAudio patch checks.
+  No new hardware or third-party plugin compatibility run is claimed.
 
 - Generator report follow-up: 14 targeted Debug cases, 83 assertions passed,
   including real Faust/Clang compilation, special-character display names,

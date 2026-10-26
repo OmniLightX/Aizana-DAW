@@ -405,3 +405,175 @@ TEST_CASE("QA3 routed track stem contains its audio", "[qa3]") {
     CHECK(t->getOutput().getDestinationTrack()==bus);
     CHECK(second->getOutput().getDestinationTrack()==bus);
 }
+
+
+TEST_CASE("Export: FX stems retain send inputs without dry leakage", "[export][stem-sends]")
+{
+    ExportFixture f;
+    auto& edit = *f.manager.getEdit();
+    auto* source = te::getAudioTracks(edit)[0];
+    source->setName("Source");
+    MixerEngine mixer(f.manager);
+    auto* fx = mixer.createFXChannel("FX");
+    REQUIRE(fx);
+    auto* send = mixer.createFXSend(*source, *fx, -6.0f);
+    REQUIRE(send);
+    auto* second = mixer.createFXChannel("Second FX");
+    REQUIRE(second);
+    REQUIRE(mixer.createFXSend(*fx, *second, -6.0f));
+    auto* bus = mixer.createBusChannel("Source Bus");
+    REQUIRE(bus);
+    mixer.routeTrackToBus(*source, *bus);
+
+    const auto ratio = juce::Decibels::decibelsToGain(-6.0);
+    double fxRatio = ratio;
+    SECTION("post-fader send") { mixer.setVolume(*source, -6.0f); }
+    SECTION("pre-fader send")
+    {
+        mixer.setVolume(*source, -6.0f);
+        mixer.setFXSendPreFader(*source, *fx, true);
+        fxRatio = 1.0;
+    }
+    SECTION("disabled send")
+    {
+        mixer.setFXSendEnabled(*source, *fx, false);
+        fxRatio = 0.0;
+    }
+    const auto sendLevel = mixer.getFXSendLevel(*source, *fx);
+    const auto sendEnabled = mixer.isFXSendEnabled(*source, *fx);
+    const auto undoDescription = edit.getUndoManager().getUndoDescription();
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.outputFile = f.dir.getChildFile("stems");
+    REQUIRE(pipeline.exportStems(edit, options).isEmpty());
+    const auto dry = qa3Rms(options.outputFile.getChildFile("Source.wav"));
+    REQUIRE(dry > 0.01);
+    CHECK_THAT(qa3Rms(options.outputFile.getChildFile("FX.wav")),
+               Catch::Matchers::WithinAbs(dry * fxRatio, 0.0001));
+    CHECK_THAT(qa3Rms(options.outputFile.getChildFile("Second FX.wav")),
+               Catch::Matchers::WithinAbs(dry * fxRatio * ratio, 0.0001));
+    CHECK_THAT(qa3Rms(options.outputFile.getChildFile("Source Bus.wav")),
+               Catch::Matchers::WithinAbs(dry, 0.0001));
+    CHECK(source->getOutput().getDestinationTrack() == bus);
+    CHECK(fx->getOutput().getDestinationTrack() == nullptr);
+    CHECK(te::getAudioTracks(edit).size() == 4);
+    CHECK(mixer.getFXSendLevel(*source, *fx) == sendLevel);
+    CHECK(mixer.isFXSendEnabled(*source, *fx) == sendEnabled);
+    CHECK(edit.getUndoManager().getUndoDescription() == undoDescription);
+}
+
+
+TEST_CASE("Export: wet delay stem excludes direct source and retains decay", "[export][stem-sends]")
+{
+    ExportFixture f;
+    auto& edit = *f.manager.getEdit();
+    auto* source = te::getAudioTracks(edit)[0];
+    MixerEngine mixer(f.manager);
+    auto* fx = mixer.createFXChannel("Wet Delay");
+    REQUIRE(fx);
+    REQUIRE(mixer.createFXSend(*source, *fx, 0.0f));
+    auto plugin = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName,
+        BuiltInPluginFormat::getDescriptionFor("Aizana Delay"));
+    REQUIRE(plugin);
+    fx->pluginList.insertPlugin(plugin, -1, nullptr);
+    auto* external = dynamic_cast<te::ExternalPlugin*>(plugin.get());
+    REQUIRE(external);
+    external->initialiseFully();
+    auto* delay = dynamic_cast<DelayProcessor*>(external->getAudioPluginInstance());
+    REQUIRE(delay);
+    delay->setTimeMs(350);
+    delay->setFeedback(50);
+    delay->setMix(100);
+    external->flushPluginStateToValueTree();
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.outputFile = f.dir.getChildFile("wet-stems");
+    REQUIRE(pipeline.exportStems(edit, options).isEmpty());
+    auto file = options.outputFile.getChildFile("Wet Delay.wav");
+    CHECK(qa3Rms(file, 0.05, 0.1) < 0.00001);
+    CHECK(qa3Rms(file, 0.4, 0.1) > 0.01);
+    CHECK(qa3Rms(file, 1.1, 0.2) > 0.01);
+}
+
+#include "fx/CompressorProcessor.h"
+TEST_CASE("Export: stem keeps external sidechain detector signal", "[export][stem-sidechain]")
+{
+    ExportFixture f;
+    auto& edit = *f.manager.getEdit();
+    auto* key = te::getAudioTracks(edit)[0];
+    key->setName("Key");
+    auto target = edit.insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(edit), nullptr);
+    REQUIRE(target);
+    target->setName("Compressed");
+    target->setSoloIsolate(false);
+    ClipEditor editor(f.manager);
+    auto* clip = editor.importAudioFile(f.dir.getChildFile("input.wav"), *target, 0);
+    REQUIRE(clip);
+    clip->setGainDB(-30.0f); // Too quiet to trigger the chosen threshold itself.
+    auto plugin = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName,
+        BuiltInPluginFormat::getDescriptionFor("Aizana Compressor"));
+    REQUIRE(plugin);
+    target->pluginList.insertPlugin(plugin, -1, nullptr);
+    auto* external = dynamic_cast<te::ExternalPlugin*>(plugin.get());
+    REQUIRE(external);
+    external->initialiseFully();
+    auto* compressor = dynamic_cast<CompressorProcessor*>(external->getAudioPluginInstance());
+    REQUIRE(compressor);
+    // Write host parameters so settings survive the export snapshot.
+    auto setParameter = [&] (const char* id, float value)
+    {
+        for (auto* parameter : compressor->getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter))
+                if (ranged->paramID == id)
+                {
+                    ranged->setValueNotifyingHost(ranged->convertTo0to1(value));
+                    return;
+                }
+        FAIL("Missing compressor parameter: " << id);
+    };
+    setParameter("threshold", -30);
+    setParameter("ratio", 10);
+    setParameter("attack", 1);
+    setParameter("knee", 0);
+    compressor->setSidechainKeyEnabled(true);
+    MixerEngine mixer(f.manager);
+    mixer.setSidechainSource(*plugin, *key);
+    external->flushPluginStateToValueTree();
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.outputFile = f.dir.getChildFile("keyed");
+    REQUIRE(pipeline.exportStems(edit, options).isEmpty());
+    const auto keyed = qa3Rms(options.outputFile.getChildFile("Compressed.wav"));
+    mixer.clearSidechainSource(*plugin);
+    options.outputFile = f.dir.getChildFile("unkeyed");
+    REQUIRE(pipeline.exportStems(edit, options).isEmpty());
+    const auto unkeyed = qa3Rms(options.outputFile.getChildFile("Compressed.wav"));
+    REQUIRE(unkeyed > 0.001);
+    CHECK(keyed > 0.00001);
+    CHECK(keyed < unkeyed * 0.5);
+}
+
+TEST_CASE("Export: submix child and its FX remain separate stems", "[export][stem-sends]")
+{
+    ExportFixture f;
+    auto& edit = *f.manager.getEdit();
+    auto* source = te::getAudioTracks(edit)[0];
+    source->setName("Child");
+    auto folder = edit.insertNewFolderTrack(te::TrackInsertPoint::getEndOfTracks(edit), nullptr, true);
+    REQUIRE(folder);
+    edit.moveTrack(source, te::TrackInsertPoint{folder.get(), nullptr});
+    REQUIRE(source->isPartOfSubmix());
+    MixerEngine mixer(f.manager);
+    auto* fx = mixer.createFXChannel("FX");
+    REQUIRE(fx);
+    REQUIRE(mixer.createFXSend(*source, *fx, -6.0f));
+    ExportPipeline pipeline;
+    ExportOptions options;
+    options.outputFile = f.dir.getChildFile("submix-stems");
+    REQUIRE(pipeline.exportStems(edit, options).isEmpty());
+    const auto dry = qa3Rms(options.outputFile.getChildFile("Child.wav"));
+    REQUIRE(dry > 0.01);
+    CHECK_THAT(qa3Rms(options.outputFile.getChildFile("FX.wav")),
+        Catch::Matchers::WithinAbs(dry * juce::Decibels::decibelsToGain(-6.0), 0.0001));
+    CHECK(source->getParentFolderTrack() == folder.get());
+}

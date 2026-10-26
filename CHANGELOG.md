@@ -1,9 +1,22 @@
 # Change log
 
-## Unreleased — 24 October 2026
+## Unreleased — 26 October 2026
 
 These changes are included in the source tree. They do not announce a new
 installer, signed app or downloadable binary release.
+
+### Import, analysis and stem export
+
+- Import the complete audio file onto the selected arrangement track at the
+  playhead; reject invalid or empty files before creating clips or session tracks.
+- Align AI gain staging with the mixer’s +6 dB ceiling, measure stereo channel
+  energy without phase cancellation, and respect the first clip’s source offset,
+  length, speed and gain during level analysis (up to 30 seconds of source audio).
+- Render routed source and bus stems from temporary session snapshots and extend
+  exports by reported plugin tails, capped at 60 seconds.
+- Keep send and sidechain sources processing during stem export while suppressing
+  their direct output. Preserve pre/post-fader sends, cascaded FX returns and the
+  live session routing.
 
 ### Background rendering
 
